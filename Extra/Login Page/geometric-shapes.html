@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Placement & Training Assessment</title>
+    <style>
+        /* ============================================
+           GLOBAL RESET & BASE STYLES
+           ============================================ */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            /* Light gradient background */
+        }
+
+        /* ============================================
+           GEOMETRIC SHAPES ANIMATION BACKGROUND
+           Creates animated floating geometric shapes
+           ============================================ */
+        .geometric-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: 1;
+        }
+
+        /* Individual geometric shape styles */
+        .shape {
+            position: absolute;
+            opacity: 0.3;
+            animation: float-rotate 20s ease-in-out infinite;
+        }
+
+        /* Circle shapes */
+        .shape.circle {
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        /* Square shapes */
+        .shape.square {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        /* Triangle shapes using CSS borders */
+        .shape.triangle {
+            width: 0;
+            height: 0;
+            border-left: 50px solid transparent;
+            border-right: 50px solid transparent;
+            border-bottom: 87px solid #4facfe;
+            opacity: 0.25;
+        }
+
+        /* Floating and rotating animation */
+        @keyframes float-rotate {
+            0%, 100% {
+                transform: translateY(0) rotate(0deg);
+            }
+            25% {
+                transform: translateY(-50px) rotate(90deg);
+            }
+            50% {
+                transform: translateY(-20px) rotate(180deg);
+            }
+            75% {
+                transform: translateY(-80px) rotate(270deg);
+            }
+        }
+
+        /* Position and size variations for different shapes */
+        .shape:nth-child(1) {
+            width: 80px;
+            height: 80px;
+            top: 10%;
+            left: 10%;
+            animation-duration: 15s;
+            animation-delay: 0s;
+        }
+
+        .shape:nth-child(2) {
+            width: 120px;
+            height: 120px;
+            top: 70%;
+            left: 80%;
+            animation-duration: 20s;
+            animation-delay: 2s;
+        }
+
+        .shape:nth-child(3) {
+            width: 60px;
+            height: 60px;
+            top: 50%;
+            left: 15%;
+            animation-duration: 18s;
+            animation-delay: 1s;
+        }
+
+        .shape:nth-child(4) {
+            width: 100px;
+            height: 100px;
+            top: 20%;
+            left: 75%;
+            animation-duration: 22s;
+            animation-delay: 3s;
+        }
+
+        .shape:nth-child(5) {
+            top: 60%;
+            left: 50%;
+            animation-duration: 16s;
+            animation-delay: 1.5s;
+        }
+
+        .shape:nth-child(6) {
+            width: 90px;
+            height: 90px;
+            top: 80%;
+            left: 20%;
+            animation-duration: 19s;
+            animation-delay: 2.5s;
+        }
+
+        /* ============================================
+           MAIN CONTAINER
+           Centers the login form on screen
+           ============================================ */
+        .container {
+            position: relative;
+            z-index: 2;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        /* ============================================
+           LOGIN CARD
+           Main form container with clean modern design
+           ============================================ */
+        .login-card {
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(15px);
+            border-radius: 24px;
+            padding: 45px;
+            width: 100%;
+            max-width: 450px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15),
+                        0 0 0 1px rgba(255, 255, 255, 0.5);
+            animation: slideUp 0.7s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+        }
+
+        /* Slide-up entrance animation with bounce */
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(60px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        /* ============================================
+           HEADER SECTION
+           Logo and title area
+           ============================================ */
+        .login-header {
+            text-align: center;
+            margin-bottom: 35px;
+        }
+
+        .logo-container {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            margin: 0 auto 20px;
+        }
+
+        /* Rotating ring behind logo */
+        .logo-ring {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 100%;
+            height: 100%;
+            border: 3px solid;
+            border-color: #667eea transparent #764ba2 transparent;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            animation: rotate-ring 3s linear infinite;
+        }
+
+        @keyframes rotate-ring {
+            from {
+                transform: translate(-50%, -50%) rotate(0deg);
+            }
+            to {
+                transform: translate(-50%, -50%) rotate(360deg);
+            }
+        }
+
+        /* Main logo */
+        .logo {
+            position: relative;
+            width: 85px;
+            height: 85px;
+            margin: 0 auto;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 38px;
+            color: white;
+            font-weight: bold;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+            transform: rotate(45deg);
+        }
+
+        .logo span {
+            transform: rotate(-45deg);
+        }
+
+        .login-header h1 {
+            font-size: 28px;
+            color: #2d3748;
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+
+        .login-header p {
+            font-size: 14px;
+            color: #718096;
+        }
+
+        /* ============================================
+           ROLE SELECTOR
+           Tab-style buttons for Student/Teacher
+           ============================================ */
+        .role-selector {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 30px;
+            background: #f7fafc;
+            padding: 6px;
+            border-radius: 14px;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .role-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            background: transparent;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 15px;
+            color: #718096;
+            transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            font-weight: 600;
+            position: relative;
+        }
+
+        /* Active state with gradient background */
+        .role-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            transform: scale(1.05);
+        }
+
+        .role-btn:hover:not(.active) {
+            background: rgba(102, 126, 234, 0.08);
+            color: #667eea;
+        }
+
+        /* ============================================
+           FORM ELEMENTS
+           Input fields and labels
+           ============================================ */
+        .form-group {
+            margin-bottom: 22px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 10px;
+            color: #2d3748;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            background: #ffffff;
+            color: #2d3748;
+        }
+
+        .form-control::placeholder {
+            color: #a0aec0;
+        }
+
+        /* Focus state with sliding border effect */
+        .form-control:focus {
+            outline: none;
+            border-color: #667eea;
+            background: #f7fafc;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            transform: translateY(-2px);
+        }
+
+        /* Icon styling (if icons are added) */
+        .input-icon {
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #cbd5e0;
+            pointer-events: none;
+        }
+
+        /* ============================================
+           ADDITIONAL OPTIONS
+           Remember me and forgot password
+           ============================================ */
+        .form-options {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 28px;
+            font-size: 13px;
+        }
+
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #4a5568;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+
+        .remember-me:hover {
+            color: #667eea;
+        }
+
+        /* Custom checkbox styling */
+        .custom-checkbox {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+
+        .forgot-password {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        /* Animated underline effect */
+        .forgot-password::before {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 50%;
+            width: 0;
+            height: 2px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: all 0.3s ease;
+            transform: translateX(-50%);
+        }
+
+        .forgot-password:hover::before {
+            width: 100%;
+        }
+
+        .forgot-password:hover {
+            color: #764ba2;
+        }
+
+        /* ============================================
+           SUBMIT BUTTON
+           Primary action button with modern effects
+           ============================================ */
+        .btn-login {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Shimmer effect on button */
+        .btn-login::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(
+                45deg,
+                transparent,
+                rgba(255, 255, 255, 0.3),
+                transparent
+            );
+            transform: rotate(45deg);
+            transition: all 0.5s ease;
+        }
+
+        .btn-login:hover::after {
+            animation: shimmer 1.5s infinite;
+        }
+
+        @keyframes shimmer {
+            0% {
+                transform: translateX(-100%) translateY(-100%) rotate(45deg);
+            }
+            100% {
+                transform: translateX(100%) translateY(100%) rotate(45deg);
+            }
+        }
+
+        .btn-login:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.5);
+        }
+
+        .btn-login:active {
+            transform: translateY(-1px);
+        }
+
+        /* ============================================
+           GUEST ACCESS SECTION
+           Alternative login option
+           ============================================ */
+        .guest-access {
+            margin-top: 25px;
+            text-align: center;
+            padding-top: 25px;
+            border-top: 2px solid #e2e8f0;
+        }
+
+        .guest-access p {
+            color: #718096;
+            font-size: 14px;
+            margin-bottom: 12px;
+            font-weight: 500;
+        }
+
+        .btn-guest {
+            display: inline-block;
+            padding: 12px 35px;
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
+        }
+
+        .btn-guest:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-guest:active {
+            transform: translateY(-1px);
+        }
+
+        /* ============================================
+           RESPONSIVE DESIGN
+           Mobile-friendly adjustments
+           ============================================ */
+        @media (max-width: 480px) {
+            .login-card {
+                padding: 35px 25px;
+            }
+
+            .login-header h1 {
+                font-size: 24px;
+            }
+
+            .logo-container {
+                width: 85px;
+                height: 85px;
+            }
+
+            .logo {
+                width: 70px;
+                height: 70px;
+                font-size: 32px;
+            }
+
+            .role-btn {
+                font-size: 13px;
+                padding: 10px;
+            }
+        }
+
+        /* ============================================
+           HIDDEN CONTENT
+           For conditional display based on role
+           ============================================ */
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- ============================================
+         ANIMATED GEOMETRIC BACKGROUND
+         Floating shapes with rotation animation
+         ============================================ -->
+    <div class="geometric-background">
+        <div class="shape circle"></div>
+        <div class="shape square"></div>
+        <div class="shape circle"></div>
+        <div class="shape square"></div>
+        <div class="shape triangle"></div>
+        <div class="shape circle"></div>
+    </div>
+
+    <!-- ============================================
+         MAIN CONTAINER
+         Holds the login form
+         ============================================ -->
+    <div class="container">
+        <div class="login-card">
+            <!-- Header with animated logo and title -->
+            <div class="login-header">
+                <div class="logo-container">
+                    <div class="logo-ring"></div>
+                    <div class="logo">
+                        <span>P</span>
+                    </div>
+                </div>
+                <h1>Welcome Back</h1>
+                <p>Placement & Training Assessment Platform</p>
+            </div>
+
+            <!-- Role selection tabs -->
+            <div class="role-selector">
+                <button class="role-btn active" data-role="student">Student</button>
+                <button class="role-btn" data-role="teacher">Teacher</button>
+            </div>
+
+            <!-- Login form -->
+            <form id="loginForm" method="POST" action="dashboard.php">
+                <!-- Hidden field to store selected role -->
+                <input type="hidden" name="role" id="roleInput" value="student">
+
+                <!-- Email input field -->
+                <div class="form-group">
+                    <label for="email">Email Address</label>
+                    <div class="input-wrapper">
+                        <input 
+                            type="email" 
+                            class="form-control" 
+                            id="email" 
+                            name="email" 
+                            placeholder="Enter your email"
+                            required
+                        >
+                    </div>
+                </div>
+
+                <!-- Password input field -->
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <div class="input-wrapper">
+                        <input 
+                            type="password" 
+                            class="form-control" 
+                            id="password" 
+                            name="password" 
+                            placeholder="Enter your password"
+                            required
+                        >
+                    </div>
+                </div>
+
+                <!-- Remember me and forgot password options -->
+                <div class="form-options">
+                    <label class="remember-me">
+                        <input type="checkbox" name="remember" class="custom-checkbox">
+                        <span>Remember me</span>
+                    </label>
+                    <a href="forgot-password.php" class="forgot-password">Forgot Password?</a>
+                </div>
+
+                <!-- Submit button -->
+                <button type="submit" class="btn-login">Sign In</button>
+            </form>
+
+            <!-- Guest access option -->
+            <div class="guest-access">
+                <p>Don't have an account?</p>
+                <a href="guest-dashboard.php" class="btn-guest">Continue as Guest</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* ============================================
+           ROLE SELECTION LOGIC
+           Handles switching between Student/Teacher tabs
+           ============================================ */
+        const roleButtons = document.querySelectorAll('.role-btn');
+        const roleInput = document.getElementById('roleInput');
+
+        roleButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                // Remove active class from all buttons
+                roleButtons.forEach(btn => btn.classList.remove('active'));
+                
+                // Add active class to clicked button
+                this.classList.add('active');
+                
+                // Update hidden input value
+                roleInput.value = this.dataset.role;
+            });
+        });
+
+        /* ============================================
+           FORM SUBMISSION HANDLER
+           Validates and submits login form
+           ============================================ */
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            e.preventDefault(); // Prevent default form submission for demo
+            
+            // Get form values
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const role = roleInput.value;
+
+            // Basic validation
+            if (!email || !password) {
+                alert('Please fill in all fields');
+                return;
+            }
+
+            // Email format validation
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                alert('Please enter a valid email address');
+                return;
+            }
+
+            // In production, this would submit to PHP backend
+            console.log('Login attempt:', { email, role });
+            
+            // Uncomment below to actually submit the form:
+            // this.submit();
+            
+            // For demo purposes, show success message
+            alert(`Login successful as ${role}!`);
+            // window.location.href = role === 'student' ? 'student-dashboard.php' : 'teacher-dashboard.php';
+        });
+
+        /* ============================================
+           INPUT FIELD ANIMATIONS
+           Adds subtle animations on input interaction
+           ============================================ */
+        const inputs = document.querySelectorAll('.form-control');
+        
+        inputs.forEach(input => {
+            // Add animation class on focus
+            input.addEventListener('focus', function() {
+                this.parentElement.classList.add('focused');
+            });
+            
+            // Remove animation class on blur
+            input.addEventListener('blur', function() {
+                this.parentElement.classList.remove('focused');
+            });
+        });
+    </script>
+</body>
+</html>

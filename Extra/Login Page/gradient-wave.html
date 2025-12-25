@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Placement & Training Assessment</title>
+    <style>
+        /* ============================================
+           GLOBAL RESET & BASE STYLES
+           ============================================ */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            background: #1a1a2e;
+            /* Dark base color */
+        }
+
+        /* ============================================
+           ANIMATED WAVE BACKGROUND
+           Creates flowing gradient wave effect
+           ============================================ */
+        .wave-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: 1;
+        }
+
+        /* Multiple wave layers for depth */
+        .wave {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 200%;
+            height: 100%;
+            background: linear-gradient(135deg, 
+                rgba(102, 126, 234, 0.4) 0%, 
+                rgba(118, 75, 162, 0.4) 100%);
+            animation: wave 10s linear infinite;
+        }
+
+        .wave:nth-child(2) {
+            animation: wave 15s linear infinite reverse;
+            opacity: 0.5;
+            background: linear-gradient(135deg, 
+                rgba(118, 75, 162, 0.3) 0%, 
+                rgba(102, 126, 234, 0.3) 100%);
+        }
+
+        .wave:nth-child(3) {
+            animation: wave 20s linear infinite;
+            opacity: 0.3;
+            background: linear-gradient(135deg, 
+                rgba(102, 126, 234, 0.2) 0%, 
+                rgba(118, 75, 162, 0.2) 100%);
+        }
+
+        /* Wave animation keyframes */
+        @keyframes wave {
+            0% {
+                transform: translateX(0) translateY(0) rotate(0deg);
+            }
+            100% {
+                transform: translateX(-50%) translateY(-20%) rotate(360deg);
+            }
+        }
+
+        /* Floating particles overlay */
+        .particles {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .particle {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            animation: float 8s ease-in-out infinite;
+        }
+
+        /* Generate different particles with varying sizes and positions */
+        .particle:nth-child(1) {
+            width: 4px;
+            height: 4px;
+            top: 20%;
+            left: 10%;
+            animation-duration: 6s;
+            animation-delay: 0s;
+        }
+
+        .particle:nth-child(2) {
+            width: 6px;
+            height: 6px;
+            top: 60%;
+            left: 80%;
+            animation-duration: 8s;
+            animation-delay: 1s;
+        }
+
+        .particle:nth-child(3) {
+            width: 3px;
+            height: 3px;
+            top: 40%;
+            left: 30%;
+            animation-duration: 10s;
+            animation-delay: 2s;
+        }
+
+        .particle:nth-child(4) {
+            width: 5px;
+            height: 5px;
+            top: 80%;
+            left: 50%;
+            animation-duration: 7s;
+            animation-delay: 1.5s;
+        }
+
+        .particle:nth-child(5) {
+            width: 4px;
+            height: 4px;
+            top: 30%;
+            left: 70%;
+            animation-duration: 9s;
+            animation-delay: 0.5s;
+        }
+
+        /* Floating animation for particles */
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0) translateX(0);
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            50% {
+                transform: translateY(-100px) translateX(50px);
+            }
+        }
+
+        /* ============================================
+           MAIN CONTAINER
+           Centers the login form on screen
+           ============================================ */
+        .container {
+            position: relative;
+            z-index: 2;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        /* ============================================
+           LOGIN CARD
+           Main form container with modern dark theme
+           ============================================ */
+        .login-card {
+            background: rgba(26, 26, 46, 0.95);
+            /* Dark semi-transparent background */
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 45px;
+            width: 100%;
+            max-width: 440px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5),
+                        0 0 0 1px rgba(255, 255, 255, 0.1);
+            /* Double shadow for depth */
+            animation: cardEnter 0.8s ease-out;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Card entrance animation */
+        @keyframes cardEnter {
+            from {
+                opacity: 0;
+                transform: scale(0.9) translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        /* ============================================
+           HEADER SECTION
+           Logo and title area
+           ============================================ */
+        .login-header {
+            text-align: center;
+            margin-bottom: 35px;
+        }
+
+        .logo {
+            width: 90px;
+            height: 90px;
+            margin: 0 auto 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            color: white;
+            font-weight: bold;
+            box-shadow: 0 8px 24px rgba(102, 126, 234, 0.5);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        /* Pulsing animation for logo */
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 8px 24px rgba(102, 126, 234, 0.5);
+            }
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 12px 32px rgba(102, 126, 234, 0.7);
+            }
+        }
+
+        .login-header h1 {
+            font-size: 26px;
+            color: #ffffff;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .login-header p {
+            font-size: 14px;
+            color: #a0a0a0;
+        }
+
+        /* ============================================
+           ROLE SELECTOR
+           Tab-style buttons for Student/Teacher
+           ============================================ */
+        .role-selector {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 30px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 6px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .role-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            background: transparent;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #a0a0a0;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Animated background effect on active state */
+        .role-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .role-btn.active::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, 
+                transparent, 
+                rgba(255, 255, 255, 0.2), 
+                transparent);
+            animation: shine 2s infinite;
+        }
+
+        /* Shine animation effect */
+        @keyframes shine {
+            0% {
+                left: -100%;
+            }
+            100% {
+                left: 100%;
+            }
+        }
+
+        .role-btn:hover:not(.active) {
+            background: rgba(102, 126, 234, 0.1);
+            color: #ffffff;
+        }
+
+        /* ============================================
+           FORM ELEMENTS
+           Input fields and labels
+           ============================================ */
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 10px;
+            color: #ffffff;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 14px 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.05);
+            color: #ffffff;
+        }
+
+        .form-control::placeholder {
+            color: #666;
+        }
+
+        /* Glowing focus effect */
+        .form-control:focus {
+            outline: none;
+            border-color: #667eea;
+            background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1),
+                        0 0 20px rgba(102, 126, 234, 0.2);
+        }
+
+        /* ============================================
+           ADDITIONAL OPTIONS
+           Remember me and forgot password
+           ============================================ */
+        .form-options {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 28px;
+            font-size: 13px;
+        }
+
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #a0a0a0;
+            cursor: pointer;
+        }
+
+        .remember-me input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+
+        .forgot-password {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        /* Underline animation on hover */
+        .forgot-password::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: #667eea;
+            transition: width 0.3s ease;
+        }
+
+        .forgot-password:hover::after {
+            width: 100%;
+        }
+
+        .forgot-password:hover {
+            color: #764ba2;
+        }
+
+        /* ============================================
+           SUBMIT BUTTON
+           Primary action button with hover effects
+           ============================================ */
+        .btn-login {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Ripple effect container */
+        .btn-login::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .btn-login:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .btn-login:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 30px rgba(102, 126, 234, 0.6);
+        }
+
+        .btn-login:active {
+            transform: translateY(0);
+        }
+
+        .btn-login span {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ============================================
+           GUEST ACCESS SECTION
+           Alternative login option
+           ============================================ */
+        .guest-access {
+            margin-top: 25px;
+            text-align: center;
+            padding-top: 25px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .guest-access p {
+            color: #a0a0a0;
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+
+        .btn-guest {
+            display: inline-block;
+            padding: 12px 35px;
+            background: transparent;
+            color: #667eea;
+            border: 2px solid #667eea;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Slide-in background effect */
+        .btn-guest::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: left 0.4s ease;
+            z-index: -1;
+        }
+
+        .btn-guest:hover::before {
+            left: 0;
+        }
+
+        .btn-guest:hover {
+            color: white;
+            border-color: #764ba2;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        /* ============================================
+           RESPONSIVE DESIGN
+           Mobile-friendly adjustments
+           ============================================ */
+        @media (max-width: 480px) {
+            .login-card {
+                padding: 35px 25px;
+            }
+
+            .login-header h1 {
+                font-size: 22px;
+            }
+
+            .logo {
+                width: 75px;
+                height: 75px;
+                font-size: 34px;
+            }
+
+            .role-btn {
+                font-size: 13px;
+                padding: 10px;
+            }
+        }
+
+        /* ============================================
+           HIDDEN CONTENT
+           For conditional display based on role
+           ============================================ */
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- ============================================
+         ANIMATED BACKGROUND
+         Multiple wave layers with floating particles
+         ============================================ -->
+    <div class="wave-background">
+        <div class="wave"></div>
+        <div class="wave"></div>
+        <div class="wave"></div>
+        <div class="particles">
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+        </div>
+    </div>
+
+    <!-- ============================================
+         MAIN CONTAINER
+         Holds the login form
+         ============================================ -->
+    <div class="container">
+        <div class="login-card">
+            <!-- Header with logo and title -->
+            <div class="login-header">
+                <div class="logo">P</div>
+                <h1>Welcome Back</h1>
+                <p>Placement & Training Assessment Platform</p>
+            </div>
+
+            <!-- Role selection tabs -->
+            <div class="role-selector">
+                <button class="role-btn active" data-role="student">Student</button>
+                <button class="role-btn" data-role="teacher">Teacher</button>
+            </div>
+
+            <!-- Login form -->
+            <form id="loginForm" method="POST" action="dashboard.php">
+                <!-- Hidden field to store selected role -->
+                <input type="hidden" name="role" id="roleInput" value="student">
+
+                <!-- Email input field -->
+                <div class="form-group">
+                    <label for="email">Email Address</label>
+                    <input 
+                        type="email" 
+                        class="form-control" 
+                        id="email" 
+                        name="email" 
+                        placeholder="Enter your email"
+                        required
+                    >
+                </div>
+
+                <!-- Password input field -->
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input 
+                        type="password" 
+                        class="form-control" 
+                        id="password" 
+                        name="password" 
+                        placeholder="Enter your password"
+                        required
+                    >
+                </div>
+
+                <!-- Remember me and forgot password options -->
+                <div class="form-options">
+                    <label class="remember-me">
+                        <input type="checkbox" name="remember">
+                        <span>Remember me</span>
+                    </label>
+                    <a href="forgot-password.php" class="forgot-password">Forgot Password?</a>
+                </div>
+
+                <!-- Submit button -->
+                <button type="submit" class="btn-login">
+                    <span>Sign In</span>
+                </button>
+            </form>
+
+            <!-- Guest access option -->
+            <div class="guest-access">
+                <p>Don't have an account?</p>
+                <a href="guest-dashboard.php" class="btn-guest">Continue as Guest</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* ============================================
+           ROLE SELECTION LOGIC
+           Handles switching between Student/Teacher tabs
+           ============================================ */
+        const roleButtons = document.querySelectorAll('.role-btn');
+        const roleInput = document.getElementById('roleInput');
+
+        roleButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                // Remove active class from all buttons
+                roleButtons.forEach(btn => btn.classList.remove('active'));
+                
+                // Add active class to clicked button
+                this.classList.add('active');
+                
+                // Update hidden input value
+                roleInput.value = this.dataset.role;
+            });
+        });
+
+        /* ============================================
+           FORM SUBMISSION HANDLER
+           Validates and submits login form
+           ============================================ */
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            e.preventDefault(); // Prevent default form submission for demo
+            
+            // Get form values
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const role = roleInput.value;
+
+            // Basic validation
+            if (!email || !password) {
+                alert('Please fill in all fields');
+                return;
+            }
+
+            // Email format validation
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                alert('Please enter a valid email address');
+                return;
+            }
+
+            // In production, this would submit to PHP backend
+            console.log('Login attempt:', { email, role });
+            
+            // Uncomment below to actually submit the form:
+            // this.submit();
+            
+            // For demo purposes, show success message
+            alert(`Login successful as ${role}!`);
+            // window.location.href = role === 'student' ? 'student-dashboard.php' : 'teacher-dashboard.php';
+        });
+    </script>
+</body>
+</html>
