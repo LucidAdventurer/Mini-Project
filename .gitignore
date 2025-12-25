@@ -1,0 +1,29 @@
+# ===== Apache / PHP =====
+*.log
+*.cache
+*.tmp
+*.pid
+sess_*
+
+# Apache
+.htaccess
+
+# ===== PHP =====
+/vendor/
+.env
+
+# ===== IDE =====
+.vscode/
+.idea/
+
+# ===== Linux =====
+*.swp
+*.swo
+*~
+.Trash-*
+
+# ===== Node / Frontend =====
+node_modules/
+
+# ===== Misc =====
+.DS_Store

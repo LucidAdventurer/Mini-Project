@@ -1,0 +1,1347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teacher Dashboard - Placement Portal</title>
+    <style>
+        /* ============================================
+           GLOBAL RESET & BASE STYLES
+           ============================================ */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            color: #2d3748;
+        }
+
+        /* ============================================
+           NAVIGATION BAR
+           Top navigation with logo, search, and profile
+           Uses teacher theme colors (purple/orange)
+           ============================================ */
+        .navbar {
+            background: white;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            border-bottom: 3px solid #fa709a;
+            /* Teacher theme color */
+        }
+
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 22px;
+            font-weight: 700;
+            color: #2d3748;
+            text-decoration: none;
+        }
+
+        .brand-logo {
+            width: 45px;
+            height: 45px;
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            /* Teacher gradient */
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 20px;
+        }
+
+        /* Search bar in navigation */
+        .nav-search {
+            flex: 1;
+            max-width: 500px;
+            margin: 0 30px;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 40px 10px 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #fa709a;
+            box-shadow: 0 0 0 3px rgba(250, 112, 154, 0.1);
+        }
+
+        .search-icon {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #a0aec0;
+            font-size: 18px;
+        }
+
+        /* User profile section in navbar */
+        .nav-profile {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .notification-icon {
+            position: relative;
+            width: 40px;
+            height: 40px;
+            background: #f7fafc;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .notification-icon:hover {
+            background: #fa709a;
+            color: white;
+        }
+
+        .notification-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: #ff6b6b;
+            color: white;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .profile-button {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 15px;
+            background: #f7fafc;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .profile-button:hover {
+            background: #e2e8f0;
+        }
+
+        .profile-avatar {
+            width: 35px;
+            height: 35px;
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .profile-name {
+            font-weight: 600;
+            font-size: 14px;
+            color: #2d3748;
+        }
+
+        /* ============================================
+           MAIN CONTAINER
+           Dashboard content wrapper
+           ============================================ */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px;
+        }
+
+        /* Welcome header section */
+        .welcome-section {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .welcome-content h1 {
+            font-size: 32px;
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+
+        .welcome-content p {
+            font-size: 16px;
+            color: #718096;
+        }
+
+        .quick-stats {
+            display: flex;
+            gap: 30px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 28px;
+            font-weight: 700;
+            color: #fa709a;
+            /* Teacher theme */
+            display: block;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: #718096;
+            margin-top: 5px;
+        }
+
+        /* ============================================
+           PERFORMANCE OVERVIEW CARDS
+           Quick statistics display
+           ============================================ */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 16px;
+            padding: 25px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+        }
+
+        /* Decorative gradient background */
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(135deg, rgba(250, 112, 154, 0.1), transparent);
+            border-radius: 50%;
+            transform: translate(30%, -30%);
+        }
+
+        .stat-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .stat-card-title {
+            font-size: 14px;
+            color: #718096;
+            font-weight: 600;
+        }
+
+        .stat-card-icon {
+            width: 45px;
+            height: 45px;
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 20px;
+        }
+
+        .stat-card-value {
+            font-size: 36px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .stat-card-change {
+            font-size: 13px;
+            color: #48bb78;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* ============================================
+           MAIN CONTENT GRID
+           Assessments and student performance
+           ============================================ */
+        .main-content {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 30px;
+        }
+
+        /* Section headers */
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: #2d3748;
+        }
+
+        .view-all-link {
+            color: #fa709a;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .view-all-link:hover {
+            color: #fee140;
+            transform: translateX(3px);
+        }
+
+        /* ============================================
+           CREATE ASSESSMENT BUTTON
+           Prominent CTA for creating new tests
+           ============================================ */
+        .create-assessment-btn {
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+
+        .create-assessment-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(250, 112, 154, 0.4);
+        }
+
+        /* ============================================
+           MY ASSESSMENTS SECTION
+           List of created tests
+           ============================================ */
+        .assessments-section {
+            background: white;
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        /* Filter tabs */
+        .filter-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-tab {
+            padding: 8px 18px;
+            background: #f7fafc;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            color: #718096;
+            transition: all 0.3s ease;
+        }
+
+        .filter-tab.active {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            color: white;
+        }
+
+        .filter-tab:hover:not(.active) {
+            background: #e2e8f0;
+        }
+
+        /* Assessment cards */
+        .assessment-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .assessment-card {
+            background: #f7fafc;
+            border-radius: 15px;
+            padding: 20px;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .assessment-card:hover {
+            border-color: #fa709a;
+            background: white;
+            box-shadow: 0 4px 15px rgba(250, 112, 154, 0.15);
+        }
+
+        .assessment-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 12px;
+        }
+
+        .assessment-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .assessment-category {
+            font-size: 13px;
+            color: #718096;
+        }
+
+        /* Status badge */
+        .status-badge {
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-badge.active {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status-badge.draft {
+            background: #feebc8;
+            color: #7c2d12;
+        }
+
+        .status-badge.inactive {
+            background: #e2e8f0;
+            color: #718096;
+        }
+
+        /* Assessment metadata */
+        .assessment-meta {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: #718096;
+        }
+
+        .meta-icon {
+            font-size: 16px;
+        }
+
+        /* Action buttons for teachers */
+        .assessment-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn-view {
+            padding: 8px 20px;
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-view:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(250, 112, 154, 0.4);
+        }
+
+        .btn-edit {
+            padding: 8px 20px;
+            background: white;
+            color: #fa709a;
+            border: 2px solid #fa709a;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-edit:hover {
+            background: #fa709a;
+            color: white;
+        }
+
+        .btn-delete {
+            padding: 8px 20px;
+            background: white;
+            color: #f56565;
+            border: 2px solid #f56565;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-delete:hover {
+            background: #f56565;
+            color: white;
+        }
+
+        /* ============================================
+           SIDEBAR - Recent Activity & Analytics
+           Right sidebar with updates
+           ============================================ */
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .sidebar-card {
+            background: white;
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .sidebar-card-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 20px;
+        }
+
+        /* Recent submissions */
+        .activity-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .activity-item {
+            display: flex;
+            gap: 12px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .activity-icon {
+            width: 40px;
+            height: 40px;
+            background: #f7fafc;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fa709a;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .activity-content {
+            flex: 1;
+        }
+
+        .activity-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 4px;
+        }
+
+        .activity-time {
+            font-size: 12px;
+            color: #a0aec0;
+        }
+
+        /* Class performance chart */
+        .performance-chart {
+            height: 200px;
+            background: linear-gradient(135deg, #f7fafc 0%, #e2e8f0 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #718096;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+
+        /* Quick action list */
+        .quick-actions-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .quick-action-item {
+            padding: 12px;
+            background: #f7fafc;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .quick-action-item:hover {
+            background: linear-gradient(135deg, rgba(250, 112, 154, 0.1), rgba(254, 225, 64, 0.1));
+            transform: translateX(5px);
+        }
+
+        .quick-action-text {
+            font-size: 14px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .quick-action-icon {
+            color: #fa709a;
+            font-size: 18px;
+        }
+
+        /* ============================================
+           FLOATING ACTION BUTTON
+           Bottom right corner quick access
+           ============================================ */
+        .fab-container {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 50;
+        }
+
+        .fab-button {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 6px 20px rgba(250, 112, 154, 0.4);
+            transition: all 0.3s ease;
+            border: none;
+        }
+
+        .fab-button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 8px 30px rgba(250, 112, 154, 0.6);
+        }
+
+        /* ============================================
+           RESPONSIVE DESIGN
+           Mobile and tablet adjustments
+           ============================================ */
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+
+            .nav-search {
+                display: none;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .navbar {
+                padding: 15px;
+            }
+
+            .container {
+                padding: 15px;
+            }
+
+            .welcome-section {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 20px;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .assessment-meta {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .assessment-actions {
+                flex-direction: column;
+            }
+
+            .profile-name {
+                display: none;
+            }
+        }
+
+        /* ============================================
+           LOADING ANIMATION
+           For dynamic content loading
+           ============================================ */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #e2e8f0;
+            border-top-color: #fa709a;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- ============================================
+         NAVIGATION BAR
+         Top navigation with teacher theme
+         ============================================ -->
+    <nav class="navbar">
+        <a href="teacher-dashboard.php" class="navbar-brand">
+            <div class="brand-logo">P</div>
+            <span>Placement Portal</span>
+        </a>
+
+        <!-- Search bar -->
+        <div class="nav-search">
+            <input type="text" class="search-input" placeholder="Search assessments, students..." id="searchInput">
+            <span class="search-icon">🔍</span>
+        </div>
+
+        <!-- User profile section -->
+        <div class="nav-profile">
+            <!-- Notification icon with badge -->
+            <div class="notification-icon" onclick="showNotifications()">
+                <span>🔔</span>
+                <div class="notification-badge">5</div>
+            </div>
+
+            <!-- Profile dropdown button -->
+            <button class="profile-button" onclick="toggleProfileMenu()">
+                <div class="profile-avatar">DR</div>
+                <span class="profile-name">Dr. Rajesh Kumar</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- ============================================
+         MAIN DASHBOARD CONTAINER
+         ============================================ -->
+    <div class="container">
+        <!-- Welcome section with quick stats -->
+        <div class="welcome-section">
+            <div class="welcome-content">
+                <h1>Welcome back, Dr. Kumar! 👨‍🏫</h1>
+                <p>Manage your assessments and track student performance</p>
+            </div>
+            <div class="quick-stats">
+                <div class="stat-item">
+                    <span class="stat-number">15</span>
+                    <span class="stat-label">Active Tests</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number">342</span>
+                    <span class="stat-label">Students</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number">1,248</span>
+                    <span class="stat-label">Submissions</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Performance overview cards -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-card-header">
+                    <span class="stat-card-title">Total Assessments</span>
+                    <div class="stat-card-icon">📝</div>
+                </div>
+                <div class="stat-card-value">23</div>
+                <div class="stat-card-change">
+                    <span>↗</span> 3 created this month
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-card-header">
+                    <span class="stat-card-title">Avg. Class Score</span>
+                    <div class="stat-card-icon">📊</div>
+                </div>
+                <div class="stat-card-value">72%</div>
+                <div class="stat-card-change">
+                    <span>↗</span> +3% from last week
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-card-header">
+                    <span class="stat-card-title">Pending Reviews</span>
+                    <div class="stat-card-icon">⏳</div>
+                </div>
+                <div class="stat-card-value">47</div>
+                <div class="stat-card-change">
+                    Submissions to review
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-card-header">
+                    <span class="stat-card-title">Active Students</span>
+                    <div class="stat-card-icon">👥</div>
+                </div>
+                <div class="stat-card-value">342</div>
+                <div class="stat-card-change">
+                    Across all classes
+                </div>
+            </div>
+        </div>
+
+        <!-- Main content grid -->
+        <div class="main-content">
+            <!-- My assessments section -->
+            <div class="assessments-section">
+                <div class="section-header">
+                    <h2 class="section-title">My Assessments</h2>
+                    <a href="create-assessment.php" class="create-assessment-btn">
+                        ➕ Create New Test
+                    </a>
+                </div>
+
+                <!-- Filter tabs -->
+                <div class="filter-tabs">
+                    <button class="filter-tab active" onclick="filterAssessments('all')">All Tests</button>
+                    <button class="filter-tab" onclick="filterAssessments('active')">Active</button>
+                    <button class="filter-tab" onclick="filterAssessments('draft')">Drafts</button>
+                    <button class="filter-tab" onclick="filterAssessments('inactive')">Inactive</button>
+                </div>
+
+                <!-- Assessment list -->
+                <div class="assessment-list" id="assessmentList">
+                    <!-- Assessment Card 1 - Active -->
+                    <div class="assessment-card" data-status="active">
+                        <div class="assessment-header">
+                            <div>
+                                <div class="assessment-title">Quantitative Aptitude - Set 1</div>
+                                <div class="assessment-category">Aptitude • Mathematics</div>
+                            </div>
+                            <span class="status-badge active">Active</span>
+                        </div>
+                        <div class="assessment-meta">
+                            <div class="meta-item">
+                                <span class="meta-icon">❓</span>
+                                <span>30 Questions</span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-icon">👥</span>
+                                <span>85 Attempts</span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-icon">📊</span>
+                                <span>Avg: 76%</span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-icon">📅</span>
+                                <span>Created: Dec 1, 2025</span>
+                            </div>
+                        </div>
+                        <div class="assessment-actions">
+                            <button class="btn-view" onclick="viewResults(1)">View Results</button>
+                            <button class="btn-edit" onclick="editAssessment(1)">Edit</button>
+                            <button class="btn-delete" onclick="deleteAssessment(1)">Delete</button>
+                        </div>
+                    </div>
+
+                    <!-- Assessment Card 2 - Draft -->
+                    <div class="assessment-card" data-status="draft">
+                        <div class="assessment-header">
+                            <div>
+                                <div class="assessment-title">Data Structures Advanced</div>
+                                <div class="assessment-category">Technical • CS Fundamentals</div>
+                            </div>
+                            <span class="status-badge draft">Draft</span>
+                        </div>
+                        <div class="assessment-meta">
+                            <div class="meta-item">
+                                <span class="meta-icon">❓</span>
+                                <span>18 Questions</span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-icon">⚠️</span>
+                                <span>Incomplete</span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-icon">📅</span>
+                                <span>Last edited: Dec 18, 2025</span>
+                            </div>
+                        </div>
+                        <div class="assessment-actions">
+                            <button class="btn-edit" onclick="editAssessment(2)">Continue Editing</button>
+                            <button class="btn-delete" onclick="deleteAssessment(2)">Delete</button>
+                        </div>
+                    </div>
+
+                    <!-- Assessment Card 3 - Active -->
+                    <div class="assessment-card" data-status="active">
+                        <div class="assessment-header">
+                            <div>
+                                <div class="assessment-title">Python Programming Basics</div>
+                                <div class="assessment-category">Coding • Python</div>
+                            </div>
+                            <span class="status-badge active">Active</span>
+                        </div>
+                        <div class="assessment-meta">
+                            <div class="meta-item">
+                                <span class="meta-icon">❓</span>
+                                <span>25 Questions</span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-icon">👥</span>
+                                <span>124 Attempts</span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-icon">📊</span>
+                                <span>Avg: 68%</span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-icon">📅</span>
+                                <span>Created: Nov 28, 2025</span>
+                            </div>
+                        </div>
+                        <div class="assessment-actions">
+                            <button class="btn-view" onclick="viewResults(3)">View Results</button>
+                            <button class="btn-edit" onclick="editAssessment(3)">Edit</button>
+                            <button class="btn-delete" onclick="deleteAssessment(3)">Delete</button>
+                        </div>
+                    </div>
+
+                    <!-- Assessment Card 4 - Inactive -->
+                    <div class="assessment-card" data-status="inactive">
+                        <div class="assessment-header">
+                            <div>
+                                <div class="assessment-title">Logical Reasoning Set 2</div>
+                                <div class="assessment-category">Aptitude • Logic</div>
+                            </div>
+                            <span class="status-badge inactive">Inactive</span>
+                        </div>
+                        <div class="assessment-meta">
+                            <div class="meta-item">
+                                <span class="meta-icon">❓</span>
+                                <span>35 Questions</span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-icon">👥</span>
+                                <span>56 Attempts</span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-icon">📊</span>
+                                <span>Avg: 71%</span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-icon">📅</span>
+                                <span>Deactivated: Dec 10, 2025</span>
+                            </div>
+                        </div>
+                        <div class="assessment-actions">
+                            <button class="btn-view" onclick="viewResults(4)">View Results</button>
+                            <button class="btn-edit" onclick="editAssessment(4)">Edit</button>
+                            <button class="btn-delete" onclick="deleteAssessment(4)">Delete</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar with activity and quick actions -->
+            <div class="sidebar">
+                <!-- Recent submissions card -->
+                <div class="sidebar-card">
+                    <h3 class="sidebar-card-title">Recent Submissions</h3>
+                    <div class="activity-list">
+                        <div class="activity-item">
+                            <div class="activity-icon">📝</div>
+                            <div class="activity-content">
+                                <div class="activity-title">Alice Johnson - Python Test</div>
+                                <div class="activity-time">5 minutes ago • Score: 88%</div>
+                            </div>
+                        </div>
+                        <div class="activity-item">
+                            <div class="activity-icon">📝</div>
+                            <div class="activity-content">
+                                <div class="activity-title">Bob Smith - Aptitude Test</div>
+                                <div class="activity-time">12 minutes ago • Score: 74%</div>
+                            </div>
+                        </div>
+                        <div class="activity-item">
+                            <div class="activity-icon">📝</div>
+                            <div class="activity-content">
+                                <div class="activity-title">Carol White - Data Structures</div>
+                                <div class="activity-time">23 minutes ago • Score: 92%</div>
+                            </div>
+                        </div>
+                        <div class="activity-item">
+                            <div class="activity-icon">📝</div>
+                            <div class="activity-content">
+                                <div class="activity-title">David Lee - SQL Basics</div>
+                                <div class="activity-time">1 hour ago • Score: 81%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Class performance card -->
+                <div class="sidebar-card">
+                    <h3 class="sidebar-card-title">Class Performance</h3>
+                    <div class="performance-chart">
+                        📈 Performance Trends
+                        <br><small>(Chart visualization will be here)</small>
+                    </div>
+                </div>
+
+                <!-- Quick actions card -->
+                <div class="sidebar-card">
+                    <h3 class="sidebar-card-title">Quick Actions</h3>
+                    <div class="quick-actions-list">
+                        <div class="quick-action-item" onclick="window.location.href='create-assessment.php'">
+                            <span class="quick-action-text">Create New Assessment</span>
+                            <span class="quick-action-icon">➕</span>
+                        </div>
+                        <div class="quick-action-item" onclick="window.location.href='view-all-results.php'">
+                            <span class="quick-action-text">View All Results</span>
+                            <span class="quick-action-icon">📊</span>
+                        </div>
+                        <div class="quick-action-item" onclick="window.location.href='student-management.php'">
+                            <span class="quick-action-text">Manage Students</span>
+                            <span class="quick-action-icon">👥</span>
+                        </div>
+                        <div class="quick-action-item" onclick="window.location.href='reports.php'">
+                            <span class="quick-action-text">Generate Reports</span>
+                            <span class="quick-action-icon">📄</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Action Button -->
+    <div class="fab-container">
+        <button class="fab-button" onclick="window.location.href='create-assessment.php'" title="Create New Assessment">
+            ➕
+        </button>
+    </div>
+
+    <script>
+        /* ============================================
+           ASSESSMENT FILTERING
+           Filter tests by status
+           ============================================ */
+        function filterAssessments(status) {
+            // Update active tab
+            const tabs = document.querySelectorAll('.filter-tab');
+            tabs.forEach(tab => tab.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // Filter assessment cards
+            const cards = document.querySelectorAll('.assessment-card');
+            cards.forEach(card => {
+                if (status === 'all') {
+                    card.style.display = 'block';
+                } else {
+                    const cardStatus = card.dataset.status;
+                    card.style.display = cardStatus === status ? 'block' : 'none';
+                }
+            });
+        }
+
+        /* ============================================
+           VIEW RESULTS
+           Opens results analytics page for an assessment
+           SECURITY: Verify teacher owns this assessment
+           ============================================ */
+        function viewResults(assessmentId) {
+            console.log('Viewing results for assessment:', assessmentId);
+            // In production: window.location.href = `assessment-results.php?id=${assessmentId}`;
+            alert(`Opening results analytics for assessment ${assessmentId}...\n\nWill show:\n• Student scores\n• Question-wise analysis\n• Performance trends\n• Export options`);
+        }
+
+        /* ============================================
+           EDIT ASSESSMENT
+           Opens assessment editor
+           SECURITY: Verify teacher owns this assessment
+           ============================================ */
+        function editAssessment(assessmentId) {
+            console.log('Editing assessment:', assessmentId);
+            // In production: window.location.href = `edit-assessment.php?id=${assessmentId}`;
+            alert(`Opening editor for assessment ${assessmentId}...\n\nWill allow editing:\n• Questions\n• Settings\n• Difficulty levels\n• Time limits`);
+        }
+
+        /* ============================================
+           DELETE ASSESSMENT
+           Deletes an assessment with confirmation
+           SECURITY: Verify teacher owns this assessment
+           WARNING: This should be a soft delete in production
+           ============================================ */
+        function deleteAssessment(assessmentId) {
+            // Confirm deletion
+            if (confirm('Are you sure you want to delete this assessment?\n\nThis action cannot be undone. All student attempts and results will be permanently deleted.')) {
+                console.log('Deleting assessment:', assessmentId);
+                
+                // In production, make AJAX call to backend
+                // Show loading state
+                alert(`Assessment ${assessmentId} deleted successfully!`);
+                
+                // In production, remove card from DOM or reload page
+                // location.reload();
+            }
+        }
+
+        /* ============================================
+           SEARCH FUNCTIONALITY
+           Real-time search through assessments and students
+           ============================================ */
+        document.getElementById('searchInput').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const cards = document.querySelectorAll('.assessment-card');
+            
+            cards.forEach(card => {
+                const title = card.querySelector('.assessment-title').textContent.toLowerCase();
+                const category = card.querySelector('.assessment-category').textContent.toLowerCase();
+                
+                if (title.includes(searchTerm) || category.includes(searchTerm)) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        });
+
+        /* ============================================
+           NOTIFICATION SYSTEM
+           Show notifications dropdown
+           ============================================ */
+        function showNotifications() {
+            // In production, this would open a dropdown with notifications
+            alert('Notifications:\n\n1. 15 new submissions pending review\n2. Alice Johnson scored 100% on Python Test\n3. New student registered: Mike Brown\n4. Reminder: Review draft assessments\n5. System update scheduled for tonight');
+        }
+
+        /* ============================================
+           PROFILE MENU
+           Toggle user profile dropdown
+           ============================================ */
+        function toggleProfileMenu() {
+            // In production, this would show a dropdown menu with:
+            // - View Profile
+            // - Settings
+            // - My Classes
+            // - Logout
+            alert('Profile Menu:\n\n• View Profile\n• Account Settings\n• My Classes\n• Assessment Library\n• Help & Support\n• Logout');
+        }
+
+        /* ============================================
+           EXPORT RESULTS
+           Export assessment results to various formats
+           ============================================ */
+        function exportResults(assessmentId, format) {
+            console.log(`Exporting results for assessment ${assessmentId} as ${format}`);
+            // In production, call backend API to generate export file
+            alert(`Generating ${format.toUpperCase()} export...\n\nThis will include:\n• Student names and scores\n• Question-wise breakdown\n• Statistics and analytics`);
+        }
+
+        /* ============================================
+           BULK ACTIONS
+           Perform actions on multiple assessments
+           ============================================ */
+        function bulkAction(action) {
+            // Get selected assessments (would need checkboxes in production)
+            console.log(`Performing bulk action: ${action}`);
+            alert(`Bulk ${action} feature\n\nWould allow:\n• Select multiple assessments\n• Activate/deactivate\n• Delete\n• Export results`);
+        }
+
+        /* ============================================
+           PAGE LOAD ANIMATIONS
+           Smooth entrance effects
+           ============================================ */
+        window.addEventListener('load', function() {
+            console.log('Teacher Dashboard loaded successfully');
+            
+            // Animate stat cards
+            const statCards = document.querySelectorAll('.stat-card');
+            statCards.forEach((card, index) => {
+                setTimeout(() => {
+                    card.style.animation = 'fadeInUp 0.5s ease forwards';
+                }, index * 100);
+            });
+        });
+
+        /* ============================================
+           AUTO-REFRESH SUBMISSIONS
+           Periodically check for new submissions
+           ============================================ */
+        // In production, poll backend every 30 seconds for new submissions
+        // setInterval(function() {
+        //     // Make AJAX call to check for new submissions
+        //     console.log('Checking for new submissions...');
+        //     // Update recent submissions list if new ones found
+        // }, 30000);
+
+        /* ============================================
+           KEYBOARD SHORTCUTS
+           Enhanced user experience for teachers
+           ============================================ */
+        document.addEventListener('keydown', function(e) {
+            // Ctrl/Cmd + N: Create new assessment
+            if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+                e.preventDefault();
+                window.location.href = 'create-assessment.php';
+            }
+            
+            // Ctrl/Cmd + R: View reports
+            if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+                e.preventDefault();
+                window.location.href = 'reports.php';
+            }
+        });
+
+        /* ============================================
+           ADD ENTRANCE ANIMATIONS
+           CSS keyframes for smooth appearance
+           ============================================ */
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes fadeInUp {
+                from {
+                    opacity: 0;
+                    transform: translateY(20px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            
+            .stat-card {
+                opacity: 0;
+            }
+        `;
+        document.head.appendChild(style);
+
+        /* ============================================
+           BACKEND INTEGRATION NOTES
+           When connecting to PHP backend:
+           
+           1. FETCH ASSESSMENTS:
+              - Endpoint: get-teacher-assessments.php
+              - Filter by teacher ID from session
+              - Return: Array of assessment objects
+           
+           2. DELETE ASSESSMENT:
+              - Endpoint: delete-assessment.php
+              - Method: POST
+              - Verify ownership before deletion
+              - Use soft delete (set active=0) rather than hard delete
+           
+           3. GET STATISTICS:
+              - Endpoint: get-teacher-stats.php
+              - Return: Total assessments, submissions, avg scores
+           
+           4. RECENT SUBMISSIONS:
+              - Endpoint: get-recent-submissions.php
+              - Return: Last 10 submissions with student info
+           
+           5. SECURITY REQUIREMENTS:
+              - Validate teacher session
+              - Verify assessment ownership for all operations
+              - Use prepared statements for SQL queries
+              - Implement CSRF tokens for delete/edit actions
+           ============================================ */
+    </script>
+</body>
+</html>
