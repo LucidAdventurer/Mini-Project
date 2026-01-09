@@ -3,8 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Create Assessment - Placement Portal">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Create Assessment - Placement Portal</title>
     <style>
+        /* ============================================
+           CSS VARIABLES - Reusable values
+           ============================================ */
+        :root {
+            /* Colors #4facfe #00f2fe*/
+
+            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            --color-primary: #234C6A;
+            --color-primary-dark: #456882;
+            --color-teacher-primary: #2E073F;
+            --color-teacher-secondary: #AD49E1;
+            --color-text: #2d3748;
+            --color-text-light: #718096;
+            --color-text-lighter: #a0aec0;
+            --color-bg: #FFEDFA;
+            --color-bg-light: #f5f7fa;
+            --color-white: #ffffff;
+            --color-border: #e2e8f0;
+            --color-success: #48bb78;
+            --color-error: #f56565;
+            --color-warning: #ffc107;
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.08);
+            --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.15);
+            --border-radius: 10px;
+            --border-radius-lg: 20px;
+            --transition: all 0.3s ease;
+        }
+
         /* ============================================
            GLOBAL RESET & BASE STYLES
            ============================================ */
@@ -15,43 +46,50 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            font-family: var(--font-family);
+            background: #D3DAD9;
             min-height: 100vh;
-            color: #2d3748;
+            color: var(--color-text);
+            margin: 0;
+            padding: 0;
+            padding-top: 71px;
+            overflow-x: hidden;
         }
 
         /* ============================================
            NAVIGATION BAR
            Teacher theme colors
            ============================================ */
+        /* NAVIGATION BAR - standardized across pages */
         .navbar {
-            background: white;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            padding: 15px 30px;
+            background: var(--color-teacher-primary);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            padding: 12px 28px;
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            position: sticky;
+            justify-content: space-between;
+            position: fixed;
             top: 0;
-            z-index: 100;
-            border-bottom: 3px solid #fa709a;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            border-bottom: 3px solid var(--color-teacher-primary);
         }
 
         .navbar-brand {
             display: flex;
             align-items: center;
             gap: 12px;
-            font-size: 22px;
+            font-size: 20px;
             font-weight: 700;
-            color: #2d3748;
+            color: white;
             text-decoration: none;
         }
 
         .brand-logo {
             width: 45px;
             height: 45px;
-            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
             border-radius: 10px;
             display: flex;
             align-items: center;
@@ -69,8 +107,8 @@
         .btn-back {
             padding: 10px 24px;
             background: white;
-            color: #fa709a;
-            border: 2px solid #fa709a;
+            color: var(--color-teacher-primary);
+            border: 2px solid var(--color-teacher-primary);
             border-radius: 10px;
             font-weight: 600;
             font-size: 14px;
@@ -83,7 +121,7 @@
         }
 
         .btn-back:hover {
-            background: #fa709a;
+            background: var(--color-teacher-primary);
             color: white;
             transform: translateY(-2px);
         }
@@ -143,7 +181,7 @@
         .section-icon {
             width: 40px;
             height: 40px;
-            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
             border-radius: 10px;
             display: flex;
             align-items: center;
@@ -182,7 +220,7 @@
 
         .form-input:focus {
             outline: none;
-            border-color: #fa709a;
+            border-color: var(--color-teacher-primary);
             box-shadow: 0 0 0 3px rgba(250, 112, 154, 0.1);
         }
 
@@ -359,7 +397,7 @@
             background: #e6f7ff;
             border-radius: 12px;
             margin-top: 20px;
-            border: 2px solid #4facfe;
+            border: 2px solid var(--color-primary);
         }
 
         .parsing-status.active {
@@ -388,7 +426,7 @@
             width: 20px;
             height: 20px;
             border: 3px solid #e2e8f0;
-            border-top-color: #fa709a;
+            border-top-color: var(--color-teacher-primary);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
             margin-right: 10px;
@@ -1048,60 +1086,106 @@
 
         /* ============================================
            DISPLAY QUESTIONS
-           Show extracted questions in preview
+           Show extracted questions in preview - optimized
            ============================================ */
         function displayQuestions(questions) {
             const questionsList = document.getElementById('questionsList');
             const questionsPreview = document.getElementById('questionsPreview');
             const questionCount = document.getElementById('questionCount');
             
-            questionsList.innerHTML = '';
-            questionCount.textContent = `${questions.length} questions found`;
+            if (!questionsList || !questionCount || !questionsPreview) return;
+            
+            // Use document fragment for better performance
+            const fragment = document.createDocumentFragment();
             
             questions.forEach((question, index) => {
                 const card = createQuestionCard(question, index);
-                questionsList.appendChild(card);
+                fragment.appendChild(card);
             });
             
+            questionsList.innerHTML = '';
+            questionsList.appendChild(fragment);
+            questionCount.textContent = `${questions.length} questions found`;
             questionsPreview.classList.add('active');
         }
 
         /* ============================================
            CREATE QUESTION CARD
-           Generate HTML for a single question
+           Generate HTML for a single question - optimized
            ============================================ */
         function createQuestionCard(question, index) {
             const card = document.createElement('div');
             card.className = 'question-card';
             card.setAttribute('data-question-id', question.id);
             
-            card.innerHTML = `
-                <div class="question-header">
-                    <span class="question-number">Question ${index + 1}</span>
-                    <div class="question-actions">
-                        <button class="btn-edit-q" onclick="editQuestion(${question.id})">Edit</button>
-                        <button class="btn-delete-q" onclick="deleteQuestion(${question.id})">Delete</button>
-                    </div>
-                </div>
-                <div class="question-text">${question.text}</div>
-                <div class="options-list">
-                    <div class="option-item">
-                        <span class="option-label">a)</span>${question.options[0]}
-                    </div>
-                    <div class="option-item">
-                        <span class="option-label">b)</span>${question.options[1]}
-                    </div>
-                    <div class="option-item">
-                        <span class="option-label">c)</span>${question.options[2]}
-                    </div>
-                    <div class="option-item">
-                        <span class="option-label">d)</span>${question.options[3]}
-                    </div>
-                </div>
-            `;
+            // Use safer HTML construction
+            const header = document.createElement('div');
+            header.className = 'question-header';
+            
+            const questionNumber = document.createElement('span');
+            questionNumber.className = 'question-number';
+            questionNumber.textContent = `Question ${index + 1}`;
+            
+            const actions = document.createElement('div');
+            actions.className = 'question-actions';
+            
+            const editBtn = document.createElement('button');
+            editBtn.className = 'btn-edit-q';
+            editBtn.textContent = 'Edit';
+            editBtn.setAttribute('data-question-id', question.id);
+            editBtn.setAttribute('aria-label', `Edit question ${index + 1}`);
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'btn-delete-q';
+            deleteBtn.textContent = 'Delete';
+            deleteBtn.setAttribute('data-question-id', question.id);
+            deleteBtn.setAttribute('aria-label', `Delete question ${index + 1}`);
+            
+            actions.appendChild(editBtn);
+            actions.appendChild(deleteBtn);
+            header.appendChild(questionNumber);
+            header.appendChild(actions);
+            
+            const questionText = document.createElement('div');
+            questionText.className = 'question-text';
+            questionText.textContent = question.text;
+            
+            const optionsList = document.createElement('div');
+            optionsList.className = 'options-list';
+            
+            question.options.forEach((option, optIndex) => {
+                const optionItem = document.createElement('div');
+                optionItem.className = 'option-item';
+                
+                const label = document.createElement('span');
+                label.className = 'option-label';
+                label.textContent = String.fromCharCode(97 + optIndex) + ') ';
+                
+                const optionText = document.createTextNode(option);
+                
+                optionItem.appendChild(label);
+                optionItem.appendChild(optionText);
+                optionsList.appendChild(optionItem);
+            });
+            
+            card.appendChild(header);
+            card.appendChild(questionText);
+            card.appendChild(optionsList);
             
             return card;
         }
+
+        // Use event delegation for question actions
+        document.addEventListener('click', function(e) {
+            const questionId = e.target.dataset.questionId;
+            if (!questionId) return;
+            
+            if (e.target.classList.contains('btn-edit-q')) {
+                editQuestion(parseInt(questionId));
+            } else if (e.target.classList.contains('btn-delete-q')) {
+                deleteQuestion(parseInt(questionId));
+            }
+        });
 
         /* ============================================
            DISPLAY CORRECT ANSWERS INPUTS

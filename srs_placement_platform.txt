@@ -1,0 +1,662 @@
+# Software Requirements Specification (SRS)
+
+## Website for Placement and Training Assessment
+
+---
+
+### Project Details
+
+**Department:** Computer Science and Engineering  
+**Academic Year:** 2025-2026  
+**Batch:** 12 (2023-2027)
+
+**Team Members:**
+1. A.V Justin Kurian (AIK23CS045)
+2. Antony Thomas (AIK23CS033)
+3. Alan Thomas (LAIK23CS126)
+4. Fernando Tony (AIK23CS058)
+
+**Date:** December 18, 2025
+
+---
+
+## 1. Introduction
+
+### 1.1 Purpose
+This document specifies the functional and non-functional requirements for the Placement and Training Assessment platform. It serves as a reference for developers, testers, and stakeholders throughout the project lifecycle.
+
+### 1.2 Scope
+A web-based assessment system for placement preparation and training. The platform supports three user roles:
+- **Students:** Take assessments, track performance, access resources
+- **Teachers:** Create and manage assessments, view analytics, upload resources
+- **Guests:** Access public tests and resources without registration
+
+**Core Capabilities:**
+- Role-based authentication and access control
+- Test creation and management (manual and PDF upload)
+- Secure test-taking environment with timer
+- Automated grading and performance analytics
+- Placement resources and training materials management
+- Placement drive information system
+
+### 1.3 Definitions and Acronyms
+- **SRS:** Software Requirements Specification
+- **LAMP:** Linux, Apache, MySQL/MariaDB, PHP
+- **XAMPP:** Cross-platform web server solution (Apache, MariaDB, PHP, Perl)
+- **AJAX:** Asynchronous JavaScript and XML
+- **MVC:** Model-View-Controller architecture pattern
+- **UI/UX:** User Interface/User Experience
+
+### 1.4 References
+- IEEE Standard 830-1998 for Software Requirements Specifications
+- Project Proposal Document (2025-2026)
+- Project Abstract (Final Version)
+
+### 1.5 Document Structure
+This document is organized into: system overview, functional requirements, non-functional requirements, database design, system architecture, and implementation constraints.
+
+---
+
+## 2. Overall Description
+
+### 2.1 Product Perspective
+A standalone web application for college placement preparation. The system integrates with college email for student authentication and operates independently within the institutional network.
+
+**System Components:**
+- Web application (PHP-based)
+- MariaDB database
+- File storage for PDFs and resources
+- Web server (Apache)
+
+### 2.2 Product Functions
+
+1. **User Management**
+   - Student and teacher registration/login
+   - Guest access (no registration)
+   - Session management and security
+
+2. **Assessment Management**
+   - Create tests manually or via PDF upload
+   - Configure test parameters (duration, marks, difficulty)
+   - Manage question bank
+   - Schedule and activate/deactivate tests
+
+3. **Test Taking**
+   - Browse available assessments
+   - Secure test environment with timer
+   - Auto-save answers
+   - Submit and view results
+
+4. **Performance Analytics**
+   - Automated grading
+   - Performance tracking and visualization
+   - Topic-wise analysis
+   - Progress monitoring
+
+5. **Resource Management**
+   - Upload placement resources (articles, PDFs, videos)
+   - Manage training materials
+   - Company and placement drive information
+
+### 2.3 User Characteristics
+
+**Students:**
+- College students preparing for placements
+- Basic web browsing skills
+- Need practice tests and performance feedback
+
+**Teachers:**
+- Faculty members and trainers
+- Moderate technical skills
+- Need efficient test creation and analytics tools
+
+**Guests:**
+- Prospective students or casual learners
+- Minimal technical knowledge
+- Limited access to public content only
+
+### 2.4 Constraints
+
+**Technical:**
+- LAMP/XAMPP stack required
+- Modern browser support (Chrome, Firefox, Safari, Edge)
+- Server resource limitations
+
+**Regulatory:**
+- Data privacy compliance
+- Educational institution policies
+- User data protection
+
+**Design:**
+- Responsive design for desktop and mobile
+- Intuitive user interface
+- Scalable database architecture
+
+### 2.5 Assumptions and Dependencies
+
+**Assumptions:**
+- Stable internet connectivity
+- Valid college email addresses for students
+- Modern web browsers available
+- Teachers have appropriate permissions
+
+**Dependencies:**
+- Apache web server (2.4+)
+- MariaDB database (10.4+)
+- PHP runtime (7.4+)
+- PDF processing libraries
+- Bootstrap framework (4.x or 5.x)
+
+---
+
+## 3. Specific Requirements
+
+### 3.1 Functional Requirements
+
+#### 3.1.1 User Management
+
+**FR1.1: Registration**
+- Students register with college email ID
+- Teachers register with verification
+- Email format validation
+- Strong password enforcement (min 8 characters, mixed case, numbers)
+
+**FR1.2: Authentication**
+- Secure login with email and password
+- Session-based authentication
+- Password recovery via email
+- Guest access without registration
+
+**FR1.3: Access Control**
+- Role-based permissions (student/teacher/guest)
+- Session timeout after inactivity
+- Unauthorized access prevention
+
+#### 3.1.2 Assessment Management (Teachers)
+
+**FR2.1: Test Creation**
+- Create tests manually with form interface
+- Upload questions via PDF (structured format)
+- Set difficulty levels (Easy, Medium, Hard)
+- Configure duration (in minutes)
+- Set total marks and passing marks
+- Add test instructions
+
+**FR2.2: Question Management**
+- Add/edit/delete questions
+- Support question types: MCQ, Multiple Select, True/False, Short Answer
+- Organize by topic/category
+- Set marks per question
+- Add explanations
+- Preview test before publishing
+
+**FR2.3: Test Configuration**
+- Set test status (Draft, Active, Inactive, Completed)
+- Schedule start and end times
+- Make tests public or private
+- Assign to specific student groups (future enhancement)
+
+#### 3.1.3 Test Taking (Students/Guests)
+
+**FR3.1: Browse Tests**
+- View available tests with details
+- Filter by difficulty, category, or status
+- See test duration, marks, and difficulty
+- Guests see only public tests
+
+**FR3.2: Attempt Test**
+- Secure test environment
+- Display questions (single or all at once)
+- Countdown timer display
+- Auto-save answers every 30 seconds
+- Prevent browser navigation during test
+- Show progress indicator
+
+**FR3.3: Submit Test**
+- Submit completed test
+- Confirm submission dialog
+- Prevent re-submission
+- Auto-submit on timer expiration
+- Timestamp all submissions
+
+#### 3.1.4 Results and Analytics
+
+**FR4.1: Automated Grading**
+- Grade objective questions automatically
+- Calculate total score and percentage
+- Store results in database
+- Generate result reports
+
+**FR4.2: Result Display**
+- Show instant results after submission
+- Display correct/incorrect answers
+- Show score breakdown by topic
+- Display performance graphs/charts
+- Show explanations for questions
+
+**FR4.3: Performance Tracking**
+- Track student progress over time
+- View test history
+- Identify strengths and weaknesses by topic
+- Compare performance across tests
+
+**FR4.4: Teacher Analytics**
+- View individual student performance
+- Class average and statistics
+- Pass/fail rates
+- Topic-wise performance analysis
+- Export results to Excel/CSV/PDF
+
+#### 3.1.5 Resource Management
+
+**FR5.1: Placement Resources**
+- Upload articles, PDFs, videos, links
+- Categorize resources (resume, interview, aptitude)
+- Make resources public or private
+- Track resource views
+
+**FR5.2: Training Materials**
+- Upload documents, videos, tutorials, courses
+- Set difficulty levels
+- Categorize by subject
+- Manage public/private access
+
+**FR5.3: Placement Drives**
+- Add company information
+- Create placement drive entries
+- Set drive dates and deadlines
+- Track drive status (upcoming, ongoing, completed)
+
+---
+
+### 3.2 Non-Functional Requirements
+
+#### 3.2.1 Performance
+
+**NFR1.1: Response Time**
+- Page load: ≤ 3 seconds
+- Test submission: ≤ 2 seconds
+- AJAX requests: ≤ 1 second
+- Database queries: optimized with indexes
+
+**NFR1.2: Capacity**
+- Support 500+ concurrent users
+- Handle 10,000+ test records
+- Support tests with 100+ questions
+- Store 1,000+ user accounts
+
+**NFR1.3: Scalability**
+- Modular architecture for easy expansion
+- Database design supports growth
+- Efficient query optimization
+
+#### 3.2.2 Security
+
+**NFR2.1: Authentication**
+- Password hashing using PHP password_hash() (bcrypt)
+- Session-based authentication
+- Session timeout (30 minutes inactivity)
+- Rate limiting for login attempts
+
+**NFR2.2: Data Protection**
+- Prepared statements for SQL injection prevention
+- Input validation and sanitization
+- XSS protection (output escaping)
+- Secure file upload validation
+
+**NFR2.3: Authorization**
+- Role-based access control
+- Prevent privilege escalation
+- Log administrative actions
+- Secure file upload restrictions
+
+#### 3.2.3 Usability
+
+**NFR3.1: Interface Design**
+- Intuitive navigation
+- Consistent design patterns
+- Clear error messages
+- Responsive layout (desktop, tablet, mobile)
+
+**NFR3.2: Accessibility**
+- Support multiple screen sizes
+- Readable fonts and contrast
+- Keyboard navigation support
+- Screen reader compatibility (basic)
+
+**NFR3.3: User Experience**
+- New users complete basic tasks within 5 minutes
+- Contextual help and tooltips
+- User documentation available
+
+#### 3.2.4 Reliability
+
+**NFR4.1: Availability**
+- 99% uptime target
+- Graceful error handling
+- Error recovery mechanisms
+- Database transaction support
+
+**NFR4.2: Data Integrity**
+- Referential integrity constraints
+- Transaction rollback on errors
+- Regular database backups
+- Data validation at all levels
+
+#### 3.2.5 Maintainability
+
+**NFR5.1: Code Quality**
+- Follow PHP PSR coding standards
+- MVC architecture pattern
+- Modular code structure
+- Inline code documentation
+
+**NFR5.2: Documentation**
+- User manuals for each role
+- Database schema documentation
+- Installation and deployment guide
+- API documentation (if applicable)
+
+#### 3.2.6 Portability
+
+**NFR6.1: Platform Support**
+- Run on Linux, Windows, macOS servers
+- Compatible with modern browsers
+- Deployable on standard LAMP/XAMPP stacks
+
+---
+
+## 4. System Features
+
+### 4.1 Multi-Role Authentication
+**Priority:** High  
+**Description:** Secure authentication system supporting students, teachers, and guests with appropriate access levels.
+
+**Key Functions:**
+- College email-based student registration
+- Teacher verification
+- Guest access without registration
+- Session management
+
+### 4.2 Assessment Management
+**Priority:** High  
+**Description:** Tools for teachers to create, configure, and manage assessments.
+
+**Key Functions:**
+- Manual test creation
+- PDF question upload
+- Difficulty and parameter configuration
+- Test scheduling and activation
+
+### 4.3 Secure Test Environment
+**Priority:** High  
+**Description:** Protected interface for taking assessments with integrity controls.
+
+**Key Functions:**
+- Countdown timer
+- Auto-save functionality
+- Browser navigation prevention
+- Secure submission
+
+### 4.4 Performance Analytics
+**Priority:** Medium  
+**Description:** Analytics dashboard for tracking and analyzing student performance.
+
+**Key Functions:**
+- Automated grading
+- Performance visualization
+- Topic-wise analysis
+- Progress tracking
+
+### 4.5 Resource Management
+**Priority:** Medium  
+**Description:** System for managing placement resources and training materials.
+
+**Key Functions:**
+- Upload and categorize resources
+- Company and placement drive management
+- Public/private access control
+
+---
+
+## 5. External Interface Requirements
+
+### 5.1 User Interfaces
+
+**UI1: Landing Page**
+- Role selection (Student/Teacher/Guest)
+- Brief system description
+- Quick links to public resources
+
+**UI2: Login/Registration**
+- Email and password fields
+- Role selection
+- Guest access button
+- Password recovery link
+
+**UI3: Student Dashboard**
+- Available tests list
+- Performance summary
+- Recent test history
+- Quick access to resources
+
+**UI4: Teacher Dashboard**
+- Test management panel
+- Student performance overview
+- Create test button
+- Analytics section
+
+**UI5: Test Interface**
+- Question display area
+- Timer (countdown)
+- Answer selection/input
+- Navigation controls
+- Submit button
+- Progress indicator
+
+**UI6: Results Page**
+- Score and percentage
+- Correct/incorrect breakdown
+- Topic-wise performance
+- Performance charts
+- Question review with explanations
+
+### 5.2 Hardware Interfaces
+- Standard web server hardware
+- Sufficient storage for database and files
+- Network connectivity
+
+### 5.3 Software Interfaces
+
+**Web Server:** Apache 2.4+  
+**Database:** MariaDB 10.4+  
+**Server-Side:** PHP 7.4+  
+**Libraries:**
+- FPDF or TCPDF for PDF processing
+- Bootstrap 4.x/5.x for UI components
+- jQuery for AJAX operations
+
+### 5.4 Communication Interfaces
+- HTTP/HTTPS protocols
+- AJAX for asynchronous operations
+- JSON for data exchange
+- RESTful API principles (optional)
+
+---
+
+## 6. Database Requirements
+
+### 6.1 Data Entities
+
+**users**
+- user_id (PK), username, email, password, full_name
+- user_type (student/teacher), department, registration_number
+- created_at, last_login, is_active
+
+**tests**
+- test_id (PK), test_name, description, created_by (FK)
+- category (placement/training/assessment)
+- difficulty_level (easy/medium/hard)
+- duration, total_marks, passing_marks
+- is_public, start_time, end_time, instructions
+- status (draft/active/inactive/completed)
+- created_at, updated_at
+
+**questions**
+- question_id (PK), test_id (FK), question_text
+- question_type (mcq/multiple_select/true_false/short_answer)
+- marks, option_a/b/c/d/e, correct_answer
+- explanation, topic, question_order
+- created_at
+
+**test_attempts**
+- attempt_id (PK), test_id (FK), user_id (FK, nullable)
+- guest_name, guest_email (for guest attempts)
+- start_time, end_time, submitted_at
+- score, total_marks, percentage
+- status (in_progress/completed/abandoned/timeout)
+- ip_address
+
+**student_answers**
+- answer_id (PK), attempt_id (FK), question_id (FK)
+- selected_answer, is_correct, marks_obtained
+- time_taken, answered_at
+
+**placement_resources**
+- resource_id (PK), title, description
+- resource_type (article/pdf/video/link/tips)
+- file_path, external_link, category
+- uploaded_by (FK), is_public, views, created_at
+
+**training_materials**
+- material_id (PK), title, description
+- material_type (document/video/tutorial/course)
+- file_path, external_link, category
+- difficulty_level (beginner/intermediate/advanced)
+- uploaded_by (FK), is_public, views, created_at
+
+**companies**
+- company_id (PK), company_name, description
+- website, logo_path, industry, created_at
+
+**placement_drives**
+- drive_id (PK), company_id (FK), title, description
+- job_role, ctc, eligibility_criteria
+- drive_date, registration_deadline
+- status (upcoming/ongoing/completed/cancelled)
+- is_public, created_by (FK), created_at
+
+### 6.2 Data Relationships
+- One teacher → many tests
+- One test → many questions
+- One test → many attempts (by different users)
+- One user → many attempts (on different tests)
+- One attempt → many answers
+- One teacher → many resources/materials
+- One company → many placement drives
+
+### 6.3 Database Constraints
+- Foreign key constraints with appropriate ON DELETE actions
+- Unique constraints on email, username, registration_number
+- Indexes on frequently queried columns (email, test_id, user_id, status)
+- Check constraints for valid data ranges
+
+---
+
+## 7. System Architecture
+
+### 7.1 Architecture Pattern
+Three-tier web application:
+
+**Presentation Layer:**
+- HTML5, CSS3, JavaScript
+- Bootstrap for responsive UI
+- AJAX for dynamic content
+
+**Application Layer:**
+- PHP server-side logic
+- Session management
+- Business logic and validation
+
+**Data Layer:**
+- MariaDB database
+- Data access abstraction
+- Query optimization
+
+### 7.2 Design Patterns
+- **MVC:** Separation of concerns (Model-View-Controller)
+- **Singleton:** Database connection management
+- **Factory:** Object creation patterns
+- **Repository:** Data access abstraction
+
+### 7.3 Folder Structure
+```
+placement_training_system/
+├── config/          # Configuration files
+├── includes/        # Shared components
+├── auth/            # Authentication
+├── student/         # Student features
+├── teacher/         # Teacher features
+├── guest/           # Guest features
+├── ajax/            # AJAX handlers
+├── uploads/         # User uploads
+├── assets/          # CSS, JS, images
+└── index.php        # Landing page
+```
+
+---
+
+## 8. Constraints and Assumptions
+
+### 8.1 Technical Constraints
+- LAMP/XAMPP stack required
+- PHP 7.4+ compatibility
+- Browser support limitations
+- Server resource constraints
+
+### 8.2 Business Constraints
+- Development timeline
+- Budget limitations
+- Resource availability
+- Institutional policies
+
+### 8.3 Regulatory Constraints
+- Data protection regulations
+- Educational institution policies
+- Privacy requirements
+- Accessibility standards
+
+---
+
+## 9. Appendices
+
+### 9.1 Glossary
+- **Assessment/Test:** A collection of questions with time and scoring parameters
+- **Attempt:** A single instance of a user taking a test
+- **LAMP Stack:** Linux, Apache, MySQL/MariaDB, PHP technology stack
+- **Session:** User's active interaction period with the system
+- **Role:** User type determining access permissions
+
+### 9.2 Future Enhancements
+- Mobile application (iOS/Android)
+- AI-based question generation
+- Video question support
+- Integration with Learning Management Systems
+- Online proctoring features
+- Machine learning-based analytics
+- Multi-language support
+- Adaptive testing algorithms
+- Real-time collaboration features
+- Notification system
+
+---
+
+**Document Prepared By:**
+1. A.V Justin Kurian (AIK23CS045)
+2. Antony Thomas (AIK23CS033)
+3. Alan Thomas (LAIK23CS126)
+4. Fernando Tony (AIK23CS058)
+
+**Document Version:** 1.0  
+**Date:** December 18, 2025  
+**Status:** Final Draft

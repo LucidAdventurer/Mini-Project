@@ -1,0 +1,1580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Assessment - Placement Portal</title>
+    <style>
+        /* ============================================
+           CSS VARIABLES - Reusable values
+           ============================================ */
+        :root {
+            /* Colors #4facfe #00f2fe*/
+
+            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            --color-primary: #234C6A;
+            --color-primary-dark: #456882;
+            --color-teacher-primary: #2E073F;
+            --color-teacher-secondary: #AD49E1;
+            --color-text: #2d3748;
+            --color-text-light: #718096;
+            --color-text-lighter: #a0aec0;
+            --color-bg: #FFEDFA;
+            --color-bg-light: #f5f7fa;
+            --color-white: #ffffff;
+            --color-border: #e2e8f0;
+            --color-success: #48bb78;
+            --color-error: #f56565;
+            --color-warning: #ffc107;
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.08);
+            --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.15);
+            --border-radius: 10px;
+            --border-radius-lg: 20px;
+            --transition: all 0.3s ease;
+        }
+
+        /* ============================================
+           GLOBAL RESET & BASE STYLES
+           ============================================ */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #D3DAD9;
+            min-height: 100vh;
+            color: #2d3748;
+            margin: 0;
+            padding: 0;
+            padding-top: 71px;
+            overflow-x: hidden;
+        }
+
+        /* ============================================
+           NAVIGATION BAR
+           Teacher theme colors (purple/orange gradient)
+           ============================================ */
+        /* NAVIGATION BAR - standardized across pages */
+        .navbar {
+            background: var(--color-teacher-primary);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            padding: 12px 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            border-bottom: 3px solid var(--color-teacher-primary);
+        }
+
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 20px;
+            font-weight: 700;
+            color: white;
+            text-decoration: none;
+        }
+
+        .brand-logo {
+            width: 45px;
+            height: 45px;
+            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 20px;
+        }
+
+        .nav-actions {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn-back {
+            padding: 10px 24px;
+            background: white;
+            color: var(--color-teacher-primary);
+            border: 2px solid var(--color-teacher-primary);
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-back:hover {
+            background: var(--color-teacher-primary);
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        /* ============================================
+           MAIN CONTAINER
+           ============================================ */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px;
+        }
+
+        /* Page header with assessment info */
+        .page-header {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-content {
+            flex: 1;
+        }
+
+        .page-title {
+            font-size: 32px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+
+        .page-description {
+            font-size: 16px;
+            color: #718096;
+        }
+
+        .assessment-meta {
+            display: flex;
+            gap: 20px;
+            margin-top: 15px;
+        }
+
+        .meta-badge {
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .meta-badge.active {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .meta-badge.draft {
+            background: #feebc8;
+            color: #7c2d12;
+        }
+
+        .meta-badge.info {
+            background: #e6f7ff;
+            color: #0c5460;
+        }
+
+        /* Status toggle switch */
+        .status-toggle {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 10px;
+        }
+
+        .toggle-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #718096;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 60px;
+            height: 30px;
+            background: #e2e8f0;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .toggle-switch.active {
+            background: #48bb78;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 24px;
+            height: 24px;
+            background: white;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .toggle-switch.active .toggle-slider {
+            left: 33px;
+        }
+
+        /* ============================================
+           FORM SECTIONS
+           Editable assessment details
+           ============================================ */
+        .form-section {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 20px;
+        }
+
+        /* Form groups */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+
+        .form-label .required {
+            color: #f56565;
+            margin-left: 4px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #fa709a;
+            box-shadow: 0 0 0 3px rgba(250, 112, 154, 0.1);
+        }
+
+        .form-textarea {
+            min-height: 100px;
+            resize: vertical;
+            font-family: inherit;
+        }
+
+        /* Grid layout for form fields */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        /* Select dropdown */
+        .form-select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 14px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .form-select:focus {
+            outline: none;
+            border-color: #fa709a;
+            box-shadow: 0 0 0 3px rgba(250, 112, 154, 0.1);
+        }
+
+        /* ============================================
+           STATISTICS SECTION
+           Assessment performance stats
+           ============================================ */
+        .stats-section {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .stat-card {
+            padding: 20px;
+            background: #f7fafc;
+            border-radius: 12px;
+            border: 2px solid #e2e8f0;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            border-color: #fa709a;
+            transform: translateY(-3px);
+        }
+
+        .stat-icon {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: #718096;
+        }
+
+        /* ============================================
+           QUESTIONS MANAGEMENT
+           Edit, add, delete questions
+           ============================================ */
+        .questions-section {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+
+        .btn-add-question {
+            padding: 10px 24px;
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-add-question:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(250, 112, 154, 0.4);
+        }
+
+        /* Question cards */
+        .questions-list {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .question-card {
+            padding: 25px;
+            background: #f7fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .question-card:hover {
+            border-color: #fa709a;
+            box-shadow: 0 4px 12px rgba(250, 112, 154, 0.15);
+        }
+
+        .question-card.editing {
+            border-color: var(--color-primary);
+            background: white;
+        }
+
+        .question-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .question-number {
+            font-size: 16px;
+            font-weight: 700;
+            color: #fa709a;
+        }
+
+        .question-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-edit-q {
+            padding: 8px 16px;
+            background: #e2e8f0;
+            color: #2d3748;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-edit-q:hover {
+            background: #cbd5e0;
+        }
+
+        .btn-delete-q {
+            padding: 8px 16px;
+            background: #fed7d7;
+            color: #742a2a;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-delete-q:hover {
+            background: #f56565;
+            color: white;
+        }
+
+        .btn-save-q {
+            padding: 8px 16px;
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-save-q:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(72, 187, 120, 0.4);
+        }
+
+        .btn-cancel-q {
+            padding: 8px 16px;
+            background: white;
+            color: #718096;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-cancel-q:hover {
+            border-color: #fa709a;
+            color: #fa709a;
+        }
+
+        /* Question display (non-editing) */
+        .question-display {
+            display: block;
+        }
+
+        .question-display.hidden {
+            display: none;
+        }
+
+        .question-text {
+            font-size: 16px;
+            color: #2d3748;
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+
+        .options-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .option-item {
+            padding: 12px;
+            background: white;
+            border-radius: 10px;
+            font-size: 14px;
+            color: #2d3748;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .option-item.correct {
+            border: 2px solid #48bb78;
+            background: rgba(72, 187, 120, 0.1);
+        }
+
+        .option-label {
+            font-weight: 700;
+            min-width: 25px;
+        }
+
+        .correct-badge {
+            margin-left: auto;
+            padding: 4px 10px;
+            background: #c6f6d5;
+            color: #22543d;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        /* Question edit form */
+        .question-edit-form {
+            display: none;
+        }
+
+        .question-edit-form.active {
+            display: block;
+        }
+
+        .edit-form-group {
+            margin-bottom: 15px;
+        }
+
+        .edit-form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 6px;
+        }
+
+        .edit-form-input {
+            width: 100%;
+            padding: 10px 14px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+
+        .edit-form-input:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px rgba(69, 104, 130, 0.1);
+        }
+
+        .options-edit-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+
+        .correct-answer-select {
+            width: 100%;
+            padding: 10px 14px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            background: white;
+            cursor: pointer;
+        }
+
+        .correct-answer-select:focus {
+            outline: none;
+            border-color: #48bb78;
+        }
+
+        /* ============================================
+           ACTION BUTTONS
+           Save, publish, delete actions
+           ============================================ */
+        .action-section {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .action-info {
+            font-size: 14px;
+            color: #718096;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn-save-changes {
+            padding: 12px 30px;
+            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-save-changes:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(250, 112, 154, 0.4);
+        }
+
+        .btn-delete-assessment {
+            padding: 12px 30px;
+            background: white;
+            color: #f56565;
+            border: 2px solid #f56565;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-delete-assessment:hover {
+            background: #f56565;
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .btn-view-results {
+            padding: 12px 30px;
+            background: white;
+            color: var(--color-primary);
+            border: 2px solid var(--color-primary);
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-view-results:hover {
+            background: var(--color-primary);
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        /* ============================================
+           ADD QUESTION MODAL
+           Modal for adding new questions manually
+           ============================================ */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 700px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+
+        .modal-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #2d3748;
+        }
+
+        .btn-close-modal {
+            width: 35px;
+            height: 35px;
+            background: #e2e8f0;
+            border: none;
+            border-radius: 50%;
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-close-modal:hover {
+            background: #cbd5e0;
+            transform: rotate(90deg);
+        }
+
+        /* ============================================
+           LOADING OVERLAY
+           Shows during save operations
+           ============================================ */
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            z-index: 999;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .loading-overlay.active {
+            display: flex;
+        }
+
+        .loading-content {
+            text-align: center;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #e2e8f0;
+            border-top-color: #fa709a;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading-text {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        /* ============================================
+           RESPONSIVE DESIGN
+           Mobile and tablet adjustments
+           ============================================ */
+        @media (max-width: 1024px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .navbar {
+                padding: 15px;
+            }
+
+            .container {
+                padding: 15px;
+            }
+
+            .page-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 20px;
+            }
+
+            .form-section,
+            .questions-section {
+                padding: 20px;
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .options-edit-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .action-section {
+                flex-direction: column;
+            }
+
+            .action-buttons {
+                width: 100%;
+                flex-direction: column;
+            }
+
+            .btn-save-changes,
+            .btn-delete-assessment,
+            .btn-view-results {
+                width: 100%;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .modal-content {
+                padding: 25px;
+            }
+        }
+
+        /* Animation keyframes */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+                transform: translateY(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- NAVIGATION BAR -->
+    <nav class="navbar">
+        <a href="teacher-dashboard.html" class="navbar-brand">
+            <div class="brand-logo">P</div>
+            <span>Placement Portal</span>
+        </a>
+        <div class="nav-actions">
+            <a href="teacher-dashboard.html" class="btn-back">← Back to Dashboard</a>
+        </div>
+    </nav>
+
+    <!-- MAIN CONTAINER -->
+    <div class="container">
+        <!-- Page Header -->
+        <div class="page-header">
+            <div class="header-content">
+                <h1 class="page-title">Edit Assessment</h1>
+                <p class="page-description">Quantitative Aptitude - Set 1</p>
+                <div class="assessment-meta">
+                    <span class="meta-badge active">● Active</span>
+                    <span class="meta-badge info">📅 Created: Dec 1, 2025</span>
+                    <span class="meta-badge info">👥 85 Attempts</span>
+                </div>
+            </div>
+            <div class="status-toggle">
+                <span class="toggle-label">Assessment Status</span>
+                <div class="toggle-switch active" id="statusToggle" onclick="toggleStatus()">
+                    <div class="toggle-slider"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Section -->
+        <div class="stats-section">
+            <h2 class="section-title">
+                <div class="section-icon">📊</div>
+                Performance Statistics
+            </h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">👥</div>
+                    <div class="stat-value">85</div>
+                    <div class="stat-label">Total Attempts</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">📈</div>
+                    <div class="stat-value">76%</div>
+                    <div class="stat-label">Average Score</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">⏱️</div>
+                    <div class="stat-value">38m</div>
+                    <div class="stat-label">Avg. Completion Time</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🎯</div>
+                    <div class="stat-value">92%</div>
+                    <div class="stat-label">Completion Rate</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Basic Information Form -->
+        <div class="form-section">
+            <h2 class="section-title">
+                <div class="section-icon">📝</div>
+                Basic Information
+            </h2>
+            
+            <div class="form-group">
+                <label class="form-label">Assessment Title<span class="required">*</span></label>
+                <input type="text" class="form-input" id="assessmentTitle" value="Quantitative Aptitude - Set 1" required>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea class="form-input form-textarea" id="assessmentDescription">A comprehensive aptitude test covering arithmetic, algebra, and geometry topics suitable for placement preparation.</textarea>
+            </div>
+
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="form-label">Category<span class="required">*</span></label>
+                    <select class="form-select" id="assessmentCategory" required>
+                        <option value="">Select Category</option>
+                        <option value="aptitude" selected>Aptitude</option>
+                        <option value="technical">Technical</option>
+                        <option value="coding">Coding</option>
+                        <option value="reasoning">Reasoning</option>
+                        <option value="english">English</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Difficulty Level<span class="required">*</span></label>
+                    <select class="form-select" id="difficultyLevel" required>
+                        <option value="">Select Difficulty</option>
+                        <option value="easy" selected>Easy</option>
+                        <option value="medium">Medium</option>
+                        <option value="hard">Hard</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Duration (minutes)<span class="required">*</span></label>
+                    <input type="number" class="form-input" id="duration" min="1" max="180" value="45" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Total Marks<span class="required">*</span></label>
+                    <input type="number" class="form-input" id="totalMarks" min="1" value="100" required>
+                </div>
+            </div>
+        </div>
+
+        <!-- Questions Section -->
+        <div class="questions-section">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <div class="section-icon">❓</div>
+                    <span id="questionCountTitle">Questions (2)</span>
+                </h2>
+                <button class="btn-add-question" onclick="openAddModal()">➕ Add Question</button>
+            </div>
+
+            <div class="questions-list" id="questionsList">
+                <!-- Question 1 -->
+                <div class="question-card" data-qid="1">
+                    <div class="question-header">
+                        <span class="question-number">Question 1</span>
+                        <div class="question-actions">
+                            <button class="btn-edit-q" onclick="editQ(1)">Edit</button>
+                            <button class="btn-delete-q" onclick="deleteQ(1)">Delete</button>
+                        </div>
+                    </div>
+                    <div class="question-display" id="disp1">
+                        <div class="question-text">If a train travels at 60 km/h for 2 hours and then at 80 km/h for 3 hours, what is the average speed of the train for the entire journey?</div>
+                        <div class="options-list">
+                            <div class="option-item"><span class="option-label">A)</span><span>68 km/h</span></div>
+                            <div class="option-item"><span class="option-label">B)</span><span>70 km/h</span></div>
+                            <div class="option-item correct"><span class="option-label">C)</span><span>72 km/h</span><span class="correct-badge">✓ Correct</span></div>
+                            <div class="option-item"><span class="option-label">D)</span><span>75 km/h</span></div>
+                        </div>
+                    </div>
+                    <div class="question-edit-form" id="edit1">
+                        <div class="edit-form-group">
+                            <label class="edit-form-label">Question Text</label>
+                            <textarea class="edit-form-input" id="qt1" rows="3">If a train travels at 60 km/h for 2 hours and then at 80 km/h for 3 hours, what is the average speed of the train for the entire journey?</textarea>
+                        </div>
+                        <div class="options-edit-grid">
+                            <div class="edit-form-group">
+                                <label class="edit-form-label">Option A</label>
+                                <input type="text" class="edit-form-input" id="oa1" value="68 km/h">
+                            </div>
+                            <div class="edit-form-group">
+                                <label class="edit-form-label">Option B</label>
+                                <input type="text" class="edit-form-input" id="ob1" value="70 km/h">
+                            </div>
+                            <div class="edit-form-group">
+                                <label class="edit-form-label">Option C</label>
+                                <input type="text" class="edit-form-input" id="oc1" value="72 km/h">
+                            </div>
+                            <div class="edit-form-group">
+                                <label class="edit-form-label">Option D</label>
+                                <input type="text" class="edit-form-input" id="od1" value="75 km/h">
+                            </div>
+                        </div>
+                        <div class="edit-form-group">
+                            <label class="edit-form-label">Correct Answer</label>
+                            <select class="correct-answer-select" id="ca1">
+                                <option value="A">A</option>
+                                <option value="B">B</option>
+                                <option value="C" selected>C</option>
+                                <option value="D">D</option>
+                            </select>
+                        </div>
+                        <div class="question-actions" style="margin-top: 15px;">
+                            <button class="btn-save-q" onclick="saveQ(1)">Save</button>
+                            <button class="btn-cancel-q" onclick="cancelQ(1)">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Question 2 -->
+                <div class="question-card" data-qid="2">
+                    <div class="question-header">
+                        <span class="question-number">Question 2</span>
+                        <div class="question-actions">
+                            <button class="btn-edit-q" onclick="editQ(2)">Edit</button>
+                            <button class="btn-delete-q" onclick="deleteQ(2)">Delete</button>
+                        </div>
+                    </div>
+                    <div class="question-display" id="disp2">
+                        <div class="question-text">What is the value of x in the equation: 3x + 7 = 22?</div>
+                        <div class="options-list">
+                            <div class="option-item"><span class="option-label">A)</span><span>3</span></div>
+                            <div class="option-item correct"><span class="option-label">B)</span><span>5</span><span class="correct-badge">✓ Correct</span></div>
+                            <div class="option-item"><span class="option-label">C)</span><span>7</span></div>
+                            <div class="option-item"><span class="option-label">D)</span><span>9</span></div>
+                        </div>
+                    </div>
+                    <div class="question-edit-form" id="edit2">
+                        <div class="edit-form-group">
+                            <label class="edit-form-label">Question Text</label>
+                            <textarea class="edit-form-input" id="qt2" rows="3">What is the value of x in the equation: 3x + 7 = 22?</textarea>
+                        </div>
+                        <div class="options-edit-grid">
+                            <div class="edit-form-group">
+                                <label class="edit-form-label">Option A</label>
+                                <input type="text" class="edit-form-input" id="oa2" value="3">
+                            </div>
+                            <div class="edit-form-group">
+                                <label class="edit-form-label">Option B</label>
+                                <input type="text" class="edit-form-input" id="ob2" value="5">
+                            </div>
+                            <div class="edit-form-group">
+                                <label class="edit-form-label">Option C</label>
+                                <input type="text" class="edit-form-input" id="oc2" value="7">
+                            </div>
+                            <div class="edit-form-group">
+                                <label class="edit-form-label">Option D</label>
+                                <input type="text" class="edit-form-input" id="od2" value="9">
+                            </div>
+                        </div>
+                        <div class="edit-form-group">
+                            <label class="edit-form-label">Correct Answer</label>
+                            <select class="correct-answer-select" id="ca2">
+                                <option value="A">A</option>
+                                <option value="B" selected>B</option>
+                                <option value="C">C</option>
+                                <option value="D">D</option>
+                            </select>
+                        </div>
+                        <div class="question-actions" style="margin-top: 15px;">
+                            <button class="btn-save-q" onclick="saveQ(2)">Save</button>
+                            <button class="btn-cancel-q" onclick="cancelQ(2)">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="action-section">
+            <div class="action-info">💡 <strong>Tip:</strong> Changes are saved automatically.</div>
+            <div class="action-buttons">
+                <button class="btn-view-results" onclick="viewResults()">📊 View Results</button>
+                <button class="btn-save-changes" onclick="saveAll()">💾 Save All Changes</button>
+                <button class="btn-delete-assessment" onclick="deleteAssessment()">🗑️ Delete Assessment</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Question Modal -->
+    <div class="modal-overlay" id="addModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Add New Question</h2>
+                <button class="btn-close-modal" onclick="closeAddModal()">✕</button>
+            </div>
+            <div class="edit-form-group">
+                <label class="edit-form-label">Question Text<span style="color:#f56565;">*</span></label>
+                <textarea class="edit-form-input" id="newQt" rows="3" placeholder="Enter question..."></textarea>
+            </div>
+            <div class="options-edit-grid">
+                <div class="edit-form-group">
+                    <label class="edit-form-label">Option A</label>
+                    <input type="text" class="edit-form-input" id="newOa" placeholder="Option A">
+                </div>
+                <div class="edit-form-group">
+                    <label class="edit-form-label">Option B</label>
+                    <input type="text" class="edit-form-input" id="newOb" placeholder="Option B">
+                </div>
+                <div class="edit-form-group">
+                    <label class="edit-form-label">Option C</label>
+                    <input type="text" class="edit-form-input" id="newOc" placeholder="Option C">
+                </div>
+                <div class="edit-form-group">
+                    <label class="edit-form-label">Option D</label>
+                    <input type="text" class="edit-form-input" id="newOd" placeholder="Option D">
+                </div>
+            </div>
+            <div class="edit-form-group">
+                <label class="edit-form-label">Correct Answer</label>
+                <select class="correct-answer-select" id="newCa">
+                    <option value="">Select</option>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                    <option value="D">D</option>
+                </select>
+            </div>
+            <div class="action-buttons" style="margin-top:25px;">
+                <button class="btn-save-q" onclick="addNewQ()" style="flex:1;">Add Question</button>
+                <button class="btn-cancel-q" onclick="closeAddModal()" style="flex:1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loading">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <div class="loading-text">Saving changes...</div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let assessmentData = {
+            id: 1,
+            title: 'Quantitative Aptitude - Set 1',
+            status: 'active'
+        };
+        let editingSet = new Set();
+        let nextQId = 3;
+
+        // Toggle status
+        function toggleStatus() {
+            const toggle = document.getElementById('statusToggle');
+            const isActive = toggle.classList.contains('active');
+            toggle.classList.toggle('active');
+            
+            const badge = document.querySelector('.meta-badge.active');
+            if (isActive) {
+                badge.classList.remove('active');
+                badge.classList.add('draft');
+                badge.innerHTML = '● Inactive';
+                assessmentData.status = 'inactive';
+            } else {
+                badge.classList.remove('draft');
+                badge.classList.add('active');
+                badge.innerHTML = '● Active';
+                assessmentData.status = 'active';
+            }
+            console.log('Status:', assessmentData.status);
+        }
+
+        // Edit question
+        function editQ(id) {
+            if (editingSet.has(id)) return;
+            editingSet.add(id);
+            document.getElementById('disp' + id).classList.add('hidden');
+            document.getElementById('edit' + id).classList.add('active');
+            document.querySelector('[data-qid="' + id + '"]').classList.add('editing');
+        }
+
+        // Cancel edit
+        function cancelQ(id) {
+            editingSet.delete(id);
+            document.getElementById('disp' + id).classList.remove('hidden');
+            document.getElementById('edit' + id).classList.remove('active');
+            document.querySelector('[data-qid="' + id + '"]').classList.remove('editing');
+        }
+
+        // Save question
+        function saveQ(id) {
+            const qt = document.getElementById('qt' + id).value.trim();
+            const oa = document.getElementById('oa' + id).value.trim();
+            const ob = document.getElementById('ob' + id).value.trim();
+            const oc = document.getElementById('oc' + id).value.trim();
+            const od = document.getElementById('od' + id).value.trim();
+            const ca = document.getElementById('ca' + id).value;
+
+            if (!qt || !oa || !ob || !oc || !od || !ca) {
+                alert('All fields required');
+                return;
+            }
+
+            showLoading();
+            setTimeout(() => {
+                updateDisplay(id, qt, {A:oa, B:ob, C:oc, D:od}, ca);
+                cancelQ(id);
+                hideLoading();
+                alert('✅ Question updated!');
+            }, 800);
+        }
+
+        // Update display
+        function updateDisplay(id, qt, opts, ca) {
+            const disp = document.getElementById('disp' + id);
+            disp.querySelector('.question-text').textContent = qt;
+            const options = disp.querySelectorAll('.option-item');
+            const letters = ['A','B','C','D'];
+            options.forEach((opt, i) => {
+                const letter = letters[i];
+                opt.classList.remove('correct');
+                opt.querySelector('span:nth-child(2)').textContent = opts[letter];
+                if (letter === ca) {
+                    opt.classList.add('correct');
+                    let badge = opt.querySelector('.correct-badge');
+                    if (!badge) {
+                        badge = document.createElement('span');
+                        badge.className = 'correct-badge';
+                        badge.textContent = '✓ Correct';
+                        opt.appendChild(badge);
+                    }
+                } else {
+                    const badge = opt.querySelector('.correct-badge');
+                    if (badge) badge.remove();
+                }
+            });
+        }
+
+        // Delete question
+        function deleteQ(id) {
+            if (!confirm('Delete this question? This cannot be undone.')) return;
+            showLoading();
+            setTimeout(() => {
+                const card = document.querySelector('[data-qid="' + id + '"]');
+                card.style.animation = 'fadeOut 0.3s ease';
+                setTimeout(() => {
+                    card.remove();
+                    updateCount();
+                }, 300);
+                hideLoading();
+            }, 500);
+        }
+
+        // Update question count
+        function updateCount() {
+            const count = document.querySelectorAll('.question-card').length;
+            document.getElementById('questionCountTitle').textContent = 'Questions (' + count + ')';
+        }
+
+        // Open add modal
+        function openAddModal() {
+            document.getElementById('addModal').classList.add('active');
+            document.getElementById('newQt').value = '';
+            document.getElementById('newOa').value = '';
+            document.getElementById('newOb').value = '';
+            document.getElementById('newOc').value = '';
+            document.getElementById('newOd').value = '';
+            document.getElementById('newCa').value = '';
+        }
+
+        // Close add modal
+        function closeAddModal() {
+            document.getElementById('addModal').classList.remove('active');
+        }
+
+        // Add new question
+        function addNewQ() {
+            const qt = document.getElementById('newQt').value.trim();
+            const oa = document.getElementById('newOa').value.trim();
+            const ob = document.getElementById('newOb').value.trim();
+            const oc = document.getElementById('newOc').value.trim();
+            const od = document.getElementById('newOd').value.trim();
+            const ca = document.getElementById('newCa').value;
+
+            if (!qt || !oa || !ob || !oc || !od || !ca) {
+                alert('All fields required');
+                return;
+            }
+
+            closeAddModal();
+            showLoading();
+            setTimeout(() => {
+                const newId = nextQId++;
+                addQCard(newId, qt, {A:oa, B:ob, C:oc, D:od}, ca);
+                updateCount();
+                hideLoading();
+                alert('✅ Question added!');
+            }, 800);
+        }
+
+        // Add question card
+        function addQCard(id, qt, opts, ca) {
+            const list = document.getElementById('questionsList');
+            const count = document.querySelectorAll('.question-card').length + 1;
+            const card = document.createElement('div');
+            card.className = 'question-card';
+            card.setAttribute('data-qid', id);
+            card.style.animation = 'fadeIn 0.5s ease';
+            
+            const corrA = ca === 'A' ? ' correct' : '';
+            const corrB = ca === 'B' ? ' correct' : '';
+            const corrC = ca === 'C' ? ' correct' : '';
+            const corrD = ca === 'D' ? ' correct' : '';
+            const badgeA = ca === 'A' ? '<span class="correct-badge">✓ Correct</span>' : '';
+            const badgeB = ca === 'B' ? '<span class="correct-badge">✓ Correct</span>' : '';
+            const badgeC = ca === 'C' ? '<span class="correct-badge">✓ Correct</span>' : '';
+            const badgeD = ca === 'D' ? '<span class="correct-badge">✓ Correct</span>' : '';
+            
+            card.innerHTML = `
+                <div class="question-header">
+                    <span class="question-number">Question ${count}</span>
+                    <div class="question-actions">
+                        <button class="btn-edit-q" onclick="editQ(${id})">Edit</button>
+                        <button class="btn-delete-q" onclick="deleteQ(${id})">Delete</button>
+                    </div>
+                </div>
+                <div class="question-display" id="disp${id}">
+                    <div class="question-text">${qt}</div>
+                    <div class="options-list">
+                        <div class="option-item${corrA}"><span class="option-label">A)</span><span>${opts.A}</span>${badgeA}</div>
+                        <div class="option-item${corrB}"><span class="option-label">B)</span><span>${opts.B}</span>${badgeB}</div>
+                        <div class="option-item${corrC}"><span class="option-label">C)</span><span>${opts.C}</span>${badgeC}</div>
+                        <div class="option-item${corrD}"><span class="option-label">D)</span><span>${opts.D}</span>${badgeD}</div>
+                    </div>
+                </div>
+                <div class="question-edit-form" id="edit${id}">
+                    <div class="edit-form-group">
+                        <label class="edit-form-label">Question Text</label>
+                        <textarea class="edit-form-input" id="qt${id}" rows="3">${qt}</textarea>
+                    </div>
+                    <div class="options-edit-grid">
+                        <div class="edit-form-group">
+                            <label class="edit-form-label">Option A</label>
+                            <input type="text" class="edit-form-input" id="oa${id}" value="${opts.A}">
+                        </div>
+                        <div class="edit-form-group">
+                            <label class="edit-form-label">Option B</label>
+                            <input type="text" class="edit-form-input" id="ob${id}" value="${opts.B}">
+                        </div>
+                        <div class="edit-form-group">
+                            <label class="edit-form-label">Option C</label>
+                            <input type="text" class="edit-form-input" id="oc${id}" value="${opts.C}">
+                        </div>
+                        <div class="edit-form-group">
+                            <label class="edit-form-label">Option D</label>
+                            <input type="text" class="edit-form-input" id="od${id}" value="${opts.D}">
+                        </div>
+                    </div>
+                    <div class="edit-form-group">
+                        <label class="edit-form-label">Correct Answer</label>
+                        <select class="correct-answer-select" id="ca${id}">
+                            <option value="A" ${ca==='A'?'selected':''}>A</option>
+                            <option value="B" ${ca==='B'?'selected':''}>B</option>
+                            <option value="C" ${ca==='C'?'selected':''}>C</option>
+                            <option value="D" ${ca==='D'?'selected':''}>D</option>
+                        </select>
+                    </div>
+                    <div class="question-actions" style="margin-top:15px;">
+                        <button class="btn-save-q" onclick="saveQ(${id})">Save</button>
+                        <button class="btn-cancel-q" onclick="cancelQ(${id})">Cancel</button>
+                    </div>
+                </div>
+            `;
+            list.appendChild(card);
+        }
+
+        // Save all changes
+        function saveAll() {
+            const title = document.getElementById('assessmentTitle').value.trim();
+            const desc = document.getElementById('assessmentDescription').value.trim();
+            const cat = document.getElementById('assessmentCategory').value;
+            const diff = document.getElementById('difficultyLevel').value;
+            const dur = document.getElementById('duration').value;
+            const marks = document.getElementById('totalMarks').value;
+
+            if (!title || !cat || !diff || !dur || !marks) {
+                alert('Please fill all required fields');
+                return;
+            }
+
+            if (editingSet.size > 0) {
+                if (!confirm('You have unsaved question edits. Continue?')) return;
+            }
+
+            showLoading();
+            setTimeout(() => {
+                assessmentData.title = title;
+                document.querySelector('.page-description').textContent = title;
+                hideLoading();
+                alert('✅ All changes saved successfully!');
+            }, 1000);
+        }
+
+        // View results
+        function viewResults() {
+            alert('Redirecting to results page...\n\nView:\n• Student scores\n• Question analysis\n• Performance trends');
+        }
+
+        // Delete assessment
+        function deleteAssessment() {
+            if (!confirm('⚠️ WARNING: Delete Assessment?\n\nThis will permanently delete:\n• All questions\n• Student results\n• All data\n\nThis CANNOT be undone!')) return;
+            
+            const conf = prompt('Type "DELETE" to confirm:');
+            if (conf !== 'DELETE') {
+                alert('Deletion cancelled');
+                return;
+            }
+
+            showLoading();
+            setTimeout(() => {
+                hideLoading();
+                alert('Assessment deleted!\n\nRedirecting...');
+                window.location.href = 'teacher-dashboard.html';
+            }, 1000);
+        }
+
+        // Utility functions
+        function showLoading() {
+            document.getElementById('loading').classList.add('active');
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').classList.remove('active');
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                saveAll();
+            }
+            if (e.key === 'Escape') {
+                closeAddModal();
+                editingSet.forEach(id => cancelQ(id));
+            }
+        });
+
+        /* BACKEND INTEGRATION NOTES:
+           
+           When connecting to PHP backend, create these endpoints:
+           
+           1. get-assessment.php?id=X
+              - Load assessment data and questions
+              - Verify teacher ownership
+           
+           2. update-assessment.php
+              - Save basic info changes
+              - POST: {assessmentId, title, description, category, difficulty, duration, totalMarks, status}
+           
+           3. update-question.php
+              - Save question edits
+              - POST: {questionId, questionText, optionA, optionB, optionC, optionD, correctAnswer}
+           
+           4. add-question.php
+              - Add new question
+              - POST: {assessmentId, questionText, options, correctAnswer}
+              - Returns: {success, questionId}
+           
+           5. delete-question.php
+              - Remove question
+              - POST: {questionId, assessmentId}
+              - Use soft delete (active=0)
+           
+           6. delete-assessment.php
+              - Delete entire assessment
+              - POST: {assessmentId}
+              - Soft delete recommended
+           
+           SECURITY:
+           - Verify teacher owns assessment in ALL endpoints
+           - Validate all inputs
+           - Use prepared statements
+           - Implement CSRF tokens
+           - Rate limit API calls
+           
+           FILES TO CHANGE:
+           - Rename this file to edit-assessment.php
+           - Update teacher-dashboard.html links
+        */
+    </script>
+</body>
+</html>

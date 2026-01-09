@@ -3,8 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Student Dashboard - Placement Assessment Platform">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Student Dashboard - Placement Assessment</title>
     <style>
+        /* ============================================
+           CSS VARIABLES - Reusable values
+           ============================================ */
+        :root {
+            /* Colors #4facfe #00f2fe*/
+
+            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            --color-primary: #234C6A;
+            --color-primary-dark: #456882;
+            --color-teacher-primary: #2E073F;
+            --color-teacher-secondary: #AD49E1;
+            --color-text: #2d3748;
+            --color-text-light: #718096;
+            --color-text-lighter: #a0aec0;
+            --color-bg: #D3DAD9;
+            --color-bg-light: #f5f7fa;
+            --color-white: #ffffff;
+            --color-border: #e2e8f0;
+            --color-success: #48bb78;
+            --color-error: #f56565;
+            --color-warning: #ffc107;
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.08);
+            --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.15);
+            --border-radius: 10px;
+            --border-radius-lg: 20px;
+            --transition: all 0.3s ease;
+        }
+
         /* ============================================
            GLOBAL RESET & BASE STYLES
            ============================================ */
@@ -15,50 +46,63 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            font-family: var(--font-family);
+            background: linear-gradient(135deg, var(--color-bg) 0%, white 100%);
             min-height: 100vh;
-            color: #2d3748;
+            color: var(--color-text);
+            margin: 0;
+            padding: 0;
+            padding-top: 71px;
+            overflow-x: hidden;
         }
 
         /* ============================================
            NAVIGATION BAR
            Top navigation with logo, search, and profile
            ============================================ */
+        /* NAVIGATION BAR - standardized across pages */
         .navbar {
-            background: white;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            padding: 15px 30px;
+            background: var(--color-primary);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            padding: 12px 28px;
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            position: sticky;
+            justify-content: space-between;
+            position: fixed;
             top: 0;
-            z-index: 100;
-            border-bottom: 3px solid #4facfe;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            border-bottom: 3px solid var(--color-primary);
         }
 
         .navbar-brand {
             display: flex;
             align-items: center;
             gap: 12px;
-            font-size: 22px;
+            font-size: 20px;
             font-weight: 700;
-            color: #2d3748;
+            color: white;
             text-decoration: none;
         }
 
         .brand-logo {
-            width: 45px;
-            height: 45px;
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
             border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
-            font-weight: bold;
-            font-size: 20px;
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
         /* Search bar in navigation */
@@ -80,7 +124,7 @@
 
         .search-input:focus {
             outline: none;
-            border-color: #4facfe;
+            border-color: var(--color-primary);
             box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1);
         }
 
@@ -114,7 +158,7 @@
         }
 
         .notification-icon:hover {
-            background: #4facfe;
+            background: var(--color-primary);
             color: white;
         }
 
@@ -154,7 +198,7 @@
         .profile-avatar {
             width: 35px;
             height: 35px;
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -215,7 +259,7 @@
         .stat-number {
             font-size: 28px;
             font-weight: 700;
-            color: #4facfe;
+            color: var(--color-primary);
             display: block;
         }
 
@@ -366,7 +410,7 @@
 
         .filter-tab {
             padding: 8px 18px;
-            background: #f7fafc;
+            background: white;
             border: none;
             border-radius: 8px;
             cursor: pointer;
@@ -393,17 +437,21 @@
         }
 
         .assessment-card {
-            background: #f7fafc;
+            background: white;
             border-radius: 15px;
             padding: 20px;
-            transition: all 0.3s ease;
+            transition: var(--transition);
             border: 2px solid transparent;
             cursor: pointer;
         }
 
+        .assessment-card.hidden {
+            display: none;
+        }
+
         .assessment-card:hover {
-            border-color: #4facfe;
-            background: white;
+            border-color: var(--color-primary);
+            background: var(--color-white);
             box-shadow: 0 4px 15px rgba(79, 172, 254, 0.15);
         }
 
@@ -496,7 +544,7 @@
             padding: 10px 24px;
             background: white;
             color: #4facfe;
-            border: 2px solid #4facfe;
+            border: 2px solid var(--color-primary);
             border-radius: 8px;
             font-weight: 600;
             font-size: 14px;
@@ -555,7 +603,7 @@
         .activity-icon {
             width: 40px;
             height: 40px;
-            background: #f7fafc;
+            background: white;
             border-radius: 10px;
             display: flex;
             align-items: center;
@@ -717,7 +765,7 @@
             width: 40px;
             height: 40px;
             border: 4px solid #e2e8f0;
-            border-top-color: #4facfe;
+            border-top-color: var(--color-primary);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
             margin: 0 auto 15px;
@@ -766,26 +814,26 @@
     <nav class="navbar">
         <a href="student-dashboard.php" class="navbar-brand">
             <div class="brand-logo">P</div>
-            <span>Placement Portal</span>
+            <span>Student Portal</span>
         </a>
 
         <!-- Search bar -->
         <div class="nav-search">
-            <input type="text" class="search-input" placeholder="Search assessments..." id="searchInput">
-            <span class="search-icon">🔍</span>
+            <input type="text" class="search-input" placeholder="Search assessments..." id="searchInput" aria-label="Search assessments" autocomplete="off">
+            <span class="search-icon" aria-hidden="true">🔍</span>
         </div>
 
         <!-- User profile section -->
         <div class="nav-profile">
             <!-- Notification icon with badge -->
-            <div class="notification-icon" onclick="showNotifications()">
-                <span>🔔</span>
-                <div class="notification-badge">3</div>
-            </div>
+            <button class="notification-icon" onclick="showNotifications()" aria-label="View notifications" aria-describedby="notification-count">
+                <span aria-hidden="true">🔔</span>
+                <div class="notification-badge" id="notification-count" aria-live="polite">3</div>
+            </button>
 
             <!-- Profile dropdown button -->
-            <button class="profile-button" onclick="toggleProfileMenu()">
-                <div class="profile-avatar">JK</div>
+            <button class="profile-button" onclick="toggleProfileMenu()" aria-label="Profile menu" aria-expanded="false">
+                <div class="profile-avatar" aria-hidden="true">JK</div>
                 <span class="profile-name">Justin Kurian</span>
             </button>
         </div>
@@ -1069,25 +1117,48 @@
     <script>
         /* ============================================
            ASSESSMENT FILTERING
-           Filter tests by category
+           Filter tests by category - optimized with event delegation
            ============================================ */
-        function filterAssessments(category) {
+        function filterAssessments(category, targetElement) {
             // Update active tab
             const tabs = document.querySelectorAll('.filter-tab');
             tabs.forEach(tab => tab.classList.remove('active'));
-            event.target.classList.add('active');
+            if (targetElement) {
+                targetElement.classList.add('active');
+            }
 
-            // Filter assessment cards
+            // Filter assessment cards - use class toggle for better performance
             const cards = document.querySelectorAll('.assessment-card');
             cards.forEach(card => {
                 if (category === 'all') {
-                    card.style.display = 'block';
+                    card.classList.remove('hidden');
                 } else {
                     const cardCategory = card.dataset.category;
-                    card.style.display = cardCategory === category ? 'block' : 'none';
+                    if (cardCategory === category) {
+                        card.classList.remove('hidden');
+                    } else {
+                        card.classList.add('hidden');
+                    }
                 }
             });
         }
+
+        // Use event delegation for filter tabs - improved version
+        document.addEventListener('click', function(e) {
+            const filterTab = e.target.closest('.filter-tab');
+            if (filterTab) {
+                const category = filterTab.dataset.category;
+                if (category) {
+                    e.preventDefault();
+                    filterAssessments(category, filterTab);
+                    // Update ARIA attributes for accessibility
+                    document.querySelectorAll('.filter-tab').forEach(tab => {
+                        tab.setAttribute('aria-selected', 'false');
+                    });
+                    filterTab.setAttribute('aria-selected', 'true');
+                }
+            }
+        });
 
         /* ============================================
            START ASSESSMENT
@@ -1122,24 +1193,47 @@
         }
 
         /* ============================================
-           SEARCH FUNCTIONALITY
-           Real-time search through assessments
+           DEBOUNCE UTILITY
+           Optimizes search input
            ============================================ */
-        document.getElementById('searchInput').addEventListener('input', function(e) {
-            const searchTerm = e.target.value.toLowerCase();
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        /* ============================================
+           SEARCH FUNCTIONALITY
+           Real-time search through assessments with debouncing
+           ============================================ */
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            const performSearch = debounce(function(e) {
+                const searchTerm = e.target.value.toLowerCase().trim();
             const cards = document.querySelectorAll('.assessment-card');
             
+                // Use document fragment for better performance
             cards.forEach(card => {
-                const title = card.querySelector('.assessment-title').textContent.toLowerCase();
-                const category = card.querySelector('.assessment-category').textContent.toLowerCase();
+                    const title = card.querySelector('.assessment-title')?.textContent?.toLowerCase() || '';
+                    const category = card.querySelector('.assessment-category')?.textContent?.toLowerCase() || '';
                 
-                if (title.includes(searchTerm) || category.includes(searchTerm)) {
-                    card.style.display = 'block';
+                    // Use class toggle instead of inline styles for better performance
+                    if (!searchTerm || title.includes(searchTerm) || category.includes(searchTerm)) {
+                        card.classList.remove('hidden');
                 } else {
-                    card.style.display = 'none';
+                        card.classList.add('hidden');
                 }
             });
-        });
+            }, 300); // 300ms debounce
+
+            searchInput.addEventListener('input', performSearch);
+        }
 
         /* ============================================
            NOTIFICATION SYSTEM
@@ -1183,20 +1277,24 @@
 
         /* ============================================
            PAGE LOAD ANIMATIONS
-           Smooth entrance effects
+           Smooth entrance effects - optimized
            ============================================ */
         window.addEventListener('load', function() {
             // Add animation classes or trigger effects
             console.log('Student Dashboard loaded successfully');
             
-            // Example: Update progress bars with animation
+            // Example: Update progress bars with animation - use requestAnimationFrame
             const progressBars = document.querySelectorAll('.progress-bar-fill');
-            progressBars.forEach(bar => {
-                const width = bar.style.width;
+            progressBars.forEach((bar, index) => {
+                const width = bar.style.width || bar.getAttribute('data-width') || '0%';
+                bar.setAttribute('data-width', width);
                 bar.style.width = '0';
+                
+                requestAnimationFrame(() => {
                 setTimeout(() => {
                     bar.style.width = width;
-                }, 300);
+                    }, index * 50); // Stagger animations
+                });
             });
         });
 

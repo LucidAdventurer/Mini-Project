@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Registration - Placement Portal</title>
+  <style>
+    /* ===== CSS Variables ===== */
+    :root {
+      --color-primary: #234C6A;
+      --color-primary-dark: #456882;
+    }
+
+    /* ===== Reset & Base Styles ===== */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      overflow: hidden;
+      background: #f0f4f8;
+    }
+
+    /* ===== Background & Animations ===== */
+    .dynamic-background {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+    }
+
+    .student-animation {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+    }
+
+    .book {
+      position: absolute;
+      width: 50px;
+      height: 70px;
+      background: white;
+      border-radius: 4px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      animation: float-book 8s ease-in-out infinite;
+    }
+
+    .book::before {
+      content: '';
+      position: absolute;
+      left: 5px;
+      top: 5px;
+      bottom: 5px;
+      width: 3px;
+      background: var(--color-primary);
+      border-radius: 2px;
+    }
+
+    .book:nth-child(1) { top: 15%; left: 8%; }
+    .book:nth-child(2) { top: 60%; left: 85%; animation-delay: 1s; }
+    .book:nth-child(3) { top: 75%; left: 15%; animation-delay: 2s; }
+
+    @keyframes float-book {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-40px); }
+    }
+
+    /* ===== Layout ===== */
+    .container {
+      position: relative;
+      z-index: 2;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    /* ===== Card Styling ===== */
+    .register-card {
+      background: rgba(0, 0, 0, 0.98);
+      backdrop-filter: blur(20px);
+      border-radius: 24px;
+      padding: 45px;
+      width: 100%;
+      max-width: 450px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+      animation: cardPop 0.6s;
+      border: 2px solid rgba(0, 0, 0, 0.8);
+    }
+
+    @keyframes cardPop {
+      from {
+        opacity: 0;
+        transform: scale(0.8) translateY(40px);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+
+    /* ===== Header ===== */
+    .register-header {
+      text-align: center;
+      margin-bottom: 35px;
+    }
+
+    .logo {
+      width: 90px;
+      height: 90px;
+      margin: 0 auto 20px;
+      background: linear-gradient(135deg, var(--color-primary-dark), var(--color-primary));
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 42px;
+      color: #fff;
+      font-weight: bold;
+      box-shadow: 0 0 25px rgba(60, 22, 120, 0.3);
+    }
+
+    .register-header h1 {
+      font-size: 28px;
+      color: #fff;
+      margin-bottom: 8px;
+      font-weight: 700;
+    }
+
+    .register-header p {
+      font-size: 14px;
+      color: #fff;
+    }
+
+    /* ===== Form Elements ===== */
+    .form-group {
+      margin-bottom: 22px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 10px;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .required {
+      color: #f56565;
+      margin-left: 4px;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 14px 16px;
+      border: 2px solid #333;
+      border-radius: 12px;
+      font-size: 14px;
+      transition: all 0.3s;
+      background: #fff;
+      color: #2d3748;
+    }
+
+    .form-control::placeholder {
+      color: #a0aec0;
+    }
+
+    .form-control:focus {
+      outline: none;
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1);
+    }
+
+    /* ===== Button ===== */
+    .btn-register {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s;
+      box-shadow: 0 6px 20px rgba(79, 172, 254, 0.4);
+    }
+
+    .btn-register:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(79, 172, 254, 0.5);
+    }
+
+    /* ===== Footer ===== */
+    .form-footer {
+      text-align: center;
+      margin-top: 25px;
+      padding-top: 25px;
+      border-top: 2px solid #e2e8f0;
+    }
+
+    .form-footer p {
+      color: #718096;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+
+    .form-footer a {
+      color: var(--color-primary);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    /* ===== Responsive Design ===== */
+    @media (max-width: 480px) {
+      .register-card {
+        padding: 35px 25px;
+      }
+
+      .logo {
+        width: 75px;
+        height: 75px;
+        font-size: 36px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Background -->
+  <div class="dynamic-background">
+    <div class="student-animation">
+      <div class="book"></div>
+      <div class="book"></div>
+      <div class="book"></div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="container">
+    <div class="register-card">
+      <!-- Header -->
+      <div class="register-header">
+        <div class="logo">P</div>
+        <h1>Student Registration</h1>
+        <p>Create your account to start preparing</p>
+      </div>
+
+      <!-- Form -->
+      <form id="registrationForm">
+        <div class="form-group">
+          <label>Full Name<span class="required">*</span></label>
+          <input type="text" class="form-control" id="fullName" placeholder="Enter your full name" required>
+        </div>
+        <div class="form-group">
+          <label>Email Address<span class="required">*</span></label>
+          <input type="email" class="form-control" id="email" placeholder="your.email@example.com" required>
+        </div>
+        <div class="form-group">
+          <label>Password<span class="required">*</span></label>
+          <input type="password" class="form-control" id="password" placeholder="Create a strong password" required minlength="6">
+        </div>
+        <button type="submit" class="btn-register">Create Account</button>
+      </form>
+
+      <!-- Footer Links -->
+      <div class="form-footer">
+        <p>Already have an account? <a href="index.html">Login here</a></p>
+        <p><a href="register-teacher.html">Register as Teacher</a></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript -->
+  <script>
+    document.getElementById('registrationForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+
+      const formData = {
+        fullName: document.getElementById('fullName').value,
+        email: document.getElementById('email').value,
+        password: document.getElementById('password').value,
+        userType: 'student'
+      };
+
+      console.log('Student Registration:', formData);
+      alert('✅ Registration Successful!\n\nYou can now login with your credentials.');
+      // In production: window.location.href = 'index.html';
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,317 @@
+-- ============================================
+-- Database Schema for Placement & Training Assessment System
+-- ============================================
+
+CREATE DATABASE IF NOT EXISTS placement_training_system;
+USE placement_training_system;
+
+-- Users table (students and teachers)
+CREATE TABLE users (
+    user_id INT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    full_name VARCHAR(100) NOT NULL,
+    user_type ENUM('student', 'teacher') NOT NULL,
+    department VARCHAR(50),
+    registration_number VARCHAR(50) UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_login TIMESTAMP NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    INDEX idx_email (email),
+    INDEX idx_user_type (user_type)
+);
+
+-- Tests/Assessments table
+CREATE TABLE tests (
+    test_id INT PRIMARY KEY AUTO_INCREMENT,
+    test_name VARCHAR(200) NOT NULL,
+    description TEXT,
+    created_by INT NOT NULL,
+    category ENUM('placement', 'training', 'assessment') NOT NULL,
+    difficulty_level ENUM('easy', 'medium', 'hard') DEFAULT 'medium',
+    duration INT NOT NULL COMMENT 'Duration in minutes',
+    total_marks INT NOT NULL,
+    passing_marks INT NOT NULL,
+    is_public BOOLEAN DEFAULT FALSE COMMENT 'Available for guest access',
+    start_time DATETIME,
+    end_time DATETIME,
+    instructions TEXT,
+    status ENUM('draft', 'active', 'inactive', 'completed') DEFAULT 'draft',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE RESTRICT,
+    INDEX idx_created_by (created_by),
+    INDEX idx_category (category),
+    INDEX idx_status (status)
+);
+
+-- Questions table
+CREATE TABLE questions (
+    question_id INT PRIMARY KEY AUTO_INCREMENT,
+    test_id INT NOT NULL,
+    question_text TEXT NOT NULL,
+    question_type ENUM('mcq', 'multiple_select', 'true_false', 'short_answer') NOT NULL,
+    marks INT NOT NULL DEFAULT 1,
+    option_a TEXT,
+    option_b TEXT,
+    option_c TEXT,
+    option_d TEXT,
+    option_e TEXT,
+    correct_answer TEXT NOT NULL COMMENT 'Stores correct option(s) or answer text',
+    explanation TEXT,
+    topic VARCHAR(100),
+    question_order INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (test_id) REFERENCES tests(test_id) ON DELETE CASCADE,
+    INDEX idx_test_id (test_id),
+    INDEX idx_question_type (question_type)
+);
+
+-- Test attempts (students and guests)
+CREATE TABLE test_attempts (
+    attempt_id INT PRIMARY KEY AUTO_INCREMENT,
+    test_id INT NOT NULL,
+    user_id INT COMMENT 'NULL for guest attempts',
+    guest_name VARCHAR(100) COMMENT 'For guest attempts only',
+    guest_email VARCHAR(100) COMMENT 'For guest attempts only',
+    start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    end_time TIMESTAMP NULL,
+    submitted_at TIMESTAMP NULL,
+    score DECIMAL(5,2) DEFAULT 0,
+    total_marks INT,
+    percentage DECIMAL(5,2) DEFAULT 0,
+    status ENUM('in_progress', 'completed', 'abandoned', 'timeout') DEFAULT 'in_progress',
+    ip_address VARCHAR(45),
+    FOREIGN KEY (test_id) REFERENCES tests(test_id) ON DELETE RESTRICT,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    INDEX idx_test_id (test_id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_status (status)
+);
+
+-- Student answers for each attempt
+CREATE TABLE student_answers (
+    answer_id INT PRIMARY KEY AUTO_INCREMENT,
+    attempt_id INT NOT NULL,
+    question_id INT NOT NULL,
+    selected_answer TEXT,
+    is_correct BOOLEAN,
+    marks_obtained DECIMAL(5,2) DEFAULT 0,
+    time_taken INT DEFAULT 0 COMMENT 'Time in seconds',
+    answered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (attempt_id) REFERENCES test_attempts(attempt_id) ON DELETE CASCADE,
+    FOREIGN KEY (question_id) REFERENCES questions(question_id) ON DELETE CASCADE,
+    INDEX idx_attempt_id (attempt_id),
+    INDEX idx_question_id (question_id)
+);
+
+-- Placement resources
+CREATE TABLE placement_resources (
+    resource_id INT PRIMARY KEY AUTO_INCREMENT,
+    title VARCHAR(200) NOT NULL,
+    description TEXT,
+    resource_type ENUM('article', 'pdf', 'video', 'link', 'tips') NOT NULL,
+    file_path VARCHAR(255),
+    external_link VARCHAR(255),
+    category VARCHAR(50) COMMENT 'resume, interview, aptitude, etc.',
+    uploaded_by INT,
+    is_public BOOLEAN DEFAULT TRUE,
+    views INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (uploaded_by) REFERENCES users(user_id) ON DELETE SET NULL,
+    INDEX idx_category (category),
+    INDEX idx_resource_type (resource_type)
+);
+
+-- Training materials
+CREATE TABLE training_materials (
+    material_id INT PRIMARY KEY AUTO_INCREMENT,
+    title VARCHAR(200) NOT NULL,
+    description TEXT,
+    material_type ENUM('document', 'video', 'tutorial', 'course') NOT NULL,
+    file_path VARCHAR(255),
+    external_link VARCHAR(255),
+    category VARCHAR(50) COMMENT 'programming, soft_skills, technical, etc.',
+    difficulty_level ENUM('beginner', 'intermediate', 'advanced') DEFAULT 'beginner',
+    uploaded_by INT,
+    is_public BOOLEAN DEFAULT TRUE,
+    views INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (uploaded_by) REFERENCES users(user_id) ON DELETE SET NULL,
+    INDEX idx_category (category),
+    INDEX idx_difficulty (difficulty_level)
+);
+
+
+
+-- ============================================
+-- Folder Structure
+-- ============================================
+
+placement_training_system/
+│
+├── config/
+│   ├── database.php           # Database connection configuration
+│   └── config.php             # Application settings (site name, URLs, etc.)
+│
+├── includes/
+│   ├── header.php             # Common HTML header
+│   ├── footer.php             # Common HTML footer
+│   ├── navbar.php             # Navigation menu component
+│   └── functions.php          # Shared utility functions
+│
+├── auth/
+│   ├── login.php              # Login page and handler
+│   ├── register.php           # Registration page and handler
+│   ├── logout.php             # Logout script
+│   └── forgot_password.php    # Password recovery
+│
+├── student/
+│   ├── dashboard.php          # Student dashboard with overview
+│   ├── my_tests.php           # List of available tests
+│   ├── take_test.php          # Test-taking interface
+│   ├── test_results.php       # View test results and analytics
+│   ├── placement_resources.php # Browse placement resources
+│   └── profile.php            # Student profile management
+│
+├── teacher/
+│   ├── dashboard.php          # Teacher dashboard
+│   ├── create_test.php        # Create new test manually
+│   ├── upload_questions.php   # Upload questions via PDF
+│   ├── manage_tests.php       # Edit/delete existing tests
+│   ├── view_results.php       # View all student results
+│   ├── grade_students.php     # Grading and performance analytics
+│   └── upload_resources.php   # Upload placement/training materials
+│
+├── guest/
+│   ├── index.php              # Guest homepage
+│   ├── public_tests.php       # Public tests available to guests
+│   ├── placement_info.php     # Placement drives and company info
+│   ├── training_materials.php # Public training resources
+│   └── take_test.php          # Guest test-taking interface
+│
+├── admin/                     # Optional: Future admin features
+│   ├── dashboard.php
+│   ├── manage_users.php
+│   └── system_settings.php
+│
+├── ajax/                      # AJAX request handlers
+│   ├── save_answer.php        # Auto-save student answers
+│   ├── submit_test.php        # Submit test via AJAX
+│   └── load_question.php      # Load questions dynamically
+│
+├── uploads/                   # User-uploaded files
+│   ├── pdfs/                  # Question PDFs from teachers
+│   ├── resources/             # Placement resource files
+│   ├── materials/             # Training material files
+│   └── company_logos/         # Company logo images
+│
+├── assets/
+│   ├── css/
+│   │   ├── style.css          # Custom styles
+│   │   └── bootstrap.min.css  # Bootstrap framework
+│   ├── js/
+│   │   ├── main.js            # Main JavaScript functions
+│   │   ├── timer.js           # Test timer functionality
+│   │   └── test_handler.js    # Test-taking logic and validation
+│   └── images/                # Static images and icons
+│
+├── api/                       # REST API endpoints (optional)
+│   ├── tests.php              # Test-related API
+│   └── results.php            # Results API
+│
+└── index.php                  # Landing page with role selection
+
+-- ============================================
+-- Core Features
+-- ============================================
+
+1. Landing Page (index.php)
+   - Student login option
+   - Teacher login option
+   - Guest access (no registration)
+   - Quick links to placement drives and public resources
+
+2. Authentication System
+   - Role-based login (student/teacher)
+   - Secure session management
+   - Password hashing using PHP password_hash()
+   - Guest access without registration
+
+3. Guest Features
+   - View placement drives and company information
+   - Access public training materials
+   - Take public tests (name and email only)
+   - View general placement tips
+   - Limited access: no detailed results or analytics
+
+4. Student Features
+   - Personal dashboard with upcoming tests
+   - Browse and filter available tests
+   - Take tests with countdown timer
+   - Auto-save answers during test
+   - View detailed results with explanations
+   - Access all placement resources and training materials
+   - Performance tracking and analytics
+   - Test history and progress monitoring
+
+5. Teacher Features
+   - Create tests manually or via PDF upload
+   - Configure test settings (duration, marks, difficulty, public/private)
+   - Manage question bank
+   - View all student attempts and results
+   - Performance analytics (class average, pass rate, topic-wise analysis)
+   - Upload and manage placement/training resources
+   - Export results to Excel/CSV/PDF
+
+-- ============================================
+-- PDF Question Upload Format
+-- ============================================
+
+Teachers can upload questions via PDF using the following format:
+
+[QUESTION_1]
+Type: MCQ
+Marks: 2
+Question: What is the time complexity of binary search?
+A) O(n)
+B) O(log n)
+C) O(n²)
+D) O(1)
+Correct: B
+Explanation: Binary search divides the search space in half each iteration.
+
+[QUESTION_2]
+Type: TRUE_FALSE
+Marks: 1
+Question: Python is a compiled language.
+Correct: False
+Explanation: Python is an interpreted language that uses bytecode compilation.
+
+[QUESTION_3]
+Type: SHORT_ANSWER
+Marks: 3
+Question: Explain the difference between stack and queue data structures.
+Correct: Stack follows LIFO (Last In First Out) principle, while Queue follows FIFO (First In First Out) principle.
+Explanation: In a stack, elements are added and removed from the same end (top). In a queue, elements are added at the rear and removed from the front.
+
+[QUESTION_4]
+Type: MULTIPLE_SELECT
+Marks: 2
+Question: Which of the following are sorting algorithms? (Select all that apply)
+A) Bubble Sort
+B) Binary Search
+C) Quick Sort
+D) Merge Sort
+Correct: A,C,D
+Explanation: Binary Search is a searching algorithm, not a sorting algorithm.
+
+Format Rules:
+- Each question must start with [QUESTION_N] where N is the question number
+- Type must be one of: MCQ, TRUE_FALSE, SHORT_ANSWER, MULTIPLE_SELECT
+- Marks must be a positive integer
+- For MCQ: Options A, B, C, D are required; E is optional
+- For TRUE_FALSE: Correct must be "True" or "False"
+- For MULTIPLE_SELECT: Correct can contain multiple comma-separated options (e.g., "A,C,D")
+- Explanation is optional but recommended

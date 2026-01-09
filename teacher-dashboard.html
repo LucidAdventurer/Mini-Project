@@ -3,22 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Teacher Dashboard - Placement Portal">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Teacher Dashboard - Placement Portal</title>
     <style>
         /* ============================================
+           CSS VARIABLES - Reusable values
+           ============================================ */
+        :root {
+            /* Colors #4facfe #00f2fe*/
+
+            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            --color-primary: #234C6A;
+            --color-primary-dark: #456882;
+            --color-teacher-primary: #2E073F;
+            --color-teacher-secondary: #AD49E1;
+            --color-text: #2d3748;
+            --color-text-light: #718096;
+            --color-text-lighter: #a0aec0;
+            --color-bg: #FFEDFA;
+            --color-bg-light: #f5f7fa;
+            --color-white: #ffffff;
+            --color-border: #e2e8f0;
+            --color-success: #48bb78;
+            --color-error: #f56565;
+            --color-warning: #ffc107;
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.08);
+            --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.15);
+            --border-radius: 10px;
+            --border-radius-lg: 20px;
+            --transition: all 0.3s ease;
+        }
+
+        /* ============================================
            GLOBAL RESET & BASE STYLES
            ============================================ */
-        * {
+        html {
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            font-family: var(--font-family);
+            background: #D3DAD9;
             min-height: 100vh;
-            color: #2d3748;
+            color: var(--color-text);
+            margin: 0;
+            padding: 0;
+            padding-top: 71px;
+            overflow-x: hidden;
         }
 
         /* ============================================
@@ -27,41 +61,41 @@
            Uses teacher theme colors (purple/orange)
            ============================================ */
         .navbar {
-            background: white;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            padding: 15px 30px;
+            background: var(--color-teacher-primary);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            padding: 12px 28px;
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            position: sticky;
+            justify-content: space-between;
+            position: fixed;
             top: 0;
-            z-index: 100;
-            border-bottom: 3px solid #fa709a;
-            /* Teacher theme color */
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            border-bottom: 3px solid var(--color-teacher-primary);
         }
 
         .navbar-brand {
             display: flex;
             align-items: center;
             gap: 12px;
-            font-size: 22px;
+            font-size: 20px;
             font-weight: 700;
-            color: #2d3748;
+            color: white;
             text-decoration: none;
         }
 
         .brand-logo {
-            width: 45px;
-            height: 45px;
-            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-            /* Teacher gradient */
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
             border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
-            font-weight: bold;
-            font-size: 20px;
+            color: var(--color-white);
+            font-weight: 700;
+            font-size: 18px;
         }
 
         /* Search bar in navigation */
@@ -83,8 +117,8 @@
 
         .search-input:focus {
             outline: none;
-            border-color: #fa709a;
-            box-shadow: 0 0 0 3px rgba(250, 112, 154, 0.1);
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1);
         }
 
         .search-icon {
@@ -117,8 +151,8 @@
         }
 
         .notification-icon:hover {
-            background: #fa709a;
-            color: white;
+            background: var(--color-teacher-primary);
+            color: var(--color-white);
         }
 
         .notification-badge {
@@ -156,12 +190,12 @@
         .profile-avatar {
             width: 35px;
             height: 35px;
-            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
+            color: var(--color-white);
             font-weight: bold;
             font-size: 14px;
         }
@@ -169,7 +203,7 @@
         .profile-name {
             font-weight: 600;
             font-size: 14px;
-            color: #2d3748;
+            color: var(--color-text);
         }
 
         /* ============================================
@@ -217,7 +251,7 @@
         .stat-number {
             font-size: 28px;
             font-weight: 700;
-            color: #fa709a;
+            color: var(--color-teacher-primary);
             /* Teacher theme */
             display: block;
         }
@@ -283,7 +317,7 @@
         .stat-card-icon {
             width: 45px;
             height: 45px;
-            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
             border-radius: 12px;
             display: flex;
             align-items: center;
@@ -332,7 +366,7 @@
         }
 
         .view-all-link {
-            color: #fa709a;
+            color: var(--color-teacher-primary);
             text-decoration: none;
             font-weight: 600;
             font-size: 14px;
@@ -350,7 +384,7 @@
            ============================================ */
         .create-assessment-btn {
             padding: 12px 30px;
-            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
             color: white;
             border: none;
             border-radius: 10px;
@@ -401,7 +435,7 @@
         }
 
         .filter-tab.active {
-            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
             color: white;
         }
 
@@ -420,13 +454,17 @@
             background: #f7fafc;
             border-radius: 15px;
             padding: 20px;
-            transition: all 0.3s ease;
+            transition: var(--transition);
             border: 2px solid transparent;
         }
 
+        .assessment-card.hidden {
+            display: none;
+        }
+
         .assessment-card:hover {
-            border-color: #fa709a;
-            background: white;
+            border-color: var(--color-teacher-primary);
+            background: var(--color-white);
             box-shadow: 0 4px 15px rgba(250, 112, 154, 0.15);
         }
 
@@ -501,7 +539,7 @@
 
         .btn-view {
             padding: 8px 20px;
-            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
             color: white;
             border: none;
             border-radius: 8px;
@@ -519,8 +557,8 @@
         .btn-edit {
             padding: 8px 20px;
             background: white;
-            color: #fa709a;
-            border: 2px solid #fa709a;
+            color: var(--color-teacher-primary);
+            border: 2px solid var(--color-teacher-primary);
             border-radius: 8px;
             font-weight: 600;
             font-size: 13px;
@@ -529,7 +567,7 @@
         }
 
         .btn-edit:hover {
-            background: #fa709a;
+            background: var(--color-teacher-primary);
             color: white;
         }
 
@@ -601,7 +639,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #fa709a;
+            color: var(--color-teacher-primary);
             font-size: 18px;
             flex-shrink: 0;
         }
@@ -645,12 +683,14 @@
         .quick-action-item {
             padding: 12px;
             background: #f7fafc;
-            border-radius: 10px;
+            border-radius: var(--border-radius);
             display: flex;
             align-items: center;
             justify-content: space-between;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: var(--transition);
+            text-decoration: none;
+            color: inherit;
         }
 
         .quick-action-item:hover {
@@ -665,7 +705,7 @@
         }
 
         .quick-action-icon {
-            color: #fa709a;
+            color: var(--color-teacher-primary);
             font-size: 18px;
         }
 
@@ -683,17 +723,18 @@
         .fab-button {
             width: 60px;
             height: 60px;
-            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
+            color: var(--color-white);
             font-size: 24px;
             cursor: pointer;
             box-shadow: 0 6px 20px rgba(250, 112, 154, 0.4);
-            transition: all 0.3s ease;
+            transition: var(--transition);
             border: none;
+            text-decoration: none;
         }
 
         .fab-button:hover {
@@ -766,7 +807,7 @@
             width: 40px;
             height: 40px;
             border: 4px solid #e2e8f0;
-            border-top-color: #fa709a;
+            border-top-color: var(--color-teacher-primary);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
             margin: 0 auto 15px;
@@ -787,26 +828,26 @@
     <nav class="navbar">
         <a href="teacher-dashboard.php" class="navbar-brand">
             <div class="brand-logo">P</div>
-            <span>Placement Portal</span>
+            <span>Teacher Portal</span>
         </a>
 
         <!-- Search bar -->
         <div class="nav-search">
-            <input type="text" class="search-input" placeholder="Search assessments, students..." id="searchInput">
-            <span class="search-icon">🔍</span>
+            <input type="text" class="search-input" placeholder="Search assessments, students..." id="searchInput" aria-label="Search assessments and students" autocomplete="off">
+            <span class="search-icon" aria-hidden="true">🔍</span>
         </div>
 
         <!-- User profile section -->
         <div class="nav-profile">
             <!-- Notification icon with badge -->
-            <div class="notification-icon" onclick="showNotifications()">
-                <span>🔔</span>
-                <div class="notification-badge">5</div>
-            </div>
+            <button class="notification-icon" onclick="showNotifications()" aria-label="View notifications" aria-describedby="notification-count">
+                <span aria-hidden="true">🔔</span>
+                <div class="notification-badge" id="notification-count" aria-live="polite">5</div>
+            </button>
 
             <!-- Profile dropdown button -->
-            <button class="profile-button" onclick="toggleProfileMenu()">
-                <div class="profile-avatar">DR</div>
+            <button class="profile-button" onclick="toggleProfileMenu()" aria-label="Profile menu" aria-expanded="false">
+                <div class="profile-avatar" aria-hidden="true">DR</div>
                 <span class="profile-name">Dr. Rajesh Kumar</span>
             </button>
         </div>
@@ -897,11 +938,11 @@
                 </div>
 
                 <!-- Filter tabs -->
-                <div class="filter-tabs">
-                    <button class="filter-tab active" onclick="filterAssessments('all')">All Tests</button>
-                    <button class="filter-tab" onclick="filterAssessments('active')">Active</button>
-                    <button class="filter-tab" onclick="filterAssessments('draft')">Drafts</button>
-                    <button class="filter-tab" onclick="filterAssessments('inactive')">Inactive</button>
+                <div class="filter-tabs" role="tablist" aria-label="Filter assessments by status">
+                    <button class="filter-tab active" data-status="all" role="tab" aria-selected="true" aria-controls="assessmentList">All Tests</button>
+                    <button class="filter-tab" data-status="active" role="tab" aria-selected="false" aria-controls="assessmentList">Active</button>
+                    <button class="filter-tab" data-status="draft" role="tab" aria-selected="false" aria-controls="assessmentList">Drafts</button>
+                    <button class="filter-tab" data-status="inactive" role="tab" aria-selected="false" aria-controls="assessmentList">Inactive</button>
                 </div>
 
                 <!-- Assessment list -->
@@ -934,9 +975,9 @@
                             </div>
                         </div>
                         <div class="assessment-actions">
-                            <button class="btn-view" onclick="viewResults(1)">View Results</button>
-                            <button class="btn-edit" onclick="editAssessment(1)">Edit</button>
-                            <button class="btn-delete" onclick="deleteAssessment(1)">Delete</button>
+                            <button class="btn-view" data-assessment-id="1" aria-label="View results for Quantitative Aptitude - Set 1">View Results</button>
+                            <button class="btn-edit" data-assessment-id="1" aria-label="Edit Quantitative Aptitude - Set 1">Edit</button>
+                            <button class="btn-delete" data-assessment-id="1" aria-label="Delete Quantitative Aptitude - Set 1">Delete</button>
                         </div>
                     </div>
 
@@ -964,8 +1005,8 @@
                             </div>
                         </div>
                         <div class="assessment-actions">
-                            <button class="btn-edit" onclick="editAssessment(2)">Continue Editing</button>
-                            <button class="btn-delete" onclick="deleteAssessment(2)">Delete</button>
+                            <button class="btn-edit" data-assessment-id="2" aria-label="Continue editing Data Structures Advanced">Continue Editing</button>
+                            <button class="btn-delete" data-assessment-id="2" aria-label="Delete Data Structures Advanced">Delete</button>
                         </div>
                     </div>
 
@@ -1089,22 +1130,22 @@
                 <div class="sidebar-card">
                     <h3 class="sidebar-card-title">Quick Actions</h3>
                     <div class="quick-actions-list">
-                        <div class="quick-action-item" onclick="window.location.href='create-assessment.php'">
+                        <a href="create-assessment.php" class="quick-action-item" role="button" aria-label="Create New Assessment">
                             <span class="quick-action-text">Create New Assessment</span>
-                            <span class="quick-action-icon">➕</span>
-                        </div>
-                        <div class="quick-action-item" onclick="window.location.href='view-all-results.php'">
+                            <span class="quick-action-icon" aria-hidden="true">➕</span>
+                        </a>
+                        <a href="view-all-results.php" class="quick-action-item" role="button" aria-label="View All Results">
                             <span class="quick-action-text">View All Results</span>
-                            <span class="quick-action-icon">📊</span>
-                        </div>
-                        <div class="quick-action-item" onclick="window.location.href='student-management.php'">
+                            <span class="quick-action-icon" aria-hidden="true">📊</span>
+                        </a>
+                        <a href="student-management.php" class="quick-action-item" role="button" aria-label="Manage Students">
                             <span class="quick-action-text">Manage Students</span>
-                            <span class="quick-action-icon">👥</span>
-                        </div>
-                        <div class="quick-action-item" onclick="window.location.href='reports.php'">
+                            <span class="quick-action-icon" aria-hidden="true">👥</span>
+                        </a>
+                        <a href="reports.php" class="quick-action-item" role="button" aria-label="Generate Reports">
                             <span class="quick-action-text">Generate Reports</span>
-                            <span class="quick-action-icon">📄</span>
-                        </div>
+                            <span class="quick-action-icon" aria-hidden="true">📄</span>
+                        </a>
                     </div>
                 </div>
             </div>
@@ -1113,33 +1154,72 @@
 
     <!-- Floating Action Button -->
     <div class="fab-container">
-        <button class="fab-button" onclick="window.location.href='create-assessment.php'" title="Create New Assessment">
+        <a href="create-assessment.php" class="fab-button" aria-label="Create New Assessment" title="Create New Assessment">
             ➕
-        </button>
+        </a>
     </div>
 
     <script>
         /* ============================================
-           ASSESSMENT FILTERING
-           Filter tests by status
+           DEBOUNCE UTILITY
+           Optimizes event handlers
            ============================================ */
-        function filterAssessments(status) {
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        /* ============================================
+           ASSESSMENT FILTERING
+           Filter tests by status - optimized with event delegation
+           ============================================ */
+        function filterAssessments(status, targetElement) {
             // Update active tab
             const tabs = document.querySelectorAll('.filter-tab');
             tabs.forEach(tab => tab.classList.remove('active'));
-            event.target.classList.add('active');
+            if (targetElement) {
+                targetElement.classList.add('active');
+            }
 
-            // Filter assessment cards
+            // Filter assessment cards - use class toggle for better performance
             const cards = document.querySelectorAll('.assessment-card');
             cards.forEach(card => {
                 if (status === 'all') {
-                    card.style.display = 'block';
+                    card.classList.remove('hidden');
                 } else {
                     const cardStatus = card.dataset.status;
-                    card.style.display = cardStatus === status ? 'block' : 'none';
+                    if (cardStatus === status) {
+                        card.classList.remove('hidden');
+                    } else {
+                        card.classList.add('hidden');
+                    }
                 }
             });
         }
+
+        // Use event delegation for filter tabs
+        document.addEventListener('click', function(e) {
+            const filterTab = e.target.closest('.filter-tab');
+            if (filterTab) {
+                const status = filterTab.dataset.status;
+                if (status) {
+                    e.preventDefault();
+                    filterAssessments(status, filterTab);
+                    // Update ARIA attributes for accessibility
+                    document.querySelectorAll('.filter-tab').forEach(tab => {
+                        tab.setAttribute('aria-selected', 'false');
+                    });
+                    filterTab.setAttribute('aria-selected', 'true');
+                }
+            }
+        });
 
         /* ============================================
            VIEW RESULTS
@@ -1147,6 +1227,7 @@
            SECURITY: Verify teacher owns this assessment
            ============================================ */
         function viewResults(assessmentId) {
+            if (!assessmentId) return;
             console.log('Viewing results for assessment:', assessmentId);
             // In production: window.location.href = `assessment-results.php?id=${assessmentId}`;
             alert(`Opening results analytics for assessment ${assessmentId}...\n\nWill show:\n• Student scores\n• Question-wise analysis\n• Performance trends\n• Export options`);
@@ -1158,6 +1239,7 @@
            SECURITY: Verify teacher owns this assessment
            ============================================ */
         function editAssessment(assessmentId) {
+            if (!assessmentId) return;
             console.log('Editing assessment:', assessmentId);
             // In production: window.location.href = `edit-assessment.php?id=${assessmentId}`;
             alert(`Opening editor for assessment ${assessmentId}...\n\nWill allow editing:\n• Questions\n• Settings\n• Difficulty levels\n• Time limits`);
@@ -1170,6 +1252,7 @@
            WARNING: This should be a soft delete in production
            ============================================ */
         function deleteAssessment(assessmentId) {
+            if (!assessmentId) return;
             // Confirm deletion
             if (confirm('Are you sure you want to delete this assessment?\n\nThis action cannot be undone. All student attempts and results will be permanently deleted.')) {
                 console.log('Deleting assessment:', assessmentId);
@@ -1183,25 +1266,45 @@
             }
         }
 
+        // Use event delegation for assessment action buttons
+        document.addEventListener('click', function(e) {
+            const assessmentId = e.target.dataset.assessmentId;
+            if (!assessmentId) return;
+            
+            if (e.target.classList.contains('btn-view')) {
+                viewResults(parseInt(assessmentId));
+            } else if (e.target.classList.contains('btn-edit')) {
+                editAssessment(parseInt(assessmentId));
+            } else if (e.target.classList.contains('btn-delete')) {
+                deleteAssessment(parseInt(assessmentId));
+            }
+        });
+
         /* ============================================
            SEARCH FUNCTIONALITY
-           Real-time search through assessments and students
+           Real-time search through assessments and students - optimized with debouncing
            ============================================ */
-        document.getElementById('searchInput').addEventListener('input', function(e) {
-            const searchTerm = e.target.value.toLowerCase();
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            const performSearch = debounce(function(e) {
+                const searchTerm = e.target.value.toLowerCase().trim();
             const cards = document.querySelectorAll('.assessment-card');
             
             cards.forEach(card => {
-                const title = card.querySelector('.assessment-title').textContent.toLowerCase();
-                const category = card.querySelector('.assessment-category').textContent.toLowerCase();
+                    const title = card.querySelector('.assessment-title')?.textContent?.toLowerCase() || '';
+                    const category = card.querySelector('.assessment-category')?.textContent?.toLowerCase() || '';
                 
-                if (title.includes(searchTerm) || category.includes(searchTerm)) {
-                    card.style.display = 'block';
+                    // Use class toggle instead of inline styles for better performance
+                    if (!searchTerm || title.includes(searchTerm) || category.includes(searchTerm)) {
+                        card.classList.remove('hidden');
                 } else {
-                    card.style.display = 'none';
+                        card.classList.add('hidden');
                 }
             });
-        });
+            }, 300); // 300ms debounce
+
+            searchInput.addEventListener('input', performSearch);
+        }
 
         /* ============================================
            NOTIFICATION SYSTEM
@@ -1247,17 +1350,19 @@
 
         /* ============================================
            PAGE LOAD ANIMATIONS
-           Smooth entrance effects
+           Smooth entrance effects - optimized
            ============================================ */
         window.addEventListener('load', function() {
             console.log('Teacher Dashboard loaded successfully');
             
-            // Animate stat cards
+            // Animate stat cards - use requestAnimationFrame for better performance
             const statCards = document.querySelectorAll('.stat-card');
             statCards.forEach((card, index) => {
+                requestAnimationFrame(() => {
                 setTimeout(() => {
                     card.style.animation = 'fadeInUp 0.5s ease forwards';
                 }, index * 100);
+                });
             });
         });
 

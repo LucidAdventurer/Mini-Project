@@ -3,22 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Take Assessment - Placement Portal">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Assessment - Placement Portal</title>
     <style>
         /* ============================================
+           CSS VARIABLES - Reusable values
+           ============================================ */
+        :root {
+            /* Colors #4facfe #00f2fe*/
+
+            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            --color-primary: #234C6A;
+            --color-primary-dark: #456882;
+            --color-teacher-primary: #2E073F;
+            --color-teacher-secondary: #AD49E1;
+            --color-text: #2d3748;
+            --color-text-light: #718096;
+            --color-text-lighter: #a0aec0;
+            --color-bg: #f0f4f8;
+            --color-bg-light: #f5f7fa;
+            --color-white: #ffffff;
+            --color-border: #e2e8f0;
+            --color-success: #48bb78;
+            --color-error: #f56565;
+            --color-warning: #ffc107;
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.08);
+            --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.15);
+            --border-radius: 10px;
+            --border-radius-lg: 20px;
+            --transition: all 0.3s ease;
+        }
+
+        /* ============================================
            GLOBAL RESET & BASE STYLES
            ============================================ */
-        * {
+        html {
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #f5f7fa;
-            color: #2d3748;
+            font-family: var(--font-family);
+            background: #D3DAD9;
+            color: var(--color-text);
             overflow-x: hidden;
+            margin: 0;
+            padding: 0;
+            padding-top: 71px;
         }
 
         /* ============================================
@@ -27,16 +60,18 @@
            SECURITY: This prevents navigation away during test
            ============================================ */
         .test-header {
-            background: white;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            padding: 15px 30px;
+            background: var(--color-primary);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            padding: 12px 28px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            position: sticky;
+            position: fixed;
             top: 0;
-            z-index: 100;
-            border-bottom: 3px solid #4facfe;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            border-bottom: 3px solid var(--color-primary);
         }
 
         .test-info {
@@ -48,13 +83,13 @@
         .test-title {
             font-size: 18px;
             font-weight: 700;
-            color: #2d3748;
+            color: white;
         }
 
         .test-badge {
             padding: 6px 12px;
-            background: #e6f7ff;
-            color: #1890ff;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
             border-radius: 6px;
             font-size: 12px;
             font-weight: 600;
@@ -72,7 +107,7 @@
             align-items: center;
             gap: 10px;
             padding: 10px 20px;
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
             border-radius: 10px;
             color: white;
             font-weight: 700;
@@ -163,7 +198,7 @@
             border-radius: 8px;
             font-size: 14px;
             font-weight: 600;
-            color: #4facfe;
+            color: var(--color-primary);
         }
 
         /* Question text display */
@@ -197,7 +232,7 @@
         }
 
         .option:hover {
-            border-color: #4facfe;
+            border-color: var(--color-primary);
             background: #f7fafc;
             transform: translateX(5px);
         }
@@ -214,7 +249,7 @@
             height: 20px;
             margin-right: 15px;
             cursor: pointer;
-            accent-color: #4facfe;
+            accent-color: var(--color-primary);
         }
 
         .option-label {
@@ -238,7 +273,7 @@
 
         .nav-btn {
             padding: 12px 30px;
-            border: 2px solid #4facfe;
+            border: 2px solid var(--color-primary);
             background: white;
             color: #4facfe;
             border-radius: 10px;
@@ -252,7 +287,7 @@
         }
 
         .nav-btn:hover:not(:disabled) {
-            background: #4facfe;
+            background: var(--color-primary);
             color: white;
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(79, 172, 254, 0.3);
@@ -544,7 +579,7 @@
             width: 50px;
             height: 50px;
             border: 5px solid #e2e8f0;
-            border-top-color: #4facfe;
+            border-top-color: var(--color-primary);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
         }
@@ -794,34 +829,81 @@
             setInterval(autoSave, 30000);
         }
 
-        // Generate question palette
+        // Generate question palette - optimized with document fragment
         function generateQuestionPalette() {
             const palette = document.getElementById('questionPalette');
-            palette.innerHTML = '';
+            if (!palette) return;
+            
+            // Use document fragment for better performance
+            const fragment = document.createDocumentFragment();
             
             questionData.forEach((question, index) => {
                 const item = document.createElement('div');
                 item.className = 'palette-item not-answered';
                 item.textContent = index + 1;
-                item.onclick = () => jumpToQuestion(index);
+                item.setAttribute('data-question-index', index);
+                item.setAttribute('role', 'button');
+                item.setAttribute('tabindex', '0');
+                item.setAttribute('aria-label', `Go to question ${index + 1}`);
                 item.id = `palette-${index}`;
-                palette.appendChild(item);
+                fragment.appendChild(item);
             });
             
-            document.getElementById('palette-0').classList.add('current');
+            palette.innerHTML = '';
+            palette.appendChild(fragment);
+            
+            // Use event delegation instead of individual onclick handlers
+            palette.addEventListener('click', function(e) {
+                const item = e.target.closest('.palette-item');
+                if (item) {
+                    const index = parseInt(item.dataset.questionIndex);
+                    if (!isNaN(index)) {
+                        jumpToQuestion(index);
+                    }
+                }
+            });
+            
+            // Keyboard navigation
+            palette.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    const item = e.target.closest('.palette-item');
+                    if (item) {
+                        e.preventDefault();
+                        const index = parseInt(item.dataset.questionIndex);
+                        if (!isNaN(index)) {
+                            jumpToQuestion(index);
+                        }
+                    }
+                }
+            });
+            
+            const firstItem = document.getElementById('palette-0');
+            if (firstItem) {
+                firstItem.classList.add('current');
+            }
         }
 
-        // Load question
+        // Load question - optimized with document fragment
         function loadQuestion(index) {
             const question = questionData[index];
+            if (!question) return;
             
-            document.getElementById('questionText').textContent = question.text;
-            document.getElementById('currentQuestion').textContent = index + 1;
-            document.getElementById('totalQuestions').textContent = questionData.length;
-            document.getElementById('questionMarks').textContent = question.marks;
-            
+            // Batch DOM updates
+            const questionTextEl = document.getElementById('questionText');
+            const currentQuestionEl = document.getElementById('currentQuestion');
+            const totalQuestionsEl = document.getElementById('totalQuestions');
+            const questionMarksEl = document.getElementById('questionMarks');
             const optionsContainer = document.getElementById('optionsContainer');
-            optionsContainer.innerHTML = '';
+            
+            if (questionTextEl) questionTextEl.textContent = question.text;
+            if (currentQuestionEl) currentQuestionEl.textContent = index + 1;
+            if (totalQuestionsEl) totalQuestionsEl.textContent = questionData.length;
+            if (questionMarksEl) questionMarksEl.textContent = question.marks;
+            
+            if (!optionsContainer) return;
+            
+            // Use document fragment for better performance
+            const fragment = document.createDocumentFragment();
             
             question.options.forEach((option, optionIndex) => {
                 const optionLabel = String.fromCharCode(65 + optionIndex);
@@ -830,13 +912,15 @@
                 const label = document.createElement('label');
                 label.className = `option ${isSelected ? 'selected' : ''}`;
                 label.setAttribute('data-option', optionLabel);
+                label.setAttribute('role', 'radio');
+                label.setAttribute('aria-checked', isSelected);
                 
                 const input = document.createElement('input');
                 input.type = 'radio';
                 input.name = 'answer';
                 input.value = optionLabel;
                 input.checked = isSelected;
-                input.onchange = () => selectOption(optionLabel);
+                input.setAttribute('aria-label', `Option ${optionLabel}: ${option}`);
                 
                 const span = document.createElement('span');
                 span.className = 'option-label';
@@ -844,7 +928,17 @@
                 
                 label.appendChild(input);
                 label.appendChild(span);
-                optionsContainer.appendChild(label);
+                fragment.appendChild(label);
+            });
+            
+            optionsContainer.innerHTML = '';
+            optionsContainer.appendChild(fragment);
+            
+            // Use event delegation for option selection
+            optionsContainer.addEventListener('change', function(e) {
+                if (e.target.type === 'radio') {
+                    selectOption(e.target.value);
+                }
             });
             
             document.getElementById('prevBtn').disabled = index === 0;
@@ -968,8 +1062,9 @@
             }, 1000);
         }
 
-        // Auto-save
+        // Auto-save - optimized with try-catch and error handling
         function autoSave() {
+            try {
             const saveData = {
                 testId: 1,
                 userId: 'student123',
@@ -980,8 +1075,16 @@
                 timestamp: new Date().toISOString()
             };
             
+                // Check if localStorage is available
+                if (typeof Storage !== 'undefined') {
             localStorage.setItem('testProgress', JSON.stringify(saveData));
             console.log('Progress auto-saved:', saveData);
+                } else {
+                    console.warn('localStorage not available');
+                }
+            } catch (error) {
+                console.error('Error saving progress:', error);
+            }
         }
 
         // Submit confirmation
@@ -1052,25 +1155,41 @@
             });
         }
 
-        // Keyboard shortcuts
+        // Keyboard shortcuts - optimized with better key handling
         document.addEventListener('keydown', function(e) {
+            // Ignore if user is typing in an input field
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                return;
+            }
+            
+            // Navigation shortcuts
             if (e.key === 'ArrowLeft' && currentQuestionIndex > 0) {
+                e.preventDefault();
                 previousQuestion();
             } else if (e.key === 'ArrowRight' && currentQuestionIndex < questionData.length - 1) {
+                e.preventDefault();
                 nextQuestion();
             }
             
+            // Number key shortcuts for options (1-4)
             if (e.key >= '1' && e.key <= '4') {
                 const optionIndex = parseInt(e.key) - 1;
-                if (optionIndex < questionData[currentQuestionIndex].options.length) {
+                const currentQuestion = questionData[currentQuestionIndex];
+                if (currentQuestion && optionIndex < currentQuestion.options.length) {
+                    e.preventDefault();
                     const optionLabel = String.fromCharCode(65 + optionIndex);
                     selectOption(optionLabel);
                     const radio = document.querySelector(`input[value="${optionLabel}"]`);
-                    if (radio) radio.checked = true;
+                    if (radio) {
+                        radio.checked = true;
+                        radio.dispatchEvent(new Event('change'));
+                    }
                 }
             }
             
+            // Mark for review shortcut
             if (e.key === 'm' || e.key === 'M') {
+                e.preventDefault();
                 toggleMarkForReview();
             }
         });

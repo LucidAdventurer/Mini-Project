@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teacher Registration - Placement Portal</title>
+  <style>
+    /* Variables */
+    :root {
+      --color-teacher-primary: #2E073F;
+      --color-teacher-secondary: #AD49E1;
+    }
+
+    /* Global Styles */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      overflow: hidden;
+      background: #f0f4f8;
+    }
+
+    /* Background */
+    .dynamic-background {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-primary) 100%);
+    }
+
+    .teacher-animation {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Chalkboard Animation */
+    .chalkboard {
+      position: absolute;
+      background: #2d3e3f;
+      border-radius: 8px;
+      box-shadow: 0 0 0 8px #8b4513, 0 8px 20px rgba(0,0,0,0.3);
+      animation: float-board 10s ease-in-out infinite;
+    }
+
+    @keyframes float-board {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-30px); }
+    }
+
+    .chalkboard:nth-child(1) {
+      width: 100px;
+      height: 80px;
+      top: 20%;
+      left: 10%;
+    }
+
+    .chalkboard:nth-child(2) {
+      width: 90px;
+      height: 70px;
+      top: 65%;
+      left: 80%;
+      animation-delay: 1.5s;
+    }
+
+    .chalkboard:nth-child(3) {
+      width: 80px;
+      height: 65px;
+      top: 75%;
+      left: 20%;
+      animation-delay: 2s;
+    }
+
+    /* Container */
+    .container {
+      position: relative;
+      z-index: 2;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    /* Card */
+    .register-card {
+      background: rgba(0,0,0,0.98);
+      backdrop-filter: blur(20px);
+      border-radius: 24px;
+      padding: 45px;
+      width: 100%;
+      max-width: 450px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+      animation: cardPop 0.6s;
+      border: 2px solid rgba(0,0,0,0.8);
+    }
+
+    @keyframes cardPop {
+      from {
+        opacity: 0;
+        transform: scale(0.8) translateY(40px);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+
+    /* Header */
+    .register-header {
+      text-align: center;
+      margin-bottom: 35px;
+    }
+
+    .logo {
+      width: 90px;
+      height: 90px;
+      margin: 0 auto 20px;
+      background: linear-gradient(135deg, #7A1CAC, var(--color-teacher-secondary));
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 42px;
+      color: #fff;
+      font-weight: bold;
+      box-shadow: 0 0 25px rgba(250,112,154,0.5);
+    }
+
+    .register-header h1 {
+      font-size: 28px;
+      color: #fff;
+      margin-bottom: 8px;
+      font-weight: 700;
+    }
+
+    .register-header p {
+      font-size: 14px;
+      color: #fff;
+    }
+
+    /* Form */
+    .form-group {
+      margin-bottom: 22px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 10px;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .required {
+      color: #f56565;
+      margin-left: 4px;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 14px 16px;
+      border: 2px solid #333;
+      border-radius: 12px;
+      font-size: 14px;
+      transition: all 0.3s;
+      background: #fff;
+      color: #2d3748;
+    }
+
+    .form-control::placeholder {
+      color: #a0aec0;
+    }
+
+    .form-control:focus {
+      outline: none;
+      border-color: var(--color-teacher-secondary);
+      box-shadow: 0 0 0 3px rgba(250,112,154,0.1);
+    }
+
+    /* Button */
+    .btn-register {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(135deg, #7A1CAC, var(--color-teacher-secondary));
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s;
+      box-shadow: 0 6px 20px rgba(250,112,154,0.4);
+    }
+
+    .btn-register:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(250,112,154,0.5);
+    }
+
+    /* Footer */
+    .form-footer {
+      text-align: center;
+      margin-top: 25px;
+      padding-top: 25px;
+      border-top: 2px solid #e2e8f0;
+    }
+
+    .form-footer p {
+      color: #718096;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+
+    .form-footer a {
+      color: var(--color-teacher-secondary);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    /* Responsive */
+    @media (max-width: 480px) {
+      .register-card {
+        padding: 35px 25px;
+      }
+      .logo {
+        width: 75px;
+        height: 75px;
+        font-size: 36px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Background -->
+  <div class="dynamic-background">
+    <div class="teacher-animation">
+      <div class="chalkboard"></div>
+      <div class="chalkboard"></div>
+      <div class="chalkboard"></div>
+    </div>
+  </div>
+
+  <!-- Main Container -->
+  <div class="container">
+    <div class="register-card">
+      <!-- Header -->
+      <div class="register-header">
+        <div class="logo">P</div>
+        <h1>Teacher Registration</h1>
+        <p>Create your account to manage assessments</p>
+      </div>
+
+      <!-- Registration Form -->
+      <form id="registrationForm">
+        <div class="form-group">
+          <label>Full Name<span class="required">*</span></label>
+          <input type="text" class="form-control" id="fullName" placeholder="Enter your full name" required>
+        </div>
+
+        <div class="form-group">
+          <label>Email Address<span class="required">*</span></label>
+          <input type="email" class="form-control" id="email" placeholder="your.email@example.com" required>
+        </div>
+
+        <div class="form-group">
+          <label>Password<span class="required">*</span></label>
+          <input type="password" class="form-control" id="password" placeholder="Create a strong password" required minlength="6">
+        </div>
+
+        <button type="submit" class="btn-register">Create Account</button>
+      </form>
+
+      <!-- Footer Links -->
+      <div class="form-footer">
+        <p>Already have an account? <a href="index.html">Login here</a></p>
+        <p><a href="register-student.html">Register as Student</a></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script>
+    document.getElementById('registrationForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      const formData = {
+        fullName: document.getElementById('fullName').value,
+        email: document.getElementById('email').value,
+        password: document.getElementById('password').value,
+        userType: 'teacher'
+      };
+
+      console.log('Teacher Registration:', formData);
+      alert('✅ Registration Successful!\n\nYou can now login with your credentials.');
+      
+      // In production: window.location.href = 'index.html';
+    });
+  </script>
+</body>
+</html>

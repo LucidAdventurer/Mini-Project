@@ -3,8 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Test Results - Placement Portal">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Test Results - Placement Portal</title>
     <style>
+        /* ============================================
+           CSS VARIABLES - Reusable values
+           ============================================ */
+        :root {
+            /* Colors #4facfe #00f2fe*/
+
+            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            --color-primary: #234C6A;
+            --color-primary-dark: #456882;
+            --color-teacher-primary: #2E073F;
+            --color-teacher-secondary: #AD49E1;
+            --color-text: #2d3748;
+            --color-text-light: #718096;
+            --color-text-lighter: #a0aec0;
+            --color-bg: #f0f4f8;
+            --color-bg-light: #f5f7fa;
+            --color-white: #ffffff;
+            --color-border: #e2e8f0;
+            --color-success: #48bb78;
+            --color-error: #f56565;
+            --color-warning: #ffc107;
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.08);
+            --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.15);
+            --border-radius: 10px;
+            --border-radius-lg: 20px;
+            --transition: all 0.3s ease;
+        }
+
         /* ============================================
            GLOBAL RESET & BASE STYLES
            ============================================ */
@@ -15,43 +46,50 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            font-family: var(--font-family);
+            background: #D3DAD9;
             min-height: 100vh;
-            color: #2d3748;
+            color: var(--color-text);
+            margin: 0;
+            padding: 0;
+            padding-top: 71px;
+            overflow-x: hidden;
         }
 
         /* ============================================
            NAVIGATION BAR
            Top navigation with back to dashboard
            ============================================ */
+        /* NAVIGATION BAR - standardized across pages */
         .navbar {
-            background: white;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            padding: 15px 30px;
+            background: var(--color-primary);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            padding: 12px 28px;
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            position: sticky;
+            justify-content: space-between;
+            position: fixed;
             top: 0;
-            z-index: 100;
-            border-bottom: 3px solid #4facfe;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            border-bottom: 3px solid var(--color-primary);
         }
 
         .navbar-brand {
             display: flex;
             align-items: center;
             gap: 12px;
-            font-size: 22px;
+            font-size: 20px;
             font-weight: 700;
-            color: #2d3748;
+            color: white;
             text-decoration: none;
         }
 
         .brand-logo {
             width: 45px;
             height: 45px;
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
             border-radius: 10px;
             display: flex;
             align-items: center;
@@ -156,8 +194,8 @@
             height: 200px;
             border-radius: 50%;
             background: conic-gradient(
-                #4facfe 0%,
-                #4facfe var(--score-percentage),
+                var(--color-primary) 0%,
+                var(--color-primary) var(--score-percentage),
                 #e2e8f0 var(--score-percentage),
                 #e2e8f0 100%
             );
@@ -185,7 +223,7 @@
         .score-value {
             font-size: 48px;
             font-weight: 700;
-            color: #4facfe;
+            color: var(--color-primary);
             line-height: 1;
         }
 
@@ -211,7 +249,7 @@
         }
 
         .performance-badge.good {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
             color: white;
         }
 
@@ -402,7 +440,7 @@
         .filter-btn.active {
             background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
             color: white;
-            border-color: #4facfe;
+            border-color: var(--color-primary);
         }
 
         .filter-btn:hover:not(.active) {
@@ -418,10 +456,14 @@
         }
 
         .question-card {
-            border: 2px solid #e2e8f0;
+            border: 2px solid var(--color-border);
             border-radius: 16px;
             padding: 25px;
-            transition: all 0.3s ease;
+            transition: var(--transition);
+        }
+
+        .question-card.hidden {
+            display: none;
         }
 
         .question-card.correct {
@@ -491,7 +533,7 @@
         }
 
         .answer-option.user-answer {
-            border-color: #4facfe;
+            border-color: var(--color-primary);
             background: rgba(79, 172, 254, 0.1);
         }
 
@@ -564,14 +606,14 @@
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
             color: white;
         }
 
         .btn-secondary {
             background: white;
-            color: #4facfe;
-            border: 2px solid #4facfe;
+            color: var(--color-primary);
+            border: 2px solid var(--color-primary);
         }
 
         .action-btn:hover {
@@ -1028,16 +1070,22 @@
 
         /* ============================================
            GENERATE QUESTION CARDS
-           Creates review cards for all questions
+           Creates review cards for all questions - optimized
            ============================================ */
         function generateQuestionCards() {
             const questionsList = document.getElementById('questionsList');
-            questionsList.innerHTML = '';
+            if (!questionsList) return;
+            
+            // Use document fragment for better performance
+            const fragment = document.createDocumentFragment();
             
             resultsData.questions.forEach((question, index) => {
                 const card = createQuestionCard(question, index + 1);
-                questionsList.appendChild(card);
+                fragment.appendChild(card);
             });
+            
+            questionsList.innerHTML = '';
+            questionsList.appendChild(fragment);
         }
 
         /* ============================================
@@ -1106,28 +1154,39 @@
 
         /* ============================================
            FILTER QUESTIONS
-           Shows/hides questions based on filter selection
+           Shows/hides questions based on filter selection - optimized
            ============================================ */
-        function filterQuestions(filter) {
+        function filterQuestions(filter, targetElement) {
             // Update active button
             const buttons = document.querySelectorAll('.filter-btn');
             buttons.forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
+            if (targetElement) {
+                targetElement.classList.add('active');
+            }
             
-            // Filter question cards
+            // Filter question cards - use class toggle for better performance
             const cards = document.querySelectorAll('.question-card');
             cards.forEach(card => {
                 const status = card.getAttribute('data-status');
                 
-                if (filter === 'all') {
-                    card.style.display = 'block';
-                } else if (filter === status) {
-                    card.style.display = 'block';
+                if (filter === 'all' || filter === status) {
+                    card.classList.remove('hidden');
                 } else {
-                    card.style.display = 'none';
+                    card.classList.add('hidden');
                 }
             });
         }
+
+        // Use event delegation for filter buttons
+        document.addEventListener('click', function(e) {
+            const filterBtn = e.target.closest('.filter-btn');
+            if (filterBtn && filterBtn.onclick) {
+                const match = filterBtn.getAttribute('onclick')?.match(/filterQuestions\('([^']+)'\)/);
+                if (match) {
+                    filterQuestions(match[1], filterBtn);
+                }
+            }
+        });
 
         /* ============================================
            ANIMATE ENTRANCE

@@ -3,11 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Placement & Training Assessment Platform - Login">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Login - Placement & Training Assessment</title>
     <style>
-        /* ============================================
-           GLOBAL RESET & BASE STYLES
-           ============================================ */
+        :root {
+            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            --color-primary: #234C6A;
+            --color-primary-dark: #456882;
+            --color-teacher-primary: #2E073F;
+            --color-teacher-secondary: #AD49E1;
+            --color-text: #2d3748;
+            --color-text-light: #718096;
+            --color-text-lighter: #a0aec0;
+            --color-bg: #f0f4f8;
+            --color-bg-light: #f5f7fa;
+            --color-white: #ffffff;
+            --color-border: #e2e8f0;
+            --color-success: #48bb78;
+            --color-error: #f56565;
+            --color-warning: #ffc107;
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.08);
+            --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.15);
+            --border-radius: 10px;
+            --border-radius-lg: 20px;
+            --transition: all 0.3s ease;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -15,16 +38,11 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: var(--font-family);
             overflow: hidden;
-            background: #f0f4f8;
-            /* Light neutral background */
+            background: var(--color-bg);
         }
 
-        /* ============================================
-           DYNAMIC BACKGROUND CONTAINER
-           Switches between student and teacher themes
-           ============================================ */
         .dynamic-background {
             position: fixed;
             top: 0;
@@ -35,20 +53,14 @@
             transition: background 0.8s ease;
         }
 
-        /* Student theme - Learning/Study colors (Blue/Cyan) */
         .dynamic-background.student-mode {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
         }
 
-        /* Teacher theme - Teaching/Authority colors (Purple/Orange) */
         .dynamic-background.teacher-mode {
-            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-primary) 100%);
         }
 
-        /* ============================================
-           STUDENT ANIMATION - FLOATING BOOKS
-           Represents studying and learning
-           ============================================ */
         .student-animation {
             position: absolute;
             width: 100%;
@@ -62,7 +74,6 @@
             pointer-events: none;
         }
 
-        /* Book styling */
         .book {
             position: absolute;
             width: 50px;
@@ -73,7 +84,6 @@
             animation: float-book 8s ease-in-out infinite;
         }
 
-        /* Book spine effect */
         .book::before {
             content: '';
             position: absolute;
@@ -81,11 +91,10 @@
             top: 5px;
             bottom: 5px;
             width: 3px;
-            background: #4facfe;
+            background: var(--color-primary);
             border-radius: 2px;
         }
 
-        /* Book pages effect */
         .book::after {
             content: '';
             position: absolute;
@@ -94,71 +103,22 @@
             width: 30px;
             height: 2px;
             background: #ddd;
-            box-shadow: 
-                0 8px 0 #ddd,
-                0 16px 0 #ddd,
-                0 24px 0 #ddd;
+            box-shadow: 0 8px 0 #ddd, 0 16px 0 #ddd, 0 24px 0 #ddd;
         }
 
-        /* Floating animation for books */
         @keyframes float-book {
-            0%, 100% {
-                transform: translateY(0) rotate(0deg);
-            }
-            25% {
-                transform: translateY(-40px) rotate(-5deg);
-            }
-            50% {
-                transform: translateY(-20px) rotate(5deg);
-            }
-            75% {
-                transform: translateY(-50px) rotate(-3deg);
-            }
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            25% { transform: translateY(-40px) rotate(-5deg); }
+            50% { transform: translateY(-20px) rotate(5deg); }
+            75% { transform: translateY(-50px) rotate(-3deg); }
         }
 
-        /* Position books across the screen */
-        .book:nth-child(1) {
-            top: 15%;
-            left: 8%;
-            animation-duration: 7s;
-            animation-delay: 0s;
-        }
+        .book:nth-child(1) { top: 15%; left: 8%; animation-duration: 7s; animation-delay: 0s; }
+        .book:nth-child(2) { top: 60%; left: 85%; width: 60px; height: 80px; animation-duration: 9s; animation-delay: 1s; }
+        .book:nth-child(3) { top: 75%; left: 15%; width: 45px; height: 65px; animation-duration: 8s; animation-delay: 2s; }
+        .book:nth-child(4) { top: 25%; left: 75%; animation-duration: 10s; animation-delay: 1.5s; }
+        .book:nth-child(5) { top: 50%; left: 25%; width: 55px; height: 75px; animation-duration: 7.5s; animation-delay: 0.5s; }
 
-        .book:nth-child(2) {
-            top: 60%;
-            left: 85%;
-            width: 60px;
-            height: 80px;
-            animation-duration: 9s;
-            animation-delay: 1s;
-        }
-
-        .book:nth-child(3) {
-            top: 75%;
-            left: 15%;
-            width: 45px;
-            height: 65px;
-            animation-duration: 8s;
-            animation-delay: 2s;
-        }
-
-        .book:nth-child(4) {
-            top: 25%;
-            left: 75%;
-            animation-duration: 10s;
-            animation-delay: 1.5s;
-        }
-
-        .book:nth-child(5) {
-            top: 50%;
-            left: 25%;
-            width: 55px;
-            height: 75px;
-            animation-duration: 7.5s;
-            animation-delay: 0.5s;
-        }
-
-        /* Pencil icons for student mode */
         .pencil {
             position: absolute;
             width: 8px;
@@ -168,7 +128,6 @@
             animation: write 6s ease-in-out infinite;
         }
 
-        /* Pencil tip */
         .pencil::before {
             content: '';
             position: absolute;
@@ -182,32 +141,14 @@
             border-top: 8px solid #333;
         }
 
-        /* Writing animation */
         @keyframes write {
-            0%, 100% {
-                transform: translateX(0) rotate(-45deg);
-            }
-            50% {
-                transform: translateX(30px) rotate(-45deg);
-            }
+            0%, 100% { transform: translateX(0) rotate(-45deg); }
+            50% { transform: translateX(30px) rotate(-45deg); }
         }
 
-        .pencil:nth-child(6) {
-            top: 40%;
-            left: 60%;
-            animation-delay: 0s;
-        }
+        .pencil:nth-child(6) { top: 40%; left: 60%; animation-delay: 0s; }
+        .pencil:nth-child(7) { top: 70%; left: 70%; animation-delay: 2s; }
 
-        .pencil:nth-child(7) {
-            top: 70%;
-            left: 70%;
-            animation-delay: 2s;
-        }
-
-        /* ============================================
-           TEACHER ANIMATION - CHALKBOARD & CHARTS
-           Represents teaching and instruction
-           ============================================ */
         .teacher-animation {
             position: absolute;
             width: 100%;
@@ -220,28 +161,19 @@
             opacity: 1;
         }
 
-        /* Chalkboard styling */
         .chalkboard {
             position: absolute;
             background: #2d3e3f;
             border-radius: 8px;
-            box-shadow: 
-                0 0 0 8px #8b4513,
-                0 8px 20px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 0 0 8px #8b4513, 0 8px 20px rgba(0, 0, 0, 0.3);
             animation: float-board 10s ease-in-out infinite;
         }
 
-        /* Floating animation for chalkboards */
         @keyframes float-board {
-            0%, 100% {
-                transform: translateY(0) rotate(0deg);
-            }
-            50% {
-                transform: translateY(-30px) rotate(2deg);
-            }
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-30px) rotate(2deg); }
         }
 
-        /* Chalk lines on board */
         .chalkboard::before {
             content: '';
             position: absolute;
@@ -251,12 +183,9 @@
             height: 2px;
             background: white;
             opacity: 0.7;
-            box-shadow: 
-                0 10px 0 rgba(255, 255, 255, 0.7),
-                0 20px 0 rgba(255, 255, 255, 0.7);
+            box-shadow: 0 10px 0 rgba(255, 255, 255, 0.7), 0 20px 0 rgba(255, 255, 255, 0.7);
         }
 
-        /* Math equation on board */
         .chalkboard::after {
             content: '✓';
             position: absolute;
@@ -267,35 +196,10 @@
             font-weight: bold;
         }
 
-        /* Position chalkboards */
-        .chalkboard:nth-child(1) {
-            width: 100px;
-            height: 80px;
-            top: 20%;
-            left: 10%;
-            animation-duration: 9s;
-            animation-delay: 0s;
-        }
+        .chalkboard:nth-child(1) { width: 100px; height: 80px; top: 20%; left: 10%; animation-duration: 9s; animation-delay: 0s; }
+        .chalkboard:nth-child(2) { width: 90px; height: 70px; top: 65%; left: 80%; animation-duration: 11s; animation-delay: 1.5s; }
+        .chalkboard:nth-child(3) { width: 80px; height: 65px; top: 75%; left: 20%; animation-duration: 10s; animation-delay: 2s; }
 
-        .chalkboard:nth-child(2) {
-            width: 90px;
-            height: 70px;
-            top: 65%;
-            left: 80%;
-            animation-duration: 11s;
-            animation-delay: 1.5s;
-        }
-
-        .chalkboard:nth-child(3) {
-            width: 80px;
-            height: 65px;
-            top: 75%;
-            left: 20%;
-            animation-duration: 10s;
-            animation-delay: 2s;
-        }
-
-        /* Chart/Graph elements for teaching */
         .chart {
             position: absolute;
             width: 70px;
@@ -303,7 +207,6 @@
             animation: rotate-chart 12s linear infinite;
         }
 
-        /* Bar chart visual */
         .chart::before {
             content: '';
             position: absolute;
@@ -314,36 +217,17 @@
             background: white;
             opacity: 0.8;
             border-radius: 2px 2px 0 0;
-            box-shadow: 
-                18px -10px 0 white,
-                36px 5px 0 white,
-                54px -5px 0 white;
+            box-shadow: 18px -10px 0 white, 36px 5px 0 white, 54px -5px 0 white;
         }
 
-        /* Chart rotation animation */
         @keyframes rotate-chart {
-            0%, 100% {
-                transform: rotate(0deg) scale(1);
-            }
-            50% {
-                transform: rotate(180deg) scale(1.1);
-            }
+            0%, 100% { transform: rotate(0deg) scale(1); }
+            50% { transform: rotate(180deg) scale(1.1); }
         }
 
-        .chart:nth-child(4) {
-            top: 30%;
-            left: 70%;
-            animation-duration: 10s;
-        }
+        .chart:nth-child(4) { top: 30%; left: 70%; animation-duration: 10s; }
+        .chart:nth-child(5) { top: 55%; left: 35%; animation-duration: 14s; animation-delay: 1s; }
 
-        .chart:nth-child(5) {
-            top: 55%;
-            left: 35%;
-            animation-duration: 14s;
-            animation-delay: 1s;
-        }
-
-        /* Apple icon for teacher (classic teaching symbol) */
         .apple {
             position: absolute;
             width: 40px;
@@ -353,7 +237,6 @@
             animation: bounce-apple 4s ease-in-out infinite;
         }
 
-        /* Apple stem */
         .apple::before {
             content: '';
             position: absolute;
@@ -366,7 +249,6 @@
             border-radius: 2px;
         }
 
-        /* Apple leaf */
         .apple::after {
             content: '';
             position: absolute;
@@ -379,26 +261,13 @@
             transform: rotate(-30deg);
         }
 
-        /* Bouncing animation for apple */
         @keyframes bounce-apple {
-            0%, 100% {
-                transform: translateY(0);
-            }
-            50% {
-                transform: translateY(-20px);
-            }
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
         }
 
-        .apple:nth-child(6) {
-            top: 45%;
-            left: 55%;
-            animation-delay: 0s;
-        }
+        .apple:nth-child(6) { top: 45%; left: 55%; animation-delay: 0s; }
 
-        /* ============================================
-           MAIN CONTAINER
-           Centers the login form on screen
-           ============================================ */
         .container {
             position: relative;
             z-index: 2;
@@ -409,12 +278,8 @@
             padding: 20px;
         }
 
-        /* ============================================
-           LOGIN CARD
-           Main form container with adaptive styling
-           ============================================ */
         .login-card {
-            background: rgba(255, 255, 255, 0.98);
+            background: rgba(0, 0, 0, 0.98);
             backdrop-filter: blur(20px);
             border-radius: 24px;
             padding: 45px;
@@ -422,50 +287,80 @@
             max-width: 450px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
             animation: cardPop 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-            border: 2px solid rgba(255, 255, 255, 0.8);
+            border: 2px solid rgba(0, 0, 0, 0.8);
             transition: box-shadow 0.6s ease;
         }
 
-        /* Card entrance animation */
         @keyframes cardPop {
-            from {
-                opacity: 0;
-                transform: scale(0.8) translateY(40px);
-            }
-            to {
-                opacity: 1;
-                transform: scale(1) translateY(0);
-            }
+            from { opacity: 0; transform: scale(0.8) translateY(40px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
         }
 
-        /* ============================================
-           HEADER SECTION
-           Logo and title area with role-adaptive styling
-           ============================================ */
         .login-header {
             text-align: center;
             margin-bottom: 35px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
         }
 
-        .logo {
+        .logo-container {
+            position: relative;
             width: 90px;
             height: 90px;
             margin: 0 auto 20px;
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+
+        .logo {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 42px;
-            color: white;
+            color: #ffffff;
             font-weight: bold;
-            box-shadow: 0 8px 30px rgba(79, 172, 254, 0.5);
-            transition: all 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-            position: relative;
+            transition: opacity 0.5s ease, transform 0.5s ease;
             overflow: hidden;
+            box-shadow: 0 0 25px rgba(60, 22, 120, 0.3);
         }
 
-        /* Animated shine effect on logo */
+        .logo.student-logo {
+            background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%);
+            opacity: 1;
+            transform: scale(1) rotateY(0deg);
+        }
+
+        .logo.student-logo.hidden {
+            opacity: 0;
+            transform: scale(0.8) rotateY(90deg);
+            pointer-events: none;
+        }
+
+        .logo.teacher-logo {
+            background: linear-gradient(135deg, #7A1CAC 0%, var(--color-teacher-secondary) 100%);
+            box-shadow: 0 8px 30px rgba(250, 112, 154, 0.5);
+            opacity: 0;
+            transform: scale(0.8) rotateY(-90deg);
+            pointer-events: none;
+        }
+
+        .logo.teacher-logo.visible {
+            opacity: 1;
+            transform: scale(1) rotateY(0deg);
+        }
+
+        .logo-content {
+            font-size: 48px;
+            z-index: 2;
+            position: relative;
+        }
+
         .logo::before {
             content: '';
             position: absolute;
@@ -473,57 +368,71 @@
             left: -50%;
             width: 200%;
             height: 200%;
-            background: linear-gradient(
-                45deg,
-                transparent,
-                rgba(255, 255, 255, 0.3),
-                transparent
-            );
+            background: linear-gradient(45deg, transparent, rgba(0, 0, 0, 0.3), transparent);
             transform: rotate(45deg);
             animation: logoShine 3s infinite;
+            z-index: 1;
         }
 
         @keyframes logoShine {
-            0% {
-                transform: translateX(-100%) translateY(-100%) rotate(45deg);
-            }
-            100% {
-                transform: translateX(100%) translateY(100%) rotate(45deg);
-            }
-        }
-
-        /* Teacher mode logo styling */
-        .logo.teacher-mode {
-            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-            box-shadow: 0 8px 30px rgba(250, 112, 154, 0.5);
+            0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+            100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
         }
 
         .login-header h1 {
             font-size: 28px;
-            color: #2d3748;
+            color: #ffffff;
             margin-bottom: 8px;
             font-weight: 700;
-            transition: color 0.4s ease;
+            transition: var(--transition);
         }
 
         .login-header p {
             font-size: 14px;
-            color: #718096;
-            transition: color 0.4s ease;
+            color: #ffffff;
+            transition: var(--transition);
         }
 
-        /* ============================================
-           ROLE SELECTOR
-           Tab-style buttons with dynamic theming
-           ============================================ */
+        .header-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .info-btn {
+            background: white;
+            border: 2px solid rgba(255,255,255,0.18);
+            color: black;
+            width: 12px;
+            height: 12px;
+            border-radius: 30px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 150ms ease, transform 120ms ease;
+        }
+
+        .info-btn:hover {
+            background: var(--color-primary);
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .info-btn.teacher-mode:hover {
+            background: var(--color-teacher-secondary);
+            color: white;
+            transform: translateY(-2px);
+        }
+
         .role-selector {
             display: flex;
             gap: 12px;
             margin-bottom: 30px;
-            background: #f7fafc;
+            background: black;
             padding: 6px;
             border-radius: 14px;
-            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
         }
 
         .role-btn {
@@ -531,7 +440,7 @@
             padding: 14px;
             border: none;
             background: transparent;
-            border-radius: 12px;
+            border-radius: 20px;
             cursor: pointer;
             font-size: 15px;
             color: #718096;
@@ -541,32 +450,24 @@
             overflow: hidden;
         }
 
-        /* Student mode active button */
         .role-btn[data-role="student"].active {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            color: white;
-            box-shadow: 0 6px 20px rgba(79, 172, 254, 0.4);
+            background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%);
+            color: var(--color-white);
             transform: scale(1.05);
         }
 
-        /* Teacher mode active button */
         .role-btn[data-role="teacher"].active {
-            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-            color: white;
-            box-shadow: 0 6px 20px rgba(250, 112, 154, 0.4);
+            background: linear-gradient(135deg, #7A1CAC 0%, var(--color-teacher-secondary) 100%);
+            color: var(--color-white);
             transform: scale(1.05);
         }
 
         .role-btn:hover:not(.active) {
             background: rgba(79, 172, 254, 0.1);
-            color: #4facfe;
+            color: var(--color-primary);
             transform: translateY(-2px);
         }
 
-        /* ============================================
-           FORM ELEMENTS
-           Input fields and labels
-           ============================================ */
         .form-group {
             margin-bottom: 22px;
         }
@@ -574,7 +475,7 @@
         .form-group label {
             display: block;
             margin-bottom: 10px;
-            color: #2d3748;
+            color: #ffffff;
             font-size: 14px;
             font-weight: 600;
         }
@@ -582,37 +483,31 @@
         .form-control {
             width: 100%;
             padding: 14px 16px;
-            border: 2px solid #e2e8f0;
+            border: 2px solid #333333;
             border-radius: 12px;
             font-size: 14px;
-            transition: all 0.3s ease;
-            background: #ffffff;
-            color: #2d3748;
+            transition: var(--transition);
+            background: var(--color-white);
+            color: var(--color-text);
         }
 
         .form-control::placeholder {
-            color: #a0aec0;
+            color: var(--color-text-lighter);
         }
 
-        /* Dynamic focus states based on role */
         .form-control:focus {
             outline: none;
-            border-color: #4facfe;
+            border-color: var(--color-primary);
             background: #f7fafc;
             box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1);
             transform: translateY(-2px);
         }
 
-        /* Teacher mode focus styling */
         body.teacher-mode .form-control:focus {
-            border-color: #fa709a;
+            border-color: var(--color-teacher-secondary);
             box-shadow: 0 0 0 3px rgba(250, 112, 154, 0.1);
         }
 
-        /* ============================================
-           ADDITIONAL OPTIONS
-           Remember me and forgot password
-           ============================================ */
         .form-options {
             display: flex;
             justify-content: space-between;
@@ -633,36 +528,32 @@
             width: 18px;
             height: 18px;
             cursor: pointer;
-            accent-color: #4facfe;
+            accent-color: var(--color-primary-dark);
         }
 
         body.teacher-mode .remember-me input[type="checkbox"] {
-            accent-color: #fa709a;
+            accent-color: #7A1CAC;
         }
 
         .forgot-password {
-            color: #4facfe;
+            color: var(--color-primary-dark);
             text-decoration: none;
             font-weight: 600;
             transition: all 0.3s ease;
         }
 
         body.teacher-mode .forgot-password {
-            color: #fa709a;
+            color: var(--color-teacher-secondary);
         }
 
         .forgot-password:hover {
             transform: translateX(3px);
         }
 
-        /* ============================================
-           SUBMIT BUTTON
-           Primary action button with role-based theming
-           ============================================ */
         .btn-login {
             width: 100%;
             padding: 16px;
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            background: linear-gradient(135deg, #234C6A 0%, #456882 100%);
             color: white;
             border: none;
             border-radius: 12px;
@@ -673,9 +564,8 @@
             box-shadow: 0 6px 20px rgba(79, 172, 254, 0.4);
         }
 
-        /* Teacher mode button styling */
         body.teacher-mode .btn-login {
-            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            background: linear-gradient(135deg, #7A1CAC 0%, var(--color-teacher-primary) 100%);
             box-shadow: 0 6px 20px rgba(250, 112, 154, 0.4);
         }
 
@@ -692,10 +582,6 @@
             transform: translateY(-1px);
         }
 
-        /* ============================================
-           GUEST ACCESS SECTION
-           Alternative login option
-           ============================================ */
         .guest-access {
             margin-top: 25px;
             text-align: center;
@@ -710,81 +596,61 @@
             font-weight: 500;
         }
 
-        .btn-guest {
+        .guest-buttons {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+
+        .btn-guest, .btn-register {
             display: inline-block;
-            padding: 12px 35px;
-            background: white;
-            color: #4facfe;
-            border: 2px solid #4facfe;
+            padding: 12px 24px;
+            background: #456882;
+            color: white;
+            border: 2px solid #456882;
             border-radius: 12px;
             text-decoration: none;
             font-weight: 700;
             font-size: 14px;
             transition: all 0.3s ease;
+            flex: 1;
+            text-align: center;
         }
 
-        body.teacher-mode .btn-guest {
-            color: #fa709a;
-            border-color: #fa709a;
+        body.teacher-mode .btn-guest,
+        body.teacher-mode .btn-register {
+            background: var(--color-teacher-primary);
+            border-color: var(--color-teacher-secondary);
         }
 
-        .btn-guest:hover {
-            background: #4facfe;
+        .btn-guest:hover, .btn-register:hover {
+            background: var(--color-primary);
             color: white;
             transform: translateY(-3px);
+            border: 2px solid var(--color-primary);
             box-shadow: 0 6px 20px rgba(79, 172, 254, 0.3);
         }
 
-        body.teacher-mode .btn-guest:hover {
-            background: #fa709a;
+        body.teacher-mode .btn-guest:hover,
+        body.teacher-mode .btn-register:hover {
+            background: #7A1CAC;
             box-shadow: 0 6px 20px rgba(250, 112, 154, 0.3);
         }
 
-        /* ============================================
-           RESPONSIVE DESIGN
-           Mobile-friendly adjustments
-           ============================================ */
         @media (max-width: 480px) {
-            .login-card {
-                padding: 35px 25px;
-            }
-
-            .login-header h1 {
-                font-size: 24px;
-            }
-
-            .logo {
-                width: 75px;
-                height: 75px;
-                font-size: 36px;
-            }
-
-            .role-btn {
-                font-size: 13px;
-                padding: 12px;
-            }
-
-            .book, .chalkboard, .chart, .apple, .pencil {
-                transform: scale(0.8);
-            }
+            .login-card { padding: 35px 25px; }
+            .login-header h1 { font-size: 24px; }
+            .logo-container { width: 75px; height: 75px; }
+            .logo-content { font-size: 36px; }
+            .role-btn { font-size: 13px; padding: 12px; }
+            .book, .chalkboard, .chart, .apple, .pencil { transform: scale(0.8); }
         }
 
-        /* ============================================
-           HIDDEN CONTENT
-           For conditional display
-           ============================================ */
-        .hidden {
-            display: none;
-        }
+        .hidden { display: none; }
     </style>
 </head>
 <body>
-    <!-- ============================================
-         DYNAMIC ANIMATED BACKGROUND
-         Switches between student and teacher modes
-         ============================================ -->
     <div class="dynamic-background student-mode">
-        <!-- Student Animation: Books and Pencils (Learning Theme) -->
         <div class="student-animation">
             <div class="book"></div>
             <div class="book"></div>
@@ -794,8 +660,6 @@
             <div class="pencil"></div>
             <div class="pencil"></div>
         </div>
-
-        <!-- Teacher Animation: Chalkboards, Charts and Apple (Teaching Theme) -->
         <div class="teacher-animation">
             <div class="chalkboard"></div>
             <div class="chalkboard"></div>
@@ -806,57 +670,38 @@
         </div>
     </div>
 
-    <!-- ============================================
-         MAIN CONTAINER
-         Holds the login form
-         ============================================ -->
     <div class="container">
         <div class="login-card">
-            <!-- Header with adaptive logo and title -->
             <div class="login-header">
-                <div class="logo">P</div>
-                <h1>Welcome Back</h1>
-                <p>Placement & Training Assessment Platform</p>
+                <div class="logo-container">
+                    <div class="logo student-logo">
+                        <span class="logo-content">🎓</span>
+                    </div>
+                    <div class="logo teacher-logo">
+                        <span class="logo-content">👨‍🏫</span>
+                    </div>
+                </div>
+                <div class="header-row">
+                    <h1>Welcome</h1>
+                    <button type="button" class="info-btn" id="pageInfoBtn" title="Page info">i</button>
+                </div>
             </div>
 
-            <!-- Role selection tabs -->
             <div class="role-selector">
                 <button class="role-btn active" data-role="student">Student</button>
                 <button class="role-btn" data-role="teacher">Teacher</button>
             </div>
 
-            <!-- Login form -->
             <form id="loginForm" method="POST" action="dashboard.php">
-                <!-- Hidden field to store selected role -->
                 <input type="hidden" name="role" id="roleInput" value="student">
-
-                <!-- Email input field -->
                 <div class="form-group">
                     <label for="email">Email Address</label>
-                    <input 
-                        type="email" 
-                        class="form-control" 
-                        id="email" 
-                        name="email" 
-                        placeholder="Enter your email"
-                        required
-                    >
+                    <input type="email" class="form-control" id="email" name="email" placeholder="Enter your email" required>
                 </div>
-
-                <!-- Password input field -->
                 <div class="form-group">
                     <label for="password">Password</label>
-                    <input 
-                        type="password" 
-                        class="form-control" 
-                        id="password" 
-                        name="password" 
-                        placeholder="Enter your password"
-                        required
-                    >
+                    <input type="password" class="form-control" id="password" name="password" placeholder="Enter your password" required>
                 </div>
-
-                <!-- Remember me and forgot password options -->
                 <div class="form-options">
                     <label class="remember-me">
                         <input type="checkbox" name="remember">
@@ -864,172 +709,136 @@
                     </label>
                     <a href="forgot-password.php" class="forgot-password">Forgot Password?</a>
                 </div>
-
-                <!-- Submit button -->
                 <button type="submit" class="btn-login">Sign In</button>
             </form>
 
-            <!-- Guest access option -->
             <div class="guest-access">
                 <p>Don't have an account?</p>
-                <a href="guest-dashboard.php" class="btn-guest">Continue as Guest</a>
+                <div class="guest-buttons">
+                    <a href="guest-dashboard.html" class="btn-guest">Continue As Guest</a>
+                    <a href="register.html" class="btn-register">Register New Account</a>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        /* ============================================
-           ROLE SELECTION LOGIC WITH ANIMATION SWITCHING
-           Seamlessly transitions between student and teacher themes
-           ============================================ */
         const roleButtons = document.querySelectorAll('.role-btn');
         const roleInput = document.getElementById('roleInput');
         const dynamicBg = document.querySelector('.dynamic-background');
         const studentAnim = document.querySelector('.student-animation');
         const teacherAnim = document.querySelector('.teacher-animation');
-        const logo = document.querySelector('.logo');
+        const studentLogo = document.querySelector('.student-logo');
+        const teacherLogo = document.querySelector('.teacher-logo');
         const body = document.body;
 
-        // Function to switch to student mode
         function activateStudentMode() {
-            // Update background gradient
             dynamicBg.classList.remove('teacher-mode');
             dynamicBg.classList.add('student-mode');
-            
-            // Switch animations
             studentAnim.classList.remove('hidden');
             teacherAnim.classList.remove('visible');
-            
-            // Update logo styling
-            logo.classList.remove('teacher-mode');
-            
-            // Update body class for global styling
+            studentLogo.classList.remove('hidden');
+            teacherLogo.classList.remove('visible');
             body.classList.remove('teacher-mode');
-            
-            // Update role input
+            const infoBtn = document.getElementById('pageInfoBtn');
+            if (infoBtn) infoBtn.classList.remove('teacher-mode');
             roleInput.value = 'student';
         }
 
-        // Function to switch to teacher mode
         function activateTeacherMode() {
-            // Update background gradient
             dynamicBg.classList.remove('student-mode');
             dynamicBg.classList.add('teacher-mode');
-            
-            // Switch animations
             studentAnim.classList.add('hidden');
             teacherAnim.classList.add('visible');
-            
-            // Update logo styling
-            logo.classList.add('teacher-mode');
-            
-            // Update body class for global styling
+            studentLogo.classList.add('hidden');
+            teacherLogo.classList.add('visible');
             body.classList.add('teacher-mode');
-            
-            // Update role input
+            const infoBtn = document.getElementById('pageInfoBtn');
+            if (infoBtn) infoBtn.classList.add('teacher-mode');
             roleInput.value = 'teacher';
         }
 
-        // Event listeners for role buttons
-        roleButtons.forEach(button => {
-            button.addEventListener('click', function() {
-                // Remove active class from all buttons
+        if (roleButtons.length > 0) {
+            document.addEventListener('click', function(e) {
+                const button = e.target.closest('.role-btn');
+                if (!button) return;
                 roleButtons.forEach(btn => btn.classList.remove('active'));
-                
-                // Add active class to clicked button
-                this.classList.add('active');
-                
-                // Get the selected role
-                const selectedRole = this.dataset.role;
-                
-                // Switch theme based on role
+                button.classList.add('active');
+                const selectedRole = button.dataset.role;
                 if (selectedRole === 'student') {
                     activateStudentMode();
                 } else if (selectedRole === 'teacher') {
                     activateTeacherMode();
                 }
             });
-        });
+        }
 
-        /* ============================================
-           FORM SUBMISSION HANDLER
-           Validates and submits login form
-           ============================================ */
-        document.getElementById('loginForm').addEventListener('submit', function(e) {
-            e.preventDefault(); // Prevent default form submission for demo
-            
-            // Get form values
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            const role = roleInput.value;
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
 
-            // Basic validation
-            if (!email || !password) {
-                alert('Please fill in all fields');
-                return;
-            }
-
-            // Email format validation
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(email)) {
-                alert('Please enter a valid email address');
-                return;
-            }
-
-            // Password length check (minimum 6 characters recommended)
-            if (password.length < 6) {
-                alert('Password must be at least 6 characters long');
-                return;
-            }
-
-            /* ============================================
-               SECURITY NOTE:
-               In production, implement the following on backend:
-               1. Use prepared statements to prevent SQL injection
-               2. Hash passwords using bcrypt or Argon2
-               3. Implement CSRF tokens
-               4. Use HTTPS for secure transmission
-               5. Implement rate limiting to prevent brute force
-               6. Add session management with secure cookies
-            ============================================ */
-
-            // In production, this would submit to PHP backend
-            console.log('Login attempt:', { 
-                email, 
-                role,
-                timestamp: new Date().toISOString()
-            });
-            
-            // Uncomment below to actually submit the form:
-            // this.submit();
-            
-            // For demo purposes, show success message
-            alert(`Login successful as ${role}!\n\nRedirecting to ${role} dashboard...`);
-            
-            // Redirect to appropriate dashboard based on role
-            // window.location.href = role === 'student' ? 'student-dashboard.php' : 'teacher-dashboard.php';
-        });
-
-        /* ============================================
-           SMOOTH ENTRANCE ANIMATION ON PAGE LOAD
-           Adds a welcoming entry effect
-           ============================================ */
-        window.addEventListener('load', function() {
-            // Trigger entrance animations
-            document.querySelector('.login-card').style.animation = 'cardPop 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55)';
-        });
-
-        /* ============================================
-           KEYBOARD ACCESSIBILITY
-           Allow Enter key to submit form from any input
-           ============================================ */
-        const formInputs = document.querySelectorAll('.form-control');
-        formInputs.forEach(input => {
-            input.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    document.getElementById('loginForm').dispatchEvent(new Event('submit'));
+        const loginForm = document.getElementById('loginForm');
+        if (loginForm) {
+            loginForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const email = document.getElementById('email')?.value?.trim();
+                const password = document.getElementById('password')?.value;
+                const role = roleInput?.value;
+                if (!email || !password) {
+                    alert('Please fill in all fields');
+                    return;
                 }
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(email)) {
+                    alert('Please enter a valid email address');
+                    return;
+                }
+                if (password.length < 6) {
+                    alert('Password must be at least 6 characters long');
+                    return;
+                }
+                console.log('Login attempt:', { email, role, timestamp: new Date().toISOString() });
+                alert(`Login successful as ${role}!\n\nRedirecting to ${role} dashboard...`);
             });
+        }
+
+        (function() {
+            const pageInfoBtn = document.getElementById('pageInfoBtn');
+            if (pageInfoBtn) {
+                pageInfoBtn.addEventListener('click', function() {
+                    const info = [
+                        `Title: ${document.title}`,
+                        `URL: ${location.href}`,
+                        `User agent: ${navigator.userAgent}`,
+                        `Time: ${new Date().toString()}`
+                    ].join('\n');
+                    alert(info);
+                });
+            }
+        })();
+
+        window.addEventListener('load', function() {
+            const loginCard = document.querySelector('.login-card');
+            if (loginCard) {
+                loginCard.style.animation = 'cardPop 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55)';
+            }
+        });
+
+        document.addEventListener('keypress', function(e) {
+            if (e.target.classList.contains('form-control') && e.key === 'Enter') {
+                const form = document.getElementById('loginForm');
+                if (form) {
+                    form.dispatchEvent(new Event('submit'));
+                }
+            }
         });
     </script>
 </body>

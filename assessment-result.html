@@ -1,0 +1,1825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assessment Results - Placement Portal</title>
+    <style>
+        /* ============================================
+           CSS VARIABLES - Reusable values
+           ============================================ */
+        :root {
+            /* Colors #4facfe #00f2fe*/
+
+            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            --color-primary: #234C6A;
+            --color-primary-dark: #456882;
+            --color-teacher-primary: #2E073F;
+            --color-teacher-secondary: #AD49E1;
+            --color-text: #2d3748;
+            --color-text-light: #718096;
+            --color-text-lighter: #a0aec0;
+            --color-bg: #FFEDFA;
+            --color-bg-light: #f5f7fa;
+            --color-white: #ffffff;
+            --color-border: #e2e8f0;
+            --color-success: #48bb78;
+            --color-error: #f56565;
+            --color-warning: #ffc107;
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.08);
+            --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.15);
+            --border-radius: 10px;
+            --border-radius-lg: 20px;
+            --transition: all 0.3s ease;
+        }
+
+        /* ============================================
+           GLOBAL RESET & BASE STYLES
+           ============================================ */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #D3DAD9;
+            min-height: 100vh;
+            color: #2d3748;
+            margin: 0;
+            padding: 0;
+            padding-top: 71px;
+            overflow-x: hidden;
+        }
+
+        /* ============================================
+           NAVIGATION BAR
+           Teacher theme colors
+           ============================================ */
+        /* NAVIGATION BAR - standardized across pages */
+        .navbar {
+            background: var(--color-teacher-primary);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            padding: 12px 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            border-bottom: 3px solid var(--color-teacher-primary);
+        }
+
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 20px;
+            font-weight: 700;
+            color: white;
+            text-decoration: none;
+        }
+
+        .brand-logo {
+            width: 45px;
+            height: 45px;
+            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 20px;
+        }
+
+        .nav-actions {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn-nav {
+            padding: 10px 24px;
+            background: white;
+            color: var(--color-teacher-primary);
+            border: 2px solid var(--color-teacher-primary);
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-nav:hover {
+            background: var(--color-teacher-primary);
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .btn-nav.primary {
+            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
+            color: white;
+            border: none;
+        }
+
+        .btn-nav.primary:hover {
+            box-shadow: 0 4px 15px rgba(250, 112, 154, 0.4);
+        }
+
+        /* ============================================
+           MAIN CONTAINER
+           ============================================ */
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 30px;
+        }
+
+        /* ============================================
+           PAGE HEADER
+           Assessment info and quick actions
+           ============================================ */
+        .page-header {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 20px;
+        }
+
+        .header-info {
+            flex: 1;
+        }
+
+        .page-title {
+            font-size: 32px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+
+        .page-subtitle {
+            font-size: 16px;
+            color: #718096;
+            margin-bottom: 15px;
+        }
+
+        .header-meta {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #718096;
+        }
+
+        .meta-icon {
+            font-size: 18px;
+        }
+
+        .export-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-export {
+            padding: 10px 20px;
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #2d3748;
+        }
+
+        .btn-export:hover {
+            border-color: var(--color-teacher-primary);
+            color: var(--color-teacher-primary);
+            transform: translateY(-2px);
+        }
+
+        /* ============================================
+           STATISTICS OVERVIEW
+           Key metrics cards
+           ============================================ */
+        .stats-overview {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 16px;
+            padding: 25px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(135deg, rgba(250, 112, 154, 0.1), transparent);
+            border-radius: 50%;
+            transform: translate(30%, -30%);
+        }
+
+        .stat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .stat-title {
+            font-size: 14px;
+            color: #718096;
+            font-weight: 600;
+        }
+
+        .stat-icon {
+            width: 45px;
+            height: 45px;
+            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 20px;
+        }
+
+        .stat-value {
+            font-size: 36px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .stat-change {
+            font-size: 13px;
+            color: #48bb78;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .stat-change.negative {
+            color: #f56565;
+        }
+
+        /* ============================================
+           MAIN CONTENT GRID
+           Charts and tables layout
+           ============================================ */
+        .main-content {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        /* ============================================
+           CHARTS SECTION
+           Performance visualizations
+           ============================================ */
+        .chart-section {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .chart-card {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .chart-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #2d3748;
+        }
+
+        .chart-filter {
+            padding: 8px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 13px;
+            background: white;
+            cursor: pointer;
+            font-weight: 600;
+            color: #718096;
+        }
+
+        .chart-filter:focus {
+            outline: none;
+            border-color: var(--color-teacher-primary);
+        }
+
+        /* Placeholder for charts - in production, use Chart.js or similar */
+        .chart-placeholder {
+            height: 300px;
+            background: linear-gradient(135deg, #f7fafc 0%, #e2e8f0 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #718096;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        /* ============================================
+           SIDEBAR
+           Quick stats and top performers
+           ============================================ */
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .sidebar-card {
+            background: white;
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .sidebar-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 20px;
+        }
+
+        /* Question difficulty breakdown */
+        .difficulty-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .difficulty-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .difficulty-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .difficulty-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .difficulty-dot.easy {
+            background: #48bb78;
+        }
+
+        .difficulty-dot.medium {
+            background: #ffc107;
+        }
+
+        .difficulty-dot.hard {
+            background: #f56565;
+        }
+
+        .difficulty-label {
+            font-size: 14px;
+            color: #2d3748;
+            font-weight: 600;
+        }
+
+        .difficulty-value {
+            font-size: 16px;
+            font-weight: 700;
+            color: #2d3748;
+        }
+
+        .difficulty-bar {
+            width: 100%;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        .difficulty-bar-fill {
+            height: 100%;
+            border-radius: 10px;
+            transition: width 0.5s ease;
+        }
+
+        .difficulty-bar-fill.easy {
+            background: linear-gradient(90deg, #48bb78 0%, #38a169 100%);
+        }
+
+        .difficulty-bar-fill.medium {
+            background: linear-gradient(90deg, #ffc107 0%, #ff9800 100%);
+        }
+
+        .difficulty-bar-fill.hard {
+            background: linear-gradient(90deg, #f56565 0%, #e53e3e 100%);
+        }
+
+        /* Top performers list */
+        .performers-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .performer-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: #f7fafc;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .performer-item:hover {
+            background: white;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .performer-rank {
+            width: 30px;
+            height: 30px;
+            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .performer-rank.gold {
+            background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+            color: #7c2d12;
+        }
+
+        .performer-rank.silver {
+            background: linear-gradient(135deg, #c0c0c0 0%, #e8e8e8 100%);
+            color: #2d3748;
+        }
+
+        .performer-rank.bronze {
+            background: linear-gradient(135deg, #cd7f32 0%, #e59b5f 100%);
+            color: white;
+        }
+
+        .performer-info {
+            flex: 1;
+        }
+
+        .performer-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .performer-reg {
+            font-size: 12px;
+            color: #718096;
+        }
+
+        .performer-score {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--color-teacher-primary);
+        }
+
+        /* ============================================
+           STUDENT RESULTS TABLE
+           Detailed student-wise results
+           ============================================ */
+        .results-section {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+
+        .section-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: #2d3748;
+        }
+
+        .search-box {
+            position: relative;
+            width: 300px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 40px 10px 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--color-teacher-primary);
+            box-shadow: 0 0 0 3px rgba(250, 112, 154, 0.1);
+        }
+
+        .search-icon {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #a0aec0;
+            font-size: 16px;
+        }
+
+        /* Filter tabs */
+        .filter-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-tab {
+            padding: 8px 18px;
+            background: #f7fafc;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            color: #718096;
+            transition: all 0.3s ease;
+        }
+
+        .filter-tab.active {
+            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
+            color: white;
+        }
+
+        .filter-tab:hover:not(.active) {
+            background: #e2e8f0;
+        }
+
+        /* Results table */
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .results-table thead {
+            background: #f7fafc;
+        }
+
+        .results-table th {
+            padding: 15px;
+            text-align: left;
+            font-size: 13px;
+            font-weight: 700;
+            color: #2d3748;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .results-table td {
+            padding: 15px;
+            font-size: 14px;
+            color: #2d3748;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .results-table tbody tr {
+            transition: all 0.3s ease;
+        }
+
+        .results-table tbody tr:hover {
+            background: #f7fafc;
+        }
+
+        .student-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .student-avatar {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .student-details {
+            flex: 1;
+        }
+
+        .student-name {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 2px;
+        }
+
+        .student-reg {
+            font-size: 12px;
+            color: #718096;
+        }
+
+        .score-badge {
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        .score-badge.excellent {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .score-badge.good {
+            background: #bee3f8;
+            color: #2c5282;
+        }
+
+        .score-badge.average {
+            background: #feebc8;
+            color: #7c2d12;
+        }
+
+        .score-badge.poor {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-badge.completed {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status-badge.in-progress {
+            background: #feebc8;
+            color: #7c2d12;
+        }
+
+        .btn-view-details {
+            padding: 6px 14px;
+            background: white;
+            color: var(--color-teacher-primary);
+            border: 2px solid var(--color-teacher-primary);
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-view-details:hover {
+            background: var(--color-teacher-primary);
+            color: white;
+        }
+
+        /* ============================================
+           QUESTION ANALYSIS SECTION
+           Question-wise performance breakdown
+           ============================================ */
+        .question-analysis {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            margin-top: 30px;
+        }
+
+        .questions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .question-stat-card {
+            padding: 20px;
+            background: #f7fafc;
+            border-radius: 12px;
+            border: 2px solid #e2e8f0;
+            transition: all 0.3s ease;
+        }
+
+        .question-stat-card:hover {
+            border-color: var(--color-teacher-primary);
+            box-shadow: 0 4px 12px rgba(250, 112, 154, 0.15);
+        }
+
+        .question-stat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .question-num {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--color-teacher-primary);
+        }
+
+        .question-difficulty {
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .question-difficulty.easy {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .question-difficulty.medium {
+            background: #feebc8;
+            color: #7c2d12;
+        }
+
+        .question-difficulty.hard {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .question-stats {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .question-stat-item {
+            text-align: center;
+        }
+
+        .question-stat-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #2d3748;
+        }
+
+        .question-stat-label {
+            font-size: 11px;
+            color: #718096;
+            margin-top: 3px;
+        }
+
+        .success-rate-bar {
+            width: 100%;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .success-rate-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #48bb78 0%, #38a169 100%);
+            border-radius: 10px;
+            transition: width 0.5s ease;
+        }
+
+        /* ============================================
+           RESPONSIVE DESIGN
+           ============================================ */
+        @media (max-width: 1200px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .navbar {
+                padding: 15px;
+            }
+
+            .container {
+                padding: 15px;
+            }
+
+            .page-header {
+                padding: 20px;
+            }
+
+            .header-top {
+                flex-direction: column;
+                gap: 20px;
+            }
+
+            .export-buttons {
+                flex-direction: column;
+            }
+
+            .stats-overview {
+                grid-template-columns: 1fr;
+            }
+
+            .section-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+
+            .search-box {
+                width: 100%;
+            }
+
+            .results-table {
+                display: block;
+                overflow-x: auto;
+            }
+
+            .questions-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Loading animation */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- NAVIGATION BAR -->
+    <nav class="navbar">
+        <a href="teacher-dashboard.html" class="navbar-brand">
+            <div class="brand-logo">P</div>
+            <span>Placement Portal</span>
+        </a>
+        <div class="nav-actions">
+            <a href="edit-assessment.html?id=1" class="btn-nav">✏️ Edit Assessment</a>
+            <a href="teacher-dashboard.html" class="btn-nav">← Back to Dashboard</a>
+        </div>
+    </nav>
+
+    <!-- MAIN CONTAINER -->
+    <div class="container">
+        <!-- Page Header -->
+        <div class="page-header">
+            <div class="header-top">
+                <div class="header-info">
+                    <h1 class="page-title">Quantitative Aptitude - Set 1</h1>
+                    <p class="page-subtitle">Assessment Results & Analytics</p>
+                    <div class="header-meta">
+                        <div class="meta-item">
+                            <span class="meta-icon">📅</span>
+                            <span>Created: Dec 1, 2025</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-icon">❓</span>
+                            <span>30 Questions</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-icon">⏱️</span>
+                            <span>45 Minutes</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-icon">🎯</span>
+                            <span>100 Points</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="export-buttons">
+                    <button class="btn-export" onclick="exportPDF()">📄 Export PDF</button>
+                    <button class="btn-export" onclick="exportExcel()">📊 Export Excel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Overview -->
+        <div class="stats-overview">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-title">Total Attempts</span>
+                    <div class="stat-icon">👥</div>
+                </div>
+                <div class="stat-value">85</div>
+                <div class="stat-change">↗ 12 this week</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-title">Average Score</span>
+                    <div class="stat-icon">📈</div>
+                </div>
+                <div class="stat-value">76%</div>
+                <div class="stat-change">↗ +4% improvement</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-title">Pass Rate</span>
+                    <div class="stat-icon">✅</div>
+                </div>
+                <div class="stat-value">82%</div>
+                <div class="stat-change">70 passed</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-title">Avg. Time</span>
+                    <div class="stat-icon">⏱️</div>
+                </div>
+                <div class="stat-value">38m</div>
+                <div class="stat-change">↘ 2m faster</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-title">Completion Rate</span>
+                    <div class="stat-icon">🎯</div>
+                </div>
+                <div class="stat-value">92%</div>
+                <div class="stat-change">78 completed</div>
+            </div>
+        </div>
+
+        <!-- Main Content Grid -->
+        <div class="main-content">
+            <!-- Charts Section -->
+            <div class="chart-section">
+                <!-- Score Distribution Chart -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3 class="chart-title">Score Distribution</h3>
+                        <select class="chart-filter">
+                            <option>All Attempts</option>
+                            <option>This Week</option>
+                            <option>This Month</option>
+                        </select>
+                    </div>
+                    <div class="chart-placeholder">
+                        📊 Score Distribution Chart<br>
+                        <small>(Bar chart showing score ranges: 0-25%, 26-50%, 51-75%, 76-100%)</small>
+                    </div>
+                </div>
+
+                <!-- Performance Trend Chart -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3 class="chart-title">Performance Trend</h3>
+                        <select class="chart-filter">
+                            <option>Last 30 Days</option>
+                            <option>Last 7 Days</option>
+                            <option>Last 90 Days</option>
+                        </select>
+                    </div>
+                    <div class="chart-placeholder">
+                        📈 Performance Trend Chart<br>
+                        <small>(Line chart showing average scores over time)</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <!-- Question Difficulty Breakdown -->
+                <div class="sidebar-card">
+                    <h3 class="sidebar-title">Question Difficulty</h3>
+                    <div class="difficulty-list">
+                        <div>
+                            <div class="difficulty-item">
+                                <div class="difficulty-info">
+                                    <div class="difficulty-dot medium"></div>
+                                    <span class="difficulty-label">Medium</span>
+                                </div>
+                                <span class="difficulty-value">13</span>
+                            </div>
+                            <div class="difficulty-bar">
+                                <div class="difficulty-bar-fill medium" style="width: 43%"></div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="difficulty-item">
+                                <div class="difficulty-info">
+                                    <div class="difficulty-dot hard"></div>
+                                    <span class="difficulty-label">Hard</span>
+                                </div>
+                                <span class="difficulty-value">5</span>
+                            </div>
+                            <div class="difficulty-bar">
+                                <div class="difficulty-bar-fill hard" style="width: 17%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Top Performers -->
+                <div class="sidebar-card">
+                    <h3 class="sidebar-title">🏆 Top Performers</h3>
+                    <div class="performers-list">
+                        <div class="performer-item">
+                            <div class="performer-rank gold">1</div>
+                            <div class="performer-info">
+                                <div class="performer-name">Alice Johnson</div>
+                                <div class="performer-reg">AIK23CS101</div>
+                            </div>
+                            <div class="performer-score">98%</div>
+                        </div>
+
+                        <div class="performer-item">
+                            <div class="performer-rank silver">2</div>
+                            <div class="performer-info">
+                                <div class="performer-name">Bob Smith</div>
+                                <div class="performer-reg">AIK23CS102</div>
+                            </div>
+                            <div class="performer-score">95%</div>
+                        </div>
+
+                        <div class="performer-item">
+                            <div class="performer-rank bronze">3</div>
+                            <div class="performer-info">
+                                <div class="performer-name">Carol White</div>
+                                <div class="performer-reg">AIK23CS103</div>
+                            </div>
+                            <div class="performer-score">92%</div>
+                        </div>
+
+                        <div class="performer-item">
+                            <div class="performer-rank">4</div>
+                            <div class="performer-info">
+                                <div class="performer-name">David Lee</div>
+                                <div class="performer-reg">AIK23CS104</div>
+                            </div>
+                            <div class="performer-score">89%</div>
+                        </div>
+
+                        <div class="performer-item">
+                            <div class="performer-rank">5</div>
+                            <div class="performer-info">
+                                <div class="performer-name">Emma Davis</div>
+                                <div class="performer-reg">AIK23CS105</div>
+                            </div>
+                            <div class="performer-score">87%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Student Results Table -->
+        <div class="results-section">
+            <div class="section-header">
+                <h2 class="section-title">Student Results</h2>
+                <div class="search-box">
+                    <input type="text" class="search-input" id="searchStudents" placeholder="Search students..." oninput="searchStudents()">
+                    <span class="search-icon">🔍</span>
+                </div>
+            </div>
+
+            <div class="filter-tabs">
+                <button class="filter-tab active" onclick="filterResults('all')">All Students (85)</button>
+                <button class="filter-tab" onclick="filterResults('passed')">Passed (70)</button>
+                <button class="filter-tab" onclick="filterResults('failed')">Failed (15)</button>
+                <button class="filter-tab" onclick="filterResults('in-progress')">In Progress (7)</button>
+            </div>
+
+            <table class="results-table" id="resultsTable">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th>Registration No.</th>
+                        <th>Score</th>
+                        <th>Percentage</th>
+                        <th>Time Taken</th>
+                        <th>Status</th>
+                        <th>Submitted</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr data-status="passed">
+                        <td>
+                            <div class="student-info">
+                                <div class="student-avatar">AJ</div>
+                                <div class="student-details">
+                                    <div class="student-name">Alice Johnson</div>
+                                    <div class="student-reg">alice.j@college.edu</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>AIK23CS101</td>
+                        <td>98/100</td>
+                        <td><span class="score-badge excellent">98%</span></td>
+                        <td>42 min</td>
+                        <td><span class="status-badge completed">Completed</span></td>
+                        <td>Dec 15, 2025</td>
+                        <td><button class="btn-view-details" onclick="viewStudentDetails(1)">View</button></td>
+                    </tr>
+
+                    <tr data-status="passed">
+                        <td>
+                            <div class="student-info">
+                                <div class="student-avatar">BS</div>
+                                <div class="student-details">
+                                    <div class="student-name">Bob Smith</div>
+                                    <div class="student-reg">bob.s@college.edu</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>AIK23CS102</td>
+                        <td>95/100</td>
+                        <td><span class="score-badge excellent">95%</span></td>
+                        <td>38 min</td>
+                        <td><span class="status-badge completed">Completed</span></td>
+                        <td>Dec 15, 2025</td>
+                        <td><button class="btn-view-details" onclick="viewStudentDetails(2)">View</button></td>
+                    </tr>
+
+                    <tr data-status="passed">
+                        <td>
+                            <div class="student-info">
+                                <div class="student-avatar">CW</div>
+                                <div class="student-details">
+                                    <div class="student-name">Carol White</div>
+                                    <div class="student-reg">carol.w@college.edu</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>AIK23CS103</td>
+                        <td>92/100</td>
+                        <td><span class="score-badge excellent">92%</span></td>
+                        <td>40 min</td>
+                        <td><span class="status-badge completed">Completed</span></td>
+                        <td>Dec 16, 2025</td>
+                        <td><button class="btn-view-details" onclick="viewStudentDetails(3)">View</button></td>
+                    </tr>
+
+                    <tr data-status="passed">
+                        <td>
+                            <div class="student-info">
+                                <div class="student-avatar">DL</div>
+                                <div class="student-details">
+                                    <div class="student-name">David Lee</div>
+                                    <div class="student-reg">david.l@college.edu</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>AIK23CS104</td>
+                        <td>89/100</td>
+                        <td><span class="score-badge good">89%</span></td>
+                        <td>37 min</td>
+                        <td><span class="status-badge completed">Completed</span></td>
+                        <td>Dec 16, 2025</td>
+                        <td><button class="btn-view-details" onclick="viewStudentDetails(4)">View</button></td>
+                    </tr>
+
+                    <tr data-status="passed">
+                        <td>
+                            <div class="student-info">
+                                <div class="student-avatar">ED</div>
+                                <div class="student-details">
+                                    <div class="student-name">Emma Davis</div>
+                                    <div class="student-reg">emma.d@college.edu</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>AIK23CS105</td>
+                        <td>87/100</td>
+                        <td><span class="score-badge good">87%</span></td>
+                        <td>35 min</td>
+                        <td><span class="status-badge completed">Completed</span></td>
+                        <td>Dec 17, 2025</td>
+                        <td><button class="btn-view-details" onclick="viewStudentDetails(5)">View</button></td>
+                    </tr>
+
+                    <tr data-status="passed">
+                        <td>
+                            <div class="student-info">
+                                <div class="student-avatar">FB</div>
+                                <div class="student-details">
+                                    <div class="student-name">Frank Brown</div>
+                                    <div class="student-reg">frank.b@college.edu</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>AIK23CS106</td>
+                        <td>78/100</td>
+                        <td><span class="score-badge good">78%</span></td>
+                        <td>41 min</td>
+                        <td><span class="status-badge completed">Completed</span></td>
+                        <td>Dec 17, 2025</td>
+                        <td><button class="btn-view-details" onclick="viewStudentDetails(6)">View</button></td>
+                    </tr>
+
+                    <tr data-status="passed">
+                        <td>
+                            <div class="student-info">
+                                <div class="student-avatar">GM</div>
+                                <div class="student-details">
+                                    <div class="student-name">Grace Miller</div>
+                                    <div class="student-reg">grace.m@college.edu</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>AIK23CS107</td>
+                        <td>65/100</td>
+                        <td><span class="score-badge average">65%</span></td>
+                        <td>43 min</td>
+                        <td><span class="status-badge completed">Completed</span></td>
+                        <td>Dec 18, 2025</td>
+                        <td><button class="btn-view-details" onclick="viewStudentDetails(7)">View</button></td>
+                    </tr>
+
+                    <tr data-status="failed">
+                        <td>
+                            <div class="student-info">
+                                <div class="student-avatar">HW</div>
+                                <div class="student-details">
+                                    <div class="student-name">Henry Wilson</div>
+                                    <div class="student-reg">henry.w@college.edu</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>AIK23CS108</td>
+                        <td>48/100</td>
+                        <td><span class="score-badge poor">48%</span></td>
+                        <td>44 min</td>
+                        <td><span class="status-badge completed">Completed</span></td>
+                        <td>Dec 18, 2025</td>
+                        <td><button class="btn-view-details" onclick="viewStudentDetails(8)">View</button></td>
+                    </tr>
+
+                    <tr data-status="in-progress">
+                        <td>
+                            <div class="student-info">
+                                <div class="student-avatar">IT</div>
+                                <div class="student-details">
+                                    <div class="student-name">Ivy Taylor</div>
+                                    <div class="student-reg">ivy.t@college.edu</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>AIK23CS109</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td><span class="status-badge in-progress">In Progress</span></td>
+                        <td>Started today</td>
+                        <td><button class="btn-view-details" disabled>View</button></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Question-wise Analysis -->
+        <div class="question-analysis">
+            <div class="section-header">
+                <h2 class="section-title">Question-wise Analysis</h2>
+            </div>
+
+            <div class="questions-grid">
+                <!-- Question 1 -->
+                <div class="question-stat-card">
+                    <div class="question-stat-header">
+                        <span class="question-num">Question 1</span>
+                        <span class="question-difficulty easy">Easy</span>
+                    </div>
+                    <div class="question-stats">
+                        <div class="question-stat-item">
+                            <div class="question-stat-value">72</div>
+                            <div class="question-stat-label">Correct</div>
+                        </div>
+                        <div class="question-stat-item">
+                            <div class="question-stat-value">13</div>
+                            <div class="question-stat-label">Incorrect</div>
+                        </div>
+                        <div class="question-stat-item">
+                            <div class="question-stat-value">85%</div>
+                            <div class="question-stat-label">Success Rate</div>
+                        </div>
+                    </div>
+                    <div class="success-rate-bar">
+                        <div class="success-rate-fill" style="width: 85%"></div>
+                    </div>
+                </div>
+
+                <!-- Question 2 -->
+                <div class="question-stat-card">
+                    <div class="question-stat-header">
+                        <span class="question-num">Question 2</span>
+                        <span class="question-difficulty easy">Easy</span>
+                    </div>
+                    <div class="question-stats">
+                        <div class="question-stat-item">
+                            <div class="question-stat-value">68</div>
+                            <div class="question-stat-label">Correct</div>
+                        </div>
+                        <div class="question-stat-item">
+                            <div class="question-stat-value">17</div>
+                            <div class="question-stat-label">Incorrect</div>
+                        </div>
+                        <div class="question-stat-item">
+                            <div class="question-stat-value">80%</div>
+                            <div class="question-stat-label">Success Rate</div>
+                        </div>
+                    </div>
+                    <div class="success-rate-bar">
+                        <div class="success-rate-fill" style="width: 80%"></div>
+                    </div>
+                </div>
+
+                <!-- Question 3 -->
+                <div class="question-stat-card">
+                    <div class="question-stat-header">
+                        <span class="question-num">Question 3</span>
+                        <span class="question-difficulty medium">Medium</span>
+                    </div>
+                    <div class="question-stats">
+                        <div class="question-stat-item">
+                            <div class="question-stat-value">55</div>
+                            <div class="question-stat-label">Correct</div>
+                        </div>
+                        <div class="question-stat-item">
+                            <div class="question-stat-value">30</div>
+                            <div class="question-stat-label">Incorrect</div>
+                        </div>
+                        <div class="question-stat-item">
+                            <div class="question-stat-value">65%</div>
+                            <div class="question-stat-label">Success Rate</div>
+                        </div>
+                    </div>
+                    <div class="success-rate-bar">
+                        <div class="success-rate-fill" style="width: 65%"></div>
+                    </div>
+                </div>
+
+                <!-- Question 4 -->
+                <div class="question-stat-card">
+                    <div class="question-stat-header">
+                        <span class="question-num">Question 4</span>
+                        <span class="question-difficulty medium">Medium</span>
+                    </div>
+                    <div class="question-stats">
+                        <div class="question-stat-item">
+                            <div class="question-stat-value">48</div>
+                            <div class="question-stat-label">Correct</div>
+                        </div>
+                        <div class="question-stat-item">
+                            <div class="question-stat-value">37</div>
+                            <div class="question-stat-label">Incorrect</div>
+                        </div>
+                        <div class="question-stat-item">
+                            <div class="question-stat-value">56%</div>
+                            <div class="question-stat-label">Success Rate</div>
+                        </div>
+                    </div>
+                    <div class="success-rate-bar">
+                        <div class="success-rate-fill" style="width: 56%"></div>
+                    </div>
+                </div>
+
+                <!-- Question 5 -->
+                <div class="question-stat-card">
+                    <div class="question-stat-header">
+                        <span class="question-num">Question 5</span>
+                        <span class="question-difficulty hard">Hard</span>
+                    </div>
+                    <div class="question-stats">
+                        <div class="question-stat-item">
+                            <div class="question-stat-value">32</div>
+                            <div class="question-stat-label">Correct</div>
+                        </div>
+                        <div class="question-stat-item">
+                            <div class="question-stat-value">53</div>
+                            <div class="question-stat-label">Incorrect</div>
+                        </div>
+                        <div class="question-stat-item">
+                            <div class="question-stat-value">38%</div>
+                            <div class="question-stat-label">Success Rate</div>
+                        </div>
+                    </div>
+                    <div class="success-rate-bar">
+                        <div class="success-rate-fill" style="width: 38%"></div>
+                    </div>
+                </div>
+
+                <!-- Question 6 -->
+                <div class="question-stat-card">
+                    <div class="question-stat-header">
+                        <span class="question-num">Question 6</span>
+                        <span class="question-difficulty hard">Hard</span>
+                    </div>
+                    <div class="question-stats">
+                        <div class="question-stat-item">
+                            <div class="question-stat-value">28</div>
+                            <div class="question-stat-label">Correct</div>
+                        </div>
+                        <div class="question-stat-item">
+                            <div class="question-stat-value">57</div>
+                            <div class="question-stat-label">Incorrect</div>
+                        </div>
+                        <div class="question-stat-item">
+                            <div class="question-stat-value">33%</div>
+                            <div class="question-stat-label">Success Rate</div>
+                        </div>
+                    </div>
+                    <div class="success-rate-bar">
+                        <div class="success-rate-fill" style="width: 33%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* ============================================
+           GLOBAL STATE
+           Store assessment and results data
+           SECURITY: In production, load from backend with authentication
+           ============================================ */
+        let assessmentData = {
+            id: 1,
+            title: 'Quantitative Aptitude - Set 1',
+            totalAttempts: 85,
+            averageScore: 76,
+            passRate: 82,
+            completionRate: 92
+        };
+
+        /* ============================================
+           SEARCH STUDENTS
+           Real-time search in results table
+           ============================================ */
+        function searchStudents() {
+            const searchTerm = document.getElementById('searchStudents').value.toLowerCase();
+            const table = document.getElementById('resultsTable');
+            const rows = table.querySelectorAll('tbody tr');
+
+            rows.forEach(row => {
+                const studentName = row.querySelector('.student-name')?.textContent.toLowerCase() || '';
+                const studentReg = row.querySelectorAll('td')[1]?.textContent.toLowerCase() || '';
+                const studentEmail = row.querySelector('.student-reg')?.textContent.toLowerCase() || '';
+
+                if (studentName.includes(searchTerm) || studentReg.includes(searchTerm) || studentEmail.includes(searchTerm)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        /* ============================================
+           FILTER RESULTS
+           Filter table by status (all/passed/failed/in-progress)
+           ============================================ */
+        function filterResults(status) {
+            // Update active tab
+            const tabs = document.querySelectorAll('.filter-tab');
+            tabs.forEach(tab => tab.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // Filter table rows
+            const table = document.getElementById('resultsTable');
+            const rows = table.querySelectorAll('tbody tr');
+
+            rows.forEach(row => {
+                const rowStatus = row.getAttribute('data-status');
+
+                if (status === 'all') {
+                    row.style.display = '';
+                } else if (status === rowStatus) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        /* ============================================
+           VIEW STUDENT DETAILS
+           Open detailed view for individual student
+           SECURITY: Verify teacher owns this assessment
+           ============================================ */
+        function viewStudentDetails(studentId) {
+            console.log('Viewing details for student:', studentId);
+            // In production: window.location.href = `student-result-details.html?assessment=1&student=${studentId}`;
+            alert(`Opening detailed results for student ${studentId}...\n\nWill show:\n• Question-by-question answers\n• Time per question\n• Comparison with class average\n• Strengths & weaknesses`);
+        }
+
+        /* ============================================
+           EXPORT TO PDF
+           Generate PDF report of results
+           BACKEND: Use libraries like FPDF, TCPDF, or mPDF
+           ============================================ */
+        function exportPDF() {
+            console.log('Exporting to PDF...');
+            alert('📄 Generating PDF Report...\n\nWill include:\n• Summary statistics\n• Student scores table\n• Performance charts\n• Question analysis\n\nDownload will start shortly.');
+
+            // In production, call backend:
+            /*
+            fetch('export-results-pdf.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    assessmentId: assessmentData.id
+                })
+            })
+            .then(response => response.blob())
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'assessment-results.pdf';
+                a.click();
+            });
+            */
+        }
+
+        /* ============================================
+           EXPORT TO EXCEL
+           Generate Excel spreadsheet of results
+           BACKEND: Use libraries like PHPExcel or PhpSpreadsheet
+           ============================================ */
+        function exportExcel() {
+            console.log('Exporting to Excel...');
+            alert('📊 Generating Excel Report...\n\nWill include:\n• Student results (all columns)\n• Statistics summary\n• Question-wise analysis\n• Charts and graphs\n\nDownload will start shortly.');
+
+            // In production, call backend:
+            /*
+            fetch('export-results-excel.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    assessmentId: assessmentData.id
+                })
+            })
+            .then(response => response.blob())
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'assessment-results.xlsx';
+                a.click();
+            });
+            */
+        }
+
+        /* ============================================
+           PAGE LOAD INITIALIZATION
+           Load data and setup page
+           ============================================ */
+        window.addEventListener('load', function() {
+            console.log('Assessment Results page loaded');
+            console.log('Assessment ID:', assessmentData.id);
+
+            // In production, load data from backend:
+            /*
+            const assessmentId = getQueryParam('id');
+
+            fetch(`get-assessment-results.php?id=${assessmentId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        loadResultsData(data);
+                        generateCharts(data.chartData);
+                    } else {
+                        alert('Failed to load results');
+                        window.location.href = 'teacher-dashboard.html';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to load results');
+                });
+            */
+
+            // Animate stat cards on load
+            const statCards = document.querySelectorAll('.stat-card');
+            statCards.forEach((card, index) => {
+                setTimeout(() => {
+                    card.style.animation = 'fadeIn 0.5s ease forwards';
+                }, index * 100);
+            });
+        });
+
+        /* ============================================
+           GET QUERY PARAMETER
+           Extract URL parameters
+           ============================================ */
+        function getQueryParam(param) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(param);
+        }
+
+        /* ============================================
+           BACKEND INTEGRATION NOTES
+           
+           This page requires the following backend endpoints:
+           
+           1. GET ASSESSMENT RESULTS
+              Endpoint: get-assessment-results.php?id=X
+              Method: GET
+              Security: Verify teacher owns this assessment
+              Returns: {
+                  success: true,
+                  assessment: {
+                      id, title, totalQuestions, duration, totalMarks, createdDate
+                  },
+                  statistics: {
+                      totalAttempts, averageScore, passRate, completionRate,
+                      avgTime, scoreDistribution, performanceTrend
+                  },
+                  students: [
+                      {
+                          studentId, name, registrationNo, email,
+                          score, percentage, timeTaken, status,
+                          submittedAt, answersCorrect, answersIncorrect
+                      },
+                      ...
+                  ],
+                  questionAnalysis: [
+                      {
+                          questionId, questionNumber, difficulty,
+                          correctCount, incorrectCount, successRate
+                      },
+                      ...
+                  ],
+                  topPerformers: [
+                      {studentId, name, registrationNo, score, percentage},
+                      ...
+                  ]
+              }
+           
+           2. EXPORT PDF
+              Endpoint: export-results-pdf.php
+              Method: POST
+              Body: {assessmentId}
+              Security: Verify ownership
+              Action: Generate PDF using FPDF/TCPDF
+              Returns: Blob (PDF file)
+           
+           3. EXPORT EXCEL
+              Endpoint: export-results-excel.php
+              Method: POST
+              Body: {assessmentId}
+              Security: Verify ownership
+              Action: Generate Excel using PhpSpreadsheet
+              Returns: Blob (XLSX file)
+           
+           4. GET STUDENT DETAILS
+              Endpoint: get-student-result-details.php?assessment=X&student=Y
+              Method: GET
+              Security: Verify teacher owns assessment
+              Returns: Detailed individual student results
+           
+           DATABASE QUERIES NEEDED:
+           - Fetch all test attempts for this assessment
+           - Calculate statistics (AVG, COUNT, etc.)
+           - Get question-wise correct/incorrect counts
+           - Order students by score for rankings
+           - Join with users table for student info
+           
+           SQL EXAMPLE:
+           SELECT 
+               u.user_id, u.full_name, u.registration_number, u.email,
+               ta.score, ta.total_marks, ta.percentage, ta.time_taken,
+               ta.status, ta.end_time
+           FROM test_attempts ta
+           JOIN users u ON ta.user_id = u.user_id
+           WHERE ta.test_id = ? AND ta.status = 'completed'
+           ORDER BY ta.percentage DESC;
+           
+           CHART DATA GENERATION:
+           For Score Distribution:
+           - Group scores into ranges (0-25, 26-50, 51-75, 76-100)
+           - Count students in each range
+           - Return as array for chart
+           
+           For Performance Trend:
+           - Group by date
+           - Calculate average score per day/week
+           - Return time series data
+           
+           SECURITY MEASURES:
+           - Verify teacher authentication
+           - Check assessment ownership
+           - Use prepared statements
+           - Sanitize all inputs
+           - Rate limit export functions
+           - Log all data access
+           
+           FILES TO CHANGE:
+           - Rename this file to assessment-results.php
+           - Update edit-assessment.html link
+           - Update teacher-dashboard.html link
+           
+           RECOMMENDED LIBRARIES:
+           - Chart.js for visualizations (client-side)
+           - FPDF or TCPDF for PDF generation (server-side)
+           - PhpSpreadsheet for Excel generation (server-side)
+           ============================================ */
+    </script>
+</body>
+</html>
+                                <div class="difficulty-info">
+                                    <div class="difficulty-dot easy"></div>
+                                    <span class="difficulty-label">Easy</span>
+                                </div>
+                                <span class="difficulty-value">12</span>
+                            </div>
+                            <div class="difficulty-bar">
+                                <div class="difficulty-bar-fill easy" style="width: 40%"></div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="difficulty-item">
+                

@@ -1,0 +1,1498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Placement Portal</title>
+    <style>
+        :root {
+            --color-admin-primary: #1a1a2e;
+            --color-admin-secondary: #16213e;
+            --color-admin-accent: #e94560;
+            --color-admin-accent-light: #ff6b6b;
+            --color-success: #4ade80;
+            --color-warning: #fbbf24;
+            --color-info: #60a5fa;
+            --sidebar-width: 240px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0f0f0f;
+            color: #ffffff;
+            overflow-x: hidden;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: var(--sidebar-width);
+            height: 100vh;
+            background: linear-gradient(to bottom, rgba(0, 0, 0, 0.98), rgba(26, 26, 46, 0.98));
+            border-right: 2px solid rgba(233, 69, 96, 0.3);
+            z-index: 1000;
+            overflow-y: auto;
+            overflow-x: hidden;
+            transition: transform 0.3s ease;
+        }
+
+        .sidebar.hidden {
+            transform: translateX(calc(-1 * var(--sidebar-width) + 40px));
+        }
+
+        .sidebar.hidden .sidebar-header,
+        .sidebar.hidden .nav-menu span:not(.nav-icon) {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .sidebar.hidden .nav-item {
+            justify-content: center;
+        }
+
+        .sidebar-header {
+            padding: 30px 20px;
+            border-bottom: 2px solid rgba(233, 69, 96, 0.2);
+            text-align: center;
+            transition: opacity 0.3s ease;
+        }
+
+        .sidebar-logo {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 12px;
+            background: linear-gradient(135deg, var(--color-admin-accent), var(--color-admin-accent-light));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            box-shadow: 0 0 20px rgba(233, 69, 96, 0.5);
+        }
+
+        .sidebar-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: 1px;
+        }
+
+        .nav-menu {
+            padding: 20px 0;
+        }
+
+        .nav-item {
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #aaa;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-left: 3px solid transparent;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .nav-item span:not(.nav-icon) {
+            transition: opacity 0.3s ease;
+        }
+
+        .nav-item:hover {
+            background: rgba(233, 69, 96, 0.1);
+            color: #ffffff;
+            border-left-color: var(--color-admin-accent);
+        }
+
+        .nav-item.active {
+            background: rgba(233, 69, 96, 0.2);
+            color: #ffffff;
+            border-left-color: var(--color-admin-accent);
+        }
+
+        .nav-icon {
+            font-size: 18px;
+            width: 20px;
+        }
+
+        /* Main Content */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            min-height: 100vh;
+            background: linear-gradient(135deg, var(--color-admin-primary), var(--color-admin-secondary));
+            transition: margin-left 0.3s ease;
+        }
+
+        .sidebar.hidden ~ .main-content {
+            margin-left: 40px;
+        }
+
+        /* Sidebar edge indicator when hidden */
+        .sidebar::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: 0;
+            width: 40px;
+            height: 100%;
+            background: linear-gradient(135deg, #3B1C32, #3B1C32);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .sidebar.hidden::after {
+            opacity: 1;
+        }
+
+        .sidebar.hidden::before {
+            opacity: 1;
+        }
+
+        .sidebar.hidden::before {
+            transform: translateY(-50%) translateX(4px);
+        }
+        
+        .sidebar::before {
+            content: '❯'; /* arrow icon */
+            position: absolute;
+            right: 12px;          /* centered inside the 40px strip */
+            top: 50%;
+            transform: translateY(-50%);
+
+            font-size: 22px;
+            color: rgba(233, 69, 96, 0.9);
+            text-shadow: 0 0 8px rgba(233, 69, 96, 0.6);
+
+            opacity: 0;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            pointer-events: none;
+
+        }
+
+        .sidebar:hover::before {
+            opacity: 0;
+        }
+
+        /* Top Bar */
+        .topbar {
+            background: rgba(0, 0, 0, 0.9);
+            border-bottom: 2px solid rgba(233, 69, 96, 0.3);
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            backdrop-filter: blur(10px);
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1001;
+            width: 100%;
+            margin-left: var(--sidebar-width);
+            width: calc(100% - var(--sidebar-width));
+            transition: all 0.3s ease;
+        }
+
+        .sidebar.hidden ~ .main-content .topbar {
+            margin-left: 0;
+            width: 100%;
+        }
+
+        .page-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #ffffff;
+        }
+
+        .admin-profile {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 15px;
+            background: rgba(233, 69, 96, 0.1);
+            border: 1px solid rgba(233, 69, 96, 0.3);
+            border-radius: 10px;
+        }
+
+        .admin-avatar {
+            width: 35px;
+            height: 35px;
+            background: linear-gradient(135deg, var(--color-admin-accent), var(--color-admin-accent-light));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .admin-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .admin-name {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .admin-role {
+            font-size: 11px;
+            color: var(--color-admin-accent);
+        }
+
+        /* Dashboard Content */
+        .dashboard-content {
+            padding: 30px;
+            padding-top: calc(30px + 70px);
+        }
+
+        /* Content Section */
+        .content-section {
+            display: none;
+        }
+
+        .content-section.active {
+            display: block;
+        }
+
+        /* Panel */
+        .panel {
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid rgba(233, 69, 96, 0.2);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(233, 69, 96, 0.2);
+        }
+
+        .panel-title {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .tab-btn {
+            padding: 10px 20px;
+            background: rgba(233, 69, 96, 0.1);
+            border: 2px solid rgba(233, 69, 96, 0.3);
+            border-radius: 8px;
+            color: #aaa;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .tab-btn:hover {
+            background: rgba(233, 69, 96, 0.2);
+            color: #ffffff;
+        }
+
+        .tab-btn.active {
+            background: var(--color-admin-accent);
+            color: white;
+            border-color: var(--color-admin-accent);
+        }
+
+        /* Filters */
+        .filters {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .filter-label {
+            display: block;
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 6px;
+            font-weight: 600;
+        }
+
+        .filter-select, .filter-input {
+            width: 100%;
+            padding: 10px 12px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid rgba(233, 69, 96, 0.3);
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+        }
+
+        .filter-select:focus, .filter-input:focus {
+            outline: none;
+            border-color: var(--color-admin-accent);
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--color-admin-accent), var(--color-admin-accent-light));
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(233, 69, 96, 0.4);
+        }
+
+        .btn-secondary {
+            background: rgba(233, 69, 96, 0.1);
+            border: 2px solid rgba(233, 69, 96, 0.3);
+            color: var(--color-admin-accent-light);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(233, 69, 96, 0.2);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.2);
+            border: 2px solid rgba(239, 68, 68, 0.5);
+            color: #ef4444;
+        }
+
+        .btn-success {
+            background: rgba(74, 222, 128, 0.2);
+            border: 2px solid rgba(74, 222, 128, 0.5);
+            color: var(--color-success);
+        }
+
+        /* Table */
+        .data-table {
+            overflow-x: auto;
+        }
+
+        .data-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .data-table th {
+            background: rgba(233, 69, 96, 0.2);
+            padding: 12px;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 700;
+            color: #ffffff;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .data-table td {
+            padding: 12px;
+            font-size: 13px;
+            color: #ccc;
+            border-bottom: 1px solid rgba(233, 69, 96, 0.1);
+        }
+
+        .data-table tr:hover td {
+            background: rgba(233, 69, 96, 0.05);
+        }
+
+        .table-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .action-icon {
+            cursor: pointer;
+            padding: 6px;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            font-size: 16px;
+        }
+
+        .action-icon:hover {
+            background: rgba(233, 69, 96, 0.2);
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--color-admin-primary);
+            border: 2px solid rgba(233, 69, 96, 0.3);
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(233, 69, 96, 0.2);
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .close-modal {
+            font-size: 24px;
+            cursor: pointer;
+            color: #888;
+        }
+
+        .close-modal:hover {
+            color: var(--color-admin-accent);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 13px;
+            color: #aaa;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid rgba(233, 69, 96, 0.3);
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            outline: none;
+            border-color: var(--color-admin-accent);
+        }
+
+        /* Upload Area */
+        .upload-area {
+            border: 2px dashed rgba(233, 69, 96, 0.3);
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .upload-area:hover {
+            border-color: var(--color-admin-accent);
+            background: rgba(233, 69, 96, 0.05);
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .upload-text {
+            color: #888;
+            font-size: 14px;
+        }
+
+        /* Resource Grid */
+        .resource-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .resource-card {
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid rgba(233, 69, 96, 0.2);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .resource-card:hover {
+            border-color: var(--color-admin-accent);
+            transform: translateY(-3px);
+        }
+
+        .resource-icon {
+            font-size: 40px;
+            margin-bottom: 10px;
+        }
+
+        .resource-name {
+            font-size: 13px;
+            color: #ccc;
+            margin-bottom: 10px;
+            word-break: break-word;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge-active {
+            background: rgba(74, 222, 128, 0.2);
+            color: var(--color-success);
+        }
+
+        .badge-inactive {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .badge-pending {
+            background: rgba(251, 191, 36, 0.2);
+            color: var(--color-warning);
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
+
+            .filters {
+                flex-direction: column;
+            }
+
+            .filter-group {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-logo">🛠️</div>
+            <div class="sidebar-title">ADMIN PANEL</div>
+        </div>
+
+        <nav class="nav-menu">
+            <div class="nav-item active" data-section="overview">
+                <span class="nav-icon">🏠</span>
+                <span>Overview</span>
+            </div>
+            <div class="nav-item" data-section="users">
+                <span class="nav-icon">👥</span>
+                <span>User Management</span>
+            </div>
+            <div class="nav-item" data-section="tests">
+                <span class="nav-icon">📝</span>
+                <span>Test Management</span>
+            </div>
+            <div class="nav-item" data-section="resources">
+                <span class="nav-icon">📚</span>
+                <span>Resources</span>
+            </div>
+            <div class="nav-item" data-section="logs">
+                <span class="nav-icon">📋</span>
+                <span>System Logs</span>
+            </div>
+            <div class="nav-item" data-section="settings">
+                <span class="nav-icon">⚙️</span>
+                <span>Settings</span>
+            </div>
+            <div class="nav-item" data-section="logout">
+                <span class="nav-icon">🚪</span>
+                <span>Logout</span>
+            </div>
+        </nav>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Top Bar -->
+        <div class="topbar">
+            <div class="page-title" id="pageTitle">User Management</div>
+            <div class="admin-profile">
+                <div class="admin-avatar">👤</div>
+                <div class="admin-info">
+                    <div class="admin-name">Admin User</div>
+                    <div class="admin-role">Super Admin</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard Content -->
+        <div class="dashboard-content">
+            <!-- Overview Section -->
+            <div class="content-section active" id="overview-section">
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">System Overview</div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+                        <div style="background: rgba(233, 69, 96, 0.1); padding: 20px; border-radius: 8px; border-left: 4px solid var(--color-admin-accent);">
+                            <div style="font-size: 32px; font-weight: 700; margin-bottom: 5px;">1,248</div>
+                            <div style="color: #888; font-size: 14px;">Total Students</div>
+                        </div>
+                        <div style="background: rgba(233, 69, 96, 0.1); padding: 20px; border-radius: 8px; border-left: 4px solid var(--color-admin-accent);">
+                            <div style="font-size: 32px; font-weight: 700; margin-bottom: 5px;">87</div>
+                            <div style="color: #888; font-size: 14px;">Total Teachers</div>
+                        </div>
+                        <div style="background: rgba(233, 69, 96, 0.1); padding: 20px; border-radius: 8px; border-left: 4px solid var(--color-admin-accent);">
+                            <div style="font-size: 32px; font-weight: 700; margin-bottom: 5px;">342</div>
+                            <div style="color: #888; font-size: 14px;">Active Tests</div>
+                        </div>
+                        <div style="background: rgba(233, 69, 96, 0.1); padding: 20px; border-radius: 8px; border-left: 4px solid var(--color-admin-accent);">
+                            <div style="font-size: 32px; font-weight: 700; margin-bottom: 5px;">156</div>
+                            <div style="color: #888; font-size: 14px;">Resources</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- User Management Section -->
+            <div class="content-section" id="users-section">
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">User Management</div>
+                        <button class="btn btn-primary" onclick="openModal('createUserModal')">
+                            ➕ Add User
+                        </button>
+                    </div>
+
+                    <!-- Tabs -->
+                    <div class="tabs">
+                        <button class="tab-btn active" onclick="switchUserTab('students')">Students</button>
+                        <button class="tab-btn" onclick="switchUserTab('teachers')">Teachers</button>
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="filters">
+                        <div class="filter-group">
+                            <label class="filter-label">Search</label>
+                            <input type="text" class="filter-input" placeholder="Search by name or ID...">
+                        </div>
+                        <div class="filter-group" id="studentFilter">
+                            <label class="filter-label">Filter by Teacher</label>
+                            <select class="filter-select">
+                                <option value="">All Teachers</option>
+                                <option value="1">Prof. John Smith</option>
+                                <option value="2">Dr. Sarah Johnson</option>
+                                <option value="3">Prof. Mike Davis</option>
+                            </select>
+                        </div>
+                        <div class="filter-group" id="teacherFilter" style="display: none;">
+                            <label class="filter-label">Filter by Students</label>
+                            <select class="filter-select">
+                                <option value="">All Students</option>
+                                <option value="has">Has Students</option>
+                                <option value="none">No Students</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Status</label>
+                            <select class="filter-select">
+                                <option value="">All Status</option>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Students Table -->
+                    <div class="data-table" id="studentsTable">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Student ID</th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Teacher</th>
+                                    <th>Tests Taken</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>STU-2024-001</td>
+                                    <td>Sarah Smith</td>
+                                    <td>sarah.smith@email.com</td>
+                                    <td>Prof. John Smith</td>
+                                    <td>24</td>
+                                    <td><span class="badge badge-active">Active</span></td>
+                                    <td>
+                                        <div class="table-actions">
+                                            <span class="action-icon" onclick="editUser('student', 1)" title="Edit">✏️</span>
+                                            <span class="action-icon" onclick="deleteUser('student', 1)" title="Delete">🗑️</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>STU-2024-002</td>
+                                    <td>Mike Johnson</td>
+                                    <td>mike.j@email.com</td>
+                                    <td>Dr. Sarah Johnson</td>
+                                    <td>18</td>
+                                    <td><span class="badge badge-active">Active</span></td>
+                                    <td>
+                                        <div class="table-actions">
+                                            <span class="action-icon" onclick="editUser('student', 2)" title="Edit">✏️</span>
+                                            <span class="action-icon" onclick="deleteUser('student', 2)" title="Delete">🗑️</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>STU-2024-003</td>
+                                    <td>Emily Davis</td>
+                                    <td>emily.d@email.com</td>
+                                    <td>Prof. Mike Davis</td>
+                                    <td>31</td>
+                                    <td><span class="badge badge-active">Active</span></td>
+                                    <td>
+                                        <div class="table-actions">
+                                            <span class="action-icon" onclick="editUser('student', 3)" title="Edit">✏️</span>
+                                            <span class="action-icon" onclick="deleteUser('student', 3)" title="Delete">🗑️</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Teachers Table -->
+                    <div class="data-table" id="teachersTable" style="display: none;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Teacher ID</th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Department</th>
+                                    <th>Students</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>TEA-2023-001</td>
+                                    <td>Prof. John Smith</td>
+                                    <td>john.smith@college.edu</td>
+                                    <td>Computer Science</td>
+                                    <td>45</td>
+                                    <td><span class="badge badge-active">Active</span></td>
+                                    <td>
+                                        <div class="table-actions">
+                                            <span class="action-icon" onclick="editUser('teacher', 1)" title="Edit">✏️</span>
+                                            <span class="action-icon" onclick="deleteUser('teacher', 1)" title="Delete">🗑️</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>TEA-2023-002</td>
+                                    <td>Dr. Sarah Johnson</td>
+                                    <td>sarah.j@college.edu</td>
+                                    <td>Mathematics</td>
+                                    <td>38</td>
+                                    <td><span class="badge badge-active">Active</span></td>
+                                    <td>
+                                        <div class="table-actions">
+                                            <span class="action-icon" onclick="editUser('teacher', 2)" title="Edit">✏️</span>
+                                            <span class="action-icon" onclick="deleteUser('teacher', 2)" title="Delete">🗑️</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Test Management Section -->
+            <div class="content-section" id="tests-section">
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">Test Management</div>
+                        <button class="btn btn-primary" onclick="openModal('createTestModal')">
+                            ➕ Create Test
+                        </button>
+                    </div>
+
+                    <div class="filters">
+                        <div class="filter-group">
+                            <label class="filter-label">Search</label>
+                            <input type="text" class="filter-input" placeholder="Search tests...">
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Category</label>
+                            <select class="filter-select">
+                                <option value="">All Categories</option>
+                                <option value="aptitude">Aptitude</option>
+                                <option value="verbal">Verbal Ability</option>
+                                <option value="logical">Logical Reasoning</option>
+                                <option value="technical">Technical</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Difficulty</label>
+                            <select class="filter-select">
+                                <option value="">All Levels</option>
+                                <option value="easy">Easy</option>
+                                <option value="medium">Medium</option>
+                                <option value="hard">Hard</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="data-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Test ID</th>
+                                    <th>Test Name</th>
+                                    <th>Category</th>
+                                    <th>Difficulty</th>
+                                    <th>Questions</th>
+                                    <th>Duration</th>
+                                    <th>Attempts</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>TEST-001</td>
+                                    <td>Quantitative Aptitude Basics</td>
+                                    <td>Aptitude</td>
+                                    <td>Easy</td>
+                                    <td>30</td>
+                                    <td>45 min</td>
+                                    <td>2,345</td>
+                                    <td><span class="badge badge-active">Active</span></td>
+                                    <td>
+                                        <div class="table-actions">
+                                            <span class="action-icon" onclick="editTest(1)" title="Edit">✏️</span>
+                                            <span class="action-icon" onclick="viewTest(1)" title="View">👁️</span>
+                                            <span class="action-icon" onclick="deleteTest(1)" title="Delete">🗑️</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>TEST-002</td>
+                                    <td>English Grammar & Vocabulary</td>
+                                    <td>Verbal</td>
+                                    <td>Medium</td>
+                                    <td>25</td>
+                                    <td>30 min</td>
+                                    <td>1,823</td>
+                                    <td><span class="badge badge-active">Active</span></td>
+                                    <td>
+                                        <div class="table-actions">
+                                            <span class="action-icon" onclick="editTest(2)" title="Edit">✏️</span>
+                                            <span class="action-icon" onclick="viewTest(2)" title="View">👁️</span>
+                                            <span class="action-icon" onclick="deleteTest(2)" title="Delete">🗑️</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>TEST-003</td>
+                                    <td>Data Structures & Algorithms</td>
+                                    <td>Technical</td>
+                                    <td>Hard</td>
+                                    <td>40</td>
+                                    <td>60 min</td>
+                                    <td>3,127</td>
+                                    <td><span class="badge badge-active">Active</span></td>
+                                    <td>
+                                        <div class="table-actions">
+                                            <span class="action-icon" onclick="editTest(3)" title="Edit">✏️</span>
+                                            <span class="action-icon" onclick="viewTest(3)" title="View">👁️</span>
+                                            <span class="action-icon" onclick="deleteTest(3)" title="Delete">🗑️</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resources Section -->
+            <div class="content-section" id="resources-section">
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">Resource Library</div>
+                        <button class="btn btn-primary" onclick="openModal('uploadResourceModal')">
+                            ⬆️ Upload Resource
+                        </button>
+                    </div>
+
+                    <div class="filters">
+                        <div class="filter-group">
+                            <label class="filter-label">Search</label>
+                            <input type="text" class="filter-input" placeholder="Search resources...">
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">File Type</label>
+                            <select class="filter-select">
+                                <option value="">All Types</option>
+                                <option value="pdf">PDF</option>
+                                <option value="image">Images</option>
+                                <option value="doc">Documents</option>
+                                <option value="video">Videos</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Category</label>
+                            <select class="filter-select">
+                                <option value="">All Categories</option>
+                                <option value="study">Study Material</option>
+                                <option value="syllabus">Syllabus</option>
+                                <option value="solution">Solutions</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="resource-grid">
+                        <div class="resource-card">
+                            <div class="resource-icon">📄</div>
+                            <div class="resource-name">Aptitude_Formula_Sheet.pdf</div>
+                            <div style="display: flex; gap: 5px; justify-content: center; margin-top: 10px;">
+                                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="downloadResource(1)">📥</button>
+                                <button class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;" onclick="deleteResource(1)">🗑️</button>
+                            </div>
+                        </div>
+                        <div class="resource-card">
+                            <div class="resource-icon">🖼️</div>
+                            <div class="resource-name">Geometry_Diagrams.png</div>
+                            <div style="display: flex; gap: 5px; justify-content: center; margin-top: 10px;">
+                                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="downloadResource(2)">📥</button>
+                                <button class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;" onclick="deleteResource(2)">🗑️</button>
+                            </div>
+                        </div>
+                        <div class="resource-card">
+                            <div class="resource-icon">📄</div>
+                            <div class="resource-name">DSA_Study_Guide.pdf</div>
+                            <div style="display: flex; gap: 5px; justify-content: center; margin-top: 10px;">
+                                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="downloadResource(3)">📥</button>
+                                <button class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;" onclick="deleteResource(3)">🗑️</button>
+                            </div>
+                        </div>
+                        <div class="resource-card">
+                            <div class="resource-icon">📄</div>
+                            <div class="resource-name">Verbal_Ability_Tips.pdf</div>
+                            <div style="display: flex; gap: 5px; justify-content: center; margin-top: 10px;">
+                                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="downloadResource(4)">📥</button>
+                                <button class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;" onclick="deleteResource(4)">🗑️</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Logs Section -->
+            <div class="content-section" id="logs-section">
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">System Logs</div>
+                        <button class="btn btn-secondary">🔄 Refresh</button>
+                    </div>
+
+                    <div class="filters">
+                        <div class="filter-group">
+                            <label class="filter-label">Log Type</label>
+                            <select class="filter-select">
+                                <option value="">All Logs</option>
+                                <option value="login">Login Attempts</option>
+                                <option value="user">User Actions</option>
+                                <option value="test">Test Activities</option>
+                                <option value="system">System Events</option>
+                                <option value="security">Security Alerts</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Date Range</label>
+                            <input type="date" class="filter-input">
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Severity</label>
+                            <select class="filter-select">
+                                <option value="">All Levels</option>
+                                <option value="info">Info</option>
+                                <option value="warning">Warning</option>
+                                <option value="error">Error</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="data-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Type</th>
+                                    <th>User</th>
+                                    <th>Action</th>
+                                    <th>IP Address</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>2026-01-09 14:32:15</td>
+                                    <td>Login</td>
+                                    <td>admin@portal.com</td>
+                                    <td>Successful login</td>
+                                    <td>192.168.1.100</td>
+                                    <td><span class="badge badge-active">Success</span></td>
+                                </tr>
+                                <tr>
+                                    <td>2026-01-09 14:28:42</td>
+                                    <td>User</td>
+                                    <td>STU-2024-001</td>
+                                    <td>Completed test: TEST-001</td>
+                                    <td>192.168.1.45</td>
+                                    <td><span class="badge badge-active">Success</span></td>
+                                </tr>
+                                <tr>
+                                    <td>2026-01-09 14:15:33</td>
+                                    <td>Security</td>
+                                    <td>unknown</td>
+                                    <td>3 failed login attempts</td>
+                                    <td>45.123.67.89</td>
+                                    <td><span class="badge badge-inactive">Failed</span></td>
+                                </tr>
+                                <tr>
+                                    <td>2026-01-09 13:45:21</td>
+                                    <td>System</td>
+                                    <td>system</td>
+                                    <td>Database backup completed</td>
+                                    <td>127.0.0.1</td>
+                                    <td><span class="badge badge-active">Success</span></td>
+                                </tr>
+                                <tr>
+                                    <td>2026-01-09 13:22:18</td>
+                                    <td>Test</td>
+                                    <td>admin@portal.com</td>
+                                    <td>Created new test: TEST-004</td>
+                                    <td>192.168.1.100</td>
+                                    <td><span class="badge badge-active">Success</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Section -->
+            <div class="content-section" id="settings-section">
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">System Settings</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Portal Name</label>
+                        <input type="text" class="form-input" value="Placement Portal">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Admin Email</label>
+                        <input type="email" class="form-input" value="admin@portal.com">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Max Login Attempts</label>
+                        <input type="number" class="form-input" value="3">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Session Timeout (minutes)</label>
+                        <input type="number" class="form-input" value="30">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Enable User Registration</label>
+                        <select class="form-select">
+                            <option value="yes">Yes</option>
+                            <option value="no">No</option>
+                        </select>
+                    </div>
+
+                    <button class="btn btn-primary">💾 Save Settings</button>
+                </div>
+
+                <div class="panel" style="margin-top: 20px;">
+                    <div class="panel-header">
+                        <div class="panel-title">Database Management</div>
+                    </div>
+                    <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                        <button class="btn btn-secondary">💾 Backup Database</button>
+                        <button class="btn btn-secondary">⬆️ Restore Database</button>
+                        <button class="btn btn-danger">🗑️ Clear Old Logs</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create User Modal -->
+    <div class="modal" id="createUserModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Add New User</div>
+                <span class="close-modal" onclick="closeModal('createUserModal')">✕</span>
+            </div>
+            <div class="form-group">
+                <label class="form-label">User Type</label>
+                <select class="form-select" id="userType" onchange="toggleUserFields()">
+                    <option value="student">Student</option>
+                    <option value="teacher">Teacher</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Full Name</label>
+                <input type="text" class="form-input" placeholder="Enter full name">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Email</label>
+                <input type="email" class="form-input" placeholder="Enter email">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Password</label>
+                <input type="password" class="form-input" placeholder="Enter password">
+            </div>
+            <div class="form-group" id="teacherField" style="display: none;">
+                <label class="form-label">Department</label>
+                <input type="text" class="form-input" placeholder="Enter department">
+            </div>
+            <div class="form-group" id="studentField">
+                <label class="form-label">Assign Teacher</label>
+                <select class="form-select">
+                    <option value="">Select Teacher</option>
+                    <option value="1">Prof. John Smith</option>
+                    <option value="2">Dr. Sarah Johnson</option>
+                    <option value="3">Prof. Mike Davis</option>
+                </select>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button class="btn btn-primary" onclick="createUser()">✅ Create User</button>
+                <button class="btn btn-secondary" onclick="closeModal('createUserModal')">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Test Modal -->
+    <div class="modal" id="createTestModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Create New Test</div>
+                <span class="close-modal" onclick="closeModal('createTestModal')">✕</span>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Test Name</label>
+                <input type="text" class="form-input" placeholder="Enter test name">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea class="form-textarea" placeholder="Enter test description"></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Category</label>
+                <select class="form-select">
+                    <option value="aptitude">Aptitude</option>
+                    <option value="verbal">Verbal Ability</option>
+                    <option value="logical">Logical Reasoning</option>
+                    <option value="technical">Technical</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Difficulty</label>
+                <select class="form-select">
+                    <option value="easy">Easy</option>
+                    <option value="medium">Medium</option>
+                    <option value="hard">Hard</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Number of Questions</label>
+                <input type="number" class="form-input" placeholder="Enter number of questions">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Duration (minutes)</label>
+                <input type="number" class="form-input" placeholder="Enter duration">
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button class="btn btn-primary" onclick="createTest()">✅ Create Test</button>
+                <button class="btn btn-secondary" onclick="closeModal('createTestModal')">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Resource Modal -->
+    <div class="modal" id="uploadResourceModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Upload Resource</div>
+                <span class="close-modal" onclick="closeModal('uploadResourceModal')">✕</span>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Resource Name</label>
+                <input type="text" class="form-input" placeholder="Enter resource name">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Category</label>
+                <select class="form-select">
+                    <option value="study">Study Material</option>
+                    <option value="syllabus">Syllabus</option>
+                    <option value="solution">Solutions</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">File Upload</label>
+                <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+                    <div class="upload-icon">📁</div>
+                    <div class="upload-text">Click to select file or drag and drop</div>
+                    <input type="file" id="fileInput" style="display: none;" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.mp4">
+                </div>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button class="btn btn-primary" onclick="uploadResource()">⬆️ Upload</button>
+                <button class="btn btn-secondary" onclick="closeModal('uploadResourceModal')">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Sidebar auto-hide functionality
+        let sidebarTimeout;
+        const sidebar = document.querySelector('.sidebar');
+        
+        function hideSidebar() {
+            sidebar.classList.add('hidden');
+        }
+        
+        function showSidebar() {
+            sidebar.classList.remove('hidden');
+            resetSidebarTimeout();
+        }
+        
+        function resetSidebarTimeout() {
+            clearTimeout(sidebarTimeout);
+            sidebarTimeout = setTimeout(hideSidebar, 3000); // Hide after 3 seconds of inactivity
+        }
+        
+        // Show sidebar on hover
+        sidebar.addEventListener('mouseenter', showSidebar);
+        
+        // Reset timeout on mouse movement within sidebar
+        sidebar.addEventListener('mousemove', resetSidebarTimeout);
+        
+        // Hide sidebar when mouse leaves
+        sidebar.addEventListener('mouseleave', () => {
+            clearTimeout(sidebarTimeout);
+            sidebarTimeout = setTimeout(hideSidebar, 60);
+        });
+        
+        // Hide sidebar immediately on page load
+        hideSidebar();
+        // Reset timeout for auto-hide functionality
+        resetSidebarTimeout();
+
+        // Navigation
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', function() {
+                const section = this.dataset.section;
+                
+                if (section === 'logout') {
+                    if (confirm('Are you sure you want to logout?')) {
+                        window.location.href = 'admin-login.html';
+                    }
+                    return;
+                }
+
+                document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                this.classList.add('active');
+
+                document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
+                document.getElementById(section + '-section').classList.add('active');
+
+                const titles = {
+                    'overview': 'Overview',
+                    'users': 'User Management',
+                    'tests': 'Test Management',
+                    'resources': 'Resources',
+                    'logs': 'System Logs',
+                    'settings': 'Settings'
+                };
+                document.getElementById('pageTitle').textContent = titles[section];
+            });
+        });
+
+        // User Tab Switching
+        function switchUserTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            if (tab === 'students') {
+                document.getElementById('studentsTable').style.display = 'block';
+                document.getElementById('teachersTable').style.display = 'none';
+                document.getElementById('studentFilter').style.display = 'block';
+                document.getElementById('teacherFilter').style.display = 'none';
+            } else {
+                document.getElementById('studentsTable').style.display = 'none';
+                document.getElementById('teachersTable').style.display = 'block';
+                document.getElementById('studentFilter').style.display = 'none';
+                document.getElementById('teacherFilter').style.display = 'block';
+            }
+        }
+
+        // Modal Functions
+        function openModal(modalId) {
+            document.getElementById(modalId).classList.add('active');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+
+        function toggleUserFields() {
+            const userType = document.getElementById('userType').value;
+            if (userType === 'teacher') {
+                document.getElementById('teacherField').style.display = 'block';
+                document.getElementById('studentField').style.display = 'none';
+            } else {
+                document.getElementById('teacherField').style.display = 'none';
+                document.getElementById('studentField').style.display = 'block';
+            }
+        }
+
+        // User Functions
+        function createUser() {
+            alert('✅ User created successfully!\n\nIn production, this will:\n• Validate input\n• Create user in database\n• Send welcome email\n• Update user list');
+            closeModal('createUserModal');
+        }
+
+        function editUser(type, id) {
+            alert(`✏️ Editing ${type}: ${id}\n\nOpening edit form...`);
+        }
+
+        function deleteUser(type, id) {
+            if (confirm(`⚠️ Are you sure you want to delete this ${type}?`)) {
+                alert(`🗑️ ${type} deleted successfully!`);
+            }
+        }
+
+        // Test Functions
+        function createTest() {
+            alert('✅ Test created successfully!\n\nIn production, this will:\n• Save test details\n• Allow adding questions\n• Publish to home page');
+            closeModal('createTestModal');
+        }
+
+        function editTest(id) {
+            alert(`✏️ Editing Test: ${id}\n\nOpening test editor...`);
+        }
+
+        function viewTest(id) {
+            alert(`👁️ Viewing Test: ${id}\n\nShowing test preview...`);
+        }
+
+        function deleteTest(id) {
+            if (confirm('⚠️ Are you sure you want to delete this test?')) {
+                alert('🗑️ Test deleted successfully!');
+            }
+        }
+
+        // Resource Functions
+        function uploadResource() {
+            alert('⬆️ Resource uploaded successfully!\n\nFile will be stored and made available for download.');
+            closeModal('uploadResourceModal');
+        }
+
+        function downloadResource(id) {
+            alert(`📥 Downloading resource ${id}...`);
+        }
+
+        function deleteResource(id) {
+            if (confirm('⚠️ Are you sure you want to delete this resource?')) {
+                alert('🗑️ Resource deleted successfully!');
+            }
+        }
+
+        // Close modal on outside click
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal')) {
+                event.target.classList.remove('active');
+            }
+        }
+    </script>
+</body>
+</html>
