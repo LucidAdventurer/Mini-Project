@@ -1,3 +1,14 @@
+<?php
+session_start();
+
+/* 🔒 SESSION GUARD */
+if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
+    header("Location: index.html");
+    exit;
+}
+
+/* (Optional) fetch user info later from DB using $_SESSION['uid'] */
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>

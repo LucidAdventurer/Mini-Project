@@ -692,7 +692,7 @@
                 <button class="role-btn" data-role="teacher">Teacher</button>
             </div>
 
-            <form id="loginForm" method="POST" action="dashboard.php">
+            <form id="loginForm" method="POST" action="login.php">
                 <input type="hidden" name="role" id="roleInput" value="student">
                 <div class="form-group">
                     <label for="email">Email Address</label>
@@ -786,29 +786,29 @@
         }
 
         const loginForm = document.getElementById('loginForm');
-        if (loginForm) {
-            loginForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                const email = document.getElementById('email')?.value?.trim();
-                const password = document.getElementById('password')?.value;
-                const role = roleInput?.value;
-                if (!email || !password) {
-                    alert('Please fill in all fields');
-                    return;
-                }
-                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                if (!emailRegex.test(email)) {
-                    alert('Please enter a valid email address');
-                    return;
-                }
-                if (password.length < 6) {
-                    alert('Password must be at least 6 characters long');
-                    return;
-                }
-                console.log('Login attempt:', { email, role, timestamp: new Date().toISOString() });
-                alert(`Login successful as ${role}!\n\nRedirecting to ${role} dashboard...`);
-            });
-        }
+        // if (loginForm) {
+        //     loginForm.addEventListener('submit', function(e) {
+        //         e.preventDefault();
+        //         const email = document.getElementById('email')?.value?.trim();
+        //         const password = document.getElementById('password')?.value;
+        //         const role = roleInput?.value;
+        //         if (!email || !password) {
+        //             alert('Please fill in all fields');
+        //             return;
+        //         }
+        //         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        //         if (!emailRegex.test(email)) {
+        //             alert('Please enter a valid email address');
+        //             return;
+        //         }
+        //         if (password.length < 6) {
+        //             alert('Password must be at least 6 characters long');
+        //             return;
+        //         }
+        //         console.log('Login attempt:', { email, role, timestamp: new Date().toISOString() });
+        //         alert(`Login successful as ${role}!\n\nRedirecting to ${role} dashboard...`);
+        //     });
+        // }
 
         (function() {
             const pageInfoBtn = document.getElementById('pageInfoBtn');
