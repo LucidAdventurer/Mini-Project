@@ -1,0 +1,294 @@
+Database name - "pta"
+
+Users Table
+
+CREATE TABLE users (
+    user_id INT PRIMARY KEY AUTO_INCREMENT,
+    full_name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    user_type ENUM('student','teacher','admin') NOT NULL,
+    department VARCHAR(50),
+    registration_number VARCHAR(50) UNIQUE,
+    is_verified BOOLEAN DEFAULT FALSE,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_login TIMESTAMP NULL
+);
+
+Why this table exists
+
+    Central identity store for all authenticated users.
+
+Why each column
+
+    user_id: internal stable reference.
+
+    full_name: display + reports.
+
+    email: login + OTP delivery.
+
+    password_hash: secure authentication.
+
+    user_type: role-based access control.
+
+    department: filtering, analytics.
+
+    registration_number: academic identity (students).
+
+    is_verified: email/OTP verification.
+
+    is_active: soft disable accounts.
+
+    created_at: audit.
+
+    last_login: security + analytics.
+
+Forgot Password Table
+
+CREATE TABLE password_reset_otps (
+    otp_id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    otp_code VARCHAR(10) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    is_used BOOLEAN DEFAULT FALSE,
+    request_ip VARCHAR(45),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+Why this table exists
+
+    Enables OTP-based forgot password flow.
+
+Why each column
+
+    otp_code: actual OTP sent to email.
+
+    expires_at: automatic invalidation.
+
+    is_used: prevents reuse.
+
+    request_ip: abuse detection.
+
+    created_at: audit + rate limiting.
+
+Login Activity Table
+
+CREATE TABLE login_activity (
+    log_id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    is_success BOOLEAN,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+Why this table exists
+
+    Detect new login device / suspicious login.
+
+Why each column
+
+    ip_address: geo & anomaly detection.
+
+    user_agent: device fingerprint.
+
+    is_success: brute-force detection.
+
+    created_at: timeline analysis.
+
+Assessments Table
+
+CREATE TABLE assessments (
+    assessment_id INT PRIMARY KEY AUTO_INCREMENT,
+    title VARCHAR(200) NOT NULL,
+    description TEXT,
+    created_by INT NOT NULL,
+    category VARCHAR(50),
+    difficulty ENUM('easy','medium','hard') DEFAULT 'medium',
+    duration_minutes INT NOT NULL,
+    total_marks INT NOT NULL,
+    passing_marks INT NOT NULL,
+    is_public BOOLEAN DEFAULT FALSE,
+    status ENUM('draft','active','archived') DEFAULT 'draft',
+    instructions TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES users(user_id)
+);
+
+Why this table exists
+
+    Represents a test/assessment entity.
+
+Why each column
+
+    created_by: teacher ownership.
+
+    category: filtering/search.
+
+    duration_minutes: timer.
+
+    passing_marks: result logic.
+
+    is_public: guest access.
+
+    status: lifecycle control.
+
+Questions Table
+
+CREATE TABLE questions (
+    question_id INT PRIMARY KEY AUTO_INCREMENT,
+    assessment_id INT NOT NULL,
+    question_type ENUM('mcq','multiple_select','true_false','short_answer') NOT NULL,
+    question_text TEXT NOT NULL,
+    marks INT NOT NULL,
+    option_a TEXT,
+    option_b TEXT,
+    option_c TEXT,
+    option_d TEXT,
+    option_e TEXT,
+    correct_answer TEXT NOT NULL,
+    explanation TEXT,
+    topic VARCHAR(100),
+    question_order INT,
+    FOREIGN KEY (assessment_id) REFERENCES assessments(assessment_id) ON DELETE CASCADE
+);
+
+Why this table exists
+
+    Stores all question data including PDF-parsed questions.
+
+Why each column
+
+    question_type: evaluation logic.
+
+    options_*: MCQ flexibility.
+
+    correct_answer: auto-evaluation.
+
+    explanation: post-test learning.
+
+    topic: topic-wise analytics.
+
+    question_order: rendering order.
+
+Assessment Attempt Table
+
+CREATE TABLE assessment_attempts (
+    attempt_id INT PRIMARY KEY AUTO_INCREMENT,
+    assessment_id INT NOT NULL,
+    user_id INT,
+    guest_name VARCHAR(100),
+    guest_email VARCHAR(100),
+    start_time DATETIME,
+    end_time DATETIME,
+    score DECIMAL(6,2),
+    percentage DECIMAL(5,2),
+    status ENUM('in_progress','completed','abandoned','timeout') DEFAULT 'in_progress',
+    ip_address VARCHAR(45),
+    FOREIGN KEY (assessment_id) REFERENCES assessments(assessment_id),
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+
+Why this table exists
+
+    Tracks each test attempt (student + guest).
+
+Why each column
+
+    guest_*: guest test support.
+
+    score / percentage: analytics.
+
+    status: timeout & resume logic.
+
+    ip_address: cheating detection.
+
+Answers Table
+
+CREATE TABLE answers (
+    answer_id INT PRIMARY KEY AUTO_INCREMENT,
+    attempt_id INT NOT NULL,
+    question_id INT NOT NULL,
+    selected_answer TEXT,
+    is_correct BOOLEAN,
+    marks_obtained DECIMAL(5,2),
+    time_taken_seconds INT,
+    answered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (attempt_id) REFERENCES assessment_attempts(attempt_id) ON DELETE CASCADE,
+    FOREIGN KEY (question_id) REFERENCES questions(question_id)
+);
+
+Why this table exists
+
+    Stores auto-saved answers per question.
+
+Why each column
+
+    time_taken_seconds: behavior analytics.
+
+    is_correct: fast scoring.
+
+    marks_obtained: partial marking support.
+
+Resources Table
+
+CREATE TABLE training_materials (
+    material_id INT PRIMARY KEY AUTO_INCREMENT,
+    title VARCHAR(200),
+    description TEXT,
+    material_type ENUM('pdf','video','link','article'),
+    file_path VARCHAR(255),
+    external_url VARCHAR(255),
+    category VARCHAR(50),
+    difficulty ENUM('beginner','intermediate','advanced'),
+    uploaded_by INT,
+    is_public BOOLEAN DEFAULT TRUE,
+    views INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (uploaded_by) REFERENCES users(user_id)
+);
+
+Why this table exists
+
+    Central repository for training content.
+
+Why each column
+
+    material_type: rendering logic.
+
+    file_path / external_url: flexible storage.
+
+    views: popularity tracking.
+
+Notifications Table
+
+CREATE TABLE notifications (
+    notification_id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    title VARCHAR(150),
+    message TEXT,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+
+Why this table exists
+
+    Email + in-app alerts (OTP, results, new test).
+
+System Settings Table
+
+CREATE TABLE system_settings (
+    setting_key VARCHAR(50) PRIMARY KEY,
+    setting_value TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+Why this table exists
+
+    Central config (OTP expiry, max attempts, maintenance mode).
+
