@@ -292,3 +292,456 @@ Why this table exists
 
     Central config (OTP expiry, max attempts, maintenance mode).
 
+From Claude
+
+-- Enhanced Database Schema for PTA (Placement Training & Assessment)
+-- Database name: pta
+
+-- =====================================================
+-- CORE USER MANAGEMENT
+-- =====================================================
+
+CREATE TABLE users (
+    user_id INT PRIMARY KEY AUTO_INCREMENT,
+    full_name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    user_type ENUM('student','teacher','admin') NOT NULL,
+    department VARCHAR(50),
+    registration_number VARCHAR(50) UNIQUE,
+    is_verified BOOLEAN DEFAULT FALSE,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_login TIMESTAMP NULL,
+    profile_image VARCHAR(255),
+    INDEX idx_email (email),
+    INDEX idx_user_type (user_type),
+    INDEX idx_department (department),
+    INDEX idx_registration_number (registration_number)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- NEW: Email verification tokens
+CREATE TABLE email_verification_tokens (
+    token_id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    token VARCHAR(64) UNIQUE NOT NULL,
+    expires_at DATETIME NOT NULL,
+    is_used BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    INDEX idx_token (token),
+    INDEX idx_expires (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE password_reset_otps (
+    otp_id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    otp_code VARCHAR(10) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    is_used BOOLEAN DEFAULT FALSE,
+    request_ip VARCHAR(45),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    INDEX idx_otp_code (otp_code),
+    INDEX idx_user_expires (user_id, expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE login_activity (
+    log_id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    is_success BOOLEAN,
+    failure_reason VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    INDEX idx_user_created (user_id, created_at),
+    INDEX idx_ip_created (ip_address, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- ASSESSMENT MANAGEMENT
+-- =====================================================
+
+CREATE TABLE assessments (
+    assessment_id INT PRIMARY KEY AUTO_INCREMENT,
+    title VARCHAR(200) NOT NULL,
+    description TEXT,
+    created_by INT NOT NULL,
+    category VARCHAR(50),
+    difficulty ENUM('easy','medium','hard') DEFAULT 'medium',
+    duration_minutes INT NOT NULL,
+    total_marks INT NOT NULL,
+    passing_marks INT NOT NULL,
+    
+    -- NEW: Scheduling fields
+    available_from DATETIME,
+    available_until DATETIME,
+    
+    -- NEW: Attempt controls
+    max_attempts INT DEFAULT 1,
+    show_results_immediately BOOLEAN DEFAULT TRUE,
+    show_correct_answers BOOLEAN DEFAULT TRUE,
+    
+    -- NEW: Randomization
+    randomize_questions BOOLEAN DEFAULT FALSE,
+    randomize_options BOOLEAN DEFAULT FALSE,
+    questions_per_attempt INT, -- NULL means all questions
+    
+    is_public BOOLEAN DEFAULT FALSE,
+    status ENUM('draft','active','archived','scheduled') DEFAULT 'draft',
+    instructions TEXT,
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (created_by) REFERENCES users(user_id),
+    INDEX idx_status (status),
+    INDEX idx_category (category),
+    INDEX idx_created_by (created_by),
+    INDEX idx_available_dates (available_from, available_until)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- NEW: Assessment access control (who can take which assessment)
+CREATE TABLE assessment_access (
+    access_id INT PRIMARY KEY AUTO_INCREMENT,
+    assessment_id INT NOT NULL,
+    user_id INT,
+    department VARCHAR(50),
+    registration_pattern VARCHAR(50), -- e.g., "2024%", "CS%"
+    access_type ENUM('allow','deny') DEFAULT 'allow',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (assessment_id) REFERENCES assessments(assessment_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    INDEX idx_assessment (assessment_id),
+    INDEX idx_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE questions (
+    question_id INT PRIMARY KEY AUTO_INCREMENT,
+    assessment_id INT NOT NULL,
+    question_type ENUM('mcq','multiple_select','true_false','short_answer','fill_blank','match') NOT NULL,
+    question_text TEXT NOT NULL,
+    marks INT NOT NULL,
+    negative_marks DECIMAL(4,2) DEFAULT 0, -- NEW: Negative marking
+    
+    option_a TEXT,
+    option_b TEXT,
+    option_c TEXT,
+    option_d TEXT,
+    option_e TEXT,
+    
+    correct_answer TEXT NOT NULL,
+    explanation TEXT,
+    
+    -- NEW: Media support
+    question_image VARCHAR(255),
+    
+    topic VARCHAR(100),
+    question_order INT,
+    difficulty ENUM('easy','medium','hard') DEFAULT 'medium', -- NEW
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (assessment_id) REFERENCES assessments(assessment_id) ON DELETE CASCADE,
+    INDEX idx_assessment (assessment_id),
+    INDEX idx_topic (topic),
+    INDEX idx_order (assessment_id, question_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- NEW: Track which questions were shown in each attempt (for randomization)
+CREATE TABLE attempt_questions (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    attempt_id INT NOT NULL,
+    question_id INT NOT NULL,
+    question_order INT NOT NULL,
+    FOREIGN KEY (attempt_id) REFERENCES assessment_attempts(attempt_id) ON DELETE CASCADE,
+    FOREIGN KEY (question_id) REFERENCES questions(question_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_attempt_question (attempt_id, question_id),
+    INDEX idx_attempt (attempt_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE assessment_attempts (
+    attempt_id INT PRIMARY KEY AUTO_INCREMENT,
+    assessment_id INT NOT NULL,
+    user_id INT,
+    
+    -- Guest support
+    guest_name VARCHAR(100),
+    guest_email VARCHAR(100),
+    guest_token VARCHAR(64), -- NEW: For guest session tracking
+    
+    attempt_number INT DEFAULT 1, -- NEW: Track attempt count
+    
+    start_time DATETIME,
+    end_time DATETIME,
+    submitted_at DATETIME, -- NEW: Separate from end_time
+    
+    score DECIMAL(6,2),
+    percentage DECIMAL(5,2),
+    total_questions INT, -- NEW: For randomized assessments
+    correct_answers INT, -- NEW
+    wrong_answers INT, -- NEW
+    unanswered INT, -- NEW
+    
+    status ENUM('in_progress','completed','abandoned','timeout','under_review') DEFAULT 'in_progress',
+    
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    browser_fingerprint VARCHAR(255), -- NEW: Additional security
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (assessment_id) REFERENCES assessments(assessment_id),
+    FOREIGN KEY (user_id) REFERENCES users(user_id),
+    INDEX idx_assessment (assessment_id),
+    INDEX idx_user (user_id),
+    INDEX idx_status (status),
+    INDEX idx_guest_token (guest_token)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE answers (
+    answer_id INT PRIMARY KEY AUTO_INCREMENT,
+    attempt_id INT NOT NULL,
+    question_id INT NOT NULL,
+    selected_answer TEXT,
+    is_correct BOOLEAN,
+    marks_obtained DECIMAL(5,2),
+    time_taken_seconds INT,
+    
+    -- NEW: Review support
+    is_flagged BOOLEAN DEFAULT FALSE,
+    review_notes TEXT,
+    
+    answered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (attempt_id) REFERENCES assessment_attempts(attempt_id) ON DELETE CASCADE,
+    FOREIGN KEY (question_id) REFERENCES questions(question_id),
+    UNIQUE KEY unique_attempt_question_answer (attempt_id, question_id),
+    INDEX idx_attempt (attempt_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- NEW: For tracking proctoring/anti-cheat events
+CREATE TABLE proctoring_events (
+    event_id INT PRIMARY KEY AUTO_INCREMENT,
+    attempt_id INT NOT NULL,
+    event_type ENUM('tab_switch','window_blur','copy','paste','right_click','fullscreen_exit','multiple_faces','no_face') NOT NULL,
+    event_data JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (attempt_id) REFERENCES assessment_attempts(attempt_id) ON DELETE CASCADE,
+    INDEX idx_attempt (attempt_id),
+    INDEX idx_event_type (event_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- TRAINING MATERIALS
+-- =====================================================
+
+CREATE TABLE training_materials (
+    material_id INT PRIMARY KEY AUTO_INCREMENT,
+    title VARCHAR(200) NOT NULL,
+    description TEXT,
+    material_type ENUM('pdf','video','link','article','quiz') NOT NULL,
+    file_path VARCHAR(255),
+    external_url VARCHAR(255),
+    file_size BIGINT, -- NEW: In bytes
+    
+    category VARCHAR(50),
+    difficulty ENUM('beginner','intermediate','advanced'),
+    
+    uploaded_by INT,
+    is_public BOOLEAN DEFAULT TRUE,
+    
+    views INT DEFAULT 0,
+    downloads INT DEFAULT 0, -- NEW
+    
+    -- NEW: Content organization
+    tags JSON, -- Array of tags for better search
+    prerequisites TEXT, -- Required knowledge
+    estimated_time_minutes INT, -- Time to complete
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (uploaded_by) REFERENCES users(user_id),
+    INDEX idx_category (category),
+    INDEX idx_material_type (material_type),
+    INDEX idx_uploaded_by (uploaded_by)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- NEW: Track user progress on training materials
+CREATE TABLE material_progress (
+    progress_id INT PRIMARY KEY AUTO_INCREMENT,
+    material_id INT NOT NULL,
+    user_id INT NOT NULL,
+    progress_percentage INT DEFAULT 0,
+    is_completed BOOLEAN DEFAULT FALSE,
+    last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    completed_at DATETIME,
+    FOREIGN KEY (material_id) REFERENCES training_materials(material_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_user_material (user_id, material_id),
+    INDEX idx_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- FILE MANAGEMENT
+-- =====================================================
+
+-- NEW: Centralized file tracking
+CREATE TABLE uploaded_files (
+    file_id INT PRIMARY KEY AUTO_INCREMENT,
+    original_filename VARCHAR(255) NOT NULL,
+    stored_filename VARCHAR(255) NOT NULL,
+    file_path VARCHAR(500) NOT NULL,
+    file_type VARCHAR(50),
+    mime_type VARCHAR(100),
+    file_size BIGINT,
+    uploaded_by INT NOT NULL,
+    entity_type ENUM('question','material','user_profile','assessment','other'),
+    entity_id INT,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (uploaded_by) REFERENCES users(user_id),
+    INDEX idx_entity (entity_type, entity_id),
+    INDEX idx_uploaded_by (uploaded_by)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- NOTIFICATIONS & COMMUNICATION
+-- =====================================================
+
+CREATE TABLE notifications (
+    notification_id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    title VARCHAR(150) NOT NULL,
+    message TEXT,
+    notification_type ENUM('info','success','warning','error','assessment','result','material') DEFAULT 'info',
+    related_entity_type ENUM('assessment','material','attempt','user'),
+    related_entity_id INT,
+    is_read BOOLEAN DEFAULT FALSE,
+    read_at DATETIME,
+    action_url VARCHAR(255), -- NEW: Link to take action
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    INDEX idx_user_read (user_id, is_read),
+    INDEX idx_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- NEW: Email queue for async sending
+CREATE TABLE email_queue (
+    email_id INT PRIMARY KEY AUTO_INCREMENT,
+    recipient_email VARCHAR(100) NOT NULL,
+    recipient_name VARCHAR(100),
+    subject VARCHAR(200) NOT NULL,
+    body TEXT NOT NULL,
+    email_type ENUM('verification','password_reset','result','notification','reminder'),
+    status ENUM('pending','sent','failed') DEFAULT 'pending',
+    attempts INT DEFAULT 0,
+    error_message TEXT,
+    sent_at DATETIME,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_status (status),
+    INDEX idx_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- ANALYTICS & REPORTING
+-- =====================================================
+
+-- NEW: Track student performance over time
+CREATE TABLE performance_analytics (
+    analytics_id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    assessment_id INT NOT NULL,
+    attempt_id INT NOT NULL,
+    
+    -- Performance metrics
+    score DECIMAL(6,2),
+    percentage DECIMAL(5,2),
+    time_taken_minutes INT,
+    rank INT, -- Rank among all attempts
+    
+    -- Topic-wise analysis
+    topic_scores JSON, -- {topic: {correct, total, percentage}}
+    difficulty_scores JSON, -- {easy, medium, hard}
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (assessment_id) REFERENCES assessments(assessment_id) ON DELETE CASCADE,
+    FOREIGN KEY (attempt_id) REFERENCES assessment_attempts(attempt_id) ON DELETE CASCADE,
+    INDEX idx_user (user_id),
+    INDEX idx_assessment (assessment_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- NEW: Track overall system usage
+CREATE TABLE system_analytics (
+    stat_id INT PRIMARY KEY AUTO_INCREMENT,
+    stat_date DATE NOT NULL,
+    metric_name VARCHAR(100) NOT NULL,
+    metric_value DECIMAL(15,2),
+    metadata JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_date_metric (stat_date, metric_name),
+    INDEX idx_date (stat_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- SYSTEM CONFIGURATION
+-- =====================================================
+
+CREATE TABLE system_settings (
+    setting_key VARCHAR(50) PRIMARY KEY,
+    setting_value TEXT,
+    setting_type ENUM('string','number','boolean','json') DEFAULT 'string',
+    description TEXT,
+    is_editable BOOLEAN DEFAULT TRUE,
+    updated_by INT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (updated_by) REFERENCES users(user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- NEW: Audit log for sensitive operations
+CREATE TABLE audit_logs (
+    log_id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT,
+    action VARCHAR(100) NOT NULL,
+    entity_type VARCHAR(50),
+    entity_id INT,
+    old_values JSON,
+    new_values JSON,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id),
+    INDEX idx_user_action (user_id, action),
+    INDEX idx_entity (entity_type, entity_id),
+    INDEX idx_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- INITIAL SYSTEM SETTINGS
+-- =====================================================
+
+INSERT INTO system_settings (setting_key, setting_value, setting_type, description, is_editable) VALUES
+('otp_expiry_minutes', '15', 'number', 'OTP expiration time in minutes', TRUE),
+('max_login_attempts', '5', 'number', 'Maximum failed login attempts before lockout', TRUE),
+('lockout_duration_minutes', '30', 'number', 'Account lockout duration in minutes', TRUE),
+('session_timeout_minutes', '60', 'number', 'Session timeout in minutes', TRUE),
+('maintenance_mode', 'false', 'boolean', 'Enable maintenance mode', TRUE),
+('allow_guest_tests', 'true', 'boolean', 'Allow guest users to take public tests', TRUE),
+('max_file_size_mb', '10', 'number', 'Maximum file upload size in MB', TRUE),
+('results_retention_days', '365', 'number', 'How long to keep assessment results', TRUE),
+('enable_proctoring', 'false', 'boolean', 'Enable proctoring features', TRUE),
+('smtp_configured', 'false', 'boolean', 'Is SMTP email configured', FALSE);
+
+-- =====================================================
+-- INDEXES FOR PERFORMANCE (Additional composite indexes)
+-- =====================================================
+
+-- Frequently queried combinations
+CREATE INDEX idx_user_active_type ON users(is_active, user_type);
+CREATE INDEX idx_assessment_status_public ON assessments(status, is_public);
+CREATE INDEX idx_attempt_user_assessment ON assessment_attempts(user_id, assessment_id, created_at);
+CREATE INDEX idx_notification_user_unread ON notifications(user_id, is_read, created_at);

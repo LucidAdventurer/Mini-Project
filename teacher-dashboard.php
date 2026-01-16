@@ -1,13 +1,23 @@
 <?php
+require "config.php";
 session_start();
 
 /* 🔒 SESSION GUARD */
-if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
+if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'teacher') {
     header("Location: index.html");
     exit;
 }
 
-/* (Optional) fetch user info later from DB using $_SESSION['uid'] */
+/* Fetch user info from database */
+$stmt = $conn->prepare("SELECT name, email FROM users WHERE uid = ?");
+$stmt->bind_param("i", $_SESSION['uid']);
+$stmt->execute();
+$result = $stmt->get_result();
+$user = $result->fetch_assoc();
+
+$userName = $user['name'] ?? 'Teacher';
+$userEmail = $user['email'] ?? '';
+$userInitials = strtoupper(substr($userName, 0, 2));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -22,8 +32,6 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
            CSS VARIABLES - Reusable values
            ============================================ */
         :root {
-            /* Colors #4facfe #00f2fe*/
-
             --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             --color-primary: #234C6A;
             --color-primary-dark: #456882;
@@ -68,8 +76,6 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
 
         /* ============================================
            NAVIGATION BAR
-           Top navigation with logo, search, and profile
-           Uses teacher theme colors (purple/orange)
            ============================================ */
         .navbar {
             background: var(--color-teacher-primary);
@@ -192,6 +198,7 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
             border-radius: 10px;
             cursor: pointer;
             transition: all 0.3s ease;
+            position: relative;
         }
 
         .profile-button:hover {
@@ -217,9 +224,111 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
             color: var(--color-text);
         }
 
+        /* Profile Dropdown */
+        .profile-dropdown {
+            position: absolute;
+            top: calc(100% + 10px);
+            right: 0;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+            min-width: 280px;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: all 0.3s ease;
+            z-index: 1001;
+        }
+
+        .profile-dropdown.active {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .profile-dropdown-header {
+            padding: 20px;
+            border-bottom: 2px solid var(--color-border);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .dropdown-avatar {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 20px;
+        }
+
+        .dropdown-user-info {
+            flex: 1;
+        }
+
+        .dropdown-user-name {
+            font-weight: 700;
+            font-size: 16px;
+            color: var(--color-text);
+            margin-bottom: 4px;
+        }
+
+        .dropdown-user-email {
+            font-size: 13px;
+            color: var(--color-text-light);
+        }
+
+        .profile-dropdown-menu {
+            padding: 10px;
+        }
+
+        .dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            color: var(--color-text);
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .dropdown-item:hover {
+            background: linear-gradient(135deg, rgba(46, 7, 63, 0.1), rgba(173, 73, 225, 0.1));
+            color: var(--color-teacher-primary);
+        }
+
+        .dropdown-item-icon {
+            font-size: 18px;
+            width: 20px;
+            text-align: center;
+        }
+
+        .dropdown-divider {
+            height: 1px;
+            background: var(--color-border);
+            margin: 8px 0;
+        }
+
+        .dropdown-item.logout {
+            color: var(--color-error);
+        }
+
+        .dropdown-item.logout:hover {
+            background: rgba(245, 101, 101, 0.1);
+            color: var(--color-error);
+        }
+
         /* ============================================
            MAIN CONTAINER
-           Dashboard content wrapper
            ============================================ */
         .container {
             max-width: 1400px;
@@ -263,7 +372,6 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
             font-size: 28px;
             font-weight: 700;
             color: var(--color-teacher-primary);
-            /* Teacher theme */
             display: block;
         }
 
@@ -274,87 +382,7 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
         }
 
         /* ============================================
-           PERFORMANCE OVERVIEW CARDS
-           Quick statistics display
-           ============================================ */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .stat-card {
-            background: white;
-            border-radius: 16px;
-            padding: 25px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
-        }
-
-        /* Decorative gradient background */
-        .stat-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            right: 0;
-            width: 100px;
-            height: 100px;
-            background: linear-gradient(135deg, rgba(250, 112, 154, 0.1), transparent);
-            border-radius: 50%;
-            transform: translate(30%, -30%);
-        }
-
-        .stat-card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-
-        .stat-card-title {
-            font-size: 14px;
-            color: #718096;
-            font-weight: 600;
-        }
-
-        .stat-card-icon {
-            width: 45px;
-            height: 45px;
-            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 20px;
-        }
-
-        .stat-card-value {
-            font-size: 36px;
-            font-weight: 700;
-            color: #2d3748;
-            margin-bottom: 5px;
-        }
-
-        .stat-card-change {
-            font-size: 13px;
-            color: #48bb78;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        /* ============================================
            MAIN CONTENT GRID
-           Assessments and student performance
            ============================================ */
         .main-content {
             display: grid;
@@ -391,7 +419,6 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
 
         /* ============================================
            CREATE ASSESSMENT BUTTON
-           Prominent CTA for creating new tests
            ============================================ */
         .create-assessment-btn {
             padding: 12px 30px;
@@ -416,7 +443,6 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
 
         /* ============================================
            MY ASSESSMENTS SECTION
-           List of created tests
            ============================================ */
         .assessments-section {
             background: white;
@@ -600,8 +626,7 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
         }
 
         /* ============================================
-           SIDEBAR - Recent Activity & Analytics
-           Right sidebar with updates
+           SIDEBAR
            ============================================ */
         .sidebar {
             display: flex;
@@ -722,7 +747,6 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
 
         /* ============================================
            FLOATING ACTION BUTTON
-           Bottom right corner quick access
            ============================================ */
         .fab-container {
             position: fixed;
@@ -755,7 +779,6 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
 
         /* ============================================
            RESPONSIVE DESIGN
-           Mobile and tablet adjustments
            ============================================ */
         @media (max-width: 1024px) {
             .main-content {
@@ -782,10 +805,6 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
                 gap: 20px;
             }
 
-            .stats-grid {
-                grid-template-columns: 1fr;
-            }
-
             .assessment-meta {
                 flex-direction: column;
                 gap: 10px;
@@ -798,11 +817,14 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
             .profile-name {
                 display: none;
             }
+
+            .profile-dropdown {
+                right: -10px;
+            }
         }
 
         /* ============================================
            LOADING ANIMATION
-           For dynamic content loading
            ============================================ */
         .loading {
             display: none;
@@ -834,7 +856,6 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
 <body>
     <!-- ============================================
          NAVIGATION BAR
-         Top navigation with teacher theme
          ============================================ -->
     <nav class="navbar">
         <a href="teacher-dashboard.php" class="navbar-brand">
@@ -857,9 +878,39 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
             </button>
 
             <!-- Profile dropdown button -->
-            <button class="profile-button" onclick="toggleProfileMenu()" aria-label="Profile menu" aria-expanded="false">
-                <div class="profile-avatar" aria-hidden="true">DR</div>
-                <span class="profile-name">Dr. Rajesh Kumar</span>
+            <button class="profile-button" onclick="toggleProfileDropdown()" aria-label="Profile menu" aria-expanded="false">
+                <div class="profile-avatar" aria-hidden="true"><?php echo $userInitials; ?></div>
+                <span class="profile-name"><?php echo htmlspecialchars($userName); ?></span>
+                
+                <!-- Profile Dropdown Menu -->
+                <div class="profile-dropdown" id="profileDropdown">
+                    <div class="profile-dropdown-header">
+                        <div class="dropdown-avatar"><?php echo $userInitials; ?></div>
+                        <div class="dropdown-user-info">
+                            <div class="dropdown-user-name"><?php echo htmlspecialchars($userName); ?></div>
+                            <div class="dropdown-user-email"><?php echo htmlspecialchars($userEmail); ?></div>
+                        </div>
+                    </div>
+                    <div class="profile-dropdown-menu">
+                        <a href="teacher-profile.php" class="dropdown-item">
+                            <span class="dropdown-item-icon">👤</span>
+                            <span>My Profile</span>
+                        </a>
+                        <a href="teacher-classes.php" class="dropdown-item">
+                            <span class="dropdown-item-icon">👥</span>
+                            <span>View Classes</span>
+                        </a>
+                        <a href="teacher-assessments.php" class="dropdown-item">
+                            <span class="dropdown-item-icon">📝</span>
+                            <span>My Assessments</span>
+                        </a>
+                        <div class="dropdown-divider"></div>
+                        <button onclick="handleLogout()" class="dropdown-item logout">
+                            <span class="dropdown-item-icon">🚪</span>
+                            <span>Logout</span>
+                        </button>
+                    </div>
+                </div>
             </button>
         </div>
     </nav>
@@ -871,7 +922,7 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
         <!-- Welcome section with quick stats -->
         <div class="welcome-section">
             <div class="welcome-content">
-                <h1>Welcome back, Dr. Kumar! 👨‍🏫</h1>
+                <h1>Welcome back, <?php echo htmlspecialchars($userName); ?>! 👨‍🏫</h1>
                 <p>Manage your assessments and track student performance</p>
             </div>
             <div class="quick-stats">
@@ -886,53 +937,6 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
                 <div class="stat-item">
                     <span class="stat-number">1,248</span>
                     <span class="stat-label">Submissions</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Performance overview cards -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-card-header">
-                    <span class="stat-card-title">Total Assessments</span>
-                    <div class="stat-card-icon">📝</div>
-                </div>
-                <div class="stat-card-value">23</div>
-                <div class="stat-card-change">
-                    <span>↗</span> 3 created this month
-                </div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-card-header">
-                    <span class="stat-card-title">Avg. Class Score</span>
-                    <div class="stat-card-icon">📊</div>
-                </div>
-                <div class="stat-card-value">72%</div>
-                <div class="stat-card-change">
-                    <span>↗</span> +3% from last week
-                </div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-card-header">
-                    <span class="stat-card-title">Pending Reviews</span>
-                    <div class="stat-card-icon">⏳</div>
-                </div>
-                <div class="stat-card-value">47</div>
-                <div class="stat-card-change">
-                    Submissions to review
-                </div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-card-header">
-                    <span class="stat-card-title">Active Students</span>
-                    <div class="stat-card-icon">👥</div>
-                </div>
-                <div class="stat-card-value">342</div>
-                <div class="stat-card-change">
-                    Across all classes
                 </div>
             </div>
         </div>
@@ -970,7 +974,7 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
                         <div class="assessment-meta">
                             <div class="meta-item">
                                 <span class="meta-icon">❓</span>
-                                <span>30 Questions</span>
+ Questions</span>
                             </div>
                             <div class="meta-item">
                                 <span class="meta-icon">👥</span>
@@ -1049,9 +1053,9 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
                             </div>
                         </div>
                         <div class="assessment-actions">
-                            <button class="btn-view" onclick="viewResults(3)">View Results</button>
-                            <button class="btn-edit" onclick="editAssessment(3)">Edit</button>
-                            <button class="btn-delete" onclick="deleteAssessment(3)">Delete</button>
+                            <button class="btn-view" data-assessment-id="3">View Results</button>
+                            <button class="btn-edit" data-assessment-id="3">Edit</button>
+                            <button class="btn-delete" data-assessment-id="3">Delete</button>
                         </div>
                     </div>
 
@@ -1083,9 +1087,9 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
                             </div>
                         </div>
                         <div class="assessment-actions">
-                            <button class="btn-view" onclick="viewResults(4)">View Results</button>
-                            <button class="btn-edit" onclick="editAssessment(4)">Edit</button>
-                            <button class="btn-delete" onclick="deleteAssessment(4)">Delete</button>
+                            <button class="btn-view" data-assessment-id="4">View Results</button>
+                            <button class="btn-edit" data-assessment-id="4">Edit</button>
+                            <button class="btn-delete" data-assessment-id="4">Delete</button>
                         </div>
                     </div>
                 </div>
@@ -1173,7 +1177,6 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
     <script>
         /* ============================================
            DEBOUNCE UTILITY
-           Optimizes event handlers
            ============================================ */
         function debounce(func, wait) {
             let timeout;
@@ -1188,18 +1191,45 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
         }
 
         /* ============================================
+           PROFILE DROPDOWN TOGGLE
+           ============================================ */
+        function toggleProfileDropdown() {
+            const dropdown = document.getElementById('profileDropdown');
+            const button = document.querySelector('.profile-button');
+            
+            dropdown.classList.toggle('active');
+            
+            const isExpanded = dropdown.classList.contains('active');
+            button.setAttribute('aria-expanded', isExpanded);
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            const profileButton = document.querySelector('.profile-button');
+            const dropdown = document.getElementById('profileDropdown');
+            
+            if (!profileButton.contains(e.target) && dropdown.classList.contains('active')) {
+                dropdown.classList.remove('active');
+                profileButton.setAttribute('aria-expanded', 'false');
+            }
+        });
+        
+        function handleLogout() {
+            if (confirm('Are you sure you want to logout?')) {
+                window.location.href = 'logout.php';
+            }
+        }
+
+        /* ============================================
            ASSESSMENT FILTERING
-           Filter tests by status - optimized with event delegation
            ============================================ */
         function filterAssessments(status, targetElement) {
-            // Update active tab
             const tabs = document.querySelectorAll('.filter-tab');
             tabs.forEach(tab => tab.classList.remove('active'));
             if (targetElement) {
                 targetElement.classList.add('active');
             }
 
-            // Filter assessment cards - use class toggle for better performance
             const cards = document.querySelectorAll('.assessment-card');
             cards.forEach(card => {
                 if (status === 'all') {
@@ -1215,7 +1245,6 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
             });
         }
 
-        // Use event delegation for filter tabs
         document.addEventListener('click', function(e) {
             const filterTab = e.target.closest('.filter-tab');
             if (filterTab) {
@@ -1223,7 +1252,6 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
                 if (status) {
                     e.preventDefault();
                     filterAssessments(status, filterTab);
-                    // Update ARIA attributes for accessibility
                     document.querySelectorAll('.filter-tab').forEach(tab => {
                         tab.setAttribute('aria-selected', 'false');
                     });
@@ -1234,50 +1262,33 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
 
         /* ============================================
            VIEW RESULTS
-           Opens results analytics page for an assessment
-           SECURITY: Verify teacher owns this assessment
            ============================================ */
         function viewResults(assessmentId) {
             if (!assessmentId) return;
             console.log('Viewing results for assessment:', assessmentId);
-            // In production: window.location.href = `assessment-results.php?id=${assessmentId}`;
             alert(`Opening results analytics for assessment ${assessmentId}...\n\nWill show:\n• Student scores\n• Question-wise analysis\n• Performance trends\n• Export options`);
         }
 
         /* ============================================
            EDIT ASSESSMENT
-           Opens assessment editor
-           SECURITY: Verify teacher owns this assessment
            ============================================ */
         function editAssessment(assessmentId) {
             if (!assessmentId) return;
             console.log('Editing assessment:', assessmentId);
-            // In production: window.location.href = `edit-assessment.php?id=${assessmentId}`;
             alert(`Opening editor for assessment ${assessmentId}...\n\nWill allow editing:\n• Questions\n• Settings\n• Difficulty levels\n• Time limits`);
         }
 
         /* ============================================
            DELETE ASSESSMENT
-           Deletes an assessment with confirmation
-           SECURITY: Verify teacher owns this assessment
-           WARNING: This should be a soft delete in production
            ============================================ */
         function deleteAssessment(assessmentId) {
             if (!assessmentId) return;
-            // Confirm deletion
             if (confirm('Are you sure you want to delete this assessment?\n\nThis action cannot be undone. All student attempts and results will be permanently deleted.')) {
                 console.log('Deleting assessment:', assessmentId);
-                
-                // In production, make AJAX call to backend
-                // Show loading state
                 alert(`Assessment ${assessmentId} deleted successfully!`);
-                
-                // In production, remove card from DOM or reload page
-                // location.reload();
             }
         }
 
-        // Use event delegation for assessment action buttons
         document.addEventListener('click', function(e) {
             const assessmentId = e.target.dataset.assessmentId;
             if (!assessmentId) return;
@@ -1293,113 +1304,60 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
 
         /* ============================================
            SEARCH FUNCTIONALITY
-           Real-time search through assessments and students - optimized with debouncing
            ============================================ */
         const searchInput = document.getElementById('searchInput');
         if (searchInput) {
             const performSearch = debounce(function(e) {
                 const searchTerm = e.target.value.toLowerCase().trim();
-            const cards = document.querySelectorAll('.assessment-card');
-            
-            cards.forEach(card => {
+                const cards = document.querySelectorAll('.assessment-card');
+                
+                cards.forEach(card => {
                     const title = card.querySelector('.assessment-title')?.textContent?.toLowerCase() || '';
                     const category = card.querySelector('.assessment-category')?.textContent?.toLowerCase() || '';
-                
-                    // Use class toggle instead of inline styles for better performance
+                    
                     if (!searchTerm || title.includes(searchTerm) || category.includes(searchTerm)) {
                         card.classList.remove('hidden');
-                } else {
+                    } else {
                         card.classList.add('hidden');
-                }
-            });
-            }, 300); // 300ms debounce
+                    }
+                });
+            }, 300);
 
             searchInput.addEventListener('input', performSearch);
         }
 
         /* ============================================
            NOTIFICATION SYSTEM
-           Show notifications dropdown
            ============================================ */
         function showNotifications() {
-            // In production, this would open a dropdown with notifications
             alert('Notifications:\n\n1. 15 new submissions pending review\n2. Alice Johnson scored 100% on Python Test\n3. New student registered: Mike Brown\n4. Reminder: Review draft assessments\n5. System update scheduled for tonight');
         }
 
         /* ============================================
-           PROFILE MENU
-           Toggle user profile dropdown
-           ============================================ */
-        function toggleProfileMenu() {
-            // In production, this would show a dropdown menu with:
-            // - View Profile
-            // - Settings
-            // - My Classes
-            // - Logout
-            alert('Profile Menu:\n\n• View Profile\n• Account Settings\n• My Classes\n• Assessment Library\n• Help & Support\n• Logout');
-        }
-
-        /* ============================================
-           EXPORT RESULTS
-           Export assessment results to various formats
-           ============================================ */
-        function exportResults(assessmentId, format) {
-            console.log(`Exporting results for assessment ${assessmentId} as ${format}`);
-            // In production, call backend API to generate export file
-            alert(`Generating ${format.toUpperCase()} export...\n\nThis will include:\n• Student names and scores\n• Question-wise breakdown\n• Statistics and analytics`);
-        }
-
-        /* ============================================
-           BULK ACTIONS
-           Perform actions on multiple assessments
-           ============================================ */
-        function bulkAction(action) {
-            // Get selected assessments (would need checkboxes in production)
-            console.log(`Performing bulk action: ${action}`);
-            alert(`Bulk ${action} feature\n\nWould allow:\n• Select multiple assessments\n• Activate/deactivate\n• Delete\n• Export results`);
-        }
-
-        /* ============================================
            PAGE LOAD ANIMATIONS
-           Smooth entrance effects - optimized
            ============================================ */
         window.addEventListener('load', function() {
             console.log('Teacher Dashboard loaded successfully');
             
-            // Animate stat cards - use requestAnimationFrame for better performance
             const statCards = document.querySelectorAll('.stat-card');
             statCards.forEach((card, index) => {
                 requestAnimationFrame(() => {
-                setTimeout(() => {
-                    card.style.animation = 'fadeInUp 0.5s ease forwards';
-                }, index * 100);
+                    setTimeout(() => {
+                        card.style.animation = 'fadeInUp 0.5s ease forwards';
+                    }, index * 100);
                 });
             });
         });
 
         /* ============================================
-           AUTO-REFRESH SUBMISSIONS
-           Periodically check for new submissions
-           ============================================ */
-        // In production, poll backend every 30 seconds for new submissions
-        // setInterval(function() {
-        //     // Make AJAX call to check for new submissions
-        //     console.log('Checking for new submissions...');
-        //     // Update recent submissions list if new ones found
-        // }, 30000);
-
-        /* ============================================
            KEYBOARD SHORTCUTS
-           Enhanced user experience for teachers
            ============================================ */
         document.addEventListener('keydown', function(e) {
-            // Ctrl/Cmd + N: Create new assessment
             if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
                 e.preventDefault();
                 window.location.href = 'create-assessment.php';
             }
             
-            // Ctrl/Cmd + R: View reports
             if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
                 e.preventDefault();
                 window.location.href = 'reports.php';
@@ -1408,7 +1366,6 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
 
         /* ============================================
            ADD ENTRANCE ANIMATIONS
-           CSS keyframes for smooth appearance
            ============================================ */
         const style = document.createElement('style');
         style.textContent = `
@@ -1428,36 +1385,6 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
             }
         `;
         document.head.appendChild(style);
-
-        /* ============================================
-           BACKEND INTEGRATION NOTES
-           When connecting to PHP backend:
-           
-           1. FETCH ASSESSMENTS:
-              - Endpoint: get-teacher-assessments.php
-              - Filter by teacher ID from session
-              - Return: Array of assessment objects
-           
-           2. DELETE ASSESSMENT:
-              - Endpoint: delete-assessment.php
-              - Method: POST
-              - Verify ownership before deletion
-              - Use soft delete (set active=0) rather than hard delete
-           
-           3. GET STATISTICS:
-              - Endpoint: get-teacher-stats.php
-              - Return: Total assessments, submissions, avg scores
-           
-           4. RECENT SUBMISSIONS:
-              - Endpoint: get-recent-submissions.php
-              - Return: Last 10 submissions with student info
-           
-           5. SECURITY REQUIREMENTS:
-              - Validate teacher session
-              - Verify assessment ownership for all operations
-              - Use prepared statements for SQL queries
-              - Implement CSRF tokens for delete/edit actions
-           ============================================ */
     </script>
 </body>
 </html>
