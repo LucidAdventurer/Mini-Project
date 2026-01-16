@@ -1,9 +1,20 @@
 <?php
+require "config.php";
 session_start();
 if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
     header("Location: index.html");
     exit;
 }
+
+$stmt = $conn->prepare("SELECT name, email FROM users WHERE uid = ?");
+$stmt->bind_param("i", $_SESSION['uid']);
+$stmt->execute();
+$result = $stmt->get_result();
+$user = $result->fetch_assoc();
+
+$userName = $user['name'] ?? 'Teacher';
+$userEmail = $user['email'] ?? '';
+$userInitials = strtoupper(substr($userName, 0, 2));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -172,6 +183,23 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
             padding: 20px;
             border-bottom: 1px solid #e2e8f0;
         }
+        .dropdown-avatar {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 20px;
+        }
+
+        .dropdown-user-info {
+            flex: 1;
+        }
+
         .dropdown-user-name {
             font-weight: 700;
             font-size: 16px;
@@ -556,28 +584,29 @@ if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
                 <span>🔔</span>
                 <div class="notification-badge">3</div>
             </button>
-            <div class="profile-dropdown-container">
-                <button class="profile-button" onclick="toggleProfileDropdown()">
-                    <div class="profile-avatar">JK</div>
-                    <span class="profile-name">Justin Kurian</span>
-                    <span class="dropdown-arrow">▼</span>
-                </button>
-                <div class="profile-dropdown" id="profileDropdown">
-                    <div class="dropdown-header">
-                        <div class="dropdown-user-name">Justin Kurian</div>
-                        <div class="dropdown-user-email">justin.kurian@example.com</div>
+            <button class="profile-button" onclick="toggleProfileDropdown()" aria-label="Profile menu" aria-expanded="false">
+                <div class="profile-avatar" aria-hidden="true"><?php echo $userInitials; ?></div>
+                <span class="profile-name"><?php echo htmlspecialchars($userName); ?></span>
+                <span class="dropdown-arrow">▼</span>
+            </button>
+            <div class="profile-dropdown" id="profileDropdown">
+                <div class="dropdown-header">
+                    <div class="dropdown-avatar"><?php echo $userInitials; ?></div>
+                    <div class="dropdown-user-info">
+                        <div class="dropdown-user-name"><?php echo htmlspecialchars($userName); ?></div>
+                        <div class="dropdown-user-email"><?php echo htmlspecialchars($userEmail); ?></div>
                     </div>
-                    <div class="dropdown-menu">
-                        <a href="view-profile.php" class="dropdown-item">
-                            <span class="dropdown-item-icon">👤</span>
-                            <span>View Profile</span>
-                        </a>
-                        <div class="dropdown-divider"></div>
-                        <button onclick="handleLogout()" class="dropdown-item logout">
-                            <span class="dropdown-item-icon">🚪</span>
-                            <span>Logout</span>
-                        </button>
-                    </div>
+                </div>
+                <div class="dropdown-menu">
+                    <a href="view-profile.php" class="dropdown-item">
+                        <span class="dropdown-item-icon">👤</span>
+                        <span>View Profile</span>
+                    </a>
+                    <div class="dropdown-divider"></div>
+                    <a onclick="handleLogout()" class="dropdown-item logout">
+                        <span class="dropdown-item-icon">🚪</span>
+                        <span>Logout</span>
+                    </a>
                 </div>
             </div>
         </div>

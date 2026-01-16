@@ -881,7 +881,7 @@ $userInitials = strtoupper(substr($userName, 0, 2));
             <button class="profile-button" onclick="toggleProfileDropdown()" aria-label="Profile menu" aria-expanded="false">
                 <div class="profile-avatar" aria-hidden="true"><?php echo $userInitials; ?></div>
                 <span class="profile-name"><?php echo htmlspecialchars($userName); ?></span>
-                
+                <span class="dropdown-arrow">▼</span>
                 <!-- Profile Dropdown Menu -->
                 <div class="profile-dropdown" id="profileDropdown">
                     <div class="profile-dropdown-header">
@@ -905,10 +905,10 @@ $userInitials = strtoupper(substr($userName, 0, 2));
                             <span>My Assessments</span>
                         </a>
                         <div class="dropdown-divider"></div>
-                        <button onclick="handleLogout()" class="dropdown-item logout">
+                        <a onclick="handleLogout()" class="dropdown-item logout">
                             <span class="dropdown-item-icon">🚪</span>
                             <span>Logout</span>
-                        </button>
+                        </a>
                     </div>
                 </div>
             </button>
