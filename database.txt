@@ -270,27 +270,6 @@ Why each column exists
 
     question_order: rendering order.
 
--- NEW: Track which questions were shown in each attempt (for randomization)
-CREATE TABLE attempt_questions (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    attempt_id INT NOT NULL,
-    question_id INT NOT NULL,
-    question_order INT NOT NULL,
-    FOREIGN KEY (attempt_id) REFERENCES assessment_attempts(attempt_id) ON DELETE CASCADE,
-    FOREIGN KEY (question_id) REFERENCES questions(question_id) ON DELETE CASCADE,
-    UNIQUE KEY unique_attempt_question (attempt_id, question_id),
-    INDEX idx_attempt (attempt_id)
-);
-
-Why this table exists
-    Locks randomized question sets per attempt.
-
-Why each column exists
-
-    question_order: preserves order.
-
-    unique_attempt_question: prevents duplication.
-
 CREATE TABLE assessment_attempts (
     attempt_id INT PRIMARY KEY AUTO_INCREMENT,
     assessment_id INT NOT NULL,
@@ -340,6 +319,26 @@ Why each column exists
 
     browser_fingerprint: cheating detection.
 
+-- NEW: Track which questions were shown in each attempt (for randomization)
+CREATE TABLE attempt_questions (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    attempt_id INT NOT NULL,
+    question_id INT NOT NULL,
+    question_order INT NOT NULL,
+    FOREIGN KEY (attempt_id) REFERENCES assessment_attempts(attempt_id) ON DELETE CASCADE,
+    FOREIGN KEY (question_id) REFERENCES questions(question_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_attempt_question (attempt_id, question_id),
+    INDEX idx_attempt (attempt_id)
+);
+
+Why this table exists
+    Locks randomized question sets per attempt.
+
+Why each column exists
+
+    question_order: preserves order.
+
+    unique_attempt_question: prevents duplication.
 
 CREATE TABLE answers (
     answer_id INT PRIMARY KEY AUTO_INCREMENT,
