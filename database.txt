@@ -1,299 +1,3 @@
-Database name - "pta"
-
-Users Table
-
-CREATE TABLE users (
-    user_id INT PRIMARY KEY AUTO_INCREMENT,
-    full_name VARCHAR(100) NOT NULL,
-    email VARCHAR(100) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    user_type ENUM('student','teacher','admin') NOT NULL,
-    department VARCHAR(50),
-    registration_number VARCHAR(50) UNIQUE,
-    is_verified BOOLEAN DEFAULT FALSE,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_login TIMESTAMP NULL
-);
-
-Why this table exists
-
-    Central identity store for all authenticated users.
-
-Why each column
-
-    user_id: internal stable reference.
-
-    full_name: display + reports.
-
-    email: login + OTP delivery.
-
-    password_hash: secure authentication.
-
-    user_type: role-based access control.
-
-    department: filtering, analytics.
-
-    registration_number: academic identity (students).
-
-    is_verified: email/OTP verification.
-
-    is_active: soft disable accounts.
-
-    created_at: audit.
-
-    last_login: security + analytics.
-
-Forgot Password Table
-
-CREATE TABLE password_reset_otps (
-    otp_id INT PRIMARY KEY AUTO_INCREMENT,
-    user_id INT NOT NULL,
-    otp_code VARCHAR(10) NOT NULL,
-    expires_at DATETIME NOT NULL,
-    is_used BOOLEAN DEFAULT FALSE,
-    request_ip VARCHAR(45),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
-);
-
-Why this table exists
-
-    Enables OTP-based forgot password flow.
-
-Why each column
-
-    otp_code: actual OTP sent to email.
-
-    expires_at: automatic invalidation.
-
-    is_used: prevents reuse.
-
-    request_ip: abuse detection.
-
-    created_at: audit + rate limiting.
-
-Login Activity Table
-
-CREATE TABLE login_activity (
-    log_id INT PRIMARY KEY AUTO_INCREMENT,
-    user_id INT NOT NULL,
-    ip_address VARCHAR(45),
-    user_agent TEXT,
-    is_success BOOLEAN,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
-);
-
-Why this table exists
-
-    Detect new login device / suspicious login.
-
-Why each column
-
-    ip_address: geo & anomaly detection.
-
-    user_agent: device fingerprint.
-
-    is_success: brute-force detection.
-
-    created_at: timeline analysis.
-
-Assessments Table
-
-CREATE TABLE assessments (
-    assessment_id INT PRIMARY KEY AUTO_INCREMENT,
-    title VARCHAR(200) NOT NULL,
-    description TEXT,
-    created_by INT NOT NULL,
-    category VARCHAR(50),
-    difficulty ENUM('easy','medium','hard') DEFAULT 'medium',
-    duration_minutes INT NOT NULL,
-    total_marks INT NOT NULL,
-    passing_marks INT NOT NULL,
-    is_public BOOLEAN DEFAULT FALSE,
-    status ENUM('draft','active','archived') DEFAULT 'draft',
-    instructions TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (created_by) REFERENCES users(user_id)
-);
-
-Why this table exists
-
-    Represents a test/assessment entity.
-
-Why each column
-
-    created_by: teacher ownership.
-
-    category: filtering/search.
-
-    duration_minutes: timer.
-
-    passing_marks: result logic.
-
-    is_public: guest access.
-
-    status: lifecycle control.
-
-Questions Table
-
-CREATE TABLE questions (
-    question_id INT PRIMARY KEY AUTO_INCREMENT,
-    assessment_id INT NOT NULL,
-    question_type ENUM('mcq','multiple_select','true_false','short_answer') NOT NULL,
-    question_text TEXT NOT NULL,
-    marks INT NOT NULL,
-    option_a TEXT,
-    option_b TEXT,
-    option_c TEXT,
-    option_d TEXT,
-    option_e TEXT,
-    correct_answer TEXT NOT NULL,
-    explanation TEXT,
-    topic VARCHAR(100),
-    question_order INT,
-    FOREIGN KEY (assessment_id) REFERENCES assessments(assessment_id) ON DELETE CASCADE
-);
-
-Why this table exists
-
-    Stores all question data including PDF-parsed questions.
-
-Why each column
-
-    question_type: evaluation logic.
-
-    options_*: MCQ flexibility.
-
-    correct_answer: auto-evaluation.
-
-    explanation: post-test learning.
-
-    topic: topic-wise analytics.
-
-    question_order: rendering order.
-
-Assessment Attempt Table
-
-CREATE TABLE assessment_attempts (
-    attempt_id INT PRIMARY KEY AUTO_INCREMENT,
-    assessment_id INT NOT NULL,
-    user_id INT,
-    guest_name VARCHAR(100),
-    guest_email VARCHAR(100),
-    start_time DATETIME,
-    end_time DATETIME,
-    score DECIMAL(6,2),
-    percentage DECIMAL(5,2),
-    status ENUM('in_progress','completed','abandoned','timeout') DEFAULT 'in_progress',
-    ip_address VARCHAR(45),
-    FOREIGN KEY (assessment_id) REFERENCES assessments(assessment_id),
-    FOREIGN KEY (user_id) REFERENCES users(user_id)
-);
-
-Why this table exists
-
-    Tracks each test attempt (student + guest).
-
-Why each column
-
-    guest_*: guest test support.
-
-    score / percentage: analytics.
-
-    status: timeout & resume logic.
-
-    ip_address: cheating detection.
-
-Answers Table
-
-CREATE TABLE answers (
-    answer_id INT PRIMARY KEY AUTO_INCREMENT,
-    attempt_id INT NOT NULL,
-    question_id INT NOT NULL,
-    selected_answer TEXT,
-    is_correct BOOLEAN,
-    marks_obtained DECIMAL(5,2),
-    time_taken_seconds INT,
-    answered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (attempt_id) REFERENCES assessment_attempts(attempt_id) ON DELETE CASCADE,
-    FOREIGN KEY (question_id) REFERENCES questions(question_id)
-);
-
-Why this table exists
-
-    Stores auto-saved answers per question.
-
-Why each column
-
-    time_taken_seconds: behavior analytics.
-
-    is_correct: fast scoring.
-
-    marks_obtained: partial marking support.
-
-Resources Table
-
-CREATE TABLE training_materials (
-    material_id INT PRIMARY KEY AUTO_INCREMENT,
-    title VARCHAR(200),
-    description TEXT,
-    material_type ENUM('pdf','video','link','article'),
-    file_path VARCHAR(255),
-    external_url VARCHAR(255),
-    category VARCHAR(50),
-    difficulty ENUM('beginner','intermediate','advanced'),
-    uploaded_by INT,
-    is_public BOOLEAN DEFAULT TRUE,
-    views INT DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (uploaded_by) REFERENCES users(user_id)
-);
-
-Why this table exists
-
-    Central repository for training content.
-
-Why each column
-
-    material_type: rendering logic.
-
-    file_path / external_url: flexible storage.
-
-    views: popularity tracking.
-
-Notifications Table
-
-CREATE TABLE notifications (
-    notification_id INT PRIMARY KEY AUTO_INCREMENT,
-    user_id INT NOT NULL,
-    title VARCHAR(150),
-    message TEXT,
-    is_read BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(user_id)
-);
-
-Why this table exists
-
-    Email + in-app alerts (OTP, results, new test).
-
-System Settings Table
-
-CREATE TABLE system_settings (
-    setting_key VARCHAR(50) PRIMARY KEY,
-    setting_value TEXT,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
-
-Why this table exists
-
-    Central config (OTP expiry, max attempts, maintenance mode).
-
-From Claude
-
 -- Enhanced Database Schema for PTA (Placement Training & Assessment)
 -- Database name: pta
 
@@ -318,9 +22,39 @@ CREATE TABLE users (
     INDEX idx_user_type (user_type),
     INDEX idx_department (department),
     INDEX idx_registration_number (registration_number)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+Why this table exists
+    Central identity store for all authenticated actors (student, teacher, admin).
+
+Why each column exists
+
+    user_id: internal primary key.
+
+    full_name: display, reports.
+
+    email: login + communication.
+
+    password_hash: secure authentication.
+
+    user_type: role-based access control.
+
+    department: filtering, access rules.
+
+    registration_number: academic identity.
+
+    is_verified: email verification state.
+
+    is_active: soft disable accounts.
+
+    profile_image: UI personalization.
+
+    created_at: audit.
+
+    last_login: security tracking.
 
 -- NEW: Email verification tokens
+
 CREATE TABLE email_verification_tokens (
     token_id INT PRIMARY KEY AUTO_INCREMENT,
     user_id INT NOT NULL,
@@ -331,7 +65,18 @@ CREATE TABLE email_verification_tokens (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
     INDEX idx_token (token),
     INDEX idx_expires (expires_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+Why this table exists
+    Manages email verification lifecycle separately from password reset.
+
+Why each column exists
+
+    token: one-time verification link.
+
+    expires_at: invalidation window.
+
+    is_used: replay protection.
 
 CREATE TABLE password_reset_otps (
     otp_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -344,7 +89,20 @@ CREATE TABLE password_reset_otps (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
     INDEX idx_otp_code (otp_code),
     INDEX idx_user_expires (user_id, expires_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+Why this table exists
+    Implements OTP-based password recovery.
+
+Why each column exists
+
+    otp_code: sent to email.
+
+    expires_at: OTP expiry.
+
+    is_used: single-use enforcement.
+
+    request_ip: abuse detection.
 
 CREATE TABLE login_activity (
     log_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -357,7 +115,20 @@ CREATE TABLE login_activity (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
     INDEX idx_user_created (user_id, created_at),
     INDEX idx_ip_created (ip_address, created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+Why this table exists
+    Detects suspicious logins and brute-force attempts.
+
+Why each column exists
+
+    ip_address: anomaly detection.
+
+    user_agent: device fingerprinting.
+
+    failure_reason: security analytics.
+
+    created_at: timeline reconstruction.
 
 -- =====================================================
 -- ASSESSMENT MANAGEMENT
@@ -373,34 +144,54 @@ CREATE TABLE assessments (
     duration_minutes INT NOT NULL,
     total_marks INT NOT NULL,
     passing_marks INT NOT NULL,
-    
-    -- NEW: Scheduling fields
     available_from DATETIME,
     available_until DATETIME,
-    
-    -- NEW: Attempt controls
     max_attempts INT DEFAULT 1,
     show_results_immediately BOOLEAN DEFAULT TRUE,
     show_correct_answers BOOLEAN DEFAULT TRUE,
-    
-    -- NEW: Randomization
     randomize_questions BOOLEAN DEFAULT FALSE,
     randomize_options BOOLEAN DEFAULT FALSE,
     questions_per_attempt INT, -- NULL means all questions
-    
     is_public BOOLEAN DEFAULT FALSE,
     status ENUM('draft','active','archived','scheduled') DEFAULT 'draft',
     instructions TEXT,
-    
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    
     FOREIGN KEY (created_by) REFERENCES users(user_id),
     INDEX idx_status (status),
     INDEX idx_category (category),
     INDEX idx_created_by (created_by),
     INDEX idx_available_dates (available_from, available_until)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+Why this table exists
+    Defines a test configuration independent of attempts.
+
+Why each column exists
+
+    created_by: ownership.
+
+    category: classification.
+
+    difficulty: baseline difficulty.
+
+    duration_minutes: timer.
+
+    total_marks: scoring.
+
+    passing_marks: result logic.
+
+    available_from / until: scheduling.
+
+    max_attempts: retry limits.
+
+    randomize_*: fairness.
+
+    questions_per_attempt: adaptive tests.
+
+    is_public: guest access.
+
+    status: lifecycle state.
 
 -- NEW: Assessment access control (who can take which assessment)
 CREATE TABLE assessment_access (
@@ -408,14 +199,27 @@ CREATE TABLE assessment_access (
     assessment_id INT NOT NULL,
     user_id INT,
     department VARCHAR(50),
-    registration_pattern VARCHAR(50), -- e.g., "2024%", "CS%"
+    registration_pattern VARCHAR(50),
     access_type ENUM('allow','deny') DEFAULT 'allow',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (assessment_id) REFERENCES assessments(assessment_id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
     INDEX idx_assessment (assessment_id),
     INDEX idx_user (user_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+Why this table exists
+    Fine-grained control over who can access which assessment.
+
+Why each column exists
+
+    user_id: per-user allow/deny.
+
+    department: batch access control.
+
+    registration_pattern: regex-like filtering.
+
+    access_type: allow vs deny.
 
 CREATE TABLE questions (
     question_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -423,31 +227,48 @@ CREATE TABLE questions (
     question_type ENUM('mcq','multiple_select','true_false','short_answer','fill_blank','match') NOT NULL,
     question_text TEXT NOT NULL,
     marks INT NOT NULL,
-    negative_marks DECIMAL(4,2) DEFAULT 0, -- NEW: Negative marking
-    
+    negative_marks DECIMAL(4,2) DEFAULT 0,
     option_a TEXT,
     option_b TEXT,
     option_c TEXT,
     option_d TEXT,
-    option_e TEXT,
-    
     correct_answer TEXT NOT NULL,
     explanation TEXT,
-    
-    -- NEW: Media support
     question_image VARCHAR(255),
-    
     topic VARCHAR(100),
     question_order INT,
-    difficulty ENUM('easy','medium','hard') DEFAULT 'medium', -- NEW
-    
+    difficulty ENUM('easy','medium','hard') DEFAULT 'medium',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
     FOREIGN KEY (assessment_id) REFERENCES assessments(assessment_id) ON DELETE CASCADE,
     INDEX idx_assessment (assessment_id),
     INDEX idx_topic (topic),
     INDEX idx_order (assessment_id, question_order)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+Why this table exists
+    Stores all assessment questions, including PDF-parsed content.
+
+Why each column exists
+
+    question_type: evaluation logic.
+
+    marks: scoring.
+
+    negative_marks: penalty logic.
+
+    option_*: MCQ support.
+
+    correct_answer: auto-grading.
+
+    explanation: learning feedback.
+
+    question_image: media support.
+
+    topic: analytics grouping.
+
+    difficulty: per-question calibration.
+
+    question_order: rendering order.
 
 -- NEW: Track which questions were shown in each attempt (for randomization)
 CREATE TABLE attempt_questions (
@@ -459,46 +280,66 @@ CREATE TABLE attempt_questions (
     FOREIGN KEY (question_id) REFERENCES questions(question_id) ON DELETE CASCADE,
     UNIQUE KEY unique_attempt_question (attempt_id, question_id),
     INDEX idx_attempt (attempt_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+Why this table exists
+    Locks randomized question sets per attempt.
+
+Why each column exists
+
+    question_order: preserves order.
+
+    unique_attempt_question: prevents duplication.
 
 CREATE TABLE assessment_attempts (
     attempt_id INT PRIMARY KEY AUTO_INCREMENT,
     assessment_id INT NOT NULL,
     user_id INT,
-    
-    -- Guest support
     guest_name VARCHAR(100),
     guest_email VARCHAR(100),
-    guest_token VARCHAR(64), -- NEW: For guest session tracking
-    
-    attempt_number INT DEFAULT 1, -- NEW: Track attempt count
-    
+    guest_token VARCHAR(64),
+    attempt_number INT DEFAULT 1,
     start_time DATETIME,
     end_time DATETIME,
-    submitted_at DATETIME, -- NEW: Separate from end_time
-    
+    submitted_at DATETIME,
     score DECIMAL(6,2),
     percentage DECIMAL(5,2),
-    total_questions INT, -- NEW: For randomized assessments
-    correct_answers INT, -- NEW
-    wrong_answers INT, -- NEW
-    unanswered INT, -- NEW
-    
+    total_questions INT,
+    correct_answers INT,
+    wrong_answers INT,
+    unanswered INT,
     status ENUM('in_progress','completed','abandoned','timeout','under_review') DEFAULT 'in_progress',
-    
     ip_address VARCHAR(45),
     user_agent TEXT,
     browser_fingerprint VARCHAR(255), -- NEW: Additional security
-    
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
     FOREIGN KEY (assessment_id) REFERENCES assessments(assessment_id),
     FOREIGN KEY (user_id) REFERENCES users(user_id),
     INDEX idx_assessment (assessment_id),
     INDEX idx_user (user_id),
     INDEX idx_status (status),
     INDEX idx_guest_token (guest_token)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+Why this table exists
+    Represents one sitting of an assessment.
+
+Why each column exists
+
+    attempt_number: retry tracking.
+
+    guest_*: guest support.
+
+    guest_token: session resume.
+
+    submitted_at: submission time.
+
+    correct/wrong/unanswered: instant analytics.
+
+    status: lifecycle state.
+
+    browser_fingerprint: cheating detection.
+
 
 CREATE TABLE answers (
     answer_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -508,18 +349,29 @@ CREATE TABLE answers (
     is_correct BOOLEAN,
     marks_obtained DECIMAL(5,2),
     time_taken_seconds INT,
-    
-    -- NEW: Review support
     is_flagged BOOLEAN DEFAULT FALSE,
     review_notes TEXT,
-    
     answered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
     FOREIGN KEY (attempt_id) REFERENCES assessment_attempts(attempt_id) ON DELETE CASCADE,
     FOREIGN KEY (question_id) REFERENCES questions(question_id),
     UNIQUE KEY unique_attempt_question_answer (attempt_id, question_id),
     INDEX idx_attempt (attempt_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+Why this table exists
+    Stores answers at question granularity.
+
+Why each column exists
+
+    selected_answer: raw response.
+
+    is_correct: grading result.
+
+    marks_obtained: partial marking.
+
+    time_taken_seconds: behavior analysis.
+
+    is_flagged: review support.
 
 -- NEW: For tracking proctoring/anti-cheat events
 CREATE TABLE proctoring_events (
@@ -531,7 +383,16 @@ CREATE TABLE proctoring_events (
     FOREIGN KEY (attempt_id) REFERENCES assessment_attempts(attempt_id) ON DELETE CASCADE,
     INDEX idx_attempt (attempt_id),
     INDEX idx_event_type (event_type)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+Why this table exists
+    Logs cheating-related behaviors.
+
+Why each column exists
+
+    event_type: standardized violations.
+
+    event_data: extensible metadata.
 
 -- =====================================================
 -- TRAINING MATERIALS
@@ -544,30 +405,38 @@ CREATE TABLE training_materials (
     material_type ENUM('pdf','video','link','article','quiz') NOT NULL,
     file_path VARCHAR(255),
     external_url VARCHAR(255),
-    file_size BIGINT, -- NEW: In bytes
-    
+    file_size BIGINT,
     category VARCHAR(50),
     difficulty ENUM('beginner','intermediate','advanced'),
-    
     uploaded_by INT,
     is_public BOOLEAN DEFAULT TRUE,
-    
     views INT DEFAULT 0,
-    downloads INT DEFAULT 0, -- NEW
-    
-    -- NEW: Content organization
-    tags JSON, -- Array of tags for better search
-    prerequisites TEXT, -- Required knowledge
-    estimated_time_minutes INT, -- Time to complete
-    
+    downloads INT DEFAULT 0,
+    tags JSON,
+    prerequisites TEXT,
+    estimated_time_minutes INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    
     FOREIGN KEY (uploaded_by) REFERENCES users(user_id),
     INDEX idx_category (category),
     INDEX idx_material_type (material_type),
     INDEX idx_uploaded_by (uploaded_by)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+Why this table exists
+    Stores learning resources independent of assessments.
+
+Why each column exists
+
+    material_type: rendering.
+
+    file_size: quota enforcement.
+
+    downloads / views: engagement metrics.
+
+    tags: search optimization.
+
+    estimated_time_minutes: learner planning.
 
 -- NEW: Track user progress on training materials
 CREATE TABLE material_progress (
@@ -582,7 +451,18 @@ CREATE TABLE material_progress (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
     UNIQUE KEY unique_user_material (user_id, material_id),
     INDEX idx_user (user_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+Why this table exists
+    Tracks user learning progression.
+
+Why each column exists
+
+    progress_percentage: partial completion.
+
+    is_completed: milestone detection.
+
+    last_accessed: resume support.
 
 -- =====================================================
 -- FILE MANAGEMENT
@@ -605,7 +485,18 @@ CREATE TABLE uploaded_files (
     FOREIGN KEY (uploaded_by) REFERENCES users(user_id),
     INDEX idx_entity (entity_type, entity_id),
     INDEX idx_uploaded_by (uploaded_by)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+Why this table exists
+    Central abstraction for file storage.
+
+Why each column exists
+
+    entity_type + entity_id: polymorphic linking.
+
+    stored_filename: filesystem safety.
+
+    is_deleted: soft delete.
 
 -- =====================================================
 -- NOTIFICATIONS & COMMUNICATION
@@ -626,7 +517,18 @@ CREATE TABLE notifications (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
     INDEX idx_user_read (user_id, is_read),
     INDEX idx_created (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+Why this table exists
+    Unified in-app notification system.
+
+Why each column exists
+
+    notification_type: UI styling.
+
+    related_entity_*: deep linking.
+
+    action_url: call-to-action.
 
 -- NEW: Email queue for async sending
 CREATE TABLE email_queue (
@@ -643,10 +545,21 @@ CREATE TABLE email_queue (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_status (status),
     INDEX idx_created (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+Why this table exists
+    Asynchronous, retry-safe email delivery.
+
+Why each column exists
+
+    status: delivery state.
+
+    attempts: retry logic.
+
+    error_message: diagnostics.
 
 -- =====================================================
--- ANALYTICS & REPORTING
+-- ANALYTICS & REPORTING (optional)
 -- =====================================================
 
 -- NEW: Track student performance over time
@@ -655,25 +568,30 @@ CREATE TABLE performance_analytics (
     user_id INT NOT NULL,
     assessment_id INT NOT NULL,
     attempt_id INT NOT NULL,
-    
-    -- Performance metrics
     score DECIMAL(6,2),
     percentage DECIMAL(5,2),
     time_taken_minutes INT,
-    rank INT, -- Rank among all attempts
-    
-    -- Topic-wise analysis
-    topic_scores JSON, -- {topic: {correct, total, percentage}}
-    difficulty_scores JSON, -- {easy, medium, hard}
-    
+    rank INT,
+    topic_scores JSON,
+    difficulty_scores JSON,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
     FOREIGN KEY (assessment_id) REFERENCES assessments(assessment_id) ON DELETE CASCADE,
     FOREIGN KEY (attempt_id) REFERENCES assessment_attempts(attempt_id) ON DELETE CASCADE,
     INDEX idx_user (user_id),
     INDEX idx_assessment (assessment_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+Why this table exists
+    Pre-aggregated analytics for dashboards.
+
+Why each column exists
+
+    topic_scores: deep insights.
+
+    difficulty_scores: skill profiling.
+
+    rank: leaderboard support.
 
 -- NEW: Track overall system usage
 CREATE TABLE system_analytics (
@@ -685,7 +603,28 @@ CREATE TABLE system_analytics (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY unique_date_metric (stat_date, metric_name),
     INDEX idx_date (stat_date)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+Why this table exists
+    Stores aggregated, system-wide metrics for dashboards and trend analysis without scanning large transactional tables.
+
+Why each column exists
+
+    stat_id: Internal primary key for efficient referencing and maintenance.
+
+    stat_date: Date the metric applies to (supports daily aggregation and time-series analysis).
+
+    metric_name: Identifier for the metric (e.g., daily_active_users, tests_taken, avg_score, new_registrations).
+
+    metric_value: Numeric value of the metric (counts, averages, rates).
+
+    metadata: Flexible JSON for contextual details (e.g., breakdown by role, category, device, or region).
+
+    created_at: Audit timestamp indicating when the metric was recorded.
+
+    unique_date_metric: Enforces one value per metric per day, preventing duplicates.
+
+    idx_date: Optimizes date-range queries for charts and reports.
 
 -- =====================================================
 -- SYSTEM CONFIGURATION
@@ -700,7 +639,18 @@ CREATE TABLE system_settings (
     updated_by INT,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (updated_by) REFERENCES users(user_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+Why this table exists
+    Central runtime configuration.
+
+Why each column exists
+
+    setting_type: validation.
+
+    is_editable: admin safety.
+
+    updated_by: audit trail.
 
 -- NEW: Audit log for sensitive operations
 CREATE TABLE audit_logs (
@@ -718,7 +668,16 @@ CREATE TABLE audit_logs (
     INDEX idx_user_action (user_id, action),
     INDEX idx_entity (entity_type, entity_id),
     INDEX idx_created (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+Why this table exists
+    Tracks sensitive actions for accountability.
+
+Why each column exists
+
+    old_values / new_values: change diffing.
+
+    entity_type / id: polymorphic reference.
 
 -- =====================================================
 -- INITIAL SYSTEM SETTINGS
@@ -736,9 +695,9 @@ INSERT INTO system_settings (setting_key, setting_value, setting_type, descripti
 ('enable_proctoring', 'false', 'boolean', 'Enable proctoring features', TRUE),
 ('smtp_configured', 'false', 'boolean', 'Is SMTP email configured', FALSE);
 
--- =====================================================
--- INDEXES FOR PERFORMANCE (Additional composite indexes)
--- =====================================================
+-- =================================================================
+-- INDEXES FOR PERFORMANCE (Additional composite indexes - optional)
+-- =================================================================
 
 -- Frequently queried combinations
 CREATE INDEX idx_user_active_type ON users(is_active, user_type);
