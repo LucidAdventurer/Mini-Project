@@ -1,6 +1,6 @@
 <?php
 define('DB_HOST', 'localhost');
-define('DB_USER', 'root');      // or miniuser
+define('DB_USER', 'root');
 define('DB_PASS', '102005');
 define('DB_NAME', 'pta');
 
