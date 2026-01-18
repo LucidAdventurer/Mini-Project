@@ -1,3 +1,4 @@
+<?php
 /*
  * ========================================
  * PTA GLOBAL CONFIGURATION
@@ -37,17 +38,29 @@ if (APP_ENVIRONMENT === 'development') {
 // Load database credentials from environment variables
 define('DB_HOST', getenv('DB_HOST') ?: '127.0.0.1');
 define('DB_USER', getenv('DB_USER') ?: 'root');
-define('DB_PASS', getenv('DB_PASS') ?: '');
-define('DB_NAME', getenv('DB_NAME') ?: 'pta_platform');
+define('DB_PASS', getenv('DB_PASS') ?: '102005');
+define('DB_NAME', getenv('DB_NAME') ?: 'pta');
 
 // Establish database connection
 $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
 
-// Check for connection errors
 if ($conn->connect_error) {
-    // In a real application, you would have a more robust error page
+    // Log the error
+    error_log("Database connection failed: " . $conn->connect_error);
+    
+    // Return JSON instead of die()
+    if (basename($_SERVER['PHP_SELF']) === 'register.php') {
+        header('Content-Type: application/json');
+        echo json_encode([
+            'success' => false,
+            'message' => 'Database connection failed. Please try again later.'
+        ]);
+        exit;
+    }
+    
+    // For other pages, show error page
     http_response_code(503);
-    die("Database connection failed: " . $conn->connect_error);
+    die("Service temporarily unavailable. Please try again later.");
 }
 
 // Set character set and SQL mode
@@ -141,5 +154,4 @@ register_shutdown_function(function() use ($conn) {
         $conn->close();
     }
 });
-
 ?>

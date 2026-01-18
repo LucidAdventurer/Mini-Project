@@ -827,8 +827,6 @@
     // Form Submission
     form.addEventListener('submit', async function(e) {
       e.preventDefault();
-      
-      // Hide alerts
       hideAlerts();
       
       // Validate all fields
@@ -844,12 +842,10 @@
         return;
       }
       
-      // Disable button and show loading
       submitBtn.disabled = true;
       submitBtn.classList.add('loading');
       btnText.textContent = 'Creating Account...';
       
-      // Submit form
       try {
         const formData = new FormData(form);
         const response = await fetch('register.php', {
@@ -863,18 +859,21 @@
           showAlert('success', result.message);
           form.reset();
           
-          // Redirect after 2 seconds
+          // Reset all visual states
+          [fullName, email, regNumber, department, password, confirmPassword].forEach(input => {
+            input.classList.remove('error', 'success');
+          });
+          
           setTimeout(() => {
             window.location.href = result.redirect || 'index.html';
           }, 2000);
         } else {
-          showAlert('error', result.message);
+          showAlert('error', result.message || 'Registration failed');
         }
+        
       } catch (error) {
-        showAlert('error', 'An error occurred. Please try again.');
-        console.error('Error:', error);
+        showAlert('error', 'Network error. Please check your connection and try again.');
       } finally {
-        // Re-enable button
         submitBtn.disabled = false;
         submitBtn.classList.remove('loading');
         btnText.textContent = 'Create Account';

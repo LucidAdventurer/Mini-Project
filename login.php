@@ -28,11 +28,7 @@
    ======================================== */
 
 // Include database configuration
-// Create config.php with: $conn = new mysqli($host, $user, $pass, $db);
 require_once "config.php";
-
-// Start session for user authentication
-session_start();
 
 // Regenerate session ID to prevent session fixation attacks
 session_regenerate_id(true);
@@ -70,8 +66,11 @@ function logLoginActivity($conn, $userId, $email, $success, $failureReason = nul
     );
     
     if ($stmt) {
+        // FIX: Convert userId to null if 0, and ensure is_success is integer (0 or 1)
         $userIdForLog = $userId > 0 ? $userId : null;
-        $stmt->bind_param("issbs", $userIdForLog, $ipAddress, $userAgent, $success, $failureReason);
+        $isSuccessInt = $success ? 1 : 0; // Convert boolean to integer
+        
+        $stmt->bind_param("issis", $userIdForLog, $ipAddress, $userAgent, $isSuccessInt, $failureReason);
         $stmt->execute();
         $stmt->close();
     }
@@ -100,7 +99,7 @@ function updateLastLogin($conn, $userId) {
 function isAccountLocked($conn, $email) {
     // Get system settings for lockout rules
     $stmt = $conn->prepare(
-        "SELECT setting_value FROM system_settings 
+        "SELECT setting_key, setting_value FROM system_settings 
          WHERE setting_key IN ('max_login_attempts', 'lockout_duration_minutes')"
     );
     
@@ -112,12 +111,18 @@ function isAccountLocked($conn, $email) {
     $maxAttempts = 5; // Default
     $lockoutDuration = 30; // Default in minutes
     
-    while ($row = $result->fetch_assoc()) {
-        if ($row['setting_key'] === 'max_login_attempts') {
-            $maxAttempts = (int)$row['setting_value'];
-        }
-        if ($row['setting_key'] === 'lockout_duration_minutes') {
-            $lockoutDuration = (int)$row['setting_value'];
+    // FIX: Properly check if result exists and has the expected keys
+    if ($result && $result->num_rows > 0) {
+        while ($row = $result->fetch_assoc()) {
+            // FIX: Check if keys exist before accessing
+            if (isset($row['setting_key']) && isset($row['setting_value'])) {
+                if ($row['setting_key'] === 'max_login_attempts') {
+                    $maxAttempts = (int)$row['setting_value'];
+                }
+                if ($row['setting_key'] === 'lockout_duration_minutes') {
+                    $lockoutDuration = (int)$row['setting_value'];
+                }
+            }
         }
     }
     $stmt->close();
@@ -128,7 +133,7 @@ function isAccountLocked($conn, $email) {
          FROM login_activity la
          JOIN users u ON la.user_id = u.user_id
          WHERE u.email = ? 
-         AND la.is_success = FALSE 
+         AND la.is_success = 0
          AND la.created_at > DATE_SUB(NOW(), INTERVAL ? MINUTE)"
     );
     
@@ -293,7 +298,7 @@ if ($remember) {
         time() + (30 * 24 * 60 * 60), // 30 days
         '/',
         '',
-        true, // Secure (HTTPS only)
+        isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on', // Secure (HTTPS only)
         true  // HttpOnly
     );
     
@@ -346,7 +351,7 @@ switch ($user['user_type']) {
    - user_id (INT, FOREIGN KEY to users)
    - ip_address (VARCHAR 45) - Supports IPv4 and IPv6
    - user_agent (TEXT) - Browser/device information
-   - is_success (BOOLEAN) - Login success/failure
+   - is_success (TINYINT/BOOLEAN) - Login success/failure (0 or 1)
    - failure_reason (VARCHAR 100) - Why login failed
    - created_at (TIMESTAMP, DEFAULT CURRENT_TIMESTAMP)
    
@@ -364,4 +369,3 @@ switch ($user['user_type']) {
    6. Implement rate limiting for login attempts
    7. Add two-factor authentication (optional)
    ======================================== */
-?>
