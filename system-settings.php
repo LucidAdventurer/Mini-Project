@@ -1,9 +1,28 @@
 <?php
 /* ========================================
- * PTA SYSTEM SETTINGS MANAGER
+ * PTA SYSTEM SETTINGS MANAGER (IMPROVED)
  * File: system-settings.php
  *
  * Purpose: Centralized system settings with multi-tier architecture
+ *
+ * DEPENDENCIES:
+ * - Assumes a global mysqli connection object named $conn is available.
+ * - Assumes the database schema outlined below is present.
+ *
+ * PHP.INI DEPENDENCIES:
+ * - File upload limits are constrained by `upload_max_filesize` and `post_max_size`.
+ *   The `max_file_size_mb` setting cannot exceed these PHP limits.
+ *
+ * DATABASE SCHEMA ASSUMPTIONS:
+ * This class assumes a `system_settings` table with the following schema:
+ * - setting_key VARCHAR(255) PRIMARY KEY
+ * - setting_value TEXT
+ * - setting_type VARCHAR(50)
+ * - description VARCHAR(255)
+ * - is_editable TINYINT(1) DEFAULT 1
+ * - created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+ * - updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP
+ * - updated_by INT NULL
  *
  * Architecture:
  * - Tier 1 (IMMUTABLE): Core constants that should NEVER change at runtime
@@ -138,6 +157,11 @@ class SystemSettings {
   private function __construct() {
     global $conn;
     $this->conn = $conn;
+    
+    // Initialize database settings if needed
+    $this->initializeSettings();
+    
+    // Load cache
     $this->loadCache();
   }
 
@@ -146,6 +170,63 @@ class SystemSettings {
       self::$instance = new self();
     }
     return self::$instance;
+  }
+
+  /* ========================================
+   *     DATABASE INITIALIZATION
+   *     Creates default settings in database if they don't exist
+   *     ======================================== */
+
+  /**
+   * Initialize system_settings table with default values
+   * This runs only once or when settings are missing
+   */
+  private function initializeSettings() {
+    error_log("Initializing system_settings table with default values if they don't exist...");
+
+    $stmt = $this->conn->prepare(
+        "INSERT IGNORE INTO system_settings (setting_key, setting_value, setting_type, description, is_editable) VALUES (?, ?, ?, ?, 1)"
+    );
+
+    if ($stmt) {
+        foreach (self::DEFAULT_CONFIGURABLE_SETTINGS as $key => $value) {
+            $type = $this->determineType($value);
+            $valueStr = $this->convertToString($value, $type);
+            $description = $this->getSettingDescription($key);
+            $stmt->bind_param("ssss", $key, $valueStr, $type, $description);
+            if (!$stmt->execute()) {
+                error_log("Failed to insert setting: $key");
+            }
+        }
+        $stmt->close();
+        error_log("System settings initialization check complete.");
+    } else {
+        error_log("Failed to prepare statement for settings initialization: " . $this->conn->error);
+    }
+  }
+
+  /**
+   * Get human-readable description for a setting
+   */
+  private function getSettingDescription($key) {
+    $descriptions = [
+      'session_timeout_minutes' => 'Session timeout in minutes',
+      'max_login_attempts' => 'Maximum failed login attempts before lockout',
+      'lockout_duration_minutes' => 'Account lockout duration in minutes',
+      'otp_expiry_minutes' => 'OTP expiration time in minutes',
+      'allow_guest_tests' => 'Allow guest users to take public tests',
+      'max_file_size_mb' => 'Maximum file upload size in MB',
+      'results_retention_days' => 'How long to keep assessment results',
+      'enable_proctoring' => 'Enable proctoring features',
+      'smtp_configured' => 'Is SMTP email configured',
+      'maintenance_mode' => 'Enable maintenance mode',
+      'items_per_page' => 'Default items per page in lists',
+      'enable_email_notifications' => 'Enable email notifications',
+      'allow_registration' => 'Allow new user registration',
+      'require_email_verification' => 'Require email verification for new accounts',
+    ];
+    
+    return $descriptions[$key] ?? ucwords(str_replace('_', ' ', $key));
   }
 
   /* ========================================
@@ -173,6 +254,10 @@ class SystemSettings {
         ];
       }
       $this->cacheTimestamp = time();
+      // After loading the cache, update the cache expiry from the settings
+      if (isset($this->cache['cache_expiry_seconds'])) {
+          $this->cacheExpiry = (int)$this->cache['cache_expiry_seconds']['value'];
+      }
     } else {
       error_log("Failed to load system settings: " . $this->conn->error);
     }
@@ -251,32 +336,32 @@ class SystemSettings {
 
     // Add immutable settings
     foreach (self::IMMUTABLE_SETTINGS as $key => $value) {
-      $all[$key] = [
-        'value' => $value,
-        'type' => gettype($value),
-        'immutable' => true
-      ];
+        $all[$key] = [
+            'value' => $value,
+            'type' => $this->determineType($value),
+            'immutable' => true
+        ];
     }
 
     // Add cached settings from database
     foreach ($this->cache as $key => $data) {
-      $all[$key] = [
-        'value' => $data['value'],
-        'type' => $data['type'],
-        'immutable' => false
-      ];
+        $all[$key] = [
+            'value' => $data['value'],
+            'type' => $data['type'],
+            'immutable' => false
+        ];
     }
 
     // Add defaults not in database
     foreach (self::DEFAULT_CONFIGURABLE_SETTINGS as $key => $value) {
-      if (!isset($all[$key])) {
-        $all[$key] = [
-          'value' => $value,
-          'type' => gettype($value),
-          'immutable' => false,
-          'is_default' => true
-        ];
-      }
+        if (!isset($all[$key])) {
+            $all[$key] = [
+                'value' => $value,
+                'type' => $this->determineType($value),
+                'immutable' => false,
+                'is_default' => true
+            ];
+        }
     }
 
     return $all;
@@ -294,9 +379,16 @@ class SystemSettings {
    * @return bool Success status
    */
   public function set($key, $value, $userId = null) {
+    // IMPORTANT: This method should only be called from admin-level code.
     // Prevent changing immutable settings
-    if (array_key_exists($key, self::IMMUTABLE_SETTINGS)) {
+    if ($this->isImmutable($key)) {
       error_log("Attempted to modify immutable setting: $key");
+      return false;
+    }
+
+    // Validate before setting
+    if (!$this->validate($key, $value)) {
+      error_log("Validation failed for setting: $key");
       return false;
     }
 
@@ -306,29 +398,33 @@ class SystemSettings {
     // Convert value to string for storage
     $valueStr = $this->convertToString($value, $type);
 
-    // Check if setting exists
-    $stmt = $this->conn->prepare("SELECT setting_key FROM system_settings WHERE setting_key = ?");
+    // Check if setting exists and is editable
+    $stmt = $this->conn->prepare("SELECT is_editable FROM system_settings WHERE setting_key = ?");
     $stmt->bind_param("s", $key);
     $stmt->execute();
-    $exists = $stmt->get_result()->num_rows > 0;
+    $result = $stmt->get_result();
+    $setting = $result->fetch_assoc();
     $stmt->close();
 
-    if ($exists) {
-      // Update existing
-      $stmt = $this->conn->prepare(
-        "UPDATE system_settings
-        SET setting_value = ?, setting_type = ?, updated_by = ?, updated_at = NOW()
-      WHERE setting_key = ?"
-      );
-      $stmt->bind_param("ssis", $valueStr, $type, $userId, $key);
+    if ($setting) {
+        if (!$setting['is_editable']) {
+            error_log("Attempted to modify non-editable setting: $key");
+            return false;
+        }
+        // Update existing
+        $stmt = $this->conn->prepare(
+            "UPDATE system_settings SET setting_value = ?, setting_type = ?, updated_by = ?, updated_at = NOW() WHERE setting_key = ?"
+        );
+        $stmt->bind_param("ssis", $valueStr, $type, $userId, $key);
     } else {
       // Insert new
+      $description = $this->getSettingDescription($key);
       $stmt = $this->conn->prepare(
         "INSERT INTO system_settings
-        (setting_key, setting_value, setting_type, updated_by)
-      VALUES (?, ?, ?, ?)"
+        (setting_key, setting_value, setting_type, description, updated_by)
+      VALUES (?, ?, ?, ?, ?)"
       );
-      $stmt->bind_param("sssi", $key, $valueStr, $type, $userId);
+      $stmt->bind_param("ssssi", $key, $valueStr, $type, $description, $userId);
     }
 
     $success = $stmt->execute();
@@ -340,14 +436,6 @@ class SystemSettings {
         'value' => $value,
         'type' => $type
       ];
-
-      // Log audit trail
-      if (function_exists('logAudit')) {
-        logAudit($userId, 'UPDATE_SETTING', 'system_settings', null, null, [
-          'key' => $key,
-          'value' => $value
-        ]);
-      }
     }
 
     return $success;
@@ -360,16 +448,20 @@ class SystemSettings {
    * @return bool Success status
    */
   public function setMultiple(array $settings, $userId = null) {
-    $allSuccess = true;
-
-    foreach ($settings as $key => $value) {
-      if (!$this->set($key, $value, $userId)) {
-        $allSuccess = false;
-        error_log("Failed to set setting: $key");
-      }
+    $this->conn->begin_transaction();
+    try {
+        foreach ($settings as $key => $value) {
+            if (!$this->set($key, $value, $userId)) {
+                throw new Exception("Failed to set setting: $key");
+            }
+        }
+        $this->conn->commit();
+        return true;
+    } catch (Exception $e) {
+        $this->conn->rollback();
+        error_log("Transaction failed in setMultiple: " . $e->getMessage());
+        return false;
     }
-
-    return $allSuccess;
   }
 
   /* ========================================
@@ -377,7 +469,7 @@ class SystemSettings {
    *     ======================================== */
 
   private function determineType($value) {
-    if (is_bool($value)) return 'boolean';
+    if (is_bool($value) || in_array($value, ['true', 'false', '1', '0'], true)) return 'boolean';
     if (is_numeric($value)) return 'number';
     if (is_array($value)) return 'json';
     return 'string';
@@ -427,6 +519,9 @@ class SystemSettings {
    * @return bool Valid or not
    */
   public function validate($key, $value) {
+    if ($this->isImmutable($key)) {
+        return false; // Cannot validate immutable settings
+    }
     // Add validation rules here
     switch ($key) {
       case 'max_login_attempts':
@@ -442,11 +537,13 @@ class SystemSettings {
         return is_numeric($value) && $value >= 5 && $value <= 60;
 
       case 'max_file_size_mb':
+        // Note: This validates against the application's absolute max, but actual upload
+        // limits are also governed by php.ini settings (upload_max_filesize, post_max_size).
         $absoluteMax = self::IMMUTABLE_SETTINGS['ABSOLUTE_MAX_FILE_SIZE'] / (1024 * 1024);
         return is_numeric($value) && $value >= 1 && $value <= $absoluteMax;
 
       case 'items_per_page':
-        return is_numeric($value) && $value >= 5 && $value <= self::get('max_items_per_page', 100);
+        return is_numeric($value) && $value >= 5 && $value <= $this->get('max_items_per_page', 100);
 
       default:
         return true; // No specific validation
@@ -489,62 +586,16 @@ class SystemSettings {
     return $this->get('max_file_size_mb', 10) * 1024 * 1024;
   }
 
-  /* ========================================
-   *     EXPORT SETTINGS FOR ADMIN PANEL
-   *     ======================================== */
-
   /**
-   * Get settings grouped by category for admin panel
+   * Get allowed file types as an array
    * @return array
    */
-  public function getGroupedSettings() {
-    $all = $this->getAll();
-
-    $grouped = [
-      'Authentication & Security' => [],
-      'Assessment Settings' => [],
-      'File Upload' => [],
-      'Email & Notifications' => [],
-      'Performance' => [],
-      'Data Retention' => [],
-      'System Behavior' => [],
-      'Immutable (Read-Only)' => []
-    ];
-
-    foreach ($all as $key => $data) {
-      $category = $this->categorize($key);
-      $grouped[$category][$key] = $data;
+  public function getAllowedFileTypes() {
+    $typesStr = $this->get('allowed_file_types', '');
+    if (empty($typesStr)) {
+      return [];
     }
-
-    return $grouped;
-  }
-
-  private function categorize($key) {
-    if (strpos($key, 'session') !== false || strpos($key, 'login') !== false ||
-      strpos($key, 'password') !== false || strpos($key, 'otp') !== false) {
-      return 'Authentication & Security';
-      }
-      if (strpos($key, 'assessment') !== false || strpos($key, 'proctoring') !== false) {
-        return 'Assessment Settings';
-      }
-      if (strpos($key, 'file') !== false || strpos($key, 'upload') !== false) {
-        return 'File Upload';
-      }
-      if (strpos($key, 'email') !== false || strpos($key, 'smtp') !== false ||
-        strpos($key, 'notification') !== false) {
-        return 'Email & Notifications';
-        }
-        if (strpos($key, 'cache') !== false || strpos($key, 'performance') !== false ||
-          strpos($key, 'compression') !== false) {
-          return 'Performance';
-          }
-          if (strpos($key, 'retention') !== false) {
-            return 'Data Retention';
-          }
-          if (array_key_exists($key, self::IMMUTABLE_SETTINGS)) {
-            return 'Immutable (Read-Only)';
-          }
-          return 'System Behavior';
+    return array_map('trim', explode(',', $typesStr));
   }
 
   /* ========================================
@@ -559,7 +610,7 @@ class SystemSettings {
 }
 
 /* ========================================
- * GLOBAL HELPER FUNCTION
+ * GLOBAL HELPER FUNCTIONS
  * For backward compatibility with existing code
  * ======================================== */
 
@@ -591,40 +642,4 @@ function updateSystemSetting($key, $value, $userId = null) {
 
   return $settings->set($key, $value, $userId);
 }
-
-/* ========================================
- * USAGE EXAMPLES
- *
- * 1. Get Setting:
- * $settings = SystemSettings::getInstance();
- * $timeout = $settings->get('session_timeout_minutes'); // Returns 60
- *
- * 2. Update Setting:
- * $settings->set('max_login_attempts', 3, $userId);
- *
- * 3. Check Maintenance Mode:
- * if ($settings->isMaintenanceMode()) {
- *     die("System is under maintenance");
- * }
- *
- * 4. Get Multiple Settings:
- * $auth = $settings->getMultiple([
- *     'max_login_attempts',
- *     'lockout_duration_minutes',
- *     'session_timeout_minutes'
- * ]);
- *
- * 5. Backward Compatible:
- * $timeout = getSystemSetting('session_timeout_minutes', 60);
- *
- * 6. For Admin Panel:
- * $grouped = $settings->getGroupedSettings();
- * foreach ($grouped as $category => $settings) {
- *     echo "<h3>$category</h3>";
- *     foreach ($settings as $key => $data) {
- *         echo "$key: " . $data['value'];
- *     }
- * }
- *
- * ======================================== */
 ?>

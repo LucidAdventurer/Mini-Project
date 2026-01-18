@@ -3,12 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Student Registration - Placement Portal</title>
+  <title>Student Registration - PTA Platform</title>
   <style>
     /* ===== CSS Variables ===== */
     :root {
       --color-primary: #234C6A;
       --color-primary-dark: #456882;
+      --color-success: #48bb78;
+      --color-error: #f56565;
+      --color-warning: #ffc107;
     }
 
     /* ===== Reset & Base Styles ===== */
@@ -20,8 +23,9 @@
 
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      overflow: hidden;
+      overflow-x: hidden;
       background: #f0f4f8;
+      min-height: 100vh;
     }
 
     /* ===== Background & Animations ===== */
@@ -79,7 +83,7 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      padding: 20px;
+      padding: 40px 20px;
     }
 
     /* ===== Card Styling ===== */
@@ -89,7 +93,7 @@
       border-radius: 24px;
       padding: 45px;
       width: 100%;
-      max-width: 450px;
+      max-width: 500px;
       box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
       animation: cardPop 0.6s;
       border: 2px solid rgba(0, 0, 0, 0.8);
@@ -139,6 +143,43 @@
       color: #fff;
     }
 
+    /* ===== Alert Messages ===== */
+    .alert {
+      padding: 14px 16px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      display: none;
+      animation: slideDown 0.3s ease;
+    }
+
+    .alert.show {
+      display: block;
+    }
+
+    .alert-error {
+      background: rgba(245, 101, 101, 0.1);
+      border-left: 4px solid var(--color-error);
+      color: #fff;
+    }
+
+    .alert-success {
+      background: rgba(72, 187, 120, 0.1);
+      border-left: 4px solid var(--color-success);
+      color: #fff;
+    }
+
+    .alert-warning {
+      background: rgba(255, 193, 7, 0.1);
+      border-left: 4px solid var(--color-warning);
+      color: #fff;
+    }
+
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
     /* ===== Form Elements ===== */
     .form-group {
       margin-bottom: 22px;
@@ -153,7 +194,7 @@
     }
 
     .required {
-      color: #f56565;
+      color: var(--color-error);
       margin-left: 4px;
     }
 
@@ -178,6 +219,107 @@
       box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1);
     }
 
+    .form-control.error {
+      border-color: var(--color-error);
+    }
+
+    .form-control.success {
+      border-color: var(--color-success);
+    }
+
+    .field-error {
+      color: var(--color-error);
+      font-size: 12px;
+      margin-top: 6px;
+      display: none;
+    }
+
+    .field-error.show {
+      display: block;
+    }
+
+    .field-success {
+      color: var(--color-success);
+      font-size: 12px;
+      margin-top: 6px;
+      display: none;
+    }
+
+    .field-success.show {
+      display: block;
+    }
+
+    /* ===== Password Strength ===== */
+    .password-strength {
+      margin-top: 10px;
+    }
+
+    .strength-bar {
+      height: 4px;
+      background: #333;
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 6px;
+    }
+
+    .strength-fill {
+      height: 100%;
+      width: 0%;
+      transition: all 0.3s ease;
+      border-radius: 2px;
+    }
+
+    .strength-fill.weak { width: 33%; background: var(--color-error); }
+    .strength-fill.medium { width: 66%; background: var(--color-warning); }
+    .strength-fill.strong { width: 100%; background: var(--color-success); }
+
+    .strength-text {
+      font-size: 12px;
+      color: #fff;
+    }
+
+    .password-requirements {
+      margin-top: 10px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      font-size: 12px;
+      color: #fff;
+    }
+
+    .requirement {
+      display: flex;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .requirement:last-child {
+      margin-bottom: 0;
+    }
+
+    .requirement-icon {
+      margin-right: 8px;
+      font-size: 14px;
+    }
+
+    .requirement.met {
+      color: var(--color-success);
+    }
+
+    .requirement.unmet {
+      color: #a0aec0;
+    }
+
+    /* ===== Select Dropdown ===== */
+    select.form-control {
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23718096' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 16px center;
+      padding-right: 40px;
+    }
+
     /* ===== Button ===== */
     .btn-register {
       width: 100%;
@@ -193,9 +335,34 @@
       box-shadow: 0 6px 20px rgba(79, 172, 254, 0.4);
     }
 
-    .btn-register:hover {
+    .btn-register:hover:not(:disabled) {
       transform: translateY(-2px);
       box-shadow: 0 10px 30px rgba(79, 172, 254, 0.5);
+    }
+
+    .btn-register:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-register .spinner {
+      display: none;
+      width: 16px;
+      height: 16px;
+      border: 2px solid #fff;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    .btn-register.loading .spinner {
+      display: inline-block;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
 
     /* ===== Footer ===== */
@@ -216,6 +383,12 @@
       color: var(--color-primary);
       text-decoration: none;
       font-weight: 600;
+      transition: all 0.3s ease;
+    }
+
+    .form-footer a:hover {
+      transform: translateX(3px);
+      display: inline-block;
     }
 
     /* ===== Responsive Design ===== */
@@ -247,40 +420,483 @@
     <div class="register-card">
       <!-- Header -->
       <div class="register-header">
-        <div class="logo">P</div>
+        <div class="logo">🎓</div>
         <h1>Student Registration</h1>
         <p>Create your account to start preparing</p>
       </div>
 
-      <!-- Form -->
-      <form action="/pta/register.php" method="POST">
-        <div class="form-group">
-          <label>Full Name<span class="required">*</span></label>
-          <input type="text" name="name" class="form-control" placeholder="Enter your full name" required>
-        </div>
-        <div class="form-group">
-          <label>Email Address<span class="required">*</span></label>
-          <input type="email" name="email" class="form-control" placeholder="your.email@example.com" required>
-        </div>
-        <div class="form-group">
-          <label>Password<span class="required">*</span></label>
-          <input type="password" name="password" class="form-control" placeholder="Create a strong password" required minlength="6">
-        </div>
+      <!-- Alert Messages -->
+      <div class="alert alert-error" id="errorAlert"></div>
+      <div class="alert alert-success" id="successAlert"></div>
+
+      <!-- Registration Form -->
+      <form id="registerForm" action="register.php" method="POST" novalidate>
+        <!-- Hidden field for user type -->
         <input type="hidden" name="user_type" value="student">
-        <button type="submit" class="btn-register">Create Account</button>
+
+        <!-- Full Name -->
+        <div class="form-group">
+          <label for="fullName">Full Name<span class="required">*</span></label>
+          <input 
+            type="text" 
+            name="full_name" 
+            id="fullName" 
+            class="form-control" 
+            placeholder="Enter your full name"
+            required
+            autocomplete="name">
+          <div class="field-error" id="nameError"></div>
+        </div>
+
+        <!-- Email Address -->
+        <div class="form-group">
+          <label for="email">Email Address<span class="required">*</span></label>
+          <input 
+            type="email" 
+            name="email" 
+            id="email" 
+            class="form-control" 
+            placeholder="your.email@example.com"
+            required
+            autocomplete="email">
+          <div class="field-error" id="emailError"></div>
+          <div class="field-success" id="emailSuccess"></div>
+        </div>
+
+        <!-- Registration Number -->
+        <div class="form-group">
+          <label for="regNumber">Registration Number<span class="required">*</span></label>
+          <input 
+            type="text" 
+            name="registration_number" 
+            id="regNumber" 
+            class="form-control" 
+            placeholder="e.g., CS2021001"
+            required>
+          <div class="field-error" id="regError"></div>
+        </div>
+
+        <!-- Department -->
+        <div class="form-group">
+          <label for="department">Department<span class="required">*</span></label>
+          <select 
+            name="department" 
+            id="department" 
+            class="form-control"
+            required>
+            <option value="">Select Department</option>
+            <option value="Computer Science">Computer Science</option>
+            <option value="Information Technology">Information Technology</option>
+            <option value="Electronics">Electronics</option>
+            <option value="Mechanical">Mechanical</option>
+            <option value="Civil">Civil</option>
+            <option value="Electrical">Electrical</option>
+            <option value="Chemical">Chemical</option>
+            <option value="Biotechnology">Biotechnology</option>
+            <option value="Other">Other</option>
+          </select>
+          <div class="field-error" id="deptError"></div>
+        </div>
+
+        <!-- Password -->
+        <div class="form-group">
+          <label for="password">Password<span class="required">*</span></label>
+          <input 
+            type="password" 
+            name="password" 
+            id="password" 
+            class="form-control" 
+            placeholder="Create a strong password"
+            required
+            autocomplete="new-password">
+          <div class="field-error" id="passwordError"></div>
+          
+          <!-- Password Strength Indicator -->
+          <div class="password-strength">
+            <div class="strength-bar">
+              <div class="strength-fill" id="strengthFill"></div>
+            </div>
+            <div class="strength-text" id="strengthText"></div>
+          </div>
+
+          <!-- Password Requirements -->
+          <div class="password-requirements">
+            <div class="requirement unmet" id="reqLength">
+              <span class="requirement-icon">○</span>
+              <span>At least 8 characters</span>
+            </div>
+            <div class="requirement unmet" id="reqUpper">
+              <span class="requirement-icon">○</span>
+              <span>One uppercase letter</span>
+            </div>
+            <div class="requirement unmet" id="reqLower">
+              <span class="requirement-icon">○</span>
+              <span>One lowercase letter</span>
+            </div>
+            <div class="requirement unmet" id="reqNumber">
+              <span class="requirement-icon">○</span>
+              <span>One number</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Confirm Password -->
+        <div class="form-group">
+          <label for="confirmPassword">Confirm Password<span class="required">*</span></label>
+          <input 
+            type="password" 
+            name="confirm_password" 
+            id="confirmPassword" 
+            class="form-control" 
+            placeholder="Re-enter your password"
+            required
+            autocomplete="new-password">
+          <div class="field-error" id="confirmError"></div>
+          <div class="field-success" id="confirmSuccess"></div>
+        </div>
+
+        <!-- Submit Button -->
+        <button type="submit" class="btn-register" id="submitBtn">
+          <span class="spinner"></span>
+          <span id="btnText">Create Account</span>
+        </button>
       </form>
 
       <!-- Footer Links -->
       <div class="form-footer">
         <p>Already have an account? <a href="index.html">Login here</a></p>
-        <p><a href="register-teacher.html">Register as Teacher</a></p>
+        <p><a href="teacher-registration.html">Register as Teacher</a></p>
       </div>
     </div>
   </div>
 
   <!-- JavaScript -->
   <script>
-    console.log('Student Registration Page Loaded');
+    // DOM Elements
+    const form = document.getElementById('registerForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const btnText = document.getElementById('btnText');
+    const errorAlert = document.getElementById('errorAlert');
+    const successAlert = document.getElementById('successAlert');
+
+    // Form inputs
+    const fullName = document.getElementById('fullName');
+    const email = document.getElementById('email');
+    const regNumber = document.getElementById('regNumber');
+    const department = document.getElementById('department');
+    const password = document.getElementById('password');
+    const confirmPassword = document.getElementById('confirmPassword');
+
+    // Error displays
+    const nameError = document.getElementById('nameError');
+    const emailError = document.getElementById('emailError');
+    const emailSuccess = document.getElementById('emailSuccess');
+    const regError = document.getElementById('regError');
+    const deptError = document.getElementById('deptError');
+    const passwordError = document.getElementById('passwordError');
+    const confirmError = document.getElementById('confirmError');
+    const confirmSuccess = document.getElementById('confirmSuccess');
+
+    // Password strength elements
+    const strengthFill = document.getElementById('strengthFill');
+    const strengthText = document.getElementById('strengthText');
+    const reqLength = document.getElementById('reqLength');
+    const reqUpper = document.getElementById('reqUpper');
+    const reqLower = document.getElementById('reqLower');
+    const reqNumber = document.getElementById('reqNumber');
+
+    // Show/Hide Alert Functions
+    function showAlert(type, message) {
+      hideAlerts();
+      const alert = type === 'error' ? errorAlert : successAlert;
+      alert.textContent = message;
+      alert.classList.add('show');
+      
+      // Auto-hide after 5 seconds
+      setTimeout(() => {
+        alert.classList.remove('show');
+      }, 5000);
+    }
+
+    function hideAlerts() {
+      errorAlert.classList.remove('show');
+      successAlert.classList.remove('show');
+    }
+
+    // Field Validation Functions
+    function showFieldError(element, errorElement, message) {
+      element.classList.add('error');
+      element.classList.remove('success');
+      errorElement.textContent = message;
+      errorElement.classList.add('show');
+    }
+
+    function showFieldSuccess(element, successElement, message = '') {
+      element.classList.remove('error');
+      element.classList.add('success');
+      if (successElement && message) {
+        successElement.textContent = message;
+        successElement.classList.add('show');
+      }
+    }
+
+    function clearFieldError(errorElement) {
+      errorElement.classList.remove('show');
+    }
+
+    function clearFieldSuccess(successElement) {
+      if (successElement) {
+        successElement.classList.remove('show');
+      }
+    }
+
+    // Validation Functions
+    function validateFullName() {
+      const value = fullName.value.trim();
+      clearFieldError(nameError);
+      
+      if (value === '') {
+        showFieldError(fullName, nameError, 'Full name is required');
+        return false;
+      }
+      
+      if (value.length < 3) {
+        showFieldError(fullName, nameError, 'Name must be at least 3 characters');
+        return false;
+      }
+      
+      if (!/^[a-zA-Z\s]+$/.test(value)) {
+        showFieldError(fullName, nameError, 'Name can only contain letters and spaces');
+        return false;
+      }
+      
+      fullName.classList.remove('error');
+      return true;
+    }
+
+    function validateEmail() {
+      const value = email.value.trim();
+      clearFieldError(emailError);
+      clearFieldSuccess(emailSuccess);
+      
+      if (value === '') {
+        showFieldError(email, emailError, 'Email is required');
+        return false;
+      }
+      
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(value)) {
+        showFieldError(email, emailError, 'Please enter a valid email address');
+        return false;
+      }
+      
+      showFieldSuccess(email, emailSuccess, '✓ Valid email format');
+      return true;
+    }
+
+    function validateRegNumber() {
+      const value = regNumber.value.trim();
+      clearFieldError(regError);
+      
+      if (value === '') {
+        showFieldError(regNumber, regError, 'Registration number is required');
+        return false;
+      }
+      
+      if (value.length < 5) {
+        showFieldError(regNumber, regError, 'Registration number must be at least 5 characters');
+        return false;
+      }
+      
+      regNumber.classList.remove('error');
+      return true;
+    }
+
+    function validateDepartment() {
+      const value = department.value;
+      clearFieldError(deptError);
+      
+      if (value === '') {
+        showFieldError(department, deptError, 'Please select a department');
+        return false;
+      }
+      
+      department.classList.remove('error');
+      return true;
+    }
+
+    function validatePassword() {
+      const value = password.value;
+      clearFieldError(passwordError);
+      
+      if (value === '') {
+        showFieldError(password, passwordError, 'Password is required');
+        updatePasswordStrength(0);
+        return false;
+      }
+      
+      // Check requirements
+      const hasLength = value.length >= 8;
+      const hasUpper = /[A-Z]/.test(value);
+      const hasLower = /[a-z]/.test(value);
+      const hasNumber = /[0-9]/.test(value);
+      
+      // Update requirement indicators
+      updateRequirement(reqLength, hasLength);
+      updateRequirement(reqUpper, hasUpper);
+      updateRequirement(reqLower, hasLower);
+      updateRequirement(reqNumber, hasNumber);
+      
+      // Calculate strength
+      let strength = 0;
+      if (hasLength) strength++;
+      if (hasUpper) strength++;
+      if (hasLower) strength++;
+      if (hasNumber) strength++;
+      
+      updatePasswordStrength(strength);
+      
+      // Check if all requirements met
+      if (!hasLength || !hasUpper || !hasLower || !hasNumber) {
+        showFieldError(password, passwordError, 'Password does not meet all requirements');
+        return false;
+      }
+      
+      password.classList.remove('error');
+      return true;
+    }
+
+    function validateConfirmPassword() {
+      const value = confirmPassword.value;
+      const passwordValue = password.value;
+      clearFieldError(confirmError);
+      clearFieldSuccess(confirmSuccess);
+      
+      if (value === '') {
+        showFieldError(confirmPassword, confirmError, 'Please confirm your password');
+        return false;
+      }
+      
+      if (value !== passwordValue) {
+        showFieldError(confirmPassword, confirmError, 'Passwords do not match');
+        return false;
+      }
+      
+      showFieldSuccess(confirmPassword, confirmSuccess, '✓ Passwords match');
+      return true;
+    }
+
+    // Password Strength Helpers
+    function updatePasswordStrength(strength) {
+      strengthFill.className = 'strength-fill';
+      
+      if (strength === 0) {
+        strengthText.textContent = '';
+      } else if (strength <= 2) {
+        strengthFill.classList.add('weak');
+        strengthText.textContent = 'Weak password';
+      } else if (strength === 3) {
+        strengthFill.classList.add('medium');
+        strengthText.textContent = 'Medium password';
+      } else {
+        strengthFill.classList.add('strong');
+        strengthText.textContent = 'Strong password';
+      }
+    }
+
+    function updateRequirement(element, isMet) {
+      if (isMet) {
+        element.classList.remove('unmet');
+        element.classList.add('met');
+        element.querySelector('.requirement-icon').textContent = '✓';
+      } else {
+        element.classList.remove('met');
+        element.classList.add('unmet');
+        element.querySelector('.requirement-icon').textContent = '○';
+      }
+    }
+
+    // Real-time Validation
+    fullName.addEventListener('blur', validateFullName);
+    email.addEventListener('blur', validateEmail);
+    regNumber.addEventListener('blur', validateRegNumber);
+    department.addEventListener('change', validateDepartment);
+    password.addEventListener('input', validatePassword);
+    confirmPassword.addEventListener('input', validateConfirmPassword);
+
+    // Form Submission
+    form.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      // Hide alerts
+      hideAlerts();
+      
+      // Validate all fields
+      const isNameValid = validateFullName();
+      const isEmailValid = validateEmail();
+      const isRegValid = validateRegNumber();
+      const isDeptValid = validateDepartment();
+      const isPasswordValid = validatePassword();
+      const isConfirmValid = validateConfirmPassword();
+      
+      if (!isNameValid || !isEmailValid || !isRegValid || !isDeptValid || !isPasswordValid || !isConfirmValid) {
+        showAlert('error', 'Please fix all errors before submitting');
+        return;
+      }
+      
+      // Disable button and show loading
+      submitBtn.disabled = true;
+      submitBtn.classList.add('loading');
+      btnText.textContent = 'Creating Account...';
+      
+      // Submit form
+      try {
+        const formData = new FormData(form);
+        const response = await fetch('register.php', {
+          method: 'POST',
+          body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          showAlert('success', result.message);
+          form.reset();
+          
+          // Redirect after 2 seconds
+          setTimeout(() => {
+            window.location.href = result.redirect || 'index.html';
+          }, 2000);
+        } else {
+          showAlert('error', result.message);
+        }
+      } catch (error) {
+        showAlert('error', 'An error occurred. Please try again.');
+        console.error('Error:', error);
+      } finally {
+        // Re-enable button
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('loading');
+        btnText.textContent = 'Create Account';
+      }
+    });
+
+    // Check for URL parameters on load
+    window.addEventListener('load', function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const error = urlParams.get('error');
+      const success = urlParams.get('success');
+      
+      if (error) {
+        showAlert('error', decodeURIComponent(error));
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+      
+      if (success) {
+        showAlert('success', decodeURIComponent(success));
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    });
   </script>
 </body>
 </html>
