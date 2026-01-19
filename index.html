@@ -3,26 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Placement & Training Assessment Platform - Login">
+    <meta name="description" content="Placement & Training Assessment Platform - Secure Login">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Login - Placement & Training Assessment</title>
     <style>
+        /* ========================================
+           ROOT VARIABLES - Update theme colors here
+           ======================================== */
         :root {
+            /* Fonts */
             --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            
+            /* Student Mode Colors */
             --color-primary: #234C6A;
             --color-primary-dark: #456882;
+            
+            /* Teacher Mode Colors */
             --color-teacher-primary: #2E073F;
             --color-teacher-secondary: #AD49E1;
+            
+            /* Neutral Colors */
             --color-text: #2d3748;
             --color-text-light: #718096;
             --color-text-lighter: #a0aec0;
             --color-bg: #f0f4f8;
-            --color-bg-light: #f5f7fa;
             --color-white: #ffffff;
             --color-border: #e2e8f0;
+            
+            /* Status Colors */
             --color-success: #48bb78;
             --color-error: #f56565;
             --color-warning: #ffc107;
+            
+            /* Effects */
             --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.1);
             --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.08);
             --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.15);
@@ -43,6 +56,10 @@
             background: var(--color-bg);
         }
 
+        /* ========================================
+           ANIMATED BACKGROUND SYSTEM
+           Switches between student/teacher themes
+           ======================================== */
         .dynamic-background {
             position: fixed;
             top: 0;
@@ -61,6 +78,7 @@
             background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-primary) 100%);
         }
 
+        /* Student Animation Elements */
         .student-animation {
             position: absolute;
             width: 100%;
@@ -149,6 +167,7 @@
         .pencil:nth-child(6) { top: 40%; left: 60%; animation-delay: 0s; }
         .pencil:nth-child(7) { top: 70%; left: 70%; animation-delay: 2s; }
 
+        /* Teacher Animation Elements */
         .teacher-animation {
             position: absolute;
             width: 100%;
@@ -268,6 +287,9 @@
 
         .apple:nth-child(6) { top: 45%; left: 55%; animation-delay: 0s; }
 
+        /* ========================================
+           MAIN CONTAINER
+           ======================================== */
         .container {
             position: relative;
             z-index: 2;
@@ -278,6 +300,10 @@
             padding: 20px;
         }
 
+        /* ========================================
+           LOGIN CARD
+           Main form container
+           ======================================== */
         .login-card {
             background: rgba(0, 0, 0, 0.98);
             backdrop-filter: blur(20px);
@@ -288,7 +314,7 @@
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
             animation: cardPop 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
             border: 2px solid rgba(0, 0, 0, 0.8);
-            transition: box-shadow 0.6s ease;
+            position: relative;
         }
 
         @keyframes cardPop {
@@ -296,6 +322,50 @@
             to { opacity: 1; transform: scale(1) translateY(0); }
         }
 
+        /* ========================================
+           INFO BUTTON
+           Position: Top-right corner of login card
+           ======================================== */
+        .info-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            color: var(--color-primary);
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+
+        .info-btn:hover {
+            background: var(--color-primary);
+            color: white;
+            transform: translateY(-2px) scale(1.1);
+            box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4);
+        }
+
+        body.teacher-mode .info-btn {
+            color: var(--color-teacher-secondary);
+        }
+
+        body.teacher-mode .info-btn:hover {
+            background: var(--color-teacher-secondary);
+            color: white;
+            box-shadow: 0 4px 12px rgba(173, 73, 225, 0.4);
+        }
+
+        /* ========================================
+           HEADER SECTION
+           ======================================== */
         .login-header {
             text-align: center;
             margin-bottom: 35px;
@@ -384,48 +454,18 @@
             color: #ffffff;
             margin-bottom: 8px;
             font-weight: 700;
-            transition: var(--transition);
         }
 
         .login-header p {
             font-size: 14px;
             color: #ffffff;
-            transition: var(--transition);
         }
 
-        .header-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .info-btn {
-            background: white;
-            border: 2px solid rgba(255,255,255,0.18);
-            color: black;
-            width: 12px;
-            height: 12px;
-            border-radius: 30px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 500;
-            cursor: pointer;
-            transition: background 150ms ease, transform 120ms ease;
-        }
-
-        .info-btn:hover {
-            background: var(--color-primary);
-            color: white;
-            transform: translateY(-2px);
-        }
-
-        .info-btn.teacher-mode:hover {
-            background: var(--color-teacher-secondary);
-            color: white;
-            transform: translateY(-2px);
-        }
-
+        /* ========================================
+           ROLE SELECTOR
+           Database field: users.user_type (ENUM: 'student', 'teacher', 'admin')
+           Note: Admin login may be handled separately
+           ======================================== */
         .role-selector {
             display: flex;
             gap: 12px;
@@ -468,6 +508,9 @@
             transform: translateY(-2px);
         }
 
+        /* ========================================
+           FORM ELEMENTS
+           ======================================== */
         .form-group {
             margin-bottom: 22px;
         }
@@ -480,6 +523,9 @@
             font-weight: 600;
         }
 
+        /* Email Input - Maps to: users.email (VARCHAR 100, UNIQUE)
+           Password Input - Verified against: users.password_hash (VARCHAR 255)
+           Note: Backend must use password_verify() for secure comparison */
         .form-control {
             width: 100%;
             padding: 14px 16px;
@@ -508,6 +554,32 @@
             box-shadow: 0 0 0 3px rgba(250, 112, 154, 0.1);
         }
 
+        /* Error message styling */
+        .error-message {
+            background: rgba(245, 101, 101, 0.1);
+            border-left: 4px solid var(--color-error);
+            color: #ffffff;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ========================================
+           FORM OPTIONS
+           Remember Me & Forgot Password
+           ======================================== */
         .form-options {
             display: flex;
             justify-content: space-between;
@@ -516,11 +588,12 @@
             font-size: 13px;
         }
 
+        /* Remember Me functionality - Can be stored in session/cookie */
         .remember-me {
             display: flex;
             align-items: center;
             gap: 8px;
-            color: #4a5568;
+            color: #ffffff;
             cursor: pointer;
         }
 
@@ -535,6 +608,7 @@
             accent-color: #7A1CAC;
         }
 
+        /* Forgot Password - Links to password_reset_otps table */
         .forgot-password {
             color: var(--color-primary-dark);
             text-decoration: none;
@@ -550,6 +624,9 @@
             transform: translateX(3px);
         }
 
+        /* ========================================
+           SUBMIT BUTTON
+           ======================================== */
         .btn-login {
             width: 100%;
             padding: 16px;
@@ -569,12 +646,12 @@
             box-shadow: 0 6px 20px rgba(250, 112, 154, 0.4);
         }
 
-        .btn-login:hover {
+        .btn-login:hover:not(:disabled) {
             transform: translateY(-3px);
             box-shadow: 0 10px 30px rgba(79, 172, 254, 0.5);
         }
 
-        body.teacher-mode .btn-login:hover {
+        body.teacher-mode .btn-login:hover:not(:disabled) {
             box-shadow: 0 10px 30px rgba(250, 112, 154, 0.5);
         }
 
@@ -582,6 +659,15 @@
             transform: translateY(-1px);
         }
 
+        .btn-login:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        /* ========================================
+           GUEST ACCESS SECTION
+           For public assessments where is_public = TRUE
+           ======================================== */
         .guest-access {
             margin-top: 25px;
             text-align: center;
@@ -637,19 +723,164 @@
             box-shadow: 0 6px 20px rgba(250, 112, 154, 0.3);
         }
 
-        @media (max-width: 480px) {
-            .login-card { padding: 35px 25px; }
-            .login-header h1 { font-size: 24px; }
-            .logo-container { width: 75px; height: 75px; }
-            .logo-content { font-size: 36px; }
-            .role-btn { font-size: 13px; padding: 12px; }
-            .book, .chalkboard, .chart, .apple, .pencil { transform: scale(0.8); }
+        /* ========================================
+           INFO MODAL
+           ======================================== */
+        .info-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.3s ease;
         }
 
-        .hidden { display: none; }
+        .info-modal.show {
+            display: flex;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .info-modal-content {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(30px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .info-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .info-modal-header h2 {
+            color: var(--color-text);
+            font-size: 22px;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            font-size: 28px;
+            color: var(--color-text-light);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+        }
+
+        .close-modal:hover {
+            background: #f0f0f0;
+            color: var(--color-error);
+            transform: rotate(90deg);
+        }
+
+        .info-section {
+            margin-bottom: 20px;
+        }
+
+        .info-section h3 {
+            color: var(--color-primary);
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        body.teacher-mode .info-section h3 {
+            color: var(--color-teacher-secondary);
+        }
+
+        .info-section p, .info-section ul {
+            color: var(--color-text);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .info-section ul {
+            margin-left: 20px;
+        }
+
+        .info-section li {
+            margin-bottom: 8px;
+        }
+
+        /* ========================================
+           RESPONSIVE DESIGN
+           ======================================== */
+        @media (max-width: 480px) {
+            .login-card { 
+                padding: 35px 25px; 
+            }
+            
+            .login-header h1 { 
+                font-size: 24px; 
+            }
+            
+            .logo-container { 
+                width: 75px; 
+                height: 75px; 
+            }
+            
+            .logo-content { 
+                font-size: 36px; 
+            }
+            
+            .role-btn { 
+                font-size: 13px; 
+                padding: 12px; 
+            }
+            
+            .book, .chalkboard, .chart, .apple, .pencil { 
+                transform: scale(0.8); 
+            }
+
+            .info-btn {
+                top: 15px;
+                right: 15px;
+                width: 28px;
+                height: 28px;
+                font-size: 14px;
+            }
+
+            .guest-buttons {
+                flex-direction: column;
+            }
+        }
+
+        .hidden { 
+            display: none; 
+        }
     </style>
 </head>
 <body>
+    <!-- ========================================
+         ANIMATED BACKGROUND
+         Switches based on selected role
+         ======================================== -->
     <div class="dynamic-background student-mode">
         <div class="student-animation">
             <div class="book"></div>
@@ -672,57 +903,205 @@
 
     <div class="container">
         <div class="login-card">
+            <!-- ========================================
+                 INFO BUTTON - Top Right Corner
+                 Shows system information and help
+                 ======================================== -->
+            <button type="button" class="info-btn" id="pageInfoBtn" title="System Information">i</button>
+
+            <!-- ========================================
+                 HEADER SECTION
+                 ======================================== -->
             <div class="login-header">
                 <div class="logo-container">
+                    <!-- Student Logo - Shown by default -->
                     <div class="logo student-logo">
                         <span class="logo-content">🎓</span>
                     </div>
+                    <!-- Teacher Logo - Hidden initially -->
                     <div class="logo teacher-logo">
                         <span class="logo-content">👨‍🏫</span>
                     </div>
                 </div>
-                <div class="header-row">
-                    <h1>Welcome</h1>
-                    <button type="button" class="info-btn" id="pageInfoBtn" title="Page info">i</button>
-                </div>
+                <h1>Welcome Back</h1>
+                <p>Sign in to access your dashboard</p>
             </div>
 
+            <!-- ========================================
+                 ROLE SELECTOR
+                 Database: users.user_type ENUM('student','teacher','admin')
+                 This value is sent as hidden input with form
+                 ======================================== -->
             <div class="role-selector">
-                <button class="role-btn active" data-role="student">Student</button>
-                <button class="role-btn" data-role="teacher">Teacher</button>
+                <button type="button" class="role-btn active" data-role="student">Student</button>
+                <button type="button" class="role-btn" data-role="teacher">Teacher</button>
             </div>
 
+            <!-- ========================================
+                 ERROR MESSAGE DISPLAY
+                 Shows validation or server errors
+                 ======================================== -->
+            <div class="error-message" id="errorMessage"></div>
+
+            <!-- ========================================
+                 LOGIN FORM
+                 Action: login.php
+                 Method: POST
+                 
+                 Form Fields Mapping to Database:
+                 - email → users.email (VARCHAR 100, UNIQUE, NOT NULL)
+                 - password → verified against users.password_hash (VARCHAR 255)
+                 - role → users.user_type ENUM('student','teacher','admin')
+                 - remember → Can extend session timeout or set cookie
+                 
+                 Security Notes:
+                 1. Backend MUST use password_verify() to check password
+                 2. Backend MUST sanitize all inputs
+                 3. Backend MUST check users.is_active = TRUE
+                 4. Backend SHOULD check users.is_verified = TRUE
+                 5. Backend SHOULD log attempt in login_activity table
+                 6. Backend SHOULD update users.last_login timestamp
+                 
+                 Redirect Logic (from database schema):
+                 - Student → student-dashboard.php
+                 - Teacher → teacher-dashboard.php
+                 - Admin → admin-dashboard.php (if implemented)
+                 ======================================== -->
             <form id="loginForm" method="POST" action="login.php">
+                <!-- Hidden field for selected role -->
                 <input type="hidden" name="role" id="roleInput" value="student">
+                
+                <!-- Email Input -->
                 <div class="form-group">
                     <label for="email">Email Address</label>
-                    <input type="email" class="form-control" id="email" name="email" placeholder="Enter your email" required>
+                    <input 
+                        type="email" 
+                        class="form-control" 
+                        id="email" 
+                        name="email" 
+                        placeholder="Enter your institutional email"
+                        required
+                        autocomplete="email">
                 </div>
+                
+                <!-- Password Input -->
                 <div class="form-group">
                     <label for="password">Password</label>
-                    <input type="password" class="form-control" id="password" name="password" placeholder="Enter your password" required>
+                    <input 
+                        type="password" 
+                        class="form-control" 
+                        id="password" 
+                        name="password" 
+                        placeholder="Enter your password"
+                        required
+                        autocomplete="current-password">
                 </div>
+                
+                <!-- Form Options -->
                 <div class="form-options">
+                    <!-- Remember Me Checkbox -->
                     <label class="remember-me">
-                        <input type="checkbox" name="remember">
+                        <input type="checkbox" name="remember" id="rememberMe">
                         <span>Remember me</span>
                     </label>
+                    
+                    <!-- Forgot Password Link
+                         Links to: forgot-password.php
+                         Uses: password_reset_otps table
+                         Process: Generates OTP → Sends email → Validates OTP → Allows reset -->
                     <a href="forgot-password.php" class="forgot-password">Forgot Password?</a>
                 </div>
-                <button type="submit" class="btn-login">Sign In</button>
+                
+                <!-- Submit Button -->
+                <button type="submit" class="btn-login" id="loginBtn">Sign In</button>
             </form>
 
+            <!-- ========================================
+                 GUEST ACCESS SECTION
+                 
+                 Guest Flow:
+                 1. Guest clicks "Continue As Guest"
+                 2. System shows public assessments (where is_public = TRUE)
+                 3. Guest data stored in assessment_attempts with:
+                    - user_id = NULL
+                    - guest_name, guest_email populated
+                    - guest_token generated for session
+                 
+                 Registration Flow:
+                 1. New user fills registration form
+                 2. Creates record in users table
+                 3. Generates email_verification_tokens entry
+                 4. Sends verification email
+                 5. User verifies → sets is_verified = TRUE
+                 ======================================== -->
             <div class="guest-access">
                 <p>Don't have an account?</p>
                 <div class="guest-buttons">
-                    <a href="guest-dashboard.html" class="btn-guest">Continue As Guest</a>
+                    <a href="guest-dashboard.php" class="btn-guest">Continue As Guest</a>
                     <a href="register.html" class="btn-register">Register New Account</a>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- ========================================
+         INFO MODAL
+         Displays system information and help
+         ======================================== -->
+    <div class="info-modal" id="infoModal">
+        <div class="info-modal-content">
+            <div class="info-modal-header">
+                <h2>System Information</h2>
+                <button type="button" class="close-modal" id="closeModal">&times;</button>
+            </div>
+            
+            <div class="info-section">
+                <h3>About PTA Platform</h3>
+                <p>Placement & Training Assessment Platform is a comprehensive system for managing assessments, training materials, and student performance tracking.</p>
+            </div>
+
+            <div class="info-section">
+                <h3>Login Instructions</h3>
+                <ul>
+                    <li><strong>Students:</strong> Use your institutional email and password to access assessments, training materials, and track your progress.</li>
+                    <li><strong>Teachers:</strong> Access assessment creation tools, student analytics, and course management features.</li>
+                    <li><strong>Guest Users:</strong> Try out public assessments without registration. Your results will be temporary.</li>
+                </ul>
+            </div>
+
+            <div class="info-section">
+                <h3>Key Features</h3>
+                <ul>
+                    <li>Secure authentication with email verification</li>
+                    <li>Role-based dashboards (Student/Teacher/Admin)</li>
+                    <li>Comprehensive assessment system with multiple question types</li>
+                    <li>Training materials library with progress tracking</li>
+                    <li>Real-time analytics and performance reports</li>
+                    <li>Guest access for public assessments</li>
+                </ul>
+            </div>
+
+            <div class="info-section">
+                <h3>Need Help?</h3>
+                <p>If you forgot your password, click "Forgot Password?" to receive a secure OTP via email. For new account registration, click "Register New Account" and verify your email to get started.</p>
+            </div>
+
+            <div class="info-section">
+                <h3>Technical Details</h3>
+                <p><strong>Database:</strong> MySQL with comprehensive schema including users, assessments, questions, attempts, and analytics tables.</p>
+                <p><strong>Security:</strong> Password hashing, email verification, login activity tracking, and session management.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================
+         JAVASCRIPT
+         Handles role switching, form validation, and UI interactions
+         ======================================== -->
     <script>
+        /* ========================================
+           DOM ELEMENTS
+           ======================================== */
         const roleButtons = document.querySelectorAll('.role-btn');
         const roleInput = document.getElementById('roleInput');
         const dynamicBg = document.querySelector('.dynamic-background');
@@ -731,113 +1110,288 @@
         const studentLogo = document.querySelector('.student-logo');
         const teacherLogo = document.querySelector('.teacher-logo');
         const body = document.body;
+        const loginForm = document.getElementById('loginForm');
+        const errorMessage = document.getElementById('errorMessage');
+        const loginBtn = document.getElementById('loginBtn');
+        const pageInfoBtn = document.getElementById('pageInfoBtn');
+        const infoModal = document.getElementById('infoModal');
+        const closeModal = document.getElementById('closeModal');
 
+        /* ========================================
+           ROLE SWITCHING FUNCTIONS
+           Updates UI theme and role input value
+           ======================================== */
         function activateStudentMode() {
+            // Update background
             dynamicBg.classList.remove('teacher-mode');
             dynamicBg.classList.add('student-mode');
+            
+            // Toggle animations
             studentAnim.classList.remove('hidden');
             teacherAnim.classList.remove('visible');
+            
+            // Switch logos
             studentLogo.classList.remove('hidden');
             teacherLogo.classList.remove('visible');
+            
+            // Update body class for styling
             body.classList.remove('teacher-mode');
-            const infoBtn = document.getElementById('pageInfoBtn');
-            if (infoBtn) infoBtn.classList.remove('teacher-mode');
+            
+            // Set form role value
             roleInput.value = 'student';
+            
+            console.log('Switched to Student Mode');
         }
 
         function activateTeacherMode() {
+            // Update background
             dynamicBg.classList.remove('student-mode');
             dynamicBg.classList.add('teacher-mode');
+            
+            // Toggle animations
             studentAnim.classList.add('hidden');
             teacherAnim.classList.add('visible');
+            
+            // Switch logos
             studentLogo.classList.add('hidden');
             teacherLogo.classList.add('visible');
+            
+            // Update body class for styling
             body.classList.add('teacher-mode');
-            const infoBtn = document.getElementById('pageInfoBtn');
-            if (infoBtn) infoBtn.classList.add('teacher-mode');
+            
+            // Set form role value
             roleInput.value = 'teacher';
+            
+            console.log('Switched to Teacher Mode');
         }
 
-        if (roleButtons.length > 0) {
-            document.addEventListener('click', function(e) {
-                const button = e.target.closest('.role-btn');
-                if (!button) return;
+        /* ========================================
+           ROLE BUTTON EVENT LISTENERS
+           Handles clicking on Student/Teacher buttons
+           ======================================== */
+        roleButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                // Remove active class from all buttons
                 roleButtons.forEach(btn => btn.classList.remove('active'));
-                button.classList.add('active');
-                const selectedRole = button.dataset.role;
+                
+                // Add active class to clicked button
+                this.classList.add('active');
+                
+                // Get selected role
+                const selectedRole = this.dataset.role;
+                
+                // Activate appropriate mode
                 if (selectedRole === 'student') {
                     activateStudentMode();
                 } else if (selectedRole === 'teacher') {
                     activateTeacherMode();
                 }
             });
+        });
+
+        /* ========================================
+           FORM VALIDATION
+           Client-side validation before submission
+           Note: Server-side validation is still required
+           ======================================== */
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.add('show');
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                errorMessage.classList.remove('show');
+            }, 5000);
         }
 
-        function debounce(func, wait) {
-            let timeout;
-            return function executedFunction(...args) {
-                const later = () => {
-                    clearTimeout(timeout);
-                    func(...args);
-                };
-                clearTimeout(timeout);
-                timeout = setTimeout(later, wait);
-            };
+        function hideError() {
+            errorMessage.classList.remove('show');
         }
 
-        // const loginForm = document.getElementById('loginForm');
-        // if (loginForm) {
-        //     loginForm.addEventListener('submit', function(e) {
-        //         e.preventDefault();
-        //         const email = document.getElementById('email')?.value?.trim();
-        //         const password = document.getElementById('password')?.value;
-        //         const role = roleInput?.value;
-        //         if (!email || !password) {
-        //             alert('Please fill in all fields');
-        //             return;
-        //         }
-        //         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        //         if (!emailRegex.test(email)) {
-        //             alert('Please enter a valid email address');
-        //             return;
-        //         }
-        //         if (password.length < 6) {
-        //             alert('Password must be at least 6 characters long');
-        //             return;
-        //         }
-        //         console.log('Login attempt:', { email, role, timestamp: new Date().toISOString() });
-        //         alert(`Login successful as ${role}!\n\nRedirecting to ${role} dashboard...`);
-        //     });
-        // }
-
-        (function() {
-            const pageInfoBtn = document.getElementById('pageInfoBtn');
-            if (pageInfoBtn) {
-                pageInfoBtn.addEventListener('click', function() {
-                    const info = [
-                        `Title: ${document.title}`,
-                        `URL: ${location.href}`,
-                        `User agent: ${navigator.userAgent}`,
-                        `Time: ${new Date().toString()}`
-                    ].join('\n');
-                    alert(info);
-                });
+        /* ========================================
+           FORM SUBMISSION HANDLER
+           Validates inputs before sending to server
+           ======================================== */
+        loginForm.addEventListener('submit', function(e) {
+            // Hide any existing errors
+            hideError();
+            
+            // Get form values
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            const role = roleInput.value;
+            
+            // Validate email format
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                e.preventDefault();
+                showError('Please enter a valid email address');
+                return false;
             }
-        })();
+            
+            // Validate password length (minimum 6 characters)
+            if (password.length < 6) {
+                e.preventDefault();
+                showError('Password must be at least 6 characters long');
+                return false;
+            }
+            
+            // Validate role selection
+            if (!role || (role !== 'student' && role !== 'teacher')) {
+                e.preventDefault();
+                showError('Please select a valid role');
+                return false;
+            }
+            
+            // Disable button to prevent double submission
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Signing In...';
+            
+            // Log attempt for debugging (remove in production)
+            console.log('Login attempt:', {
+                email: email,
+                role: role,
+                timestamp: new Date().toISOString()
+            });
+            
+            // Form will submit normally to login.php
+            // Backend will handle:
+            // 1. SQL query to users table
+            // 2. Password verification
+            // 3. Session creation
+            // 4. Login activity logging
+            // 5. Redirect to appropriate dashboard
+        });
 
+        /* ========================================
+           INFO MODAL FUNCTIONS
+           Opens/closes the information modal
+           ======================================== */
+        function openInfoModal() {
+            infoModal.classList.add('show');
+            document.body.style.overflow = 'hidden'; // Prevent background scrolling
+        }
+
+        function closeInfoModal() {
+            infoModal.classList.remove('show');
+            document.body.style.overflow = ''; // Restore scrolling
+        }
+
+        // Info button click
+        pageInfoBtn.addEventListener('click', openInfoModal);
+
+        // Close button click
+        closeModal.addEventListener('click', closeInfoModal);
+
+        // Click outside modal to close
+        infoModal.addEventListener('click', function(e) {
+            if (e.target === infoModal) {
+                closeInfoModal();
+            }
+        });
+
+        // ESC key to close modal
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && infoModal.classList.contains('show')) {
+                closeInfoModal();
+            }
+        });
+
+        /* ========================================
+           URL PARAMETER ERROR HANDLING
+           Checks for error messages in URL (from backend redirect)
+           Example: login.php?error=invalid_credentials
+           ======================================== */
         window.addEventListener('load', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const errorParam = urlParams.get('error');
+            
+            if (errorParam) {
+                let errorMsg = '';
+                
+                switch(errorParam) {
+                    case 'invalid_credentials':
+                        errorMsg = 'Invalid email or password. Please try again.';
+                        break;
+                    case 'user_not_found':
+                        errorMsg = 'No account found with this email address.';
+                        break;
+                    case 'role_mismatch':
+                        errorMsg = 'This account is not registered as the selected role.';
+                        break;
+                    case 'account_inactive':
+                        errorMsg = 'Your account has been deactivated. Please contact administrator.';
+                        break;
+                    case 'email_not_verified':
+                        errorMsg = 'Please verify your email address before logging in.';
+                        break;
+                    case 'account_locked':
+                        errorMsg = 'Account temporarily locked due to multiple failed login attempts.';
+                        break;
+                    default:
+                        errorMsg = 'An error occurred. Please try again.';
+                }
+                
+                showError(errorMsg);
+                
+                // Clean URL without page reload
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+            
+            // Play card pop animation on load
             const loginCard = document.querySelector('.login-card');
             if (loginCard) {
                 loginCard.style.animation = 'cardPop 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55)';
             }
         });
 
+        /* ========================================
+           ENTER KEY HANDLING
+           Allow Enter key to submit form from any input
+           ======================================== */
         document.addEventListener('keypress', function(e) {
-            if (e.target.classList.contains('form-control') && e.key === 'Enter') {
-                const form = document.getElementById('loginForm');
-                if (form) {
-                    form.dispatchEvent(new Event('submit'));
+            if (e.key === 'Enter' && e.target.classList.contains('form-control')) {
+                e.preventDefault();
+                loginForm.dispatchEvent(new Event('submit'));
+            }
+        });
+
+        /* ========================================
+           REMEMBER ME FUNCTIONALITY
+           Store preference in localStorage (optional enhancement)
+           Note: Actual "remember me" logic should be handled server-side
+           ======================================== */
+        const rememberMeCheckbox = document.getElementById('rememberMe');
+        const emailInput = document.getElementById('email');
+
+        // Load saved email on page load (if remember me was checked before)
+        window.addEventListener('load', function() {
+            const savedEmail = localStorage.getItem('rememberedEmail');
+            const wasRemembered = localStorage.getItem('rememberMe') === 'true';
+            
+            if (wasRemembered && savedEmail) {
+                emailInput.value = savedEmail;
+                rememberMeCheckbox.checked = true;
+            }
+        });
+
+        // Save email when remember me is checked
+        rememberMeCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                localStorage.setItem('rememberMe', 'true');
+                if (emailInput.value) {
+                    localStorage.setItem('rememberedEmail', emailInput.value);
                 }
+            } else {
+                localStorage.removeItem('rememberMe');
+                localStorage.removeItem('rememberedEmail');
+            }
+        });
+
+        // Update saved email when it changes (if remember me is checked)
+        emailInput.addEventListener('change', function() {
+            if (rememberMeCheckbox.checked) {
+                localStorage.setItem('rememberedEmail', this.value);
             }
         });
     </script>
