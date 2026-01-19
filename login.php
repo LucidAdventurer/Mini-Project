@@ -120,7 +120,7 @@ function isAccountLocked($conn, $email) {
     $stmt = $conn->prepare(
         "SELECT COUNT(*) as failed_count 
          FROM login_activity la
-         JOIN users u ON la.user_id = u.user_id
+         JOIN users u ON la.user_id = u.uid
          WHERE u.email = ? 
          AND la.is_success = 0
          AND la.created_at > DATE_SUB(NOW(), INTERVAL ? MINUTE)"
@@ -195,7 +195,7 @@ if (isAccountLocked($conn, $email)) {
 
 $stmt = $conn->prepare(
     "SELECT 
-        user_id,
+        uid,
         name,
         email,
         password,
