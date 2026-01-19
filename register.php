@@ -1,56 +1,47 @@
-<?php
-/* ========================================
-   PRODUCTION REGISTRATION HANDLER
-   ======================================== */
 
-// CRITICAL: No whitespace before this line
+<?php
+header('Content-Type: application/json');
+
+// Error handling setup
 ini_set('display_errors', 0);
 error_reporting(E_ALL);
-ini_set('log_errors', 1);
 
-// Ensure logs directory exists
 $logDir = __DIR__ . '/logs';
 if (!is_dir($logDir)) {
     @mkdir($logDir, 0755, true);
 }
-ini_set('error_log', $logDir . '/php_errors.log');
+ini_set('error_log', $logDir . '/registration_errors.log');
 
-header('Content-Type: application/json');
-
-// Global error handler for unexpected errors
+// Global error handler
 set_exception_handler(function($e) {
-    error_log("Uncaught exception: " . $e->getMessage() . "\n" . $e->getTraceAsString());
+    error_log("Registration Exception: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
     echo json_encode([
         'success' => false,
-        'message' => 'An unexpected error occurred. Please try again.'
+        'message' => 'An unexpected error occurred. Please contact administrator.',
+        'debug' => 'Check logs/registration_errors.log for details'
     ]);
     exit;
 });
 
-// Wrap everything in try-catch
 try {
-    // Include dependencies with error checking
+    // Check if config file exists
     if (!file_exists("config.php")) {
-        throw new Exception("Configuration file not found");
+        throw new Exception("Configuration file (config.php) not found");
     }
+    
     require_once "config.php";
     
-    // Check database connection
+    // Verify database connection
     if (!isset($conn) || $conn->connect_error) {
-        throw new Exception("Database connection failed");
+        throw new Exception("Database connection failed: " . ($conn->connect_error ?? 'Unknown error'));
     }
     
-    // system-settings.php is optional - handle gracefully
-    $settingsAvailable = file_exists("system-settings.php");
-    if ($settingsAvailable) {
-        require_once "system-settings.php";
-        $settings = SystemSettings::getInstance();
+    // Verify users table exists
+    if (!tableExists($conn, 'users')) {
+        throw new Exception("Users table does not exist. Please run database_setup.sql first.");
     }
-
-    /* ========================================
-       HELPER FUNCTIONS
-       ======================================== */
     
+    // Helper functions
     function sendResponse($success, $message, $data = []) {
         echo json_encode(array_merge([
             'success' => $success,
@@ -78,12 +69,15 @@ try {
         if (count($errors) > 0) {
             return [false, "Password must contain " . implode(', ', $errors)];
         }
-        return [true, 'Password meets requirements'];
+        return [true, 'Password valid'];
     }
     
     function emailExists($conn, $email) {
         $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ?");
-        if (!$stmt) return false;
+        if (!$stmt) {
+            error_log("Prepare failed in emailExists: " . $conn->error);
+            return false;
+        }
         $stmt->bind_param("s", $email);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -95,7 +89,10 @@ try {
     function regNumberExists($conn, $regNumber) {
         if (empty($regNumber)) return false;
         $stmt = $conn->prepare("SELECT user_id FROM users WHERE registration_number = ?");
-        if (!$stmt) return false;
+        if (!$stmt) {
+            error_log("Prepare failed in regNumberExists: " . $conn->error);
+            return false;
+        }
         $stmt->bind_param("s", $regNumber);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -108,20 +105,9 @@ try {
         return bin2hex(random_bytes($length / 2));
     }
     
-    /* ========================================
-       MAIN LOGIC
-       ======================================== */
-    
+    // Check request method
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        sendResponse(false, 'Invalid request method');
-    }
-    
-    // Check if registration allowed (if settings available)
-    if ($settingsAvailable) {
-        $allowRegistration = $settings->get('allow_registration', true);
-        if (!$allowRegistration) {
-            sendResponse(false, 'Registration is currently disabled');
-        }
+        sendResponse(false, 'Invalid request method. Please use the registration form.');
     }
     
     // Get and sanitize inputs
@@ -133,29 +119,39 @@ try {
     $regNumber = sanitizeInput($_POST['registration_number'] ?? '');
     $department = sanitizeInput($_POST['department'] ?? '');
     
+    // Log received data (remove passwords)
+    error_log("Registration attempt - Email: $email, Type: $userType, Dept: $department");
+    
     // Validate user type
     if (!in_array($userType, ['student', 'teacher'])) {
-        sendResponse(false, 'Invalid user type');
+        sendResponse(false, 'Invalid user type. Please select Student or Teacher.');
     }
     
     // Validate required fields
-    if (empty($fullName) || empty($email) || empty($password)) {
-        sendResponse(false, 'Full name, email, and password are required');
+    if (empty($fullName)) {
+        sendResponse(false, 'Full name is required');
     }
     
-    // Validate passwords match
-    if (!empty($confirmPassword) && $password !== $confirmPassword) {
-        sendResponse(false, 'Passwords do not match');
+    if (empty($email)) {
+        sendResponse(false, 'Email address is required');
+    }
+    
+    if (empty($password)) {
+        sendResponse(false, 'Password is required');
     }
     
     // Validate name
-    if (strlen($fullName) < 3 || !preg_match('/^[a-zA-Z\s\'.,-]+$/', $fullName)) {
-        sendResponse(false, 'Invalid name format');
+    if (strlen($fullName) < 3) {
+        sendResponse(false, 'Name must be at least 3 characters long');
+    }
+    
+    if (!preg_match('/^[a-zA-Z\s\'.,-]+$/', $fullName)) {
+        sendResponse(false, 'Name contains invalid characters');
     }
     
     // Validate email
     if (!isValidEmail($email)) {
-        sendResponse(false, 'Invalid email address');
+        sendResponse(false, 'Invalid email address format');
     }
     
     // Validate password strength
@@ -164,13 +160,12 @@ try {
         sendResponse(false, $passwordMessage);
     }
     
-    // Role-specific validation
-    $validDepartments = [
-        'Computer Science', 'Information Technology', 'Electronics',
-        'Mechanical', 'Civil', 'Electrical', 'Chemical', 
-        'Biotechnology', 'Mathematics', 'Physics', 'Chemistry', 'Other'
-    ];
+    // Validate passwords match (if confirm_password provided)
+    if (!empty($confirmPassword) && $password !== $confirmPassword) {
+        sendResponse(false, 'Passwords do not match');
+    }
     
+    // Student-specific validation
     if ($userType === 'student') {
         if (empty($regNumber)) {
             sendResponse(false, 'Registration number is required for students');
@@ -179,31 +174,44 @@ try {
             sendResponse(false, 'Registration number must be at least 5 characters');
         }
         if (regNumberExists($conn, $regNumber)) {
-            sendResponse(false, 'Registration number already exists');
+            sendResponse(false, 'This registration number is already registered');
         }
     } else {
         $regNumber = null; // Teachers don't have registration numbers
     }
     
-    if (empty($department) || !in_array($department, $validDepartments)) {
+    // Validate department
+    $validDepartments = [
+        'Computer Science', 'Information Technology', 'Electronics',
+        'Mechanical', 'Civil', 'Electrical', 'Chemical', 
+        'Biotechnology', 'Mathematics', 'Physics', 'Chemistry', 'Other'
+    ];
+    
+    if (empty($department)) {
+        sendResponse(false, 'Department is required');
+    }
+    
+    if (!in_array($department, $validDepartments)) {
         sendResponse(false, 'Please select a valid department');
     }
     
     // Check duplicate email
     if (emailExists($conn, $email)) {
-        sendResponse(false, 'Email already registered. Please login instead.');
+        sendResponse(false, 'This email is already registered. Please login instead.');
     }
     
-    // Create user account
-    $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+    // Begin transaction
     $conn->begin_transaction();
     
     try {
+        // Hash password
+        $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+        
         // Insert user
         $stmt = $conn->prepare(
             "INSERT INTO users 
             (full_name, email, password_hash, user_type, department, registration_number, is_verified, is_active) 
-            VALUES (?, ?, ?, ?, ?, ?, FALSE, TRUE)"
+            VALUES (?, ?, ?, ?, ?, ?, 0, 1)"
         );
         
         if (!$stmt) {
@@ -213,7 +221,6 @@ try {
         $stmt->bind_param("ssssss", $fullName, $email, $passwordHash, $userType, $department, $regNumber);
         
         if (!$stmt->execute()) {
-            // Handle duplicate entry errors
             if ($stmt->errno === 1062) {
                 if (strpos($stmt->error, 'email') !== false) {
                     throw new Exception("Email already exists");
@@ -227,46 +234,60 @@ try {
         $userId = $stmt->insert_id;
         $stmt->close();
         
-        // Generate verification token
-        $token = generateToken(64);
-        $expiresAt = date('Y-m-d H:i:s', strtotime('+24 hours'));
+        error_log("User created successfully - ID: $userId, Email: $email");
         
-        $stmt = $conn->prepare(
-            "INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES (?, ?, ?)"
-        );
-        
-        if ($stmt) {
-            $stmt->bind_param("iss", $userId, $token, $expiresAt);
-            $stmt->execute();
-            $stmt->close();
+        // Generate verification token (if table exists)
+        if (tableExists($conn, 'email_verification_tokens')) {
+            $token = generateToken(64);
+            $expiresAt = date('Y-m-d H:i:s', strtotime('+24 hours'));
+            
+            $stmt = $conn->prepare(
+                "INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES (?, ?, ?)"
+            );
+            
+            if ($stmt) {
+                $stmt->bind_param("iss", $userId, $token, $expiresAt);
+                $stmt->execute();
+                $stmt->close();
+                error_log("Verification token created for user: $userId");
+            }
         }
         
-        // Queue email (if table exists)
-        $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
-        $verificationLink = $protocol . "://" . $_SERVER['HTTP_HOST'] . "/verify-email.php?token=" . $token;
-        
-        $subject = "Verify Your Email - PTA Platform";
-        $body = "Hello $fullName,\n\nPlease verify your email by clicking:\n$verificationLink\n\nThis link expires in 24 hours.";
-        
-        $stmt = $conn->prepare(
-            "INSERT INTO email_queue (recipient_email, recipient_name, subject, body, email_type) 
-            VALUES (?, ?, ?, ?, 'verification')"
-        );
-        
-        if ($stmt) {
-            $stmt->bind_param("ssss", $email, $fullName, $subject, $body);
-            $stmt->execute();
-            $stmt->close();
+        // Queue verification email (if table exists)
+        if (tableExists($conn, 'email_queue')) {
+            $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
+            $verificationLink = $protocol . "://" . $_SERVER['HTTP_HOST'] . "/verify-email.php?token=" . ($token ?? '');
+            
+            $subject = "Verify Your Email - PTA Platform";
+            $body = "Hello $fullName,\n\nPlease verify your email by clicking:\n$verificationLink\n\nThis link expires in 24 hours.\n\nIf you didn't create this account, please ignore this email.";
+            
+            $stmt = $conn->prepare(
+                "INSERT INTO email_queue (recipient_email, recipient_name, subject, body, email_type) 
+                VALUES (?, ?, ?, ?, 'verification')"
+            );
+            
+            if ($stmt) {
+                $stmt->bind_param("ssss", $email, $fullName, $subject, $body);
+                $stmt->execute();
+                $stmt->close();
+                error_log("Email queued for user: $userId");
+            }
         }
         
         // Commit transaction
         $conn->commit();
         
-        $requireVerification = $settingsAvailable ? $settings->get('require_email_verification', true) : true;
+        error_log("Registration completed successfully for: $email");
+        
+        // Check if email verification is required (from system settings if available)
+        $requireVerification = false;
+        if (function_exists('getSystemSetting')) {
+            $requireVerification = getSystemSetting('require_email_verification', false);
+        }
         
         $message = $requireVerification 
-            ? "Account created! Please check your email to verify your account."
-            : "Account created successfully! You can now login.";
+            ? "Account created! Please check your email to verify your account before logging in."
+            : "Account created successfully! You can now login with your credentials.";
         
         sendResponse(true, $message, [
             'user_id' => $userId,
@@ -281,6 +302,7 @@ try {
     }
     
 } catch (Throwable $e) {
-    error_log("Fatal registration error: " . $e->getMessage() . "\n" . $e->getTraceAsString());
-    sendResponse(false, 'A server error occurred. Please try again or contact support.');
+    error_log("Fatal registration error: " . $e->getMessage() . "\nStack trace: " . $e->getTraceAsString());
+    sendResponse(false, 'A server error occurred. Please check the error log or contact support.');
 }
+?>
