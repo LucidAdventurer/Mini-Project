@@ -6,15 +6,14 @@
    Purpose: Authenticates users and creates sessions
    
    Database Tables Used:
-   - users: Main authentication
+   - users: Main authentication (PRIMARY KEY: user_id)
    - login_activity: Security logging
    
    FIXES APPLIED:
-   1. Session started BEFORE including config.php to avoid ini_set warnings
-   2. Fixed field name mismatch (uid vs user_id)
-   3. Fixed session variable names to match dashboard expectations
+   1. Fixed column name from 'password' to 'password_hash'
+   2. Fixed ALL references from 'uid' to 'user_id'
+   3. Session started BEFORE including config.php
    4. Added proper error logging
-   5. Fixed boolean handling in database operations
    ======================================== */
 
 // Start session FIRST before including config (which also tries to start session)
@@ -89,7 +88,7 @@ function logLoginActivity($conn, $userId, $email, $success, $failureReason = nul
  * @param int $userId User ID
  */
 function updateLastLogin($conn, $userId) {
-    $stmt = $conn->prepare("UPDATE users SET last_login = NOW() WHERE uid = ?");
+    $stmt = $conn->prepare("UPDATE users SET last_login = NOW() WHERE user_id = ?");
     if ($stmt) {
         $stmt->bind_param("i", $userId);
         if (!$stmt->execute()) {
@@ -117,8 +116,8 @@ function isAccountLocked($conn, $email) {
         return false; // Can't check if table doesn't exist
     }
     
-    // First get the user's uid from the email
-    $userStmt = $conn->prepare("SELECT uid FROM users WHERE email = ?");
+    // First get the user's user_id from the email
+    $userStmt = $conn->prepare("SELECT user_id FROM users WHERE email = ?");
     if (!$userStmt) {
         error_log("Failed to prepare user lookup: " . $conn->error);
         return false;
@@ -134,11 +133,10 @@ function isAccountLocked($conn, $email) {
     }
     
     $userData = $userResult->fetch_assoc();
-    $userId = $userData['uid'];
+    $userId = $userData['user_id'];
     $userStmt->close();
     
-    // Now count recent failed attempts using the uid
-    // Note: login_activity.user_id references users.uid
+    // Now count recent failed attempts using the user_id
     $stmt = $conn->prepare(
         "SELECT COUNT(*) as failed_count 
          FROM login_activity 
@@ -166,7 +164,7 @@ function isAccountLocked($conn, $email) {
     
     $isLocked = ($row['failed_count'] >= $maxAttempts);
     if ($isLocked) {
-        error_log("Account locked for email: $email (UID: $userId, attempts: {$row['failed_count']})");
+        error_log("Account locked for email: $email (user_id: $userId, attempts: {$row['failed_count']})");
     }
     
     return $isLocked;
@@ -216,16 +214,15 @@ if (isAccountLocked($conn, $email)) {
 /* ========================================
    DATABASE QUERY
    
-   IMPORTANT: Using 'uid' as the primary key field name
-   based on student-dashboard.php which uses $_SESSION['uid']
+   IMPORTANT: Using 'password_hash' as the password column name
    ======================================== */
 
 $stmt = $conn->prepare(
     "SELECT 
-        uid,
-        name,
+        user_id,
+        full_name,
         email,
-        password,
+        password_hash,
         user_type,
         department,
         is_verified,
@@ -261,7 +258,7 @@ if ($result->num_rows !== 1) {
 $user = $result->fetch_assoc();
 $stmt->close();
 
-error_log("User found - UID: {$user['uid']}, Name: {$user['name']}, Verified: {$user['is_verified']}, Active: {$user['is_active']}");
+error_log("User found - user_id: {$user['user_id']}, Name: {$user['name']}, Verified: {$user['is_verified']}, Active: {$user['is_active']}");
 
 /* ========================================
    ACCOUNT STATUS CHECKS
@@ -269,44 +266,54 @@ error_log("User found - UID: {$user['uid']}, Name: {$user['name']}, Verified: {$
 
 // Check if account is active (users.is_active)
 if (!$user['is_active']) {
-    error_log("Account inactive - UID: {$user['uid']}");
-    logLoginActivity($conn, $user['uid'], $email, false, 'account_inactive');
+    error_log("Account inactive - user_id: {$user['user_id']}");
+    logLoginActivity($conn, $user['user_id'], $email, false, 'account_inactive');
     redirectWithError('account_inactive');
 }
 
 // Check if email is verified (users.is_verified)
 // OPTIONAL: Comment out these lines if you want to allow unverified login during development
 if (!$user['is_verified']) {
-    error_log("Email not verified - UID: {$user['uid']}");
-    logLoginActivity($conn, $user['uid'], $email, false, 'email_not_verified');
+    error_log("Email not verified - user_id: {$user['user_id']}");
+    logLoginActivity($conn, $user['user_id'], $email, false, 'email_not_verified');
     redirectWithError('email_not_verified');
 }
 
 /* ========================================
    PASSWORD VERIFICATION
    
-   NOTE: The database field is 'password' (not 'password_hash')
+   IMPORTANT: The database field is 'password_hash'
    ======================================== */
 
+error_log("=== PASSWORD VERIFICATION START ===");
+error_log("Password hash from DB (first 20 chars): " . substr($user['password_hash'], 0, 20));
+
 // Check if password is already hashed (starts with $2y$ for bcrypt)
-$isHashed = (strpos($user['password'], '$2y$') === 0 || strpos($user['password'], '$2a$') === 0);
+$isHashed = (strpos($user['password_hash'], '$2y$') === 0 || 
+             strpos($user['password_hash'], '$2a$') === 0 || 
+             strpos($user['password_hash'], '$2b$') === 0);
+
+error_log("Is password hashed: " . ($isHashed ? 'YES' : 'NO'));
 
 $passwordValid = false;
 
 if ($isHashed) {
     // Password is hashed, use password_verify
-    $passwordValid = password_verify($password, $user['password']);
-    error_log("Using password_verify - Result: " . ($passwordValid ? 'true' : 'false'));
+    $passwordValid = password_verify($password, $user['password_hash']);
+    error_log("Using password_verify - Result: " . ($passwordValid ? 'TRUE' : 'FALSE'));
 } else {
     // Password is plain text (not recommended, but handling it)
-    $passwordValid = ($password === $user['password']);
-    error_log("WARNING: Password stored in plain text! Using direct comparison - Result: " . ($passwordValid ? 'true' : 'false'));
+    $passwordValid = ($password === $user['password_hash']);
+    error_log("WARNING: Password stored in plain text!");
+    error_log("Direct comparison result: " . ($passwordValid ? 'TRUE' : 'FALSE'));
 }
 
+error_log("=== PASSWORD VERIFICATION END ===");
+
 if (!$passwordValid) {
-    error_log("Password verification failed - UID: {$user['uid']}");
+    error_log("PASSWORD VERIFICATION FAILED - user_id: {$user['user_id']}");
     // Log failed login attempt
-    logLoginActivity($conn, $user['uid'], $email, false, 'wrong_password');
+    logLoginActivity($conn, $user['user_id'], $email, false, 'wrong_password');
     redirectWithError('invalid_credentials');
 }
 
@@ -315,20 +322,21 @@ if (!$passwordValid) {
    Create session and redirect
    ======================================== */
 
-error_log("Login successful - UID: {$user['uid']}, Email: $email, Role: {$user['user_type']}");
+error_log("Login successful - user_id: {$user['user_id']}, Email: $email, Role: {$user['user_type']}");
 
 // Log successful login
-logLoginActivity($conn, $user['uid'], $email, true, null);
+logLoginActivity($conn, $user['user_id'], $email, true, null);
 
 // Update last login timestamp
-updateLastLogin($conn, $user['uid']);
+updateLastLogin($conn, $user['user_id']);
 
 // Clear any existing session data
 $_SESSION = array();
 
-// IMPORTANT: Match session variable names with what student-dashboard.php expects
-$_SESSION['uid'] = $user['uid'];  // student-dashboard.php checks for 'uid'
-$_SESSION['user_id'] = $user['uid'];  // Also set user_id for compatibility
+// IMPORTANT: Set BOTH 'uid' and 'user_id' for compatibility
+// student-dashboard.php checks for 'uid', but your database uses 'user_id'
+$_SESSION['uid'] = $user['user_id'];  // student-dashboard.php checks for 'uid'
+$_SESSION['user_id'] = $user['user_id'];  // Actual database field name
 $_SESSION['name'] = $user['name'];  // student-dashboard.php uses 'name'
 $_SESSION['full_name'] = $user['name'];  // Also set full_name for compatibility
 $_SESSION['email'] = $user['email'];
@@ -342,13 +350,13 @@ $_SESSION['is_verified'] = $user['is_verified'];
 $_SESSION['is_active'] = $user['is_active'];
 
 // Log session creation
-error_log("Session created - Session ID: " . session_id() . ", UID: {$_SESSION['uid']}, Role: {$_SESSION['role']}");
+error_log("Session created - Session ID: " . session_id() . ", user_id: {$_SESSION['user_id']}, Role: {$_SESSION['role']}");
 
 // Handle "Remember Me" functionality
 if ($remember) {
     // Set cookie for 30 days
     $cookieValue = base64_encode(json_encode([
-        'user_id' => $user['uid'],
+        'user_id' => $user['user_id'],
         'token' => bin2hex(random_bytes(32)) // Generate secure token
     ]));
     
@@ -362,7 +370,7 @@ if ($remember) {
         true  // HttpOnly
     );
     
-    error_log("Remember me cookie set for user: {$user['uid']}");
+    error_log("Remember me cookie set for user: {$user['user_id']}");
 }
 
 /* ========================================
@@ -388,7 +396,7 @@ switch ($user['user_type']) {
     default:
         // Should never reach here due to earlier validation
         error_log("Invalid user type after login: {$user['user_type']}");
-        logLoginActivity($conn, $user['uid'], $email, false, 'invalid_user_type');
+        logLoginActivity($conn, $user['user_id'], $email, false, 'invalid_user_type');
         redirectWithError('invalid_role');
 }
 
@@ -401,21 +409,18 @@ exit;
 /* ========================================
    DATABASE SCHEMA NOTES
    
-   Based on student-dashboard.php, the actual schema uses:
-   - uid (not user_id) as the primary key
-   - name (not full_name) for the user's name
-   - password (not password_hash) for the password field
-   - user_type for the role
+   Your actual database schema:
+   - users.user_id (PRIMARY KEY) - Main user identifier
+   - users.name - User's full name
+   - users.password_hash - Hashed password
+   - users.user_type - Role (student/teacher/admin)
    
-   Session variables expected by student-dashboard.php:
-   - $_SESSION['uid']
-   - $_SESSION['role']
-   - Also fetches 'name' and 'email' from database
+   login_activity table:
+   - login_activity.user_id (FOREIGN KEY to users.user_id)
    
-   RECOMMENDATION FOR TEAM:
-   1. Standardize field names across all files
-   2. Always hash passwords with password_hash()
-   3. Ensure all dashboards check the same session variables
-   4. Create the login_activity table if it doesn't exist
+   Session variables for compatibility:
+   - $_SESSION['uid'] = user_id (for student-dashboard.php)
+   - $_SESSION['user_id'] = user_id (actual DB field)
+   - $_SESSION['role'] = user_type (for student-dashboard.php)
    ======================================== */
 ?>

@@ -1,18 +1,17 @@
 <?php
 require "config.php";
-session_start();
 if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
     header("Location: index.html");
     exit;
 }
 
-$stmt = $conn->prepare("SELECT name, email FROM users WHERE uid = ?");
+$stmt = $conn->prepare("SELECT full_name, email FROM users WHERE user_id = ?");
 $stmt->bind_param("i", $_SESSION['uid']);
 $stmt->execute();
 $result = $stmt->get_result();
 $user = $result->fetch_assoc();
 
-$userName = $user['name'] ?? 'Teacher';
+$userName = $user['full_name'] ?? 'Teacher';
 $userEmail = $user['email'] ?? '';
 $userInitials = strtoupper(substr($userName, 0, 2));
 ?>
