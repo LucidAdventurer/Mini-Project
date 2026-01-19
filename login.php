@@ -113,17 +113,38 @@ function isAccountLocked($conn, $email) {
     
     // Check if login_activity table exists
     if (!tableExists($conn, 'login_activity')) {
+        error_log("login_activity table does not exist - cannot check account lock status");
         return false; // Can't check if table doesn't exist
     }
     
-    // Count recent failed attempts
+    // First get the user's uid from the email
+    $userStmt = $conn->prepare("SELECT uid FROM users WHERE email = ?");
+    if (!$userStmt) {
+        error_log("Failed to prepare user lookup: " . $conn->error);
+        return false;
+    }
+    
+    $userStmt->bind_param("s", $email);
+    $userStmt->execute();
+    $userResult = $userStmt->get_result();
+    
+    if ($userResult->num_rows === 0) {
+        $userStmt->close();
+        return false; // User doesn't exist, can't be locked
+    }
+    
+    $userData = $userResult->fetch_assoc();
+    $userId = $userData['uid'];
+    $userStmt->close();
+    
+    // Now count recent failed attempts using the uid
+    // Note: login_activity.user_id references users.uid
     $stmt = $conn->prepare(
         "SELECT COUNT(*) as failed_count 
-         FROM login_activity la
-         JOIN users u ON la.user_id = u.uid
-         WHERE u.email = ? 
-         AND la.is_success = 0
-         AND la.created_at > DATE_SUB(NOW(), INTERVAL ? MINUTE)"
+         FROM login_activity 
+         WHERE user_id = ? 
+         AND is_success = 0
+         AND created_at > DATE_SUB(NOW(), INTERVAL ? MINUTE)"
     );
     
     if (!$stmt) {
@@ -131,15 +152,21 @@ function isAccountLocked($conn, $email) {
         return false;
     }
     
-    $stmt->bind_param("si", $email, $lockoutDuration);
-    $stmt->execute();
+    $stmt->bind_param("ii", $userId, $lockoutDuration);
+    
+    if (!$stmt->execute()) {
+        error_log("Failed to execute account lock check: " . $stmt->error);
+        $stmt->close();
+        return false;
+    }
+    
     $result = $stmt->get_result();
     $row = $result->fetch_assoc();
     $stmt->close();
     
     $isLocked = ($row['failed_count'] >= $maxAttempts);
     if ($isLocked) {
-        error_log("Account locked for email: $email (attempts: {$row['failed_count']})");
+        error_log("Account locked for email: $email (UID: $userId, attempts: {$row['failed_count']})");
     }
     
     return $isLocked;
