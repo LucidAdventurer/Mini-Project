@@ -1,7 +1,7 @@
 <?php
 /*
  * ========================================
- * PTA GLOBAL CONFIGURATION - FIXED VERSION
+ * PTA GLOBAL CONFIGURATION - FIXED VERSION 1.0
  * File: config.php
  *
  * Purpose: Core application setup, including error reporting, database connection,
