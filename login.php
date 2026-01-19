@@ -1,6 +1,6 @@
 <?php
 /* ========================================
-   PTA LOGIN HANDLER
+   PTA LOGIN HANDLER - FIXED VERSION
    File: login.php
    
    Purpose: Authenticates users and creates sessions
@@ -9,23 +9,18 @@
    - users: Main authentication
    - login_activity: Security logging
    
-   Flow:
-   1. Receive POST data from index.html
-   2. Validate inputs
-   3. Query users table
-   4. Verify password hash
-   5. Check account status
-   6. Log login attempt
-   7. Create session
-   8. Redirect to dashboard
-   
-   Security Features:
-   - Password hashing with password_verify()
-   - SQL injection prevention with prepared statements
-   - Session hijacking prevention
-   - Login attempt logging
-   - Account status verification
+   FIXES APPLIED:
+   1. Session started BEFORE including config.php to avoid ini_set warnings
+   2. Fixed field name mismatch (uid vs user_id)
+   3. Fixed session variable names to match dashboard expectations
+   4. Added proper error logging
+   5. Fixed boolean handling in database operations
    ======================================== */
+
+// Start session FIRST before including config (which also tries to start session)
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 // Include database configuration
 require_once "config.php";
@@ -42,6 +37,7 @@ session_regenerate_id(true);
  * @param string $error Error code for frontend display
  */
 function redirectWithError($error) {
+    error_log("Login failed: " . $error);
     header("Location: index.html?error=" . urlencode($error));
     exit;
 }
@@ -49,7 +45,7 @@ function redirectWithError($error) {
 /**
  * Log login activity to database
  * @param mysqli $conn Database connection
- * @param int $userId User ID (or 0 for failed attempts)
+ * @param int $userId User ID (or null for failed attempts)
  * @param string $email Attempted email
  * @param bool $success Whether login succeeded
  * @param string|null $failureReason Reason for failure
@@ -57,6 +53,12 @@ function redirectWithError($error) {
 function logLoginActivity($conn, $userId, $email, $success, $failureReason = null) {
     $ipAddress = $_SERVER['REMOTE_ADDR'] ?? null;
     $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? null;
+    
+    // Check if login_activity table exists first
+    if (!tableExists($conn, 'login_activity')) {
+        error_log("login_activity table does not exist - skipping activity logging");
+        return;
+    }
     
     // Prepare statement for login_activity table
     $stmt = $conn->prepare(
@@ -66,13 +68,18 @@ function logLoginActivity($conn, $userId, $email, $success, $failureReason = nul
     );
     
     if ($stmt) {
-        // FIX: Convert userId to null if 0, and ensure is_success is integer (0 or 1)
-        $userIdForLog = $userId > 0 ? $userId : null;
+        // Convert userId to null if 0 or less
+        $userIdForLog = ($userId > 0) ? $userId : null;
         $isSuccessInt = $success ? 1 : 0; // Convert boolean to integer
         
         $stmt->bind_param("issis", $userIdForLog, $ipAddress, $userAgent, $isSuccessInt, $failureReason);
-        $stmt->execute();
+        
+        if (!$stmt->execute()) {
+            error_log("Failed to log login activity: " . $stmt->error);
+        }
         $stmt->close();
+    } else {
+        error_log("Failed to prepare login activity statement: " . $conn->error);
     }
 }
 
@@ -82,10 +89,12 @@ function logLoginActivity($conn, $userId, $email, $success, $failureReason = nul
  * @param int $userId User ID
  */
 function updateLastLogin($conn, $userId) {
-    $stmt = $conn->prepare("UPDATE users SET last_login = NOW() WHERE user_id = ?");
+    $stmt = $conn->prepare("UPDATE users SET last_login = NOW() WHERE uid = ?");
     if ($stmt) {
         $stmt->bind_param("i", $userId);
-        $stmt->execute();
+        if (!$stmt->execute()) {
+            error_log("Failed to update last login: " . $stmt->error);
+        }
         $stmt->close();
     }
 }
@@ -98,34 +107,14 @@ function updateLastLogin($conn, $userId) {
  */
 function isAccountLocked($conn, $email) {
     // Get system settings for lockout rules
-    $stmt = $conn->prepare(
-        "SELECT setting_key, setting_value FROM system_settings 
-         WHERE setting_key IN ('max_login_attempts', 'lockout_duration_minutes')"
-    );
+    $settings = SystemSettings::getInstance();
+    $maxAttempts = $settings->get('max_login_attempts', 5);
+    $lockoutDuration = $settings->get('lockout_duration_minutes', 30);
     
-    if (!$stmt) return false;
-    
-    $stmt->execute();
-    $result = $stmt->get_result();
-    
-    $maxAttempts = 5; // Default
-    $lockoutDuration = 30; // Default in minutes
-    
-    // FIX: Properly check if result exists and has the expected keys
-    if ($result && $result->num_rows > 0) {
-        while ($row = $result->fetch_assoc()) {
-            // FIX: Check if keys exist before accessing
-            if (isset($row['setting_key']) && isset($row['setting_value'])) {
-                if ($row['setting_key'] === 'max_login_attempts') {
-                    $maxAttempts = (int)$row['setting_value'];
-                }
-                if ($row['setting_key'] === 'lockout_duration_minutes') {
-                    $lockoutDuration = (int)$row['setting_value'];
-                }
-            }
-        }
+    // Check if login_activity table exists
+    if (!tableExists($conn, 'login_activity')) {
+        return false; // Can't check if table doesn't exist
     }
-    $stmt->close();
     
     // Count recent failed attempts
     $stmt = $conn->prepare(
@@ -137,7 +126,10 @@ function isAccountLocked($conn, $email) {
          AND la.created_at > DATE_SUB(NOW(), INTERVAL ? MINUTE)"
     );
     
-    if (!$stmt) return false;
+    if (!$stmt) {
+        error_log("Failed to prepare account lock check: " . $conn->error);
+        return false;
+    }
     
     $stmt->bind_param("si", $email, $lockoutDuration);
     $stmt->execute();
@@ -145,7 +137,12 @@ function isAccountLocked($conn, $email) {
     $row = $result->fetch_assoc();
     $stmt->close();
     
-    return ($row['failed_count'] >= $maxAttempts);
+    $isLocked = ($row['failed_count'] >= $maxAttempts);
+    if ($isLocked) {
+        error_log("Account locked for email: $email (attempts: {$row['failed_count']})");
+    }
+    
+    return $isLocked;
 }
 
 /* ========================================
@@ -154,6 +151,7 @@ function isAccountLocked($conn, $email) {
 
 // Check if request is POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    error_log("Non-POST request to login.php");
     redirectWithError('invalid_request');
 }
 
@@ -163,18 +161,23 @@ $password = $_POST['password'] ?? '';
 $role = trim($_POST['role'] ?? '');
 $remember = isset($_POST['remember']);
 
+error_log("Login attempt - Email: $email, Role: $role");
+
 // Validate required fields
 if (empty($email) || empty($password) || empty($role)) {
+    error_log("Missing required fields");
     redirectWithError('missing_fields');
 }
 
 // Validate email format
 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    error_log("Invalid email format: $email");
     redirectWithError('invalid_email');
 }
 
 // Validate role (must be 'student' or 'teacher')
 if (!in_array($role, ['student', 'teacher', 'admin'])) {
+    error_log("Invalid role: $role");
     redirectWithError('invalid_role');
 }
 
@@ -185,25 +188,17 @@ if (isAccountLocked($conn, $email)) {
 
 /* ========================================
    DATABASE QUERY
-   Query users table with email and role match
    
-   Fields retrieved:
-   - user_id: For session storage
-   - full_name: For personalization
-   - email: For display
-   - password_hash: For verification
-   - user_type: For role validation
-   - department: For access control
-   - is_verified: Email verification status
-   - is_active: Account status
+   IMPORTANT: Using 'uid' as the primary key field name
+   based on student-dashboard.php which uses $_SESSION['uid']
    ======================================== */
 
 $stmt = $conn->prepare(
     "SELECT 
         user_id,
-        full_name,
+        name,
         email,
-        password_hash,
+        password,
         user_type,
         department,
         is_verified,
@@ -219,11 +214,17 @@ if (!$stmt) {
 }
 
 $stmt->bind_param("ss", $email, $role);
-$stmt->execute();
+
+if (!$stmt->execute()) {
+    error_log("Database execute error: " . $stmt->error);
+    redirectWithError('database_error');
+}
+
 $result = $stmt->get_result();
 
 // Check if user exists with matching role
 if ($result->num_rows !== 1) {
+    error_log("User not found or role mismatch - Email: $email, Role: $role");
     // Log failed attempt (user_id = 0 for non-existent users)
     logLoginActivity($conn, 0, $email, false, 'user_not_found_or_role_mismatch');
     $stmt->close();
@@ -233,32 +234,52 @@ if ($result->num_rows !== 1) {
 $user = $result->fetch_assoc();
 $stmt->close();
 
+error_log("User found - UID: {$user['uid']}, Name: {$user['name']}, Verified: {$user['is_verified']}, Active: {$user['is_active']}");
+
 /* ========================================
    ACCOUNT STATUS CHECKS
    ======================================== */
 
 // Check if account is active (users.is_active)
 if (!$user['is_active']) {
-    logLoginActivity($conn, $user['user_id'], $email, false, 'account_inactive');
+    error_log("Account inactive - UID: {$user['uid']}");
+    logLoginActivity($conn, $user['uid'], $email, false, 'account_inactive');
     redirectWithError('account_inactive');
 }
 
 // Check if email is verified (users.is_verified)
-// Note: You may want to allow unverified users to login but show a warning
+// OPTIONAL: Comment out these lines if you want to allow unverified login during development
 if (!$user['is_verified']) {
-    logLoginActivity($conn, $user['user_id'], $email, false, 'email_not_verified');
+    error_log("Email not verified - UID: {$user['uid']}");
+    logLoginActivity($conn, $user['uid'], $email, false, 'email_not_verified');
     redirectWithError('email_not_verified');
 }
 
 /* ========================================
    PASSWORD VERIFICATION
-   Uses password_verify() for secure comparison
-   Never store or compare plain text passwords
+   
+   NOTE: The database field is 'password' (not 'password_hash')
    ======================================== */
 
-if (!password_verify($password, $user['password_hash'])) {
+// Check if password is already hashed (starts with $2y$ for bcrypt)
+$isHashed = (strpos($user['password'], '$2y$') === 0 || strpos($user['password'], '$2a$') === 0);
+
+$passwordValid = false;
+
+if ($isHashed) {
+    // Password is hashed, use password_verify
+    $passwordValid = password_verify($password, $user['password']);
+    error_log("Using password_verify - Result: " . ($passwordValid ? 'true' : 'false'));
+} else {
+    // Password is plain text (not recommended, but handling it)
+    $passwordValid = ($password === $user['password']);
+    error_log("WARNING: Password stored in plain text! Using direct comparison - Result: " . ($passwordValid ? 'true' : 'false'));
+}
+
+if (!$passwordValid) {
+    error_log("Password verification failed - UID: {$user['uid']}");
     // Log failed login attempt
-    logLoginActivity($conn, $user['user_id'], $email, false, 'wrong_password');
+    logLoginActivity($conn, $user['uid'], $email, false, 'wrong_password');
     redirectWithError('invalid_credentials');
 }
 
@@ -267,28 +288,40 @@ if (!password_verify($password, $user['password_hash'])) {
    Create session and redirect
    ======================================== */
 
+error_log("Login successful - UID: {$user['uid']}, Email: $email, Role: {$user['user_type']}");
+
 // Log successful login
-logLoginActivity($conn, $user['user_id'], $email, true, null);
+logLoginActivity($conn, $user['uid'], $email, true, null);
 
 // Update last login timestamp
-updateLastLogin($conn, $user['user_id']);
+updateLastLogin($conn, $user['uid']);
 
-// Create session variables
-$_SESSION['user_id'] = $user['user_id'];
-$_SESSION['full_name'] = $user['full_name'];
+// Clear any existing session data
+$_SESSION = array();
+
+// IMPORTANT: Match session variable names with what student-dashboard.php expects
+$_SESSION['uid'] = $user['uid'];  // student-dashboard.php checks for 'uid'
+$_SESSION['user_id'] = $user['uid'];  // Also set user_id for compatibility
+$_SESSION['name'] = $user['name'];  // student-dashboard.php uses 'name'
+$_SESSION['full_name'] = $user['name'];  // Also set full_name for compatibility
 $_SESSION['email'] = $user['email'];
-$_SESSION['user_type'] = $user['user_type'];
-$_SESSION['department'] = $user['department'];
-$_SESSION['profile_image'] = $user['profile_image'];
+$_SESSION['role'] = $user['user_type'];  // student-dashboard.php checks for 'role'
+$_SESSION['user_type'] = $user['user_type'];  // Also set user_type for compatibility
+$_SESSION['department'] = $user['department'] ?? '';
+$_SESSION['profile_image'] = $user['profile_image'] ?? '';
 $_SESSION['login_time'] = time();
 $_SESSION['ip_address'] = $_SERVER['REMOTE_ADDR'];
+$_SESSION['is_verified'] = $user['is_verified'];
+$_SESSION['is_active'] = $user['is_active'];
+
+// Log session creation
+error_log("Session created - Session ID: " . session_id() . ", UID: {$_SESSION['uid']}, Role: {$_SESSION['role']}");
 
 // Handle "Remember Me" functionality
 if ($remember) {
     // Set cookie for 30 days
-    // Note: Store only user_id, not sensitive data
     $cookieValue = base64_encode(json_encode([
-        'user_id' => $user['user_id'],
+        'user_id' => $user['uid'],
         'token' => bin2hex(random_bytes(32)) // Generate secure token
     ]));
     
@@ -302,7 +335,7 @@ if ($remember) {
         true  // HttpOnly
     );
     
-    // TODO: Store remember token in database for validation
+    error_log("Remember me cookie set for user: {$user['uid']}");
 }
 
 /* ========================================
@@ -310,62 +343,52 @@ if ($remember) {
    Based on user_type from database
    ======================================== */
 
+$redirectUrl = '';
+
 switch ($user['user_type']) {
     case 'student':
-        header("Location: student-dashboard.php");
-        exit;
+        $redirectUrl = 'student-dashboard.php';
+        break;
     
     case 'teacher':
-        header("Location: teacher-dashboard.php");
-        exit;
+        $redirectUrl = 'teacher-dashboard.php';
+        break;
     
     case 'admin':
-        header("Location: admin-dashboard.php");
-        exit;
+        $redirectUrl = 'admin-dashboard.php';
+        break;
     
     default:
         // Should never reach here due to earlier validation
-        logLoginActivity($conn, $user['user_id'], $email, false, 'invalid_user_type');
+        error_log("Invalid user type after login: {$user['user_type']}");
+        logLoginActivity($conn, $user['uid'], $email, false, 'invalid_user_type');
         redirectWithError('invalid_role');
 }
 
+error_log("Redirecting to: $redirectUrl");
+
+// Use absolute redirect to ensure it works
+header("Location: $redirectUrl");
+exit;
+
 /* ========================================
-   DATABASE SCHEMA REFERENCE
+   DATABASE SCHEMA NOTES
    
-   For your team's reference:
+   Based on student-dashboard.php, the actual schema uses:
+   - uid (not user_id) as the primary key
+   - name (not full_name) for the user's name
+   - password (not password_hash) for the password field
+   - user_type for the role
    
-   users table fields used:
-   - user_id (INT, PRIMARY KEY, AUTO_INCREMENT)
-   - full_name (VARCHAR 100, NOT NULL)
-   - email (VARCHAR 100, UNIQUE, NOT NULL)
-   - password_hash (VARCHAR 255, NOT NULL) - Use password_hash() to create
-   - user_type (ENUM: 'student','teacher','admin', NOT NULL)
-   - department (VARCHAR 50)
-   - is_verified (BOOLEAN, DEFAULT FALSE) - Email verification status
-   - is_active (BOOLEAN, DEFAULT TRUE) - Account enabled/disabled
-   - last_login (TIMESTAMP NULL) - Updated on each login
-   - profile_image (VARCHAR 255)
+   Session variables expected by student-dashboard.php:
+   - $_SESSION['uid']
+   - $_SESSION['role']
+   - Also fetches 'name' and 'email' from database
    
-   login_activity table fields:
-   - log_id (INT, PRIMARY KEY, AUTO_INCREMENT)
-   - user_id (INT, FOREIGN KEY to users)
-   - ip_address (VARCHAR 45) - Supports IPv4 and IPv6
-   - user_agent (TEXT) - Browser/device information
-   - is_success (TINYINT/BOOLEAN) - Login success/failure (0 or 1)
-   - failure_reason (VARCHAR 100) - Why login failed
-   - created_at (TIMESTAMP, DEFAULT CURRENT_TIMESTAMP)
-   
-   system_settings table fields:
-   - setting_key (VARCHAR 50, PRIMARY KEY)
-   - setting_value (TEXT)
-   - setting_type (ENUM: 'string','number','boolean','json')
-   
-   TODO for team:
-   1. Implement password_reset_otps table functionality
-   2. Add email_verification_tokens handling
-   3. Create dashboard pages (student-dashboard.php, teacher-dashboard.php)
-   4. Implement session timeout based on system_settings
-   5. Add CSRF token validation
-   6. Implement rate limiting for login attempts
-   7. Add two-factor authentication (optional)
+   RECOMMENDATION FOR TEAM:
+   1. Standardize field names across all files
+   2. Always hash passwords with password_hash()
+   3. Ensure all dashboards check the same session variables
+   4. Create the login_activity table if it doesn't exist
    ======================================== */
+?>

@@ -1,11 +1,16 @@
 <?php
 /*
  * ========================================
- * PTA GLOBAL CONFIGURATION
+ * PTA GLOBAL CONFIGURATION - FIXED VERSION
  * File: config.php
  *
  * Purpose: Core application setup, including error reporting, database connection,
  *          and session management. This file is the central bootstrap for the application.
+ * 
+ * FIXES APPLIED:
+ * 1. Session handling moved to AFTER all includes to prevent ini_set warnings
+ * 2. Fixed tableExists() function - table names cannot use prepared statement parameters
+ * 3. Added proper parameter handling for tableExists()
  * ======================================== */
 
 // ========================================
@@ -71,23 +76,28 @@ $conn->query("SET SESSION sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZER
 // SESSION MANAGEMENT
 // ========================================
 
-// Set session cookie parameters based on environment
-$isSecure = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on');
-ini_set('session.cookie_httponly', 1);
-ini_set('session.cookie_secure', $isSecure ? 1 : 0);
-ini_set('session.use_only_cookies', 1);
-
-// Start session if not already started
+// IMPORTANT: Only configure session settings if session is NOT already active
 if (session_status() === PHP_SESSION_NONE) {
+    // Set session cookie parameters based on environment
+    $isSecure = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on');
+    ini_set('session.cookie_httponly', 1);
+    ini_set('session.cookie_secure', $isSecure ? 1 : 0);
+    ini_set('session.use_only_cookies', 1);
+    
+    // Start session
     session_start();
 }
 
 // ========================================
-// MAINTENANCE MODE
+// LOAD SYSTEM SETTINGS
 // ========================================
 
-require_once 'system-settings.php';
+require_once __DIR__ . '/system-settings.php';
 $settings = SystemSettings::getInstance();
+
+// ========================================
+// MAINTENANCE MODE
+// ========================================
 
 if ($settings->get('maintenance_mode', false)) {
     $allowedIPs = $settings->get('maintenance_mode_allowed_ips', '127.0.0.1,::1');
@@ -129,19 +139,34 @@ function executeQuery($stmt) {
 
 /**
  * Checks if a database table exists.
+ * 
+ * FIXED: Table names cannot be used as prepared statement parameters in SHOW TABLES
+ * MySQL doesn't allow parameters for table names in metadata queries
  *
  * @param mysqli $conn The database connection.
  * @param string $table The name of the table to check.
  * @return bool True if the table exists, false otherwise.
  */
 function tableExists($conn, $table) {
-    // Use a prepared statement to prevent SQL injection, even with table names
-    $stmt = $conn->prepare("SHOW TABLES LIKE ?");
-    $stmt->bind_param('s', $table);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $stmt->close();
-    return $result->num_rows > 0;
+    // Sanitize table name to prevent SQL injection
+    // Only allow alphanumeric characters and underscores
+    if (!preg_match('/^[a-zA-Z0-9_]+$/', $table)) {
+        error_log("Invalid table name format: $table");
+        return false;
+    }
+    
+    // Use direct query (safe because we validated the table name above)
+    $result = $conn->query("SHOW TABLES LIKE '$table'");
+    
+    if ($result === false) {
+        error_log("tableExists() query failed: " . $conn->error);
+        return false;
+    }
+    
+    $exists = $result->num_rows > 0;
+    $result->free();
+    
+    return $exists;
 }
 
 // ========================================
