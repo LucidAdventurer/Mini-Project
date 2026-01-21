@@ -58,14 +58,9 @@ try {
     
     require_once "config.php";
     
-    // Check database connection with timeout handling
-    if (!isset($conn) || $conn->connect_error) {
-        throw new Exception("Database connection failed");
-    }
-    
-    // Check if connection is still alive (important for remote DBs)
-    if (!$conn->ping()) {
-        throw new Exception("Database connection lost");
+    // Check database connection with automatic reconnect
+    if (!ensureDatabaseConnection($conn)) {
+        throw new Exception("Database connection failed after retries");
     }
     
     // system-settings.php is optional - handle gracefully

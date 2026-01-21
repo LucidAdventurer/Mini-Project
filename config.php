@@ -56,10 +56,10 @@ define('DB_NAME', 'pta_solutionbe');
 define('DB_PORT', '61000');
 
 // Connection settings for remote database
-define('DB_CONNECT_TIMEOUT', 20); // Connection timeout in seconds (increased for remote)
-define('DB_READ_TIMEOUT', 45);     // Read timeout in seconds
-define('DB_WRITE_TIMEOUT', 45);    // Write timeout in seconds
-define('DB_MAX_RETRIES', 3);       // Maximum connection retry attempts
+define('DB_CONNECT_TIMEOUT', 10); // Shorter - fail fast if DB is down
+define('DB_READ_TIMEOUT', 30);     // Read timeout in seconds
+define('DB_WRITE_TIMEOUT', 30);    // Write timeout in seconds
+define('DB_MAX_RETRIES', 5);       // More retries for flaky remote DB
 
 // MariaDB detection and compatibility
 define('DB_TYPE', 'MariaDB'); // Set to 'MariaDB' or 'MySQL' if known
@@ -87,18 +87,20 @@ function createDatabaseConnection() {
             }
             
             // Set connection timeout options (before connecting)
-            // MYSQLI_OPT_CONNECT_TIMEOUT is universally supported
             $conn->options(MYSQLI_OPT_CONNECT_TIMEOUT, DB_CONNECT_TIMEOUT);
             
-            // MYSQLI_OPT_READ_TIMEOUT - check if available (PHP 7.2+)
+            // Optional timeouts - check if available
             if (defined('MYSQLI_OPT_READ_TIMEOUT')) {
                 $conn->options(MYSQLI_OPT_READ_TIMEOUT, DB_READ_TIMEOUT);
             }
             
-            // MYSQLI_OPT_WRITE_TIMEOUT - check if available (MySQL Native Driver)
-            // This constant may not exist in all environments
             if (defined('MYSQLI_OPT_WRITE_TIMEOUT')) {
                 $conn->options(MYSQLI_OPT_WRITE_TIMEOUT, DB_WRITE_TIMEOUT);
+            }
+            
+            // Enable auto-reconnect if supported (not available in all PHP versions)
+            if (defined('MYSQLI_OPT_RECONNECT')) {
+                $conn->options(MYSQLI_OPT_RECONNECT, 1);
             }
             
             // Now establish the actual connection
@@ -106,33 +108,38 @@ function createDatabaseConnection() {
                 throw new mysqli_sql_exception("Connection failed: " . $conn->connect_error);
             }
             
+            // Verify connection is actually alive (PHP 8.4 compatible)
+            try {
+                $conn->query("SELECT 1");
+            } catch (Exception $e) {
+                throw new Exception("Connection test query failed");
+            }
+            
             // Set character set and SQL mode
             $conn->set_charset("utf8mb4");
             
-            // MariaDB-compatible SQL mode (slightly different from MySQL)
-            // Remove ONLY_FULL_GROUP_BY for MariaDB compatibility
+            // MariaDB-compatible SQL mode
             $conn->query("SET SESSION sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO'");
             
-            // Set session timeout at MySQL/MariaDB level (works on all versions)
-            $conn->query("SET SESSION wait_timeout = 300");        // 5 minutes
-            $conn->query("SET SESSION interactive_timeout = 300"); // 5 minutes
-            $conn->query("SET SESSION net_read_timeout = 60");     // 60 seconds
-            $conn->query("SET SESSION net_write_timeout = 60");    // 60 seconds
+            // Generous timeouts for flaky remote DB
+            $conn->query("SET SESSION wait_timeout = 300");
+            $conn->query("SET SESSION interactive_timeout = 300");
+            $conn->query("SET SESSION net_read_timeout = 60");
+            $conn->query("SET SESSION net_write_timeout = 60");
             
-            error_log("Database connection established successfully on attempt " . ($retryCount + 1));
+            error_log("✓ DB connected on attempt " . ($retryCount + 1));
             return $conn;
             
         } catch (Exception $e) {
             $retryCount++;
-            error_log("Database connection attempt $retryCount failed: " . $e->getMessage());
+            error_log("✗ DB connection attempt $retryCount failed: " . $e->getMessage());
             
             if ($retryCount < DB_MAX_RETRIES) {
-                // Exponential backoff: wait before retrying
-                error_log("Retrying connection in {$retryDelay} seconds...");
+                error_log("→ Retrying in {$retryDelay}s...");
                 sleep($retryDelay);
-                $retryDelay *= 2; // Double the delay for next retry
+                $retryDelay = min($retryDelay * 2, 10); // Max 10s between retries
             } else {
-                error_log("All database connection attempts failed after $retryCount tries");
+                error_log("✗ All DB connection attempts failed");
                 return null;
             }
         }
@@ -260,23 +267,32 @@ function tableExists($conn, $table) {
 }
 
 /**
- * Check if database connection is still alive
- * Useful for long-running scripts with remote databases
+ * Check if database connection is still alive and reconnect if needed
+ * Call this before important database operations
  *
  * @param mysqli $conn Database connection
- * @return bool True if connection is alive
+ * @return bool True if connection is alive or reconnected successfully
  */
-function isDatabaseConnected($conn) {
-    if (!$conn || $conn->connect_error) {
-        return false;
+function ensureDatabaseConnection(&$conn) {
+    // Check if connection exists and test it with a simple query (PHP 8.4 compatible)
+    if ($conn) {
+        try {
+            $result = $conn->query("SELECT 1");
+            if ($result) {
+                $result->free();
+                return true; // Connection is alive
+            }
+        } catch (Exception $e) {
+            // Connection is dead, continue to reconnect
+        }
     }
     
-    try {
-        return $conn->ping();
-    } catch (Exception $e) {
-        error_log("Database ping failed: " . $e->getMessage());
-        return false;
-    }
+    error_log("Database connection lost - attempting to reconnect");
+    
+    // Try to reconnect
+    $conn = createDatabaseConnection();
+    
+    return ($conn !== null);
 }
 
 // ========================================

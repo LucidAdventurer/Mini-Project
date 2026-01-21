@@ -1,26 +1,67 @@
 <?php
-require "config.php";
-if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'student') {
-    header("Location: index.html");
-    exit;
-}
+/* ========================================
+ * STUDENT DASHBOARD - CONNECTION PROTECTED
+ * ======================================== */
 
-$stmt = $conn->prepare("SELECT full_name, email FROM users WHERE user_id = ?");
-$stmt->bind_param("i", $_SESSION['uid']);
-$stmt->execute();
-$result = $stmt->get_result();
-$user = $result->fetch_assoc();
+// Load configuration and database guard
+require_once "config.php";
+require_once "db-guard.php";
 
-$userName = $user['full_name'] ?? 'Teacher';
+// Validate session and get user data with automatic retry
+$user = validateSession($conn, 'student');
+
+// Extract user information
+$userName = $user['full_name'] ?? 'Student';
 $userEmail = $user['email'] ?? '';
 $userInitials = strtoupper(substr($userName, 0, 2));
+$userId = $user['user_id'];
+
+// Get student statistics with safe query
+$statsQuery = "
+    SELECT 
+        COUNT(DISTINCT a.attempt_id) as tests_completed,
+        COALESCE(AVG(a.score_percentage), 0) as avg_score
+    FROM assessment_attempts a
+    WHERE a.user_id = ? AND a.status = 'completed'
+";
+
+$statsResult = safePreparedQuery($conn, $statsQuery, "i", [$userId]);
+
+// Default statistics
+$testsCompleted = 0;
+$avgScore = 0;
+
+if ($statsResult['success'] && $statsResult['result']) {
+    $stats = $statsResult['result']->fetch_assoc();
+    $testsCompleted = $stats['tests_completed'] ?? 0;
+    $avgScore = round($stats['avg_score'] ?? 0);
+    $statsResult['result']->free();
+}
+
+// Get available assessments count with safe query
+$availableQuery = "
+    SELECT COUNT(*) as count 
+    FROM assessments 
+    WHERE is_active = 1 
+    AND (publish_date IS NULL OR publish_date <= NOW())
+    AND (end_date IS NULL OR end_date >= NOW())
+";
+
+$availableResult = safeQuery($conn, $availableQuery);
+$availableTests = 0;
+
+if ($availableResult) {
+    $row = $availableResult->fetch_assoc();
+    $availableTests = $row['count'] ?? 0;
+    $availableResult->free();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Student Dashboard</title>
+    <title>Student Dashboard - PTA Platform</title>
     <style>
         :root {
             --primary: #234C6A;
@@ -194,11 +235,9 @@ $userInitials = strtoupper(substr($userName, 0, 2));
             font-weight: bold;
             font-size: 20px;
         }
-
         .dropdown-user-info {
             flex: 1;
         }
-
         .dropdown-user-name {
             font-weight: 700;
             font-size: 16px;
@@ -616,20 +655,20 @@ $userInitials = strtoupper(substr($userName, 0, 2));
     <div class="container">
         <div class="welcome-section">
             <div class="welcome-content">
-                <h1>Welcome back, Justin! 👋</h1>
-                <p>Ready to continue your placement preparation journey?</p>
+                <h1>Welcome back, <?php echo strtoupper(htmlspecialchars($userName)); ?> 👋</h1>
+                <p>Ready to continue your learning journey?</p>
             </div>
             <div class="quick-stats">
                 <div class="stat-item">
-                    <span class="stat-number">12</span>
+                    <span class="stat-number"><?php echo $testsCompleted; ?></span>
                     <span class="stat-label">Tests Completed</span>
                 </div>
                 <div class="stat-item">
-                    <span class="stat-number">8</span>
+                    <span class="stat-number"><?php echo $availableTests; ?></span>
                     <span class="stat-label">Available</span>
                 </div>
                 <div class="stat-item">
-                    <span class="stat-number">76%</span>
+                    <span class="stat-number"><?php echo $avgScore; ?>%</span>
                     <span class="stat-label">Avg. Score</span>
                 </div>
             </div>
@@ -648,6 +687,7 @@ $userInitials = strtoupper(substr($userName, 0, 2));
                     <button class="filter-tab" data-category="coding">Coding</button>
                 </div>
                 <div class="assessment-list">
+                    <!-- Assessment cards will be loaded here via AJAX in production -->
                     <div class="assessment-card" data-category="aptitude">
                         <div class="assessment-header">
                             <div>
@@ -664,60 +704,6 @@ $userInitials = strtoupper(substr($userName, 0, 2));
                         <div class="assessment-actions">
                             <button class="btn-start" onclick="startAssessment(1)">Start Test</button>
                             <button class="btn-details" onclick="viewDetails(1)">View Details</button>
-                        </div>
-                    </div>
-                    <div class="assessment-card" data-category="technical">
-                        <div class="assessment-header">
-                            <div>
-                                <div class="assessment-title">Data Structures & Algorithms</div>
-                                <div class="assessment-category">Technical • CS Fundamentals</div>
-                            </div>
-                            <span class="difficulty-badge medium">Medium</span>
-                        </div>
-                        <div class="assessment-meta">
-                            <div class="meta-item"><span>❓</span><span>25 Questions</span></div>
-                            <div class="meta-item"><span>⏱️</span><span>60 Minutes</span></div>
-                            <div class="meta-item"><span>🏆</span><span>150 Points</span></div>
-                        </div>
-                        <div class="assessment-actions">
-                            <button class="btn-start" onclick="startAssessment(2)">Start Test</button>
-                            <button class="btn-details" onclick="viewDetails(2)">View Details</button>
-                        </div>
-                    </div>
-                    <div class="assessment-card" data-category="coding">
-                        <div class="assessment-header">
-                            <div>
-                                <div class="assessment-title">Python Programming Challenge</div>
-                                <div class="assessment-category">Coding • Python</div>
-                            </div>
-                            <span class="difficulty-badge hard">Hard</span>
-                        </div>
-                        <div class="assessment-meta">
-                            <div class="meta-item"><span>❓</span><span>5 Problems</span></div>
-                            <div class="meta-item"><span>⏱️</span><span>90 Minutes</span></div>
-                            <div class="meta-item"><span>🏆</span><span>200 Points</span></div>
-                        </div>
-                        <div class="assessment-actions">
-                            <button class="btn-start" onclick="startAssessment(3)">Start Test</button>
-                            <button class="btn-details" onclick="viewDetails(3)">View Details</button>
-                        </div>
-                    </div>
-                    <div class="assessment-card" data-category="aptitude">
-                        <div class="assessment-header">
-                            <div>
-                                <div class="assessment-title">Logical Reasoning Assessment</div>
-                                <div class="assessment-category">Aptitude • Logic</div>
-                            </div>
-                            <span class="difficulty-badge medium">Medium</span>
-                        </div>
-                        <div class="assessment-meta">
-                            <div class="meta-item"><span>❓</span><span>35 Questions</span></div>
-                            <div class="meta-item"><span>⏱️</span><span>50 Minutes</span></div>
-                            <div class="meta-item"><span>🏆</span><span>120 Points</span></div>
-                        </div>
-                        <div class="assessment-actions">
-                            <button class="btn-start" onclick="startAssessment(4)">Start Test</button>
-                            <button class="btn-details" onclick="viewDetails(4)">View Details</button>
                         </div>
                     </div>
                 </div>
@@ -739,20 +725,6 @@ $userInitials = strtoupper(substr($userName, 0, 2));
                             <div class="activity-content">
                                 <div class="activity-title">Achieved: Perfect Score Badge</div>
                                 <div class="activity-time">Yesterday</div>
-                            </div>
-                        </div>
-                        <div class="activity-item">
-                            <div class="activity-icon">📝</div>
-                            <div class="activity-content">
-                                <div class="activity-title">Started: Java Programming</div>
-                                <div class="activity-time">2 days ago</div>
-                            </div>
-                        </div>
-                        <div class="activity-item">
-                            <div class="activity-icon">🎯</div>
-                            <div class="activity-content">
-                                <div class="activity-title">New Test Available</div>
-                                <div class="activity-time">3 days ago</div>
                             </div>
                         </div>
                     </div>
@@ -819,6 +791,7 @@ $userInitials = strtoupper(substr($userName, 0, 2));
             alert('Quick Actions:\n\n• Take Practice Test\n• View Progress Report\n• Schedule Assessment\n• Contact Support');
         }
 
+        // Filter tabs
         document.querySelectorAll('.filter-tab').forEach(tab => {
             tab.addEventListener('click', function() {
                 document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
@@ -834,6 +807,7 @@ $userInitials = strtoupper(substr($userName, 0, 2));
             });
         });
 
+        // Search functionality
         document.getElementById('searchInput').addEventListener('input', function(e) {
             const search = e.target.value.toLowerCase();
             document.querySelectorAll('.assessment-card').forEach(card => {
@@ -847,6 +821,7 @@ $userInitials = strtoupper(substr($userName, 0, 2));
             });
         });
 
+        // Animate progress bars on load
         window.addEventListener('load', function() {
             document.querySelectorAll('.progress-bar-fill').forEach(bar => {
                 const width = bar.style.width;

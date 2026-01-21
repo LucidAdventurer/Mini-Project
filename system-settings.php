@@ -134,10 +134,18 @@ class SystemSettings {
     global $conn;
     $this->conn = $conn;
     
-    // Verify database connection is still alive
-    if (!$this->conn || !$this->conn->ping()) {
-      error_log("Database connection lost in SystemSettings - attempting reconnection");
-      // Connection will be handled by config.php retry logic
+    // Verify database connection is still alive (PHP 8.4 compatible)
+    if ($this->conn) {
+      try {
+        $result = $this->conn->query("SELECT 1");
+        if (!$result) {
+          error_log("Database connection test failed in SystemSettings");
+        } else {
+          $result->free();
+        }
+      } catch (Exception $e) {
+        error_log("Database connection lost in SystemSettings: " . $e->getMessage());
+      }
     }
     
     // Load cache first (faster than database check)
