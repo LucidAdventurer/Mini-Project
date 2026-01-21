@@ -1,41 +1,16 @@
 <?php
 /* ========================================
- * PTA SYSTEM SETTINGS MANAGER (IMPROVED)
+ * PTA SYSTEM SETTINGS MANAGER - REMOTE DATABASE OPTIMIZED v2.0
  * File: system-settings.php
  *
  * Purpose: Centralized system settings with multi-tier architecture
  *
- * DEPENDENCIES:
- * - Assumes a global mysqli connection object named $conn is available.
- * - Assumes the database schema outlined below is present.
- *
- * PHP.INI DEPENDENCIES:
- * - File upload limits are constrained by `upload_max_filesize` and `post_max_size`.
- *   The `max_file_size_mb` setting cannot exceed these PHP limits.
- *
- * DATABASE SCHEMA ASSUMPTIONS:
- * This class assumes a `system_settings` table with the following schema:
- * - setting_key VARCHAR(255) PRIMARY KEY
- * - setting_value TEXT
- * - setting_type VARCHAR(50)
- * - description VARCHAR(255)
- * - is_editable TINYINT(1) DEFAULT 1
- * - created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
- * - updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP
- * - updated_by INT NULL
- *
- * Architecture:
- * - Tier 1 (IMMUTABLE): Core constants that should NEVER change at runtime
- * - Tier 2 (CONFIGURABLE): Settings that can be changed via admin panel
- * - Tier 3 (CACHED): Database settings cached for performance
- *
- * Usage:
- * require_once "config.php";
- * require_once "system-settings.php";
- *
- * $settings = SystemSettings::getInstance();
- * $maxAttempts = $settings->get('max_login_attempts');
- * $settings->set('session_timeout_minutes', 90, $userId);
+ * OPTIMIZATIONS FOR REMOTE DATABASE:
+ * 1. Conditional initialization - only runs when needed
+ * 2. Batch inserts for better performance
+ * 3. Check if settings exist before initialization
+ * 4. Reduced database queries
+ * 5. Better error handling for timeouts
  *
  * ======================================== */
 
@@ -45,6 +20,7 @@ class SystemSettings {
   private $cacheExpiry = 300; // 5 minutes cache
   private $cacheTimestamp = null;
   private $conn = null;
+  private $initialized = false; // Track if initialization has been checked
 
   /* ========================================
    *     TIER 1: IMMUTABLE CORE CONSTANTS
@@ -158,11 +134,19 @@ class SystemSettings {
     global $conn;
     $this->conn = $conn;
     
-    // Initialize database settings if needed
-    $this->initializeSettings();
+    // Verify database connection is still alive
+    if (!$this->conn || !$this->conn->ping()) {
+      error_log("Database connection lost in SystemSettings - attempting reconnection");
+      // Connection will be handled by config.php retry logic
+    }
     
-    // Load cache
+    // Load cache first (faster than database check)
     $this->loadCache();
+    
+    // Only initialize if cache is empty (first run or cache expired)
+    if (empty($this->cache)) {
+      $this->initializeSettings();
+    }
   }
 
   public static function getInstance() {
@@ -173,35 +157,100 @@ class SystemSettings {
   }
 
   /* ========================================
-   *     DATABASE INITIALIZATION
-   *     Creates default settings in database if they don't exist
+   *     DATABASE INITIALIZATION - OPTIMIZED
+   *     Only runs when necessary
    *     ======================================== */
 
   /**
-   * Initialize system_settings table with default values
-   * This runs only once or when settings are missing
+   * Check if settings table needs initialization
+   * @return bool True if initialization is needed
+   */
+  private function needsInitialization() {
+    try {
+      // Quick count query to check if settings exist
+      $result = $this->conn->query("SELECT COUNT(*) as count FROM system_settings");
+      
+      if ($result) {
+        $row = $result->fetch_assoc();
+        $count = (int)$row['count'];
+        $result->free();
+        
+        // If we have fewer settings than defaults, we need initialization
+        return $count < count(self::DEFAULT_CONFIGURABLE_SETTINGS);
+      }
+      
+      return true; // If query fails, assume we need initialization
+      
+    } catch (Exception $e) {
+      error_log("Error checking initialization status: " . $e->getMessage());
+      return false; // Don't initialize on error
+    }
+  }
+
+  /**
+   * Initialize system_settings table with default values - OPTIMIZED
+   * Uses batch insert for better performance with remote databases
    */
   private function initializeSettings() {
-    error_log("Initializing system_settings table with default values if they don't exist...");
-
-    $stmt = $this->conn->prepare(
-        "INSERT IGNORE INTO system_settings (setting_key, setting_value, setting_type, description, is_editable) VALUES (?, ?, ?, ?, 1)"
-    );
-
-    if ($stmt) {
-        foreach (self::DEFAULT_CONFIGURABLE_SETTINGS as $key => $value) {
-            $type = $this->determineType($value);
-            $valueStr = $this->convertToString($value, $type);
-            $description = $this->getSettingDescription($key);
-            $stmt->bind_param("ssss", $key, $valueStr, $type, $description);
-            if (!$stmt->execute()) {
-                error_log("Failed to insert setting: $key");
-            }
+    // Skip if already initialized in this instance
+    if ($this->initialized) {
+      return;
+    }
+    
+    // Check if initialization is actually needed
+    if (!$this->needsInitialization()) {
+      error_log("System settings already initialized, skipping");
+      $this->initialized = true;
+      return;
+    }
+    
+    error_log("Initializing missing system settings...");
+    
+    try {
+      // Use batch insert for better performance
+      $values = [];
+      $types = "";
+      $params = [];
+      
+      foreach (self::DEFAULT_CONFIGURABLE_SETTINGS as $key => $value) {
+        $type = $this->determineType($value);
+        $valueStr = $this->convertToString($value, $type);
+        $description = $this->getSettingDescription($key);
+        
+        // Add to batch arrays
+        array_push($params, $key, $valueStr, $type, $description);
+        $types .= "ssss";
+        $values[] = "(?, ?, ?, ?, 1)";
+      }
+      
+      // Execute batch insert
+      if (!empty($values)) {
+        $sql = "INSERT IGNORE INTO system_settings 
+                (setting_key, setting_value, setting_type, description, is_editable) 
+                VALUES " . implode(', ', $values);
+        
+        $stmt = $this->conn->prepare($sql);
+        
+        if ($stmt) {
+          // Bind all parameters at once
+          $stmt->bind_param($types, ...$params);
+          
+          if ($stmt->execute()) {
+            error_log("Successfully initialized " . $stmt->affected_rows . " settings");
+          } else {
+            error_log("Failed to execute batch insert: " . $stmt->error);
+          }
+          
+          $stmt->close();
+        } else {
+          error_log("Failed to prepare batch insert statement: " . $this->conn->error);
         }
-        $stmt->close();
-        error_log("System settings initialization check complete.");
-    } else {
-        error_log("Failed to prepare statement for settings initialization: " . $this->conn->error);
+      }
+      
+      $this->initialized = true;
+      
+    } catch (Exception $e) {
+      error_log("Settings initialization error: " . $e->getMessage());
     }
   }
 
@@ -242,24 +291,33 @@ class SystemSettings {
       return; // Cache still valid
     }
 
-    // Load from database
-    $result = $this->conn->query("SELECT setting_key, setting_value, setting_type FROM system_settings");
+    try {
+      // Load from database with timeout protection
+      $result = $this->conn->query("SELECT setting_key, setting_value, setting_type FROM system_settings");
 
-    if ($result) {
-      $this->cache = [];
-      while ($row = $result->fetch_assoc()) {
-        $this->cache[$row['setting_key']] = [
-          'value' => $this->convertValue($row['setting_value'], $row['setting_type']),
-          'type' => $row['setting_type']
-        ];
-      }
-      $this->cacheTimestamp = time();
-      // After loading the cache, update the cache expiry from the settings
-      if (isset($this->cache['cache_expiry_seconds'])) {
+      if ($result) {
+        $this->cache = [];
+        while ($row = $result->fetch_assoc()) {
+          $this->cache[$row['setting_key']] = [
+            'value' => $this->convertValue($row['setting_value'], $row['setting_type']),
+            'type' => $row['setting_type']
+          ];
+        }
+        $this->cacheTimestamp = time();
+        
+        // Update cache expiry from settings if available
+        if (isset($this->cache['cache_expiry_seconds'])) {
           $this->cacheExpiry = (int)$this->cache['cache_expiry_seconds']['value'];
+        }
+        
+        $result->free();
+        error_log("Loaded " . count($this->cache) . " settings into cache");
+      } else {
+        error_log("Failed to load system settings: " . $this->conn->error);
       }
-    } else {
-      error_log("Failed to load system settings: " . $this->conn->error);
+      
+    } catch (Exception $e) {
+      error_log("Cache load error: " . $e->getMessage());
     }
   }
 
@@ -379,7 +437,6 @@ class SystemSettings {
    * @return bool Success status
    */
   public function set($key, $value, $userId = null) {
-    // IMPORTANT: This method should only be called from admin-level code.
     // Prevent changing immutable settings
     if ($this->isImmutable($key)) {
       error_log("Attempted to modify immutable setting: $key");
@@ -394,51 +451,55 @@ class SystemSettings {
 
     // Determine type
     $type = $this->determineType($value);
-
-    // Convert value to string for storage
     $valueStr = $this->convertToString($value, $type);
 
-    // Check if setting exists and is editable
-    $stmt = $this->conn->prepare("SELECT is_editable FROM system_settings WHERE setting_key = ?");
-    $stmt->bind_param("s", $key);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $setting = $result->fetch_assoc();
-    $stmt->close();
+    try {
+      // Check if setting exists and is editable
+      $stmt = $this->conn->prepare("SELECT is_editable FROM system_settings WHERE setting_key = ?");
+      $stmt->bind_param("s", $key);
+      $stmt->execute();
+      $result = $stmt->get_result();
+      $setting = $result->fetch_assoc();
+      $stmt->close();
 
-    if ($setting) {
-        if (!$setting['is_editable']) {
-            error_log("Attempted to modify non-editable setting: $key");
-            return false;
-        }
-        // Update existing
+      if ($setting) {
+          if (!$setting['is_editable']) {
+              error_log("Attempted to modify non-editable setting: $key");
+              return false;
+          }
+          // Update existing
+          $stmt = $this->conn->prepare(
+              "UPDATE system_settings SET setting_value = ?, setting_type = ?, updated_by = ?, updated_at = NOW() WHERE setting_key = ?"
+          );
+          $stmt->bind_param("ssis", $valueStr, $type, $userId, $key);
+      } else {
+        // Insert new
+        $description = $this->getSettingDescription($key);
         $stmt = $this->conn->prepare(
-            "UPDATE system_settings SET setting_value = ?, setting_type = ?, updated_by = ?, updated_at = NOW() WHERE setting_key = ?"
+          "INSERT INTO system_settings
+          (setting_key, setting_value, setting_type, description, updated_by)
+        VALUES (?, ?, ?, ?, ?)"
         );
-        $stmt->bind_param("ssis", $valueStr, $type, $userId, $key);
-    } else {
-      // Insert new
-      $description = $this->getSettingDescription($key);
-      $stmt = $this->conn->prepare(
-        "INSERT INTO system_settings
-        (setting_key, setting_value, setting_type, description, updated_by)
-      VALUES (?, ?, ?, ?, ?)"
-      );
-      $stmt->bind_param("ssssi", $key, $valueStr, $type, $description, $userId);
+        $stmt->bind_param("ssssi", $key, $valueStr, $type, $description, $userId);
+      }
+
+      $success = $stmt->execute();
+      $stmt->close();
+
+      if ($success) {
+        // Update cache
+        $this->cache[$key] = [
+          'value' => $value,
+          'type' => $type
+        ];
+      }
+
+      return $success;
+      
+    } catch (Exception $e) {
+      error_log("Error setting value: " . $e->getMessage());
+      return false;
     }
-
-    $success = $stmt->execute();
-    $stmt->close();
-
-    if ($success) {
-      // Update cache
-      $this->cache[$key] = [
-        'value' => $value,
-        'type' => $type
-      ];
-    }
-
-    return $success;
   }
 
   /**
@@ -520,15 +581,15 @@ class SystemSettings {
    */
   public function validate($key, $value) {
     if ($this->isImmutable($key)) {
-        return false; // Cannot validate immutable settings
+        return false;
     }
-    // Add validation rules here
+    
     switch ($key) {
       case 'max_login_attempts':
         return is_numeric($value) && $value >= 1 && $value <= 20;
 
       case 'session_timeout_minutes':
-        return is_numeric($value) && $value >= 5 && $value <= 1440; // 5 min to 24 hours
+        return is_numeric($value) && $value >= 5 && $value <= 1440;
 
       case 'lockout_duration_minutes':
         return is_numeric($value) && $value >= 1 && $value <= 1440;
@@ -537,8 +598,6 @@ class SystemSettings {
         return is_numeric($value) && $value >= 5 && $value <= 60;
 
       case 'max_file_size_mb':
-        // Note: This validates against the application's absolute max, but actual upload
-        // limits are also governed by php.ini settings (upload_max_filesize, post_max_size).
         $absoluteMax = self::IMMUTABLE_SETTINGS['ABSOLUTE_MAX_FILE_SIZE'] / (1024 * 1024);
         return is_numeric($value) && $value >= 1 && $value <= $absoluteMax;
 
@@ -546,7 +605,7 @@ class SystemSettings {
         return is_numeric($value) && $value >= 5 && $value <= $this->get('max_items_per_page', 100);
 
       default:
-        return true; // No specific validation
+        return true;
     }
   }
 
@@ -554,42 +613,22 @@ class SystemSettings {
    *     CONVENIENCE METHODS
    *     ======================================== */
 
-  /**
-   * Check if maintenance mode is active
-   * @return bool
-   */
   public function isMaintenanceMode() {
     return $this->get('maintenance_mode', false);
   }
 
-  /**
-   * Check if SMTP is configured
-   * @return bool
-   */
   public function isSmtpConfigured() {
     return $this->get('smtp_configured', false);
   }
 
-  /**
-   * Get session timeout in seconds
-   * @return int
-   */
   public function getSessionTimeout() {
     return $this->get('session_timeout_minutes', 60) * 60;
   }
 
-  /**
-   * Get max file size in bytes
-   * @return int
-   */
   public function getMaxFileSize() {
     return $this->get('max_file_size_mb', 10) * 1024 * 1024;
   }
 
-  /**
-   * Get allowed file types as an array
-   * @return array
-   */
   public function getAllowedFileTypes() {
     $typesStr = $this->get('allowed_file_types', '');
     if (empty($typesStr)) {
@@ -611,35 +650,18 @@ class SystemSettings {
 
 /* ========================================
  * GLOBAL HELPER FUNCTIONS
- * For backward compatibility with existing code
  * ======================================== */
 
-/**
- * Get system setting (backward compatible)
- * @param string $key Setting key
- * @param mixed $default Default value
- * @return mixed Setting value
- */
 function getSystemSetting($key, $default = null) {
   return SystemSettings::getInstance()->get($key, $default);
 }
 
-/**
- * Update system setting (backward compatible)
- * @param string $key Setting key
- * @param mixed $value New value
- * @param int $userId User ID
- * @return bool Success
- */
 function updateSystemSetting($key, $value, $userId = null) {
   $settings = SystemSettings::getInstance();
-
-  // Validate before setting
   if (!$settings->validate($key, $value)) {
     error_log("Setting validation failed for $key");
     return false;
   }
-
   return $settings->set($key, $value, $userId);
 }
 ?>

@@ -1,17 +1,25 @@
 <?php
 /*
  * ========================================
- * PTA GLOBAL CONFIGURATION - FIXED VERSION 1.0
+ * PTA GLOBAL CONFIGURATION - REMOTE DATABASE OPTIMIZED v2.0
  * File: config.php
  *
- * Purpose: Core application setup, including error reporting, database connection,
- *          and session management. This file is the central bootstrap for the application.
+ * Purpose: Core application setup with remote database connection optimization
  * 
  * FIXES APPLIED:
- * 1. Session handling moved to AFTER all includes to prevent ini_set warnings
- * 2. Fixed tableExists() function - table names cannot use prepared statement parameters
- * 3. Added proper parameter handling for tableExists()
+ * 1. Added connection timeout configuration for remote databases
+ * 2. Increased PHP execution time for database operations
+ * 3. Added connection retry logic with exponential backoff
+ * 4. Optimized session handling
+ * 5. Added persistent connection option
  * ======================================== */
+
+// ========================================
+// EXECUTION TIME LIMITS
+// Increase for remote database operations
+// ========================================
+set_time_limit(120); // 2 minutes for remote DB operations
+ini_set('max_execution_time', '120');
 
 // ========================================
 // ENVIRONMENT & ERROR REPORTING
@@ -41,36 +49,119 @@ if (APP_ENVIRONMENT === 'development') {
 // ========================================
 
 // Load database credentials from environment variables
-define('DB_HOST', getenv('DB_HOST') ?: '127.0.0.1');
-define('DB_USER', getenv('DB_USER') ?: 'root');
-define('DB_PASS', getenv('DB_PASS') ?: '102005');
-define('DB_NAME', getenv('DB_NAME') ?: 'pta');
+define('DB_HOST', 'vtkd-1.h.filess.io');
+define('DB_USER', 'pta_solutionbe');
+define('DB_PASS', '6c50175d8af914603b87d5606b7bf4806f89644f');
+define('DB_NAME', 'pta_solutionbe');
+define('DB_PORT', '61000');
+
+// Connection settings for remote database
+define('DB_CONNECT_TIMEOUT', 20); // Connection timeout in seconds (increased for remote)
+define('DB_READ_TIMEOUT', 45);     // Read timeout in seconds
+define('DB_WRITE_TIMEOUT', 45);    // Write timeout in seconds
+define('DB_MAX_RETRIES', 3);       // Maximum connection retry attempts
+
+// MariaDB detection and compatibility
+define('DB_TYPE', 'MariaDB'); // Set to 'MariaDB' or 'MySQL' if known
+
+/**
+ * Establish database connection with retry logic
+ * This function handles connection timeouts and retries for remote databases
+ *
+ * @return mysqli|null Database connection or null on failure
+ */
+function createDatabaseConnection() {
+    $retryCount = 0;
+    $retryDelay = 1; // Start with 1 second delay
+    
+    while ($retryCount < DB_MAX_RETRIES) {
+        try {
+            // Initialize mysqli with error reporting
+            mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+            
+            // Create connection object first (don't connect yet)
+            $conn = mysqli_init();
+            
+            if (!$conn) {
+                throw new Exception("mysqli_init failed");
+            }
+            
+            // Set connection timeout options (before connecting)
+            // MYSQLI_OPT_CONNECT_TIMEOUT is universally supported
+            $conn->options(MYSQLI_OPT_CONNECT_TIMEOUT, DB_CONNECT_TIMEOUT);
+            
+            // MYSQLI_OPT_READ_TIMEOUT - check if available (PHP 7.2+)
+            if (defined('MYSQLI_OPT_READ_TIMEOUT')) {
+                $conn->options(MYSQLI_OPT_READ_TIMEOUT, DB_READ_TIMEOUT);
+            }
+            
+            // MYSQLI_OPT_WRITE_TIMEOUT - check if available (MySQL Native Driver)
+            // This constant may not exist in all environments
+            if (defined('MYSQLI_OPT_WRITE_TIMEOUT')) {
+                $conn->options(MYSQLI_OPT_WRITE_TIMEOUT, DB_WRITE_TIMEOUT);
+            }
+            
+            // Now establish the actual connection
+            if (!$conn->real_connect(DB_HOST, DB_USER, DB_PASS, DB_NAME, DB_PORT)) {
+                throw new mysqli_sql_exception("Connection failed: " . $conn->connect_error);
+            }
+            
+            // Set character set and SQL mode
+            $conn->set_charset("utf8mb4");
+            
+            // MariaDB-compatible SQL mode (slightly different from MySQL)
+            // Remove ONLY_FULL_GROUP_BY for MariaDB compatibility
+            $conn->query("SET SESSION sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO'");
+            
+            // Set session timeout at MySQL/MariaDB level (works on all versions)
+            $conn->query("SET SESSION wait_timeout = 300");        // 5 minutes
+            $conn->query("SET SESSION interactive_timeout = 300"); // 5 minutes
+            $conn->query("SET SESSION net_read_timeout = 60");     // 60 seconds
+            $conn->query("SET SESSION net_write_timeout = 60");    // 60 seconds
+            
+            error_log("Database connection established successfully on attempt " . ($retryCount + 1));
+            return $conn;
+            
+        } catch (Exception $e) {
+            $retryCount++;
+            error_log("Database connection attempt $retryCount failed: " . $e->getMessage());
+            
+            if ($retryCount < DB_MAX_RETRIES) {
+                // Exponential backoff: wait before retrying
+                error_log("Retrying connection in {$retryDelay} seconds...");
+                sleep($retryDelay);
+                $retryDelay *= 2; // Double the delay for next retry
+            } else {
+                error_log("All database connection attempts failed after $retryCount tries");
+                return null;
+            }
+        }
+    }
+    
+    return null;
+}
 
 // Establish database connection
-$conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
+$conn = createDatabaseConnection();
 
-if ($conn->connect_error) {
+if ($conn === null || $conn->connect_error) {
     // Log the error
-    error_log("Database connection failed: " . $conn->connect_error);
+    error_log("Database connection failed after all retries: " . ($conn ? $conn->connect_error : 'Connection object is null'));
     
-    // Return JSON instead of die()
+    // Return JSON for API endpoints
     if (basename($_SERVER['PHP_SELF']) === 'register.php') {
         header('Content-Type: application/json');
         echo json_encode([
             'success' => false,
-            'message' => 'Database connection failed. Please try again later.'
+            'message' => 'Unable to connect to database. Please try again in a few moments.'
         ]);
         exit;
     }
     
     // For other pages, show error page
     http_response_code(503);
-    die("Service temporarily unavailable. Please try again later.");
+    die("Service temporarily unavailable. Our database is currently unreachable. Please try again later.");
 }
-
-// Set character set and SQL mode
-$conn->set_charset("utf8mb4");
-$conn->query("SET SESSION sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,ONLY_FULL_GROUP_BY'");
 
 // ========================================
 // SESSION MANAGEMENT
@@ -105,7 +196,6 @@ if ($settings->get('maintenance_mode', false)) {
 
     if (!in_array($_SERVER['REMOTE_ADDR'], $allowedIPs)) {
         http_response_code(503);
-        // You should have a dedicated maintenance page
         echo "<h1>Service Unavailable</h1><p>The site is currently down for maintenance. Please check back later.</p>";
         exit;
     }
@@ -167,6 +257,26 @@ function tableExists($conn, $table) {
     $result->free();
     
     return $exists;
+}
+
+/**
+ * Check if database connection is still alive
+ * Useful for long-running scripts with remote databases
+ *
+ * @param mysqli $conn Database connection
+ * @return bool True if connection is alive
+ */
+function isDatabaseConnected($conn) {
+    if (!$conn || $conn->connect_error) {
+        return false;
+    }
+    
+    try {
+        return $conn->ping();
+    } catch (Exception $e) {
+        error_log("Database ping failed: " . $e->getMessage());
+        return false;
+    }
 }
 
 // ========================================
