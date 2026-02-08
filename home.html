@@ -7,28 +7,17 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Practice Tests - Placement Portal</title>
     <style>
-        /* ============================================
-           CSS VARIABLES - Consistent theme
-           ============================================ */
         :root {
-            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            --color-primary: #234C6A;
-            --color-primary-dark: #456882;
-            --color-primary-light: #5A8CB0;
-            --color-text: #2d3748;
-            --color-text-light: #718096;
-            --color-text-lighter: #a0aec0;
-            --color-bg: #f5f7fa;
-            --color-white: #ffffff;
-            --color-border: #e2e8f0;
-            --color-success: #48bb78;
-            --color-warning: #ffc107;
-            --color-info: #4facfe;
+            --color-primary: #0D7377;
+            --color-primary-dark: #14FFEC;
+            --color-accent: #FF6B6B;
+            --color-text: #1a1a1a;
+            --color-text-light: #6b7280;
+            --color-bg: #ffffff;
+            --color-bg-light: #f9fafb;
+            --color-border: #e5e7eb;
         }
 
-        /* ============================================
-           GLOBAL RESET & BASE STYLES
-           ============================================ */
         * {
             margin: 0;
             padding: 0;
@@ -36,32 +25,28 @@
         }
 
         body {
-            font-family: var(--font-family);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background: var(--color-bg);
             color: var(--color-text);
             line-height: 1.6;
         }
 
-        /* ============================================
-           NAVIGATION BAR
-           Top navigation with search
-           ============================================ */
         .navbar {
-            background: var(--color-primary);
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            background: var(--color-bg);
+            border-bottom: 1px solid var(--color-border);
             position: sticky;
             top: 0;
             z-index: 1000;
         }
 
         .nav-container {
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
-            padding: 0 20px;
+            padding: 0 24px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            height: 70px;
+            height: 64px;
         }
 
         .navbar-brand {
@@ -69,139 +54,122 @@
             align-items: center;
             gap: 12px;
             text-decoration: none;
-            color: white;
-        }
-
-        .brand-logo {
-            width: 45px;
-            height: 45px;
-            background: linear-gradient(135deg, var(--color-primary-dark), var(--color-primary-light));
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            font-weight: bold;
-        }
-
-        .brand-text {
+            color: var(--color-text);
             font-size: 20px;
             font-weight: 700;
         }
 
-        /* Search bar */
+        .brand-logo {
+            width: 36px;
+            height: 36px;
+            background: var(--color-primary);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
         .nav-search {
             flex: 1;
-            max-width: 500px;
-            margin: 0 30px;
+            max-width: 400px;
+            margin: 0 32px;
             position: relative;
         }
 
         .search-input {
             width: 100%;
-            padding: 10px 45px 10px 15px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-radius: 25px;
+            padding: 10px 40px 10px 16px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
             font-size: 14px;
-            background: rgba(255, 255, 255, 0.15);
-            color: white;
-            transition: all 0.3s ease;
-        }
-
-        .search-input::placeholder {
-            color: rgba(255, 255, 255, 0.7);
+            background: var(--color-bg-light);
+            transition: all 0.2s;
         }
 
         .search-input:focus {
             outline: none;
-            background: white;
-            color: var(--color-text);
-            border-color: white;
+            border-color: var(--color-primary);
+            background: var(--color-bg);
         }
 
         .search-icon {
             position: absolute;
-            right: 15px;
+            right: 12px;
             top: 50%;
             transform: translateY(-50%);
-            color: white;
+            color: var(--color-text-light);
             font-size: 18px;
-            cursor: pointer;
         }
 
-        /* Navigation actions */
         .nav-actions {
             display: flex;
-            gap: 15px;
+            gap: 12px;
         }
 
         .btn-login, .btn-signup {
-            padding: 10px 24px;
+            padding: 10px 20px;
             border-radius: 8px;
             font-weight: 600;
             font-size: 14px;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s;
             text-decoration: none;
-            border: 2px solid white;
+            border: none;
         }
 
         .btn-login {
             background: transparent;
-            color: white;
+            color: var(--color-text);
+            border: 1px solid var(--color-border);
         }
 
         .btn-login:hover {
-            background: white;
-            color: var(--color-primary);
+            background: var(--color-bg-light);
         }
 
         .btn-signup {
-            background: white;
-            color: var(--color-primary);
-            border-color: white;
+            background: var(--color-primary);
+            color: white;
         }
 
         .btn-signup:hover {
             background: var(--color-primary-dark);
-            color: white;
-            border-color: var(--color-primary-dark);
+            color: var(--color-text);
         }
 
-        /* ============================================
-           HERO SECTION
-           Featured banner with CTA
-           ============================================ */
         .hero-section {
-            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+            background: linear-gradient(135deg, var(--color-primary) 0%, #0a5c5f 100%);
             color: white;
-            padding: 60px 20px;
+            padding: 80px 24px 60px;
             text-align: center;
         }
 
         .hero-container {
-            max-width: 1000px;
+            max-width: 800px;
             margin: 0 auto;
         }
 
         .hero-title {
-            font-size: 42px;
+            font-size: 48px;
             font-weight: 700;
-            margin-bottom: 15px;
+            margin-bottom: 16px;
             line-height: 1.2;
         }
 
         .hero-subtitle {
-            font-size: 18px;
-            margin-bottom: 30px;
-            opacity: 0.95;
+            font-size: 20px;
+            margin-bottom: 32px;
+            opacity: 0.9;
         }
 
         .hero-stats {
             display: flex;
             justify-content: center;
-            gap: 40px;
-            margin-top: 30px;
+            gap: 48px;
+            margin-top: 40px;
         }
 
         .stat-box {
@@ -209,368 +177,267 @@
         }
 
         .stat-number {
-            font-size: 36px;
+            font-size: 40px;
             font-weight: 700;
             display: block;
-            margin-bottom: 5px;
+            margin-bottom: 4px;
         }
 
         .stat-label {
             font-size: 14px;
-            opacity: 0.9;
+            opacity: 0.85;
         }
 
-        /* ============================================
-           BREADCRUMB NAVIGATION
-           Page path indicator
-           ============================================ */
         .breadcrumb {
-            background: white;
-            padding: 15px 0;
+            background: var(--color-bg-light);
+            padding: 16px 0;
             border-bottom: 1px solid var(--color-border);
         }
 
         .breadcrumb-container {
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
-            padding: 0 20px;
+            padding: 0 24px;
             display: flex;
             align-items: center;
             gap: 8px;
             font-size: 14px;
+            color: var(--color-text-light);
         }
 
         .breadcrumb-link {
-            color: var(--color-primary);
+            color: var(--color-text-light);
             text-decoration: none;
-            transition: all 0.3s ease;
+            transition: color 0.2s;
         }
 
         .breadcrumb-link:hover {
-            text-decoration: underline;
-        }
-
-        .breadcrumb-current {
-            color: var(--color-text-light);
-        }
-
-        /* ============================================
-           MAIN CONTAINER
-           Content area
-           ============================================ */
-        .main-container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 40px 20px;
-            display: grid;
-            grid-template-columns: 250px 1fr;
-            gap: 30px;
-        }
-
-        /* ============================================
-           SIDEBAR - CATEGORY NAVIGATION
-           Left sidebar with test categories
-           ============================================ */
-        .sidebar {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-            height: fit-content;
-            position: sticky;
-            top: 90px;
-        }
-
-        .sidebar-title {
-            font-size: 18px;
-            font-weight: 700;
-            color: var(--color-text);
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 2px solid var(--color-border);
-        }
-
-        .category-list {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-
-        .category-item {
-            padding: 12px 15px;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            color: var(--color-text);
-            text-decoration: none;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 14px;
-            font-weight: 500;
-        }
-
-        .category-item:hover {
-            background: var(--color-bg);
             color: var(--color-primary);
-            transform: translateX(5px);
         }
 
-        .category-item.active {
-            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
-            color: white;
+        .main-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 48px 24px;
         }
 
-        .category-count {
-            font-size: 12px;
-            padding: 2px 8px;
-            background: rgba(0, 0, 0, 0.1);
-            border-radius: 12px;
+        .section-header {
+            margin-bottom: 32px;
         }
 
-        /* ============================================
-           CONTENT AREA
-           Main test grid
-           ============================================ */
-        .content-area {
-            background: white;
-            border-radius: 12px;
-            padding: 30px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-        }
-
-        .content-header {
-            margin-bottom: 30px;
-        }
-
-        .content-title {
+        .section-title {
             font-size: 28px;
             font-weight: 700;
+            margin-bottom: 8px;
             color: var(--color-text);
-            margin-bottom: 10px;
         }
 
-        .content-description {
-            font-size: 15px;
+        .section-subtitle {
+            font-size: 16px;
             color: var(--color-text-light);
-            line-height: 1.6;
         }
 
-        /* Filter and sort bar */
-        .filter-bar {
+        .filters-bar {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 25px;
-            padding: 15px;
-            background: var(--color-bg);
-            border-radius: 10px;
-        }
-
-        .filter-tags {
-            display: flex;
-            gap: 10px;
+            gap: 12px;
+            margin-bottom: 32px;
             flex-wrap: wrap;
         }
 
-        .filter-tag {
-            padding: 6px 16px;
-            background: white;
-            border: 2px solid var(--color-border);
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 600;
+        .filter-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .filter-btn {
+            padding: 8px 16px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            background: var(--color-bg);
+            color: var(--color-text);
+            font-size: 14px;
             cursor: pointer;
-            transition: all 0.3s ease;
-            color: var(--color-text-light);
+            transition: all 0.2s;
         }
 
-        .filter-tag:hover {
-            border-color: var(--color-primary);
-            color: var(--color-primary);
+        .filter-btn:hover {
+            background: var(--color-bg-light);
         }
 
-        .filter-tag.active {
+        .filter-btn.active {
             background: var(--color-primary);
             color: white;
             border-color: var(--color-primary);
         }
 
-        .sort-dropdown {
-            padding: 8px 15px;
-            border: 2px solid var(--color-border);
-            border-radius: 8px;
-            font-size: 14px;
-            cursor: pointer;
-            background: white;
-            font-weight: 600;
-            color: var(--color-text);
-        }
-
-        .sort-dropdown:focus {
-            outline: none;
-            border-color: var(--color-primary);
-        }
-
-        /* ============================================
-           TEST GRID
-           Grid of test cards
-           ============================================ */
         .tests-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 24px;
+            margin-bottom: 48px;
         }
 
         .test-card {
-            background: white;
-            border: 2px solid var(--color-border);
+            background: var(--color-bg);
+            border: 1px solid var(--color-border);
             border-radius: 12px;
-            padding: 20px;
-            transition: all 0.3s ease;
+            padding: 24px;
+            transition: all 0.2s;
             cursor: pointer;
         }
 
         .test-card:hover {
-            border-color: var(--color-primary);
-            box-shadow: 0 4px 15px rgba(35, 76, 106, 0.15);
-            transform: translateY(-3px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            transform: translateY(-2px);
         }
 
-        .test-card-header {
+        .test-header {
             display: flex;
             justify-content: space-between;
             align-items: start;
-            margin-bottom: 15px;
+            margin-bottom: 16px;
         }
 
-        .test-icon {
-            width: 50px;
-            height: 50px;
-            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
+        .test-category {
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .category-aptitude {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .category-verbal {
+            background: #fce7f3;
+            color: #be185d;
+        }
+
+        .category-logical {
+            background: #dcfce7;
+            color: #15803d;
+        }
+
+        .category-technical {
+            background: #fef3c7;
+            color: #a16207;
         }
 
         .difficulty-badge {
-            padding: 5px 12px;
+            padding: 4px 10px;
             border-radius: 6px;
-            font-size: 12px;
-            font-weight: 700;
+            font-size: 11px;
+            font-weight: 600;
         }
 
-        .difficulty-badge.easy {
-            background: #c6f6d5;
-            color: #22543d;
+        .difficulty-easy {
+            background: #d1fae5;
+            color: #065f46;
         }
 
-        .difficulty-badge.medium {
-            background: #feebc8;
-            color: #7c2d12;
+        .difficulty-medium {
+            background: #fed7aa;
+            color: #9a3412;
         }
 
-        .difficulty-badge.hard {
-            background: #fed7d7;
-            color: #742a2a;
+        .difficulty-hard {
+            background: #fecaca;
+            color: #991b1b;
         }
 
         .test-title {
             font-size: 18px;
             font-weight: 700;
-            color: var(--color-text);
             margin-bottom: 8px;
+            color: var(--color-text);
         }
 
         .test-description {
             font-size: 14px;
             color: var(--color-text-light);
-            margin-bottom: 15px;
+            margin-bottom: 16px;
             line-height: 1.5;
         }
 
-        .test-stats {
+        .test-meta {
             display: flex;
-            gap: 15px;
-            margin-bottom: 15px;
+            gap: 16px;
+            margin-bottom: 16px;
             font-size: 13px;
             color: var(--color-text-light);
         }
 
-        .test-stat {
+        .meta-item {
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 6px;
         }
 
         .test-actions {
             display: flex;
-            gap: 10px;
+            gap: 8px;
         }
 
-        .btn-start-test {
+        .btn-start {
             flex: 1;
-            padding: 10px 20px;
-            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+            padding: 10px 16px;
+            background: var(--color-primary);
             color: white;
             border: none;
             border-radius: 8px;
             font-weight: 600;
             font-size: 14px;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s;
         }
 
-        .btn-start-test:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(35, 76, 106, 0.3);
+        .btn-start:hover {
+            background: var(--color-primary-dark);
+            color: var(--color-text);
         }
 
         .btn-details {
-            padding: 10px 20px;
-            background: white;
-            color: var(--color-primary);
-            border: 2px solid var(--color-primary);
+            padding: 10px 16px;
+            background: var(--color-bg-light);
+            color: var(--color-text);
+            border: 1px solid var(--color-border);
             border-radius: 8px;
             font-weight: 600;
             font-size: 14px;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s;
         }
 
         .btn-details:hover {
-            background: var(--color-primary);
-            color: white;
+            background: var(--color-bg);
         }
 
-        /* ============================================
-           PAGINATION
-           Bottom navigation
-           ============================================ */
         .pagination {
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 10px;
-            margin-top: 40px;
+            gap: 8px;
+            margin-top: 48px;
         }
 
         .page-btn {
-            padding: 10px 15px;
-            background: white;
-            border: 2px solid var(--color-border);
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
+            padding: 8px 12px;
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            background: var(--color-bg);
             color: var(--color-text);
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-width: 40px;
+            text-align: center;
         }
 
         .page-btn:hover {
-            border-color: var(--color-primary);
-            color: var(--color-primary);
+            background: var(--color-bg-light);
         }
 
         .page-btn.active {
@@ -579,769 +446,464 @@
             border-color: var(--color-primary);
         }
 
-        /* ============================================
-           FOOTER
-           Bottom page footer
-           ============================================ */
+        .page-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
         .footer {
-            background: var(--color-text);
-            color: white;
-            padding: 40px 20px 20px;
-            margin-top: 60px;
+            background: var(--color-bg-light);
+            border-top: 1px solid var(--color-border);
+            padding: 40px 24px;
+            margin-top: 80px;
         }
 
         .footer-container {
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 30px;
-            margin-bottom: 30px;
+            gap: 32px;
         }
 
-        .footer-section-title {
+        .footer-section h3 {
             font-size: 16px;
             font-weight: 700;
-            margin-bottom: 15px;
+            margin-bottom: 16px;
+            color: var(--color-text);
         }
 
         .footer-links {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
+            list-style: none;
         }
 
-        .footer-link {
-            color: rgba(255, 255, 255, 0.7);
+        .footer-links li {
+            margin-bottom: 8px;
+        }
+
+        .footer-links a {
+            color: var(--color-text-light);
             text-decoration: none;
             font-size: 14px;
-            transition: all 0.3s ease;
+            transition: color 0.2s;
         }
 
-        .footer-link:hover {
-            color: white;
-            transform: translateX(5px);
+        .footer-links a:hover {
+            color: var(--color-primary);
         }
 
         .footer-bottom {
+            max-width: 1200px;
+            margin: 32px auto 0;
+            padding-top: 24px;
+            border-top: 1px solid var(--color-border);
             text-align: center;
-            padding-top: 20px;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-            color: rgba(255, 255, 255, 0.7);
+            color: var(--color-text-light);
             font-size: 14px;
         }
 
-        /* ============================================
-           RESPONSIVE DESIGN
-           ============================================ */
-        @media (max-width: 1024px) {
-            .main-container {
-                grid-template-columns: 1fr;
-            }
-
-            .sidebar {
-                position: static;
-            }
-
+        @media (max-width: 768px) {
             .nav-search {
                 display: none;
             }
-        }
 
-        @media (max-width: 768px) {
             .hero-title {
-                font-size: 32px;
+                font-size: 36px;
+            }
+
+            .hero-subtitle {
+                font-size: 18px;
             }
 
             .hero-stats {
                 flex-direction: column;
-                gap: 20px;
+                gap: 24px;
             }
 
             .tests-grid {
                 grid-template-columns: 1fr;
             }
 
-            .filter-bar {
+            .filters-bar {
                 flex-direction: column;
-                gap: 15px;
-                align-items: stretch;
             }
 
-            .nav-actions {
-                gap: 10px;
-            }
-
-            .btn-login, .btn-signup {
-                padding: 8px 16px;
-                font-size: 13px;
+            .filter-group {
+                width: 100%;
+                overflow-x: auto;
             }
         }
     </style>
 </head>
 <body>
-    <!-- ============================================
-         NAVIGATION BAR
-         ============================================ -->
     <nav class="navbar">
         <div class="nav-container">
-            <a href="guest-home.html" class="navbar-brand">
+            <a href="#" class="navbar-brand">
                 <div class="brand-logo">P</div>
                 <span class="brand-text">Placement Portal</span>
             </a>
 
-            <!-- Search Bar -->
             <div class="nav-search">
                 <input 
                     type="text" 
-                    class="search-input" 
-                    placeholder="Search for tests, topics..."
                     id="searchInput"
-                    aria-label="Search tests"
+                    class="search-input" 
+                    placeholder="Search tests..."
+                    oninput="handleSearch(this.value)"
                 >
                 <span class="search-icon">🔍</span>
             </div>
 
-            <!-- Navigation Actions -->
             <div class="nav-actions">
-                <a href="index.html" class="btn-login">Login</a>
-                <a href="register.html" class="btn-signup">Sign Up</a>
+                <a href="#" class="btn-login">Login</a>
+                <a href="#" class="btn-signup">Sign Up</a>
             </div>
         </div>
     </nav>
 
-    <!-- ============================================
-         HERO SECTION
-         ============================================ -->
     <section class="hero-section">
         <div class="hero-container">
-            <h1 class="hero-title">Practice Tests for Placement Preparation</h1>
-            <p class="hero-subtitle">
-                Master aptitude, technical, and coding skills with our comprehensive test library
-            </p>
+            <h1 class="hero-title">Master Your Placement Tests</h1>
+            <p class="hero-subtitle">Practice with real test scenarios and boost your confidence</p>
+            
             <div class="hero-stats">
                 <div class="stat-box">
-                    <span class="stat-number">500+</span>
+                    <span class="stat-number">150+</span>
                     <span class="stat-label">Practice Tests</span>
                 </div>
                 <div class="stat-box">
                     <span class="stat-number">50K+</span>
-                    <span class="stat-label">Students Practicing</span>
+                    <span class="stat-label">Students</span>
                 </div>
                 <div class="stat-box">
-                    <span class="stat-number">100+</span>
-                    <span class="stat-label">Topics Covered</span>
+                    <span class="stat-number">95%</span>
+                    <span class="stat-label">Success Rate</span>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- ============================================
-         BREADCRUMB
-         ============================================ -->
     <div class="breadcrumb">
         <div class="breadcrumb-container">
-            <a href="guest-home.html" class="breadcrumb-link">Home</a>
+            <a href="#" class="breadcrumb-link">Home</a>
             <span>›</span>
-            <span class="breadcrumb-current">All Tests</span>
+            <span>All Tests</span>
         </div>
     </div>
 
-    <!-- ============================================
-         MAIN CONTAINER
-         ============================================ -->
     <main class="main-container">
-        <!-- Sidebar - Category Navigation -->
-        <aside class="sidebar">
-            <h2 class="sidebar-title">Categories</h2>
-            <div class="category-list">
-                <a href="#" class="category-item active" onclick="filterByCategory('all', event)">
-                    <span>📚 All Tests</span>
-                    <span class="category-count">45</span>
-                </a>
-                <a href="#" class="category-item" onclick="filterByCategory('aptitude', event)">
-                    <span>🔢 Aptitude</span>
-                    <span class="category-count">15</span>
-                </a>
-                <a href="#" class="category-item" onclick="filterByCategory('verbal', event)">
-                    <span>💬 Verbal Ability</span>
-                    <span class="category-count">8</span>
-                </a>
-                <a href="#" class="category-item" onclick="filterByCategory('logical', event)">
-                    <span>🧩 Logical Reasoning</span>
-                    <span class="category-count">10</span>
-                </a>
-                <a href="#" class="category-item" onclick="filterByCategory('technical', event)">
-                    <span>💻 Technical</span>
-                    <span class="category-count">12</span>
-                </a>
-            </div>
-        </aside>
+        <div class="section-header">
+            <h2 class="section-title">All Practice Tests</h2>
+            <p class="section-subtitle">Choose from our comprehensive collection of tests</p>
+        </div>
 
-        <!-- Content Area -->
-        <section class="content-area">
-            <div class="content-header">
-                <h1 class="content-title">All Practice Tests</h1>
-                <p class="content-description">
-                    Choose from our wide range of practice tests. Each test is carefully designed to help you prepare for placement interviews and competitive exams.
-                </p>
+        <div class="filters-bar">
+            <div class="filter-group">
+                <button class="filter-btn active" onclick="filterCategory('all')">All</button>
+                <button class="filter-btn" onclick="filterCategory('aptitude')">Aptitude</button>
+                <button class="filter-btn" onclick="filterCategory('verbal')">Verbal</button>
+                <button class="filter-btn" onclick="filterCategory('logical')">Logical</button>
+                <button class="filter-btn" onclick="filterCategory('technical')">Technical</button>
             </div>
 
-            <!-- Filter and Sort Bar -->
-            <div class="filter-bar">
-                <div class="filter-tags">
-                    <button class="filter-tag active" onclick="filterByDifficulty('all', event)">All</button>
-                    <button class="filter-tag" onclick="filterByDifficulty('easy', event)">Easy</button>
-                    <button class="filter-tag" onclick="filterByDifficulty('medium', event)">Medium</button>
-                    <button class="filter-tag" onclick="filterByDifficulty('hard', event)">Hard</button>
-                </div>
-                <select class="sort-dropdown" onchange="sortTests(this.value)">
-                    <option value="popular">Most Popular</option>
-                    <option value="newest">Newest First</option>
-                    <option value="easy">Easiest First</option>
-                    <option value="hard">Hardest First</option>
-                </select>
+            <div class="filter-group">
+                <button class="filter-btn active" onclick="filterDifficulty('all')">All Levels</button>
+                <button class="filter-btn" onclick="filterDifficulty('easy')">Easy</button>
+                <button class="filter-btn" onclick="filterDifficulty('medium')">Medium</button>
+                <button class="filter-btn" onclick="filterDifficulty('hard')">Hard</button>
             </div>
+        </div>
 
-            <!-- Tests Grid -->
-            <div class="tests-grid" id="testsGrid">
-                <!-- Test Card 1 - Aptitude -->
-                <div class="test-card" data-category="aptitude" data-difficulty="easy">
-                    <div class="test-card-header">
-                        <div class="test-icon">🔢</div>
-                        <span class="difficulty-badge easy">Easy</span>
-                    </div>
-                    <h3 class="test-title">Quantitative Aptitude Basics</h3>
-                    <p class="test-description">
-                        Master fundamental arithmetic, algebra, and geometry concepts
-                    </p>
-                    <div class="test-stats">
-                        <div class="test-stat">
-                            <span>📝</span>
-                            <span>30 Questions</span>
-                        </div>
-                        <div class="test-stat">
-                            <span>⏱️</span>
-                            <span>45 Min</span>
-                        </div>
-                        <div class="test-stat">
-                            <span>👥</span>
-                            <span>2.3k</span>
-                        </div>
-                    </div>
-                    <div class="test-actions">
-                        <button class="btn-start-test" onclick="startTest(1)">Start Test</button>
-                        <button class="btn-details" onclick="viewDetails(1)">Details</button>
-                    </div>
+        <div class="tests-grid" id="testsGrid">
+            <div class="test-card">
+                <div class="test-header">
+                    <span class="test-category category-aptitude">Aptitude</span>
+                    <span class="difficulty-badge difficulty-easy">Easy</span>
                 </div>
-
-                <!-- Test Card 2 - Verbal -->
-                <div class="test-card" data-category="verbal" data-difficulty="medium">
-                    <div class="test-card-header">
-                        <div class="test-icon">💬</div>
-                        <span class="difficulty-badge medium">Medium</span>
-                    </div>
-                    <h3 class="test-title">English Grammar & Vocabulary</h3>
-                    <p class="test-description">
-                        Test your command over English grammar and vocabulary
-                    </p>
-                    <div class="test-stats">
-                        <div class="test-stat">
-                            <span>📝</span>
-                            <span>25 Questions</span>
-                        </div>
-                        <div class="test-stat">
-                            <span>⏱️</span>
-                            <span>30 Min</span>
-                        </div>
-                        <div class="test-stat">
-                            <span>👥</span>
-                            <span>1.8k</span>
-                        </div>
-                    </div>
-                    <div class="test-actions">
-                        <button class="btn-start-test" onclick="startTest(2)">Start Test</button>
-                        <button class="btn-details" onclick="viewDetails(2)">Details</button>
-                    </div>
+                <h3 class="test-title">Basic Quantitative Aptitude</h3>
+                <p class="test-description">Foundation test covering arithmetic, percentages, ratios, and basic algebra</p>
+                <div class="test-meta">
+                    <span class="meta-item">⏱️ 30 mins</span>
+                    <span class="meta-item">📝 25 questions</span>
+                    <span class="meta-item">⭐ 100 marks</span>
                 </div>
-
-                <!-- Test Card 3 - Logical -->
-                <div class="test-card" data-category="logical" data-difficulty="medium">
-                    <div class="test-card-header">
-                        <div class="test-icon">🧩</div>
-                        <span class="difficulty-badge medium">Medium</span>
-                    </div>
-                    <h3 class="test-title">Logical Reasoning Patterns</h3>
-                    <p class="test-description">
-                        Analyze patterns, sequences, and logical relationships
-                    </p>
-                    <div class="test-stats">
-                        <div class="test-stat">
-                            <span>📝</span>
-                            <span>35 Questions</span>
-                        </div>
-                        <div class="test-stat">
-                            <span>⏱️</span>
-                            <span>50 Min</span>
-                        </div>
-                        <div class="test-stat">
-                            <span>👥</span>
-                            <span>3.1k</span>
-                        </div>
-                    </div>
-                    <div class="test-actions">
-                        <button class="btn-start-test" onclick="startTest(3)">Start Test</button>
-                        <button class="btn-details" onclick="viewDetails(3)">Details</button>
-                    </div>
-                </div>
-
-                <!-- Test Card 4 - Technical -->
-                <div class="test-card" data-category="technical" data-difficulty="hard">
-                    <div class="test-card-header">
-                        <div class="test-icon">💻</div>
-                        <span class="difficulty-badge hard">Hard</span>
-                    </div>
-                    <h3 class="test-title">Data Structures & Algorithms</h3>
-                    <p class="test-description">
-                        Advanced DSA concepts including trees, graphs, and DP
-                    </p>
-                    <div class="test-stats">
-                        <div class="test-stat">
-                            <span>📝</span>
-                            <span>40 Questions</span>
-                        </div>
-                        <div class="test-stat">
-                            <span>⏱️</span>
-                            <span>60 Min</span>
-                        </div>
-                        <div class="test-stat">
-                            <span>👥</span>
-                            <span>4.2k</span>
-                        </div>
-                    </div>
-                    <div class="test-actions">
-                        <button class="btn-start-test" onclick="startTest(4)">Start Test</button>
-                        <button class="btn-details" onclick="viewDetails(4)">Details</button>
-                    </div>
-                </div>
-
-                <!-- Test Card 5 - Aptitude -->
-                <div class="test-card" data-category="aptitude" data-difficulty="easy">
-                    <div class="test-card-header">
-                        <div class="test-icon">📊</div>
-                        <span class="difficulty-badge easy">Easy</span>
-                    </div>
-                    <h3 class="test-title">Data Interpretation Basics</h3>
-                    <p class="test-description">
-                        Read charts, graphs, and tables to answer questions
-                    </p>
-                    <div class="test-stats">
-                        <div class="test-stat">
-                            <span>📝</span>
-                            <span>20 Questions</span>
-                        </div>
-                        <div class="test-stat">
-                            <span>⏱️</span>
-                            <span>40 Min</span>
-                        </div>
-                        <div class="test-stat">
-                            <span>👥</span>
-                            <span>1.5k</span>
-                        </div>
-                    </div>
-                    <div class="test-actions">
-                        <button class="btn-start-test" onclick="startTest(5)">Start Test</button>
-                        <button
-                        <button class="btn-details" onclick="viewDetails(5)">Details</button>
-                    </div>
-                </div>
-
-                <!-- Test Card 6 - Technical -->
-                <div class="test-card" data-category="technical" data-difficulty="medium">
-                    <div class="test-card-header">
-                        <div class="test-icon">🗄️</div>
-                        <span class="difficulty-badge medium">Medium</span>
-                    </div>
-                    <h3 class="test-title">Database Management Systems</h3>
-                    <p class="test-description">
-                        SQL queries, normalization, transactions, and indexing
-                    </p>
-                    <div class="test-stats">
-                        <div class="test-stat">
-                            <span>📝</span>
-                            <span>28 Questions</span>
-                        </div>
-                        <div class="test-stat">
-                            <span>⏱️</span>
-                            <span>45 Min</span>
-                        </div>
-                        <div class="test-stat">
-                            <span>👥</span>
-                            <span>2.7k</span>
-                        </div>
-                    </div>
-                    <div class="test-actions">
-                        <button class="btn-start-test" onclick="startTest(6)">Start Test</button>
-                        <button class="btn-details" onclick="viewDetails(6)">Details</button>
-                    </div>
-                </div>
-
-                <!-- Test Card 7 - Verbal -->
-                <div class="test-card" data-category="verbal" data-difficulty="easy">
-                    <div class="test-card-header">
-                        <div class="test-icon">📖</div>
-                        <span class="difficulty-badge easy">Easy</span>
-                    </div>
-                    <h3 class="test-title">Reading Comprehension</h3>
-                    <p class="test-description">
-                        Improve reading speed and comprehension skills
-                    </p>
-                    <div class="test-stats">
-                        <div class="test-stat">
-                            <span>📝</span>
-                            <span>15 Questions</span>
-                        </div>
-                        <div class="test-stat">
-                            <span>⏱️</span>
-                            <span>25 Min</span>
-                        </div>
-                        <div class="test-stat">
-                            <span>👥</span>
-                            <span>1.2k</span>
-                        </div>
-                    </div>
-                    <div class="test-actions">
-                        <button class="btn-start-test" onclick="startTest(7)">Start Test</button>
-                        <button class="btn-details" onclick="viewDetails(7)">Details</button>
-                    </div>
-                </div>
-
-                <!-- Test Card 8 - Logical -->
-                <div class="test-card" data-category="logical" data-difficulty="hard">
-                    <div class="test-card-header">
-                        <div class="test-icon">🎯</div>
-                        <span class="difficulty-badge hard">Hard</span>
-                    </div>
-                    <h3 class="test-title">Advanced Problem Solving</h3>
-                    <p class="test-description">
-                        Complex puzzles, brain teasers, and logical challenges
-                    </p>
-                    <div class="test-stats">
-                        <div class="test-stat">
-                            <span>📝</span>
-                            <span>32 Questions</span>
-                        </div>
-                        <div class="test-stat">
-                            <span>⏱️</span>
-                            <span>55 Min</span>
-                        </div>
-                        <div class="test-stat">
-                            <span>👥</span>
-                            <span>3.5k</span>
-                        </div>
-                    </div>
-                    <div class="test-actions">
-                        <button class="btn-start-test" onclick="startTest(8)">Start Test</button>
-                        <button class="btn-details" onclick="viewDetails(8)">Details</button>
-                    </div>
-                </div>
-
-                <!-- Test Card 9 - Aptitude -->
-                <div class="test-card" data-category="aptitude" data-difficulty="medium">
-                    <div class="test-card-header">
-                        <div class="test-icon">⚡</div>
-                        <span class="difficulty-badge medium">Medium</span>
-                    </div>
-                    <h3 class="test-title">Speed Mathematics</h3>
-                    <p class="test-description">
-                        Quick calculation techniques and mental math tricks
-                    </p>
-                    <div class="test-stats">
-                        <div class="test-stat">
-                            <span>📝</span>
-                            <span>40 Questions</span>
-                        </div>
-                        <div class="test-stat">
-                            <span>⏱️</span>
-                            <span>30 Min</span>
-                        </div>
-                        <div class="test-stat">
-                            <span>👥</span>
-                            <span>2.9k</span>
-                        </div>
-                    </div>
-                    <div class="test-actions">
-                        <button class="btn-start-test" onclick="startTest(9)">Start Test</button>
-                        <button class="btn-details" onclick="viewDetails(9)">Details</button>
-                    </div>
+                <div class="test-actions">
+                    <button class="btn-start" onclick="startTest(1)">Start Test</button>
+                    <button class="btn-details" onclick="viewDetails(1)">Details</button>
                 </div>
             </div>
 
-            <!-- Pagination -->
-            <div class="pagination">
-                <button class="page-btn" onclick="changePage('prev')">‹ Previous</button>
-                <button class="page-btn active" onclick="changePage(1)">1</button>
-                <button class="page-btn" onclick="changePage(2)">2</button>
-                <button class="page-btn" onclick="changePage(3)">3</button>
-                <button class="page-btn" onclick="changePage(4)">4</button>
-                <button class="page-btn" onclick="changePage('next')">Next ›</button>
+            <div class="test-card">
+                <div class="test-header">
+                    <span class="test-category category-verbal">Verbal</span>
+                    <span class="difficulty-badge difficulty-medium">Medium</span>
+                </div>
+                <h3 class="test-title">English Comprehension</h3>
+                <p class="test-description">Reading comprehension, grammar, vocabulary, and sentence correction</p>
+                <div class="test-meta">
+                    <span class="meta-item">⏱️ 40 mins</span>
+                    <span class="meta-item">📝 30 questions</span>
+                    <span class="meta-item">⭐ 120 marks</span>
+                </div>
+                <div class="test-actions">
+                    <button class="btn-start" onclick="startTest(2)">Start Test</button>
+                    <button class="btn-details" onclick="viewDetails(2)">Details</button>
+                </div>
             </div>
-        </section>
-    </main>
 
-    <!-- ============================================
-         FOOTER
-         ============================================ -->
-    <footer class="footer">
-        <div class="footer-container">
-            <div>
-                <h3 class="footer-section-title">About</h3>
-                <div class="footer-links">
-                    <a href="#" class="footer-link">About Us</a>
-                    <a href="#" class="footer-link">How It Works</a>
-                    <a href="#" class="footer-link">Success Stories</a>
-                    <a href="#" class="footer-link">Blog</a>
+            <div class="test-card">
+                <div class="test-header">
+                    <span class="test-category category-logical">Logical</span>
+                    <span class="difficulty-badge difficulty-hard">Hard</span>
+                </div>
+                <h3 class="test-title">Advanced Logical Reasoning</h3>
+                <p class="test-description">Complex patterns, puzzles, analytical reasoning, and critical thinking</p>
+                <div class="test-meta">
+                    <span class="meta-item">⏱️ 45 mins</span>
+                    <span class="meta-item">📝 35 questions</span>
+                    <span class="meta-item">⭐ 140 marks</span>
+                </div>
+                <div class="test-actions">
+                    <button class="btn-start" onclick="startTest(3)">Start Test</button>
+                    <button class="btn-details" onclick="viewDetails(3)">Details</button>
                 </div>
             </div>
-            <div>
-                <h3 class="footer-section-title">Tests</h3>
-                <div class="footer-links">
-                    <a href="#" class="footer-link">Aptitude Tests</a>
-                    <a href="#" class="footer-link">Technical Tests</a>
-                    <a href="#" class="footer-link">Coding Challenges</a>
-                    <a href="#" class="footer-link">Mock Interviews</a>
+
+            <div class="test-card">
+                <div class="test-header">
+                    <span class="test-category category-technical">Technical</span>
+                    <span class="difficulty-badge difficulty-medium">Medium</span>
+                </div>
+                <h3 class="test-title">Data Structures Fundamentals</h3>
+                <p class="test-description">Arrays, linked lists, stacks, queues, trees, and basic algorithms</p>
+                <div class="test-meta">
+                    <span class="meta-item">⏱️ 50 mins</span>
+                    <span class="meta-item">📝 40 questions</span>
+                    <span class="meta-item">⭐ 150 marks</span>
+                </div>
+                <div class="test-actions">
+                    <button class="btn-start" onclick="startTest(4)">Start Test</button>
+                    <button class="btn-details" onclick="viewDetails(4)">Details</button>
                 </div>
             </div>
-            <div>
-                <h3 class="footer-section-title">Resources</h3>
-                <div class="footer-links">
-                    <a href="#" class="footer-link">Study Materials</a>
-                    <a href="#" class="footer-link">Interview Tips</a>
-                    <a href="#" class="footer-link">Company Reviews</a>
-                    <a href="#" class="footer-link">FAQ</a>
+
+            <div class="test-card">
+                <div class="test-header">
+                    <span class="test-category category-aptitude">Aptitude</span>
+                    <span class="difficulty-badge difficulty-medium">Medium</span>
+                </div>
+                <h3 class="test-title">Advanced Mathematics</h3>
+                <p class="test-description">Probability, permutations, combinations, geometry, and calculus basics</p>
+                <div class="test-meta">
+                    <span class="meta-item">⏱️ 60 mins</span>
+                    <span class="meta-item">📝 50 questions</span>
+                    <span class="meta-item">⭐ 200 marks</span>
+                </div>
+                <div class="test-actions">
+                    <button class="btn-start" onclick="startTest(5)">Start Test</button>
+                    <button class="btn-details" onclick="viewDetails(5)">Details</button>
                 </div>
             </div>
-            <div>
-                <h3 class="footer-section-title">Support</h3>
-                <div class="footer-links">
-                    <a href="#" class="footer-link">Help Center</a>
-                    <a href="#" class="footer-link">Contact Us</a>
-                    <a href="#" class="footer-link">Privacy Policy</a>
-                    <a href="#" class="footer-link">Terms of Service</a>
+
+            <div class="test-card">
+                <div class="test-header">
+                    <span class="test-category category-verbal">Verbal</span>
+                    <span class="difficulty-badge difficulty-easy">Easy</span>
+                </div>
+                <h3 class="test-title">Basic Grammar & Vocabulary</h3>
+                <p class="test-description">Essential grammar rules, common vocabulary, and sentence formation</p>
+                <div class="test-meta">
+                    <span class="meta-item">⏱️ 25 mins</span>
+                    <span class="meta-item">📝 20 questions</span>
+                    <span class="meta-item">⭐ 80 marks</span>
+                </div>
+                <div class="test-actions">
+                    <button class="btn-start" onclick="startTest(6)">Start Test</button>
+                    <button class="btn-details" onclick="viewDetails(6)">Details</button>
+                </div>
+            </div>
+
+            <div class="test-card">
+                <div class="test-header">
+                    <span class="test-category category-logical">Logical</span>
+                    <span class="difficulty-badge difficulty-easy">Easy</span>
+                </div>
+                <h3 class="test-title">Basic Pattern Recognition</h3>
+                <p class="test-description">Simple patterns, sequences, and logical deduction exercises</p>
+                <div class="test-meta">
+                    <span class="meta-item">⏱️ 30 mins</span>
+                    <span class="meta-item">📝 25 questions</span>
+                    <span class="meta-item">⭐ 100 marks</span>
+                </div>
+                <div class="test-actions">
+                    <button class="btn-start" onclick="startTest(7)">Start Test</button>
+                    <button class="btn-details" onclick="viewDetails(7)">Details</button>
+                </div>
+            </div>
+
+            <div class="test-card">
+                <div class="test-header">
+                    <span class="test-category category-technical">Technical</span>
+                    <span class="difficulty-badge difficulty-hard">Hard</span>
+                </div>
+                <h3 class="test-title">Advanced Algorithms</h3>
+                <p class="test-description">Dynamic programming, graph algorithms, sorting, and optimization</p>
+                <div class="test-meta">
+                    <span class="meta-item">⏱️ 75 mins</span>
+                    <span class="meta-item">📝 45 questions</span>
+                    <span class="meta-item">⭐ 180 marks</span>
+                </div>
+                <div class="test-actions">
+                    <button class="btn-start" onclick="startTest(8)">Start Test</button>
+                    <button class="btn-details" onclick="viewDetails(8)">Details</button>
+                </div>
+            </div>
+
+            <div class="test-card">
+                <div class="test-header">
+                    <span class="test-category category-aptitude">Aptitude</span>
+                    <span class="difficulty-badge difficulty-hard">Hard</span>
+                </div>
+                <h3 class="test-title">Problem Solving & Analytics</h3>
+                <p class="test-description">Complex word problems, data interpretation, and analytical reasoning</p>
+                <div class="test-meta">
+                    <span class="meta-item">⏱️ 60 mins</span>
+                    <span class="meta-item">📝 40 questions</span>
+                    <span class="meta-item">⭐ 160 marks</span>
+                </div>
+                <div class="test-actions">
+                    <button class="btn-start" onclick="startTest(9)">Start Test</button>
+                    <button class="btn-details" onclick="viewDetails(9)">Details</button>
                 </div>
             </div>
         </div>
+
+        <div class="pagination">
+            <button class="page-btn" onclick="changePage(0)" disabled>‹</button>
+            <button class="page-btn active" onclick="changePage(1)">1</button>
+            <button class="page-btn" onclick="changePage(2)">2</button>
+            <button class="page-btn" onclick="changePage(3)">3</button>
+            <button class="page-btn" onclick="changePage(2)">›</button>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="footer-container">
+            <div class="footer-section">
+                <h3>About</h3>
+                <ul class="footer-links">
+                    <li><a href="#">About Us</a></li>
+                    <li><a href="#">How It Works</a></li>
+                    <li><a href="#">Contact</a></li>
+                </ul>
+            </div>
+
+            <div class="footer-section">
+                <h3>Resources</h3>
+                <ul class="footer-links">
+                    <li><a href="#">Study Materials</a></li>
+                    <li><a href="#">Practice Tests</a></li>
+                    <li><a href="#">Success Stories</a></li>
+                </ul>
+            </div>
+
+            <div class="footer-section">
+                <h3>Support</h3>
+                <ul class="footer-links">
+                    <li><a href="#">Help Center</a></li>
+                    <li><a href="#">FAQ</a></li>
+                    <li><a href="#">Feedback</a></li>
+                </ul>
+            </div>
+
+            <div class="footer-section">
+                <h3>Legal</h3>
+                <ul class="footer-links">
+                    <li><a href="#">Privacy Policy</a></li>
+                    <li><a href="#">Terms of Service</a></li>
+                    <li><a href="#">Cookie Policy</a></li>
+                </ul>
+            </div>
+        </div>
+
         <div class="footer-bottom">
-            <p>&copy; 2025 Placement Portal. All rights reserved. Made with ❤️ for students</p>
+            <p>2024 Placement Portal. All rights reserved.</p>
         </div>
     </footer>
 
-    <!-- ============================================
-         JAVASCRIPT
-         ============================================ -->
     <script>
-        /* ============================================
-           DEBOUNCE UTILITY
-           Optimizes search performance by limiting function calls
-           ============================================ */
-        function debounce(func, wait) {
-            let timeout;
-            return function executedFunction(...args) {
-                const later = () => {
-                    clearTimeout(timeout);
-                    func(...args);
-                };
-                clearTimeout(timeout);
-                timeout = setTimeout(later, wait);
-            };
+        function handleSearch(query) {
+            console.log('Searching for:', query);
+            const cards = document.querySelectorAll('.test-card');
+            const searchTerm = query.toLowerCase();
+
+            cards.forEach(card => {
+                const title = card.querySelector('.test-title').textContent.toLowerCase();
+                const description = card.querySelector('.test-description').textContent.toLowerCase();
+                const category = card.querySelector('.test-category').textContent.toLowerCase();
+
+                if (title.includes(searchTerm) || description.includes(searchTerm) || category.includes(searchTerm)) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
         }
 
-        /* ============================================
-           SEARCH FUNCTIONALITY
-           Real-time search through test cards
-           Uses debouncing to optimize performance
-           ============================================ */
-        const searchInput = document.getElementById('searchInput');
-        if (searchInput) {
-            const performSearch = debounce(function(e) {
-                const searchTerm = e.target.value.toLowerCase().trim();
-                const testCards = document.querySelectorAll('.test-card');
-                
-                testCards.forEach(card => {
-                    const title = card.querySelector('.test-title')?.textContent?.toLowerCase() || '';
-                    const description = card.querySelector('.test-description')?.textContent?.toLowerCase() || '';
-                    
-                    if (!searchTerm || title.includes(searchTerm) || description.includes(searchTerm)) {
-                        card.style.display = '';
-                    } else {
-                        card.style.display = 'none';
-                    }
-                });
-            }, 300);
+        function filterCategory(category) {
+            console.log('Filtering by category:', category);
+            
+            document.querySelectorAll('.filter-group:first-child .filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
 
-            searchInput.addEventListener('input', performSearch);
-        }
-
-        /* ============================================
-           FILTER BY CATEGORY
-           Shows tests from selected category
-           Updates active state in sidebar
-           ============================================ */
-        function filterByCategory(category, event) {
-            if (event) {
-                event.preventDefault();
-            }
-
-            // Update active state in sidebar
-            const categoryItems = document.querySelectorAll('.category-item');
-            categoryItems.forEach(item => item.classList.remove('active'));
-            if (event) {
-                event.currentTarget.classList.add('active');
-            }
-
-            // Filter test cards
-            const testCards = document.querySelectorAll('.test-card');
-            testCards.forEach(card => {
-                const cardCategory = card.dataset.category;
-                
+            const cards = document.querySelectorAll('.test-card');
+            cards.forEach(card => {
+                const cardCategory = card.querySelector('.test-category').textContent.toLowerCase();
                 if (category === 'all' || cardCategory === category) {
-                    card.style.display = '';
+                    card.style.display = 'block';
                 } else {
                     card.style.display = 'none';
                 }
             });
-
-            console.log('Filtered by category:', category);
         }
 
-        /* ============================================
-           FILTER BY DIFFICULTY
-           Shows tests of selected difficulty level
-           Updates active state in filter tags
-           ============================================ */
-        function filterByDifficulty(difficulty, event) {
-            if (event) {
-                event.preventDefault();
-            }
+        function filterDifficulty(difficulty) {
+            console.log('Filtering by difficulty:', difficulty);
+            
+            document.querySelectorAll('.filter-group:last-child .filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
 
-            // Update active state in filter tags
-            const filterTags = document.querySelectorAll('.filter-tag');
-            filterTags.forEach(tag => tag.classList.remove('active'));
-            if (event) {
-                event.currentTarget.classList.add('active');
-            }
-
-            // Filter test cards
-            const testCards = document.querySelectorAll('.test-card');
-            testCards.forEach(card => {
-                const cardDifficulty = card.dataset.difficulty;
-                
+            const cards = document.querySelectorAll('.test-card');
+            cards.forEach(card => {
+                const cardDifficulty = card.querySelector('.difficulty-badge').textContent.toLowerCase();
                 if (difficulty === 'all' || cardDifficulty === difficulty) {
-                    card.style.display = '';
+                    card.style.display = 'block';
                 } else {
                     card.style.display = 'none';
                 }
             });
-
-            console.log('Filtered by difficulty:', difficulty);
         }
 
-        /* ============================================
-           SORT TESTS
-           Sorts test cards based on selected criteria
-           ============================================ */
-        function sortTests(sortBy) {
-            const testsGrid = document.getElementById('testsGrid');
-            const testCards = Array.from(document.querySelectorAll('.test-card'));
-            
-            testCards.sort((a, b) => {
-                switch(sortBy) {
-                    case 'newest':
-                        // In production, this would sort by creation date
-                        return 0;
-                    
-                    case 'easy':
-                        const difficultyOrder = { 'easy': 1, 'medium': 2, 'hard': 3 };
-                        const diffA = difficultyOrder[a.dataset.difficulty];
-                        const diffB = difficultyOrder[b.dataset.difficulty];
-                        return diffA - diffB;
-                    
-                    case 'hard':
-                        const diffOrder = { 'easy': 3, 'medium': 2, 'hard': 1 };
-                        const dA = diffOrder[a.dataset.difficulty];
-                        const dB = diffOrder[b.dataset.difficulty];
-                        return dA - dB;
-                    
-                    case 'popular':
-                    default:
-                        // Currently sorted by popularity (default order)
-                        return 0;
-                }
-            });
-
-            // Re-append sorted cards
-            testCards.forEach(card => testsGrid.appendChild(card));
-            
-            console.log('Sorted by:', sortBy);
-        }
-
-        /* ============================================
-           START TEST
-           Initiates a test session
-           
-           SECURITY NOTE:
-           - In production, this should verify user authentication
-           - Create a test attempt record in database
-           - Redirect to secure test environment
-           
-           BACKEND INTEGRATION:
-           When implementing backend, this function should:
-           1. Check if user is logged in (redirect to login if not)
-           2. POST to create-test-attempt.php with testId
-           3. Receive attemptId from backend
-           4. Redirect to take-test.html?attempt={attemptId}
-           ============================================ */
         function startTest(testId) {
             console.log('Starting test:', testId);
             
-            // Check if user is logged in (in production)
-            // For guests, show modal to collect name and email
-            
             if (confirm('Ready to start this test?\n\nFor guests: You will be asked to provide your name and email before starting.')) {
-                // In production:
-                // window.location.href = `test-preview.html?id=${testId}`;
-                alert(`🚀 Starting Test ${testId}\n\nRedirecting to test preview...`);
+                alert(`Starting Test ${testId}\n\nRedirecting to test preview...`);
             }
         }
 
-        /* ============================================
-           VIEW TEST DETAILS
-           Shows detailed information about a test
-           Opens test preview page
-           ============================================ */
         function viewDetails(testId) {
             console.log('Viewing details for test:', testId);
-            
-            // In production:
-            // window.location.href = `test-preview.html?id=${testId}`;
-            alert(`📋 Viewing details for Test ${testId}\n\nWill show:\n• Full syllabus\n• Sample questions\n• Difficulty breakdown\n• Time limits\n• Scoring system`);
+            alert(`Viewing details for Test ${testId}\n\nWill show:\n• Full syllabus\n• Sample questions\n• Difficulty breakdown\n• Time limits\n• Scoring system`);
         }
 
-        /* ============================================
-           PAGINATION
-           Handles page navigation
-           
-           BACKEND NOTE:
-           In production, implement server-side pagination:
-           - Fetch tests in batches (e.g., 9 per page)
-           - Send page number to backend
-           - Update URL with page parameter (?page=2)
-           - Implement scroll to top on page change
-           ============================================ */
         function changePage(page) {
             console.log('Changing to page:', page);
             
-            // Update active page button
             const pageButtons = document.querySelectorAll('.page-btn');
             pageButtons.forEach(btn => {
                 if (btn.textContent === page.toString()) {
@@ -1351,178 +913,33 @@
                 }
             });
 
-            // Scroll to top
             window.scrollTo({ top: 0, behavior: 'smooth' });
-            
-            // In production, fetch new set of tests from backend
             alert(`Loading page ${page}...`);
         }
 
-        /* ============================================
-           KEYBOARD SHORTCUTS
-           Enhances user experience with keyboard navigation
-           ============================================ */
         document.addEventListener('keydown', function(e) {
-            // Focus search with '/' key
             if (e.key === '/' && !e.target.matches('input, textarea')) {
                 e.preventDefault();
                 document.getElementById('searchInput')?.focus();
             }
             
-            // Clear search with Escape
             if (e.key === 'Escape' && e.target.matches('#searchInput')) {
                 e.target.value = '';
                 e.target.dispatchEvent(new Event('input'));
             }
         });
 
-        /* ============================================
-           PAGE LOAD INITIALIZATION
-           Sets up page on load
-           ============================================ */
         window.addEventListener('load', function() {
             console.log('All Tests page loaded');
             
-            // Animate test cards entrance
             const testCards = document.querySelectorAll('.test-card');
             testCards.forEach((card, index) => {
                 setTimeout(() => {
-                    card.style.animation = 'fadeIn 0.5s ease forwards';
+                    card.style.opacity = '1';
+                    card.style.transform = 'translateY(0)';
                 }, index * 50);
             });
         });
-
-        /* ============================================
-           ANALYTICS TRACKING (Optional)
-           Track user interactions for analytics
-           
-           In production, integrate with analytics service:
-           - Track search queries
-           - Track category filters
-           - Track test views and starts
-           - Track time spent on page
-           ============================================ */
-        function trackEvent(eventName, eventData) {
-            console.log('Analytics Event:', eventName, eventData);
-            
-            // In production, send to analytics service:
-            // gtag('event', eventName, eventData);
-            // or
-            // analytics.track(eventName, eventData);
-        }
-
-        /* ============================================
-           CSS ANIMATIONS
-           Define entrance animations
-           ============================================ */
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes fadeIn {
-                from {
-                    opacity: 0;
-                    transform: translateY(20px);
-                }
-                to {
-                    opacity: 1;
-                    transform: translateY(0);
-                }
-            }
-            
-            .test-card {
-                opacity: 0;
-            }
-        `;
-        document.head.appendChild(style);
-
-        /* ============================================
-           BACKEND INTEGRATION NOTES
-           
-           When ready to implement backend functionality:
-           
-           1. RENAME FILE: all-tests.html → all-tests.php
-           
-           2. FETCH TESTS FROM DATABASE:
-              
-              <?php
-              // all-tests.php
-              require_once 'config/database.php';
-              
-              // Pagination
-              $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-              $perPage = 9;
-              $offset = ($page - 1) * $perPage;
-              
-              // Filters
-              $category = $_GET['category'] ?? 'all';
-              $difficulty = $_GET['difficulty'] ?? 'all';
-              $search = $_GET['search'] ?? '';
-              
-              // Build query
-              $query = "SELECT * FROM tests WHERE is_public = 1";
-              
-              if ($category !== 'all') {
-                  $query .= " AND category = :category";
-              }
-              
-              if ($difficulty !== 'all') {
-                  $query .= " AND difficulty_level = :difficulty";
-              }
-              
-              if ($search) {
-                  $query .= " AND (test_name LIKE :search OR description LIKE :search)";
-              }
-              
-              $query .= " ORDER BY created_at DESC LIMIT :limit OFFSET :offset";
-              
-              $stmt = $pdo->prepare($query);
-              // ... bind parameters and execute
-              ?>
-           
-           3. DATABASE SCHEMA:
-              Ensure 'tests' table has columns:
-              - test_id (INT, PRIMARY KEY)
-              - test_name (VARCHAR)
-              - description (TEXT)
-              - category (ENUM: 'aptitude', 'verbal', 'logical', 'technical')
-              - difficulty_level (ENUM: 'easy', 'medium', 'hard')
-              - duration (INT, minutes)
-              - total_questions (INT)
-              - total_marks (INT)
-              - is_public (BOOLEAN, for guest access)
-              - attempt_count (INT, track popularity)
-              - created_at (TIMESTAMP)
-           
-           4. IMPLEMENT SEARCH API:
-              Create api/search-tests.php for AJAX search
-              Return JSON with filtered tests
-           
-           5. SECURITY MEASURES:
-              - Sanitize all inputs (search, filters)
-              - Use prepared statements for SQL
-              - Implement rate limiting on search
-              - Validate page numbers (prevent negative/huge values)
-              - Add CSRF protection if needed
-           
-           6. PERFORMANCE OPTIMIZATION:
-              - Add database indexes on category, difficulty, created_at
-              - Implement caching for frequently accessed pages
-              - Use lazy loading for test cards (load as user scrolls)
-              - Compress and optimize images
-           
-           7. FILES TO CREATE/MODIFY:
-              - all-tests.html → all-tests.php
-              - api/search-tests.php (new, for AJAX search)
-              - api/get-test-details.php (new, for test preview)
-              - Update links in guest-dashboard.html
-              - Update links in guest-home.html
-           
-           8. URL STRUCTURE:
-              - /all-tests.php (all tests)
-              - /all-tests.php?category=aptitude (filtered by category)
-              - /all-tests.php?difficulty=easy (filtered by difficulty)
-              - /all-tests.php?page=2 (pagination)
-              - /all-tests.php?search=algebra (search results)
-           ============================================ */
     </script>
 </body>
 </html>

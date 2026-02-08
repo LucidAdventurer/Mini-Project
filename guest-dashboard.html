@@ -5,38 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Welcome - Placement & Training Portal</title>
     <style>
-        /* ============================================
-           CSS VARIABLES - Reusable values
-           ============================================ */
         :root {
-            /* Colors #4facfe #00f2fe*/
-
             --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            --color-primary: #234C6A;
-            --color-primary-dark: #456882;
-            --color-teacher-primary: #2E073F;
-            --color-teacher-secondary: #AD49E1;
-            --color-text: #2d3748;
-            --color-text-light: #718096;
-            --color-text-lighter: #a0aec0;
-            --color-bg: #f0f4f8;
-            --color-bg-light: #f5f7fa;
-            --color-white: #ffffff;
-            --color-border: #e2e8f0;
-            --color-success: #48bb78;
-            --color-error: #f56565;
-            --color-warning: #ffc107;
-            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.1);
-            --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.08);
-            --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.15);
-            --border-radius: 10px;
+            --color-primary: #6366f1;
+            --color-primary-dark: #4f46e5;
+            --color-primary-light: #818cf8;
+            --color-accent: #f59e0b;
+            --color-text: #1f2937;
+            --color-text-light: #6b7280;
+            --color-text-lighter: #9ca3af;
+            --color-bg: #f9fafb;
+            --color-bg-light: #ffffff;
+            --color-border: #e5e7eb;
+            --color-success: #10b981;
+            --color-error: #ef4444;
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.08);
+            --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.12);
+            --border-radius: 12px;
             --border-radius-lg: 20px;
             --transition: all 0.3s ease;
         }
 
-        /* ============================================
-           GLOBAL RESET & BASE STYLES
-           ============================================ */
         * {
             margin: 0;
             padding: 0;
@@ -45,19 +35,14 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #D3DAD9;
-            color: #2d3748;
+            background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+            color: #1f2937;
             overflow-x: hidden;
             margin: 0;
             padding: 0;
             padding-top: 71px;
         }
 
-        /* ============================================
-           NAVIGATION BAR
-           Guest-friendly navigation with prominent CTA
-           ============================================ */
-        /* NAVIGATION BAR - standardized across pages */
         .navbar {
             background: white;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
@@ -78,7 +63,7 @@
             gap: 12px;
             font-size: 20px;
             font-weight: 700;
-            color: #2d3748;
+            color: #1f2937;
             text-decoration: none;
         }
 
@@ -101,13 +86,11 @@
             align-items: center;
             gap: 10px;
         }
-        
 
         .brand-logo:hover {
             transform: scale(1.1) rotate(5deg);
         }
 
-        /* Navigation menu */
         .nav-menu {
             display: flex;
             gap: 30px;
@@ -116,7 +99,7 @@
 
         .nav-link {
             text-decoration: none;
-            color: #4a5568;
+            color: #4b5563;
             font-weight: 600;
             font-size: 15px;
             transition: color 0.3s ease;
@@ -140,12 +123,6 @@
 
         .nav-link:hover::after {
             width: 100%;
-        }
-
-        .nav-actions {
-            display: flex;
-            gap: 15px;
-            align-items: center;
         }
 
         .btn-login {
@@ -178,15 +155,14 @@
             cursor: pointer;
             transition: all 0.3s ease;
             text-decoration: none;
-            box-shadow: 0 4px 12px rgba(79, 172, 254, 0.3);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
         }
 
         .btn-signup:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(79, 172, 254, 0.4);
+            box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
         }
 
-        /* Mobile menu toggle */
         .mobile-menu-toggle {
             display: none;
             width: 35px;
@@ -204,141 +180,105 @@
         .menu-bar {
             width: 20px;
             height: 2px;
-            background: #2d3748;
+            background: #1f2937;
             transition: all 0.3s ease;
         }
 
-        /* ============================================
-           HERO SECTION
-           Eye-catching landing section with main CTA
-           ============================================ */
         .hero-section {
-            margin-top: 70px; /* Account for fixed navbar */
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin-top: 70px;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
             padding: 100px 30px 80px;
             text-align: center;
             position: relative;
             overflow: hidden;
         }
 
-        /* Animated background elements */
         .hero-section::before {
             content: '';
             position: absolute;
             top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
-            background-size: 50px 50px;
-            animation: moveBackground 20s linear infinite;
+            right: -20%;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: float 20s ease-in-out infinite;
         }
 
-        @keyframes moveBackground {
-            0% {
-                transform: translate(0, 0);
-            }
-            100% {
-                transform: translate(50px, 50px);
-            }
+        .hero-section::after {
+            content: '';
+            position: absolute;
+            bottom: -30%;
+            left: -10%;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.08) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: float 15s ease-in-out infinite reverse;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) translateX(0px); }
+            50% { transform: translateY(-30px) translateX(20px); }
         }
 
         .hero-content {
             position: relative;
-            z-index: 1;
-            max-width: 900px;
+            z-index: 2;
+            max-width: 800px;
             margin: 0 auto;
         }
 
-        .hero-badge {
-            display: inline-block;
-            padding: 8px 20px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 20px;
-            color: white;
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 20px;
-            backdrop-filter: blur(10px);
-        }
-
         .hero-title {
-            font-size: 56px;
+            font-size: 52px;
             font-weight: 800;
             color: white;
             margin-bottom: 20px;
             line-height: 1.2;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
 
         .hero-subtitle {
             font-size: 20px;
-            color: rgba(255, 255, 255, 0.9);
+            color: rgba(255, 255, 255, 0.95);
             margin-bottom: 40px;
             line-height: 1.6;
         }
 
         .hero-cta {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-
-        .btn-primary-large {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
             padding: 18px 40px;
             background: white;
-            color: #667eea;
+            color: var(--color-primary);
+            font-size: 18px;
+            font-weight: 700;
             border: none;
             border-radius: 12px;
-            font-weight: 700;
-            font-size: 18px;
             cursor: pointer;
             transition: all 0.3s ease;
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
             text-decoration: none;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
         }
 
-        .btn-primary-large:hover {
+        .hero-cta:hover {
             transform: translateY(-3px);
-            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.25);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
         }
 
-        .btn-secondary-large {
-            padding: 18px 40px;
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            border: 2px solid white;
-            border-radius: 12px;
-            font-weight: 700;
-            font-size: 18px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            backdrop-filter: blur(10px);
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-            text-decoration: none;
+        .hero-cta svg {
+            width: 20px;
+            height: 20px;
+            transition: transform 0.3s ease;
         }
 
-        .btn-secondary-large:hover {
-            background: white;
-            color: #667eea;
-            transform: translateY(-3px);
+        .hero-cta:hover svg {
+            transform: translateX(5px);
         }
 
-        /* ============================================
-           FEATURES SECTION
-           Highlight key platform features
-           ============================================ */
         .features-section {
             padding: 80px 30px;
-            background: white;
-        }
-
-        .container {
             max-width: 1200px;
             margin: 0 auto;
         }
@@ -348,354 +288,185 @@
             margin-bottom: 60px;
         }
 
-        .section-badge {
-            display: inline-block;
-            padding: 6px 16px;
-            background: #e6f7ff;
-            color: #4facfe;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 700;
-            margin-bottom: 15px;
-            letter-spacing: 0.5px;
-        }
-
         .section-title {
-            font-size: 42px;
-            font-weight: 700;
-            color: #2d3748;
+            font-size: 38px;
+            font-weight: 800;
+            color: #1f2937;
             margin-bottom: 15px;
         }
 
-        .section-description {
+        .section-subtitle {
             font-size: 18px;
-            color: #718096;
-            max-width: 700px;
+            color: #6b7280;
+            max-width: 600px;
             margin: 0 auto;
-            line-height: 1.7;
         }
 
-        /* Features grid */
         .features-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 30px;
         }
 
         .feature-card {
-            padding: 35px;
             background: white;
-            border-radius: 20px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            padding: 35px;
+            border-radius: 16px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
             transition: all 0.3s ease;
-            border: 2px solid transparent;
+            border: 1px solid #f3f4f6;
         }
 
         .feature-card:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
-            border-color: #4facfe;
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
         }
 
         .feature-icon {
-            width: 70px;
-            height: 70px;
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            border-radius: 16px;
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 32px;
             margin-bottom: 20px;
-            box-shadow: 0 8px 20px rgba(79, 172, 254, 0.3);
+        }
+
+        .feature-icon svg {
+            width: 28px;
+            height: 28px;
+            color: white;
         }
 
         .feature-title {
             font-size: 22px;
             font-weight: 700;
-            color: #2d3748;
+            color: #1f2937;
             margin-bottom: 12px;
         }
 
         .feature-description {
             font-size: 15px;
-            color: #718096;
-            line-height: 1.7;
+            color: #6b7280;
+            line-height: 1.6;
         }
 
-        /* ============================================
-           PUBLIC TESTS SECTION
-           Showcase available practice tests
-           ============================================ */
-        .tests-section {
-            padding: 80px 30px;
-            background: #f7fafc;
-        }
-
-        .tests-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 25px;
-        }
-
-        .test-card {
-            background: white;
-            border-radius: 20px;
-            overflow: hidden;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-            transition: all 0.3s ease;
-            cursor: pointer;
-        }
-
-        .test-card:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
-        }
-
-        .test-card-header {
-            padding: 25px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .test-card-title {
-            font-size: 20px;
-            font-weight: 700;
-            margin-bottom: 8px;
-        }
-
-        .test-card-subtitle {
-            font-size: 14px;
-            opacity: 0.9;
-        }
-
-        .test-card-body {
-            padding: 25px;
-        }
-
-        .test-meta {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-
-        .test-meta-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 14px;
-            color: #4a5568;
-        }
-
-        .test-meta-icon {
-            font-size: 18px;
-            color: #4facfe;
-        }
-
-        .test-difficulty {
-            display: inline-block;
-            padding: 6px 14px;
-            border-radius: 8px;
-            font-size: 12px;
-            font-weight: 700;
-            margin-bottom: 15px;
-        }
-
-        .test-difficulty.easy {
-            background: #c6f6d5;
-            color: #22543d;
-        }
-
-        .test-difficulty.medium {
-            background: #feebc8;
-            color: #7c2d12;
-        }
-
-        .test-difficulty.hard {
-            background: #fed7d7;
-            color: #742a2a;
-        }
-
-        .btn-take-test {
-            width: 100%;
-            padding: 12px;
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-weight: 700;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .btn-take-test:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4);
-        }
-
-        /* ============================================
-           STATISTICS SECTION
-           Show platform impact with numbers
-           ============================================ */
         .stats-section {
-            padding: 80px 30px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 60px 30px;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
             color: white;
             text-align: center;
         }
 
-        .stats-grid {
+        .stats-container {
+            max-width: 1000px;
+            margin: 0 auto;
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 40px;
-            max-width: 1000px;
-            margin: 0 auto;
         }
 
         .stat-item {
             padding: 20px;
         }
 
-        .stat-value {
+        .stat-number {
             font-size: 48px;
             font-weight: 800;
             margin-bottom: 10px;
-            background: linear-gradient(135deg, #ffffff 0%, #e0e7ff 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
 
         .stat-label {
             font-size: 16px;
-            opacity: 0.9;
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: 500;
         }
 
-        /* ============================================
-           HOW IT WORKS SECTION
-           Step-by-step guide for new users
-           ============================================ */
-        .how-it-works-section {
-            padding: 80px 30px;
-            background: white;
-        }
-
-        .steps-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 40px;
-            margin-top: 50px;
-        }
-
-        .step-card {
-            text-align: center;
-            position: relative;
-        }
-
-        .step-number {
-            width: 60px;
-            height: 60px;
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 24px;
-            font-weight: 700;
-            margin: 0 auto 20px;
-            box-shadow: 0 8px 20px rgba(79, 172, 254, 0.3);
-        }
-
-        .step-title {
-            font-size: 20px;
-            font-weight: 700;
-            color: #2d3748;
-            margin-bottom: 12px;
-        }
-
-        .step-description {
-            font-size: 15px;
-            color: #718096;
-            line-height: 1.7;
-        }
-
-        /* Connecting line between steps (desktop only) */
-        .step-card:not(:last-child)::after {
-            content: '';
-            position: absolute;
-            top: 30px;
-            left: calc(50% + 30px);
-            width: calc(100% - 60px);
-            height: 2px;
-            background: linear-gradient(90deg, var(--color-primary) 0%, transparent 100%);
-            display: none;
-        }
-
-        @media (min-width: 768px) {
-            .step-card:not(:last-child)::after {
-                display: block;
-            }
-        }
-
-        /* ============================================
-           CTA SECTION
-           Final call-to-action before footer
-           ============================================ */
         .cta-section {
             padding: 80px 30px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             text-align: center;
-            color: white;
+            background: linear-gradient(135deg, #f9fafb 0%, #ffffff 100%);
+        }
+
+        .cta-container {
+            max-width: 700px;
+            margin: 0 auto;
+            background: white;
+            padding: 50px;
+            border-radius: 20px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
         }
 
         .cta-title {
-            font-size: 42px;
+            font-size: 36px;
             font-weight: 800;
+            color: #1f2937;
             margin-bottom: 20px;
         }
 
         .cta-description {
-            font-size: 20px;
-            margin-bottom: 40px;
-            opacity: 0.9;
+            font-size: 18px;
+            color: #6b7280;
+            margin-bottom: 35px;
+            line-height: 1.6;
         }
 
-        /* ============================================
-           FOOTER
-           Site footer with links and info
-           ============================================ */
-        .footer {
-            background: #2d3748;
+        .cta-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            padding: 18px 45px;
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
             color: white;
-            padding: 60px 30px 30px;
+            font-size: 18px;
+            font-weight: 700;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            box-shadow: 0 8px 20px rgba(99, 102, 241, 0.3);
+        }
+
+        .cta-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 28px rgba(99, 102, 241, 0.4);
+        }
+
+        .cta-button svg {
+            width: 20px;
+            height: 20px;
+            transition: transform 0.3s ease;
+        }
+
+        .cta-button:hover svg {
+            transform: translateX(5px);
+        }
+
+        footer {
+            background: #1f2937;
+            color: #9ca3af;
+            padding: 40px 30px 25px;
+            text-align: center;
         }
 
         .footer-content {
             max-width: 1200px;
             margin: 0 auto;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 40px;
-            margin-bottom: 40px;
-        }
-
-        .footer-section-title {
-            font-size: 18px;
-            font-weight: 700;
-            margin-bottom: 20px;
         }
 
         .footer-links {
             display: flex;
-            flex-direction: column;
-            gap: 12px;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
         }
 
         .footer-link {
-            color: #a0aec0;
+            color: #9ca3af;
             text-decoration: none;
             font-size: 14px;
             transition: color 0.3s ease;
@@ -705,150 +476,32 @@
             color: white;
         }
 
-        .footer-description {
-            color: #a0aec0;
+        .footer-text {
             font-size: 14px;
-            line-height: 1.7;
+            color: #6b7280;
+            margin-top: 20px;
         }
 
-        .footer-bottom {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding-top: 30px;
-            border-top: 1px solid #4a5568;
-            text-align: center;
-            color: #a0aec0;
-            font-size: 14px;
-        }
-
-        /* ============================================
-           GUEST ACCESS MODAL
-           Quick access form for guests
-           ============================================ */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.7);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-
-        .modal-overlay.active {
-            display: flex;
-        }
-
-        .modal-content {
-            background: white;
-            border-radius: 20px;
-            padding: 40px;
-            max-width: 500px;
-            width: 100%;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            position: relative;
-        }
-
-        .modal-close {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            width: 35px;
-            height: 35px;
-            background: #e2e8f0;
-            border: none;
-            border-radius: 50%;
-            font-size: 20px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .modal-close:hover {
-            background: #cbd5e0;
-            transform: rotate(90deg);
-        }
-
-        .modal-title {
-            font-size: 28px;
-            font-weight: 700;
-            color: #2d3748;
-            margin-bottom: 10px;
-        }
-
-        .modal-subtitle {
-            font-size: 15px;
-            color: #718096;
-            margin-bottom: 30px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-label {
-            display: block;
-            font-size: 14px;
-            font-weight: 600;
-            color: #2d3748;
-            margin-bottom: 8px;
-        }
-
-        .form-input {
-            width: 100%;
-            padding: 12px 16px;
-            border: 2px solid #e2e8f0;
-            border-radius: 10px;
-            font-size: 14px;
-            transition: all 0.3s ease;
-        }
-
-        .form-input:focus {
-            outline: none;
-            border-color: #4facfe;
-            box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1);
-        }
-
-        .btn-submit {
-            width: 100%;
-            padding: 14px;
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-weight: 700;
-            font-size: 16px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .btn-submit:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4);
-        }
-
-        /* ============================================
-           RESPONSIVE DESIGN
-           Mobile and tablet adjustments
-           ============================================ */
         @media (max-width: 768px) {
-            .navbar {
-                padding: 15px;
-            }
-
             .nav-menu {
                 display: none;
+                position: absolute;
+                top: 70px;
+                left: 0;
+                right: 0;
+                background: white;
+                flex-direction: column;
+                padding: 0;
+                box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            }
+
+            .nav-menu.active {
+                display: flex;
+                padding: 20px;
             }
 
             .mobile-menu-toggle {
                 display: flex;
-            }
-
-            .hero-section {
-                padding: 80px 20px 60px;
             }
 
             .hero-title {
@@ -860,85 +513,61 @@
             }
 
             .section-title {
-                font-size: 32px;
-            }
-
-            .features-grid,
-            .tests-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
+                font-size: 28px;
             }
 
             .cta-title {
-                font-size: 32px;
+                font-size: 28px;
             }
 
-            .cta-description {
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-container {
+                grid-template-columns: 1fr;
+                gap: 30px;
+            }
+
+            .cta-container {
+                padding: 35px 25px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .hero-title {
+                font-size: 28px;
+            }
+
+            .hero-cta {
+                padding: 14px 28px;
                 font-size: 16px;
             }
-        }
 
-        /* ============================================
-           ANIMATIONS
-           Smooth entrance effects
-           ============================================ */
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
+            .stat-number {
+                font-size: 36px;
             }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .fade-in-up {
-            animation: fadeInUp 0.6s ease;
-        }
-
-        /* Scroll reveal animation */
-        .reveal {
-            opacity: 0;
-            transform: translateY(30px);
-            transition: all 0.6s ease;
-        }
-
-        .reveal.active {
-            opacity: 1;
-            transform: translateY(0);
         }
     </style>
 </head>
 <body>
-    <!-- ============================================
-         NAVIGATION BAR
-         Fixed top navigation with guest-friendly options
-         ============================================ -->
     <nav class="navbar">
-        <a href="guest-home.html" class="navbar-brand">
-            <div class="brand-logo">P</div>
-            <span>Placement Portal</span>
+        <a href="#" class="navbar-brand">
+            <div class="brand-logo">PT</div>
+            <span>Placement & Training</span>
         </a>
 
-        <!-- Desktop Navigation Menu -->
-        <div class="nav-menu">
+        <div class="nav-menu" id="navMenu">
             <a href="#features" class="nav-link">Features</a>
-            <a href="#tests" class="nav-link">Practice Tests</a>
-            <a href="#how-it-works" class="nav-link">How It Works</a>
             <a href="#about" class="nav-link">About</a>
+            <a href="#contact" class="nav-link">Contact</a>
         </div>
 
-        <!-- Navigation Actions -->
         <div class="nav-actions">
-            <a href="index.html" class="btn-login">Login</a>
-            <a href="register.html" class="btn-signup">Sign Up</a>
+            <a href="login.php" class="btn-login">Login</a>
+            <a href="register.php" class="btn-signup">Sign Up</a>
         </div>
 
-        <!-- Mobile Menu Toggle -->
         <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
             <span class="menu-bar"></span>
             <span class="menu-bar"></span>
@@ -946,710 +575,159 @@
         </button>
     </nav>
 
-    <!-- ============================================
-         HERO SECTION
-         Main landing section with primary CTA
-         ============================================ -->
     <section class="hero-section">
-        <div class="hero-content fade-in-up">
-            <div class="hero-badge">🎓 Your Path to Success</div>
-            <h1 class="hero-title">Master Your Placement<br>Interviews</h1>
-            <p class="hero-subtitle">
-                Practice with real interview questions, track your progress, and land your dream job.<br>
-                Join thousands of students who have successfully prepared with our platform.
-            </p>
-            <div class="hero-cta">
-                <button class="btn-primary-large" onclick="showGuestModal()">
-                    🚀 Try Practice Test
-                </button>
-                <a href="index.html" class="btn-secondary-large">
-                    📝 Create Account
-                </a>
+        <div class="hero-content">
+            <h1 class="hero-title">Master Your Skills, Ace Your Placement</h1>
+            <p class="hero-subtitle">Practice with real placement tests, track your progress, and prepare for success with our placement and training portal.</p>
+            <a href="home.html" class="hero-cta">
+                Take Test Now
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+                </svg>
+            </a>
+        </div>
+    </section>
+
+    <section class="features-section" id="features">
+        <div class="section-header">
+            <h2 class="section-title">Why Choose Our Platform?</h2>
+            <p class="section-subtitle">Everything you need to prepare for your placement tests and succeed in your career.</p>
+        </div>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
+                    </svg>
+                </div>
+                <h3 class="feature-title">Practice Tests</h3>
+                <p class="feature-description">Access real placement test questions and simulate the actual testing environment to build confidence.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                </div>
+                <h3 class="feature-title">Performance Analytics</h3>
+                <p class="feature-description">Track your progress with detailed analytics and insights to identify your strengths and areas for improvement.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <h3 class="feature-title">Timed Practice</h3>
+                <p class="feature-description">Improve your time management skills with timed tests that mirror actual placement test conditions.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                    </svg>
+                </div>
+                <h3 class="feature-title">Expert Tips</h3>
+                <p class="feature-description">Learn from experts with detailed explanations and tips for every question type.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+                    </svg>
+                </div>
+                <h3 class="feature-title">Study Materials</h3>
+                <p class="feature-description">Access resources and study materials to strengthen your knowledge base.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                    </svg>
+                </div>
+                <h3 class="feature-title">Secure Platform</h3>
+                <p class="feature-description">Your data and progress are safe with us. Focus on learning without worries.</p>
             </div>
         </div>
     </section>
 
-    <!-- ============================================
-         FEATURES SECTION
-         Highlight key platform capabilities
-         ============================================ -->
-    <section id="features" class="features-section">
-        <div class="container">
-            <div class="section-header reveal">
-                <div class="section-badge">FEATURES</div>
-                <h2 class="section-title">Everything You Need to Succeed</h2>
-                <p class="section-description">
-                    Comprehensive tools and resources designed to help you excel in placement interviews
-                </p>
-            </div>
-
-            <div class="features-grid">
-                <!-- Feature 1: Practice Tests -->
-                <div class="feature-card reveal">
-                    <div class="feature-icon">📝</div>
-                    <h3 class="feature-title">Practice Tests</h3>
-                    <p class="feature-description">
-                        Access hundreds of carefully curated questions covering aptitude, technical skills, and coding challenges.
-                    </p>
-                </div>
-
-                <!-- Feature 2: Real-Time Evaluation -->
-                <div class="feature-card reveal">
-                    <div class="feature-icon">⚡</div>
-                    <h3 class="feature-title">Instant Results</h3>
-                    <p class="feature-description">
-                        Get immediate feedback with detailed explanations for each question to understand concepts better.
-                    </p>
-                </div>
-
-                <!-- Feature 3: Progress Tracking -->
-                <div class="feature-card reveal">
-                    <div class="feature-icon">📊</div>
-                    <h3 class="feature-title">Track Progress</h3>
-                    <p class="feature-description">
-                        Monitor your improvement over time with comprehensive analytics and performance insights.
-                    </p>
-                </div>
-
-                <!-- Feature 4: Multiple Categories -->
-                <div class="feature-card reveal">
-                    <div class="feature-icon">🎯</div>
-                    <h3 class="feature-title">Diverse Topics</h3>
-                    <p class="feature-description">
-                        Practice across multiple domains including aptitude, reasoning, technical, and coding.
-                    </p>
-                </div>
-
-                <!-- Feature 5: Difficulty Levels -->
-                <div class="feature-card reveal">
-                    <div class="feature-icon">📈</div>
-                    <h3 class="feature-title">Adaptive Learning</h3>
-                    <p class="feature-description">
-                        Progress from easy to hard questions at your own pace with difficulty-based categorization.
-                    </p>
-                </div>
-
-                <!-- Feature 6: Placement Resources -->
-                <div class="feature-card reveal">
-                    <div class="feature-icon">📚</div>
-                    <h3 class="feature-title">Study Materials</h3>
-                    <p class="feature-description">
-                        Access curated resources, tips, and strategies from industry experts and successful candidates.
-                    </p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- ============================================
-         PUBLIC TESTS SECTION
-         Showcase available practice tests for guests
-         ============================================ -->
-    <section id="tests" class="tests-section">
-        <div class="container">
-            <div class="section-header reveal">
-                <div class="section-badge">PRACTICE TESTS</div>
-                <h2 class="section-title">Start Practicing Today</h2>
-                <p class="section-description">
-                    Try our free practice tests without creating an account. No commitment required!
-                </p>
-            </div>
-
-            <div class="tests-grid">
-                <!-- Test Card 1 -->
-                <div class="test-card reveal" onclick="showGuestModal()">
-                    <div class="test-card-header">
-                        <h3 class="test-card-title">Quantitative Aptitude</h3>
-                        <p class="test-card-subtitle">Mathematics & Problem Solving</p>
-                    </div>
-                    <div class="test-card-body">
-                        <span class="test-difficulty easy">Easy</span>
-                        <div class="test-meta">
-                            <div class="test-meta-item">
-                                <span class="test-meta-icon">❓</span>
-                                <span>20 Questions</span>
-                            </div>
-                            <div class="test-meta-item">
-                                <span class="test-meta-icon">⏱️</span>
-                                <span>30 Minutes</span>
-                            </div>
-                            <div class="test-meta-item">
-                                <span class="test-meta-icon">🎯</span>
-                                <span>50 Points</span>
-                            </div>
-                            <div class="test-meta-item">
-                                <span class="test-meta-icon">👥</span>
-                                <span>1,234 Taken</span>
-                            </div>
-                        </div>
-                        <button class="btn-take-test">Take Test Now</button>
-                    </div>
-                </div>
-
-                <!-- Test Card 2 -->
-                <div class="test-card reveal" onclick="showGuestModal()">
-                    <div class="test-card-header">
-                        <h3 class="test-card-title">Logical Reasoning</h3>
-                        <p class="test-card-subtitle">Patterns & Logic Puzzles</p>
-                    </div>
-                    <div class="test-card-body">
-                        <span class="test-difficulty medium">Medium</span>
-                        <div class="test-meta">
-                            <div class="test-meta-item">
-                                <span class="test-meta-icon">❓</span>
-                                <span>25 Questions</span>
-                            </div>
-                            <div class="test-meta-item">
-                                <span class="test-meta-icon">⏱️</span>
-                                <span>40 Minutes</span>
-                            </div>
-                            <div class="test-meta-item">
-                                <span class="test-meta-icon">🎯</span>
-                                <span>75 Points</span>
-                            </div>
-                            <div class="test-meta-item">
-                                <span class="test-meta-icon">👥</span>
-                                <span>892 Taken</span>
-                            </div>
-                        </div>
-                        <button class="btn-take-test">Take Test Now</button>
-                    </div>
-                </div>
-
-                <!-- Test Card 3 -->
-                <div class="test-card reveal" onclick="showGuestModal()">
-                    <div class="test-card-header">
-                        <h3 class="test-card-title">Verbal Ability</h3>
-                        <p class="test-card-subtitle">Grammar & Comprehension</p>
-                    </div>
-                    <div class="test-card-body">
-                        <span class="test-difficulty easy">Easy</span>
-                        <div class="test-meta">
-                            <div class="test-meta-item">
-                                <span class="test-meta-icon">❓</span>
-                                <span>15 Questions</span>
-                            </div>
-                            <div class="test-meta-item">
-                                <span class="test-meta-icon">⏱️</span>
-                                <span>25 Minutes</span>
-                            </div>
-                            <div class="test-meta-item">
-                                <span class="test-meta-icon">🎯</span>
-                                <span>45 Points</span>
-                            </div>
-                            <div class="test-meta-item">
-                                <span class="test-meta-icon">👥</span>
-                                <span>2,156 Taken</span>
-                            </div>
-                        </div>
-                        <button class="btn-take-test">Take Test Now</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- ============================================
-         STATISTICS SECTION
-         Show platform impact with impressive numbers
-         ============================================ -->
     <section class="stats-section">
-        <div class="container">
-            <div class="section-header">
-                <h2 class="section-title" style="color: white;">Trusted by Thousands</h2>
-                <p class="section-description" style="color: rgba(255, 255, 255, 0.9);">
-                    Join a community of successful students
-                </p>
+        <div class="stats-container">
+            <div class="stat-item">
+                <div class="stat-number">5000+</div>
+                <div class="stat-label">Practice Questions</div>
             </div>
-            <div class="stats-grid">
-                <div class="stat-item">
-                    <div class="stat-value">10K+</div>
-                    <div class="stat-label">Students Registered</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value">50K+</div>
-                    <div class="stat-label">Tests Completed</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value">500+</div>
-                    <div class="stat-label">Companies Covered</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value">95%</div>
-                    <div class="stat-label">Success Rate</div>
-                </div>
+            <div class="stat-item">
+                <div class="stat-number">10,000+</div>
+                <div class="stat-label">Students Trained</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">95%</div>
+                <div class="stat-label">Success Rate</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">50+</div>
+                <div class="stat-label">Partner Companies</div>
             </div>
         </div>
     </section>
 
-    <!-- ============================================
-         HOW IT WORKS SECTION
-         Simple 4-step guide for new users
-         ============================================ -->
-    <section id="how-it-works" class="how-it-works-section">
-        <div class="container">
-            <div class="section-header reveal">
-                <div class="section-badge">HOW IT WORKS</div>
-                <h2 class="section-title">Get Started in 4 Simple Steps</h2>
-                <p class="section-description">
-                    Our streamlined process makes it easy to start improving your skills
-                </p>
-            </div>
-
-            <div class="steps-grid">
-                <div class="step-card reveal">
-                    <div class="step-number">1</div>
-                    <h3 class="step-title">Choose a Test</h3>
-                    <p class="step-description">
-                        Browse our collection of practice tests and select one that matches your preparation needs.
-                    </p>
-                </div>
-
-                <div class="step-card reveal">
-                    <div class="step-number">2</div>
-                    <h3 class="step-title">Enter Your Details</h3>
-                    <p class="step-description">
-                        Provide your name and email to get started. No password required for guest access!
-                    </p>
-                </div>
-
-                <div class="step-card reveal">
-                    <div class="step-number">3</div>
-                    <h3 class="step-title">Take the Test</h3>
-                    <p class="step-description">
-                        Answer questions at your own pace with our intuitive test interface and timer.
-                    </p>
-                </div>
-
-                <div class="step-card reveal">
-                    <div class="step-number">4</div>
-                    <h3 class="step-title">Get Instant Results</h3>
-                    <p class="step-description">
-                        Receive detailed feedback, scores, and insights to identify areas for improvement.
-                    </p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- ============================================
-         CALL TO ACTION SECTION
-         Encourage registration with benefits
-         ============================================ -->
     <section class="cta-section">
-        <div class="container">
-            <h2 class="cta-title">Ready to Ace Your Placement?</h2>
-            <p class="cta-description">
-                Create a free account to unlock unlimited tests, track your progress, and get personalized recommendations.
-            </p>
-            <div class="hero-cta">
-                <a href="index.html" class="btn-primary-large">
-                    🎓 Sign Up Free
-                </a>
-                <button class="btn-secondary-large" onclick="showGuestModal()">
-                    👀 Try as Guest
-                </button>
-            </div>
+        <div class="cta-container">
+            <h2 class="cta-title">Ready to Start Your Journey?</h2>
+            <p class="cta-description">Join thousands of successful candidates who prepared with us. Start practicing today and take the first step towards your dream placement.</p>
+            <a href="home.php" class="cta-button">
+                Begin Test Preparation
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+                </svg>
+            </a>
         </div>
     </section>
 
-    <!-- ============================================
-         FOOTER
-         Comprehensive footer with links and info
-         ============================================ -->
-    <footer id="about" class="footer">
+    <footer>
         <div class="footer-content">
-            <!-- About Section -->
-            <div>
-                <h4 class="footer-section-title">About Placement Portal</h4>
-                <p class="footer-description">
-                    We help students prepare for placement interviews with comprehensive practice tests, resources, and analytics. Our mission is to make quality preparation accessible to everyone.
-                </p>
+            <div class="footer-links">
+                <a href="#" class="footer-link">Privacy Policy</a>
+                <a href="#" class="footer-link">Terms of Service</a>
+                <a href="#" class="footer-link">Help Center</a>
+                <a href="#" class="footer-link">Contact Us</a>
             </div>
-
-            <!-- Quick Links -->
-            <div>
-                <h4 class="footer-section-title">Quick Links</h4>
-                <div class="footer-links">
-                    <a href="#features" class="footer-link">Features</a>
-                    <a href="#tests" class="footer-link">Practice Tests</a>
-                    <a href="#how-it-works" class="footer-link">How It Works</a>
-                    <a href="index.html" class="footer-link">Sign In</a>
-                    <a href="index.html" class="footer-link">Sign Up</a>
-                </div>
-            </div>
-
-            <!-- Resources -->
-            <div>
-                <h4 class="footer-section-title">Resources</h4>
-                <div class="footer-links">
-                    <a href="#" class="footer-link">Study Materials</a>
-                    <a href="#" class="footer-link">Interview Tips</a>
-                    <a href="#" class="footer-link">Company Reviews</a>
-                    <a href="#" class="footer-link">Success Stories</a>
-                    <a href="#" class="footer-link">Blog</a>
-                </div>
-            </div>
-
-            <!-- Support -->
-            <div>
-                <h4 class="footer-section-title">Support</h4>
-                <div class="footer-links">
-                    <a href="#" class="footer-link">Help Center</a>
-                    <a href="#" class="footer-link">Contact Us</a>
-                    <a href="#" class="footer-link">Privacy Policy</a>
-                    <a href="#" class="footer-link">Terms of Service</a>
-                    <a href="#" class="footer-link">FAQ</a>
-                </div>
-            </div>
-        </div>
-
-        <div class="footer-bottom">
-            <p>&copy; 2025 Placement Portal. All rights reserved. | Made with ❤️ for students</p>
+            <p class="footer-text">2025 Placement & Training Portal. All rights reserved.</p>
         </div>
     </footer>
 
-    <!-- ============================================
-         GUEST ACCESS MODAL
-         Quick registration form for guest users
-         SECURITY: Validate email format, rate limit by IP
-         ============================================ -->
-    <div class="modal-overlay" id="guestModal">
-        <div class="modal-content">
-            <button class="modal-close" onclick="closeGuestModal()">✕</button>
-            <h2 class="modal-title">Quick Start</h2>
-            <p class="modal-subtitle">
-                Enter your details to begin practicing. No password required!
-            </p>
-
-            <form id="guestForm" onsubmit="submitGuestForm(event)">
-                <div class="form-group">
-                    <label class="form-label">Your Name</label>
-                    <input 
-                        type="text" 
-                        class="form-input" 
-                        id="guestName" 
-                        placeholder="Enter your full name"
-                        required
-                        minlength="2"
-                    >
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Email Address</label>
-                    <input 
-                        type="email" 
-                        class="form-input" 
-                        id="guestEmail" 
-                        placeholder="your.email@example.com"
-                        required
-                    >
-                </div>
-
-                <div class="form-group">
-                    <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #718096;">
-                        <input type="checkbox" required>
-                        <span>I agree to receive test results via email</span>
-                    </label>
-                </div>
-
-                <button type="submit" class="btn-submit">
-                    Start Practice Test →
-                </button>
-
-                <p style="text-align: center; margin-top: 15px; font-size: 13px; color: #718096;">
-                    Have an account? <a href="index.html" style="color: var(--color-primary); font-weight: 600;">Login here</a>
-                </p>
-            </form>
-        </div>
-    </div>
-
     <script>
-        /* ============================================
-           SCROLL REVEAL ANIMATION
-           Animate elements as they come into viewport
-           ============================================ */
-        function revealOnScroll() {
-            const reveals = document.querySelectorAll('.reveal');
-            
-            reveals.forEach(element => {
-                const windowHeight = window.innerHeight;
-                const elementTop = element.getBoundingClientRect().top;
-                const revealPoint = 100;
-                
-                if (elementTop < windowHeight - revealPoint) {
-                    element.classList.add('active');
-                }
-            });
-        }
-
-        // Listen for scroll events
-        window.addEventListener('scroll', revealOnScroll);
-        
-        // Initial check on page load
-        window.addEventListener('load', revealOnScroll);
-
-        /* ============================================
-           SMOOTH SCROLLING FOR ANCHOR LINKS
-           Enhance navigation experience
-           ============================================ */
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
-                e.preventDefault();
-                const target = document.querySelector(this.getAttribute('href'));
-                if (target) {
-                    target.scrollIntoView({
-                        behavior: 'smooth',
-                        block: 'start'
-                    });
-                }
-            });
-        });
-
-        /* ============================================
-           MOBILE MENU TOGGLE
-           Show/hide navigation menu on mobile
-           ============================================ */
         function toggleMobileMenu() {
-            const navMenu = document.querySelector('.nav-menu');
+            const navMenu = document.getElementById('navMenu');
             const menuToggle = document.querySelector('.mobile-menu-toggle');
             
-            // Toggle menu visibility
             if (navMenu.style.display === 'flex') {
                 navMenu.style.display = 'none';
                 menuToggle.classList.remove('active');
             } else {
                 navMenu.style.display = 'flex';
-                navMenu.style.flexDirection = 'column';
-                navMenu.style.position = 'absolute';
-                navMenu.style.top = '70px';
-                navMenu.style.left = '0';
-                navMenu.style.right = '0';
-                navMenu.style.background = 'white';
                 navMenu.style.padding = '20px';
                 navMenu.style.boxShadow = '0 4px 10px rgba(0, 0, 0, 0.1)';
                 menuToggle.classList.add('active');
             }
         }
 
-        /* ============================================
-           GUEST MODAL FUNCTIONS
-           Show and hide guest access modal
-           ============================================ */
-        function showGuestModal() {
-            document.getElementById('guestModal').classList.add('active');
-            // Prevent body scroll when modal is open
-            document.body.style.overflow = 'hidden';
-        }
-
-        function closeGuestModal() {
-            document.getElementById('guestModal').classList.remove('active');
-            // Restore body scroll
-            document.body.style.overflow = '';
-        }
-
-        // Close modal when clicking outside
-        document.getElementById('guestModal').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeGuestModal();
-            }
-        });
-
-        // Close modal on Escape key
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                closeGuestModal();
-            }
-        });
-
-        /* ============================================
-           GUEST FORM SUBMISSION
-           Handle guest registration and redirect
-           SECURITY: In production, validate on server
-           ============================================ */
-        function submitGuestForm(event) {
-            event.preventDefault();
-            
-            const name = document.getElementById('guestName').value.trim();
-            const email = document.getElementById('guestEmail').value.trim();
-            
-            // Basic validation
-            if (!name || name.length < 2) {
-                alert('Please enter a valid name (at least 2 characters)');
-                return;
-            }
-            
-            // Email validation
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(email)) {
-                alert('Please enter a valid email address');
-                return;
-            }
-            
-            /* ============================================
-               PRODUCTION BACKEND IMPLEMENTATION:
-               
-               1. Send data to backend:
-               fetch('guest-session.php', {
-                   method: 'POST',
-                   headers: { 'Content-Type': 'application/json' },
-                   body: JSON.stringify({ name, email })
-               })
-               .then(response => response.json())
-               .then(data => {
-                   if (data.success) {
-                       // Store guest session ID
-                       // Redirect to test selection or specific test
-                       window.location.href = 'test-preview.html?guest=true&test=1';
-                   }
-               });
-               
-               2. Backend (guest-session.php) should:
-               - Validate name and email format
-               - Check rate limiting (max 3 tests per email per day)
-               - Create temporary session
-               - Store in database:
-                 INSERT INTO guest_sessions (name, email, ip_address, created_at)
-               - Return session ID
-               
-               3. Track guest attempts in test_attempts table:
-               - user_id = NULL (for guests)
-               - guest_name = provided name
-               - guest_email = provided email
-               - ip_address = user's IP (for abuse prevention)
-               
-               4. Rate Limiting:
-               - Check how many tests this email/IP took today
-               - Limit to 3 tests per email per 24 hours
-               - Block if exceeded: "You've reached your daily limit"
-               
-               5. Session Timeout:
-               - Guest sessions expire after 24 hours
-               - After completing test, suggest registration
-            ============================================ */
-            
-            // For demo: Log data and redirect
-            console.log('Guest registration:', { name, email });
-            
-            // Show loading state
-            const submitBtn = event.target.querySelector('.btn-submit');
-            submitBtn.textContent = 'Setting up...';
-            submitBtn.disabled = true;
-            
-            // Simulate backend processing
-            setTimeout(() => {
-                // Close modal
-                closeGuestModal();
-                
-                // Show success message
-                alert(`Welcome, ${name}! 🎉\n\nRedirecting you to the test selection page...`);
-                
-                // In production: Redirect to test preview or test list
-                // window.location.href = 'guest-test-selection.html';
-                // Or directly to a specific test:
-                // window.location.href = 'test-preview.html?guest=true&test=1';
-                
-                console.log('Guest session created. Ready for test.');
-                
-                // Reset form
-                document.getElementById('guestForm').reset();
-                submitBtn.textContent = 'Start Practice Test →';
-                submitBtn.disabled = false;
-            }, 1000);
-        }
-
-        /* ============================================
-           PAGE LOAD ANALYTICS
-           Track page views (optional)
-           ============================================ */
         window.addEventListener('load', function() {
             console.log('Guest home page loaded');
             
-            // In production, send analytics event
-            // trackPageView('guest-home');
-            
-            // Check if user came from specific source
             const urlParams = new URLSearchParams(window.location.search);
             const source = urlParams.get('source');
             if (source) {
                 console.log('Traffic source:', source);
-                // Track referral source
             }
         });
-
-        /* ============================================
-           ACCESSIBILITY ENHANCEMENTS
-           Keyboard navigation support
-           ============================================ */
-        // Tab trap in modal when open
-        document.getElementById('guestModal').addEventListener('keydown', function(e) {
-            if (e.key === 'Tab') {
-                const focusableElements = this.querySelectorAll(
-                    'button, input, [tabindex]:not([tabindex="-1"])'
-                );
-                const firstElement = focusableElements[0];
-                const lastElement = focusableElements[focusableElements.length - 1];
-                
-                if (e.shiftKey && document.activeElement === firstElement) {
-                    e.preventDefault();
-                    lastElement.focus();
-                } else if (!e.shiftKey && document.activeElement === lastElement) {
-                    e.preventDefault();
-                    firstElement.focus();
-                }
-            }
-        });
-
-        /* ============================================
-           BACKEND INTEGRATION NOTES
-           
-           FILES NEEDED:
-           1. Rename to: guest-home.php
-           2. Create: guest-session.php (handle guest registration)
-           3. Create: guest-test-selection.php (show available tests)
-           4. Modify: test-preview.php (add guest mode)
-           5. Modify: take-test.php (handle guest attempts)
-           
-           DATABASE CHANGES:
-           - Add columns to test_attempts:
-             * guest_name VARCHAR(100)
-             * guest_email VARCHAR(100)
-             * ip_address VARCHAR(45)
-           - Create guest_sessions table:
-             * session_id (PK)
-             * guest_name
-             * guest_email
-             * ip_address
-             * created_at
-             * expires_at
-           
-           SECURITY MEASURES:
-           1. Validate all inputs server-side
-           2. Rate limit by IP and email (3 tests/day)
-           3. Sanitize all user inputs
-           4. Use prepared statements for SQL
-           5. Store IP address for abuse tracking
-           6. Implement CAPTCHA if spam detected
-           7. Session timeout after 24 hours
-           8. Don't store passwords for guests
-           
-           GUEST USER FLOW:
-           1. Land on guest-home.php
-           2. Click "Try Practice Test"
-           3. Fill modal (name + email)
-           4. Submit → guest-session.php creates session
-           5. Redirect → guest-test-selection.php
-           6. Select test → test-preview.php?guest=true
-           7. Take test → take-test.php (guest mode)
-           8. View results → test-results.php?guest=true
-           9. After test: Prompt to create account
-           
-           CONVERSION STRATEGY:
-           - After test completion, show benefits of registration
-           - Offer to save results if they sign up
-           - Show "Create account to unlock X features"
-           - One-click account creation with guest email
-        ============================================ */
     </script>
 </body>
-</html
+</html>

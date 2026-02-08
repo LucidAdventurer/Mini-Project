@@ -1,21 +1,28 @@
 <?php
-require "config.php";
-session_start();
+/* ========================================
+ * TEACHER DASHBOARD - FIXED VERSION
+ * ======================================== */
 
-/* 🔒 SESSION GUARD */
-if (!isset($_SESSION['uid']) || $_SESSION['role'] !== 'teacher') {
+// Load configuration (session_start is already in config.php)
+require "config.php";
+
+/* 🔒 SESSION GUARD - Fixed to check correct session variable */
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'teacher') {
     header("Location: index.html");
     exit;
 }
 
-/* Fetch user info from database */
-$stmt = $conn->prepare("SELECT name, email FROM users WHERE uid = ?");
-$stmt->bind_param("i", $_SESSION['uid']);
+/* Fetch user info from database - FIXED: Using correct column names */
+// BEFORE: SELECT name, email FROM users WHERE uid = ?
+// AFTER:  SELECT full_name, email FROM users WHERE user_id = ?
+$stmt = $conn->prepare("SELECT full_name, email FROM users WHERE user_id = ?");
+$stmt->bind_param("i", $_SESSION['user_id']); // Changed from uid to user_id
 $stmt->execute();
 $result = $stmt->get_result();
 $user = $result->fetch_assoc();
 
-$userName = $user['name'] ?? 'Teacher';
+// Changed from 'name' to 'full_name'
+$userName = $user['full_name'] ?? 'Teacher';
 $userEmail = $user['email'] ?? '';
 $userInitials = strtoupper(substr($userName, 0, 2));
 ?>
@@ -229,14 +236,14 @@ $userInitials = strtoupper(substr($userName, 0, 2));
             position: absolute;
             top: calc(100% + 10px);
             right: 0;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
-            min-width: 280px;
+            background: var(--color-white);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-lg);
+            min-width: 220px;
             opacity: 0;
             visibility: hidden;
             transform: translateY(-10px);
-            transition: all 0.3s ease;
+            transition: var(--transition);
             z-index: 1001;
         }
 
@@ -246,70 +253,61 @@ $userInitials = strtoupper(substr($userName, 0, 2));
             transform: translateY(0);
         }
 
-        .profile-dropdown-header {
-            padding: 20px;
-            border-bottom: 2px solid var(--color-border);
-            display: flex;
-            align-items: center;
-            gap: 12px;
+        .profile-dropdown::before {
+            content: '';
+            position: absolute;
+            top: -8px;
+            right: 20px;
+            width: 16px;
+            height: 16px;
+            background: var(--color-white);
+            transform: rotate(45deg);
+            border-radius: 3px;
         }
 
-        .dropdown-avatar {
-            width: 50px;
-            height: 50px;
-            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-            font-size: 20px;
+        .dropdown-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--color-border);
         }
 
-        .dropdown-user-info {
-            flex: 1;
-        }
-
-        .dropdown-user-name {
-            font-weight: 700;
-            font-size: 16px;
+        .dropdown-name {
+            font-weight: 600;
+            font-size: 14px;
             color: var(--color-text);
             margin-bottom: 4px;
         }
 
-        .dropdown-user-email {
+        .dropdown-email {
             font-size: 13px;
             color: var(--color-text-light);
         }
 
-        .profile-dropdown-menu {
-            padding: 10px;
+        .dropdown-menu {
+            padding: 8px 0;
         }
 
         .dropdown-item {
             display: flex;
             align-items: center;
             gap: 12px;
-            padding: 12px 15px;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
+            padding: 12px 20px;
             color: var(--color-text);
+            text-decoration: none;
             font-size: 14px;
-            font-weight: 500;
+            transition: var(--transition);
+            cursor: pointer;
         }
 
         .dropdown-item:hover {
-            background: linear-gradient(135deg, rgba(46, 7, 63, 0.1), rgba(173, 73, 225, 0.1));
-            color: var(--color-teacher-primary);
+            background: var(--color-bg-light);
         }
 
-        .dropdown-item-icon {
-            font-size: 18px;
-            width: 20px;
-            text-align: center;
+        .dropdown-item.danger {
+            color: var(--color-error);
+        }
+
+        .dropdown-item.danger:hover {
+            background: rgba(245, 101, 101, 0.1);
         }
 
         .dropdown-divider {
@@ -318,431 +316,306 @@ $userInitials = strtoupper(substr($userName, 0, 2));
             margin: 8px 0;
         }
 
-        .dropdown-item.logout {
-            color: var(--color-error);
-        }
-
-        .dropdown-item.logout:hover {
-            background: rgba(245, 101, 101, 0.1);
-            color: var(--color-error);
-        }
-
         /* ============================================
            MAIN CONTAINER
            ============================================ */
         .container {
             max-width: 1400px;
             margin: 0 auto;
-            padding: 30px;
+            padding: 30px 20px;
         }
 
-        /* Welcome header section */
+        /* ============================================
+           WELCOME HEADER
+           ============================================ */
         .welcome-section {
-            background: white;
-            border-radius: 20px;
-            padding: 30px;
             margin-bottom: 30px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
         }
 
-        .welcome-content h1 {
-            font-size: 32px;
-            color: #2d3748;
+        .welcome-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--color-text);
             margin-bottom: 8px;
         }
 
-        .welcome-content p {
-            font-size: 16px;
-            color: #718096;
+        .welcome-subtitle {
+            font-size: 15px;
+            color: var(--color-text-light);
         }
 
-        .quick-stats {
+        /* ============================================
+           STATISTICS CARDS
+           ============================================ */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: var(--color-white);
+            border-radius: var(--border-radius);
+            padding: 24px;
+            box-shadow: var(--shadow-sm);
+            transition: var(--transition);
+            border-left: 4px solid var(--color-teacher-secondary);
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .stat-header {
             display: flex;
-            gap: 30px;
-        }
-
-        .stat-item {
-            text-align: center;
-        }
-
-        .stat-number {
-            font-size: 28px;
-            font-weight: 700;
-            color: var(--color-teacher-primary);
-            display: block;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
         }
 
         .stat-label {
             font-size: 13px;
-            color: #718096;
-            margin-top: 5px;
+            font-weight: 600;
+            color: var(--color-text-light);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
+            color: var(--color-white);
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--color-text);
+            margin-bottom: 4px;
+        }
+
+        .stat-change {
+            font-size: 13px;
+            color: var(--color-success);
+            font-weight: 600;
+        }
+
+        .stat-change.negative {
+            color: var(--color-error);
         }
 
         /* ============================================
-           MAIN CONTENT GRID
+           ASSESSMENTS SECTION
            ============================================ */
-        .main-content {
-            display: grid;
-            grid-template-columns: 2fr 1fr;
-            gap: 30px;
-        }
-
-        /* Section headers */
         .section-header {
             display: flex;
-            justify-content: space-between;
             align-items: center;
+            justify-content: space-between;
             margin-bottom: 20px;
         }
 
         .section-title {
             font-size: 22px;
             font-weight: 700;
-            color: #2d3748;
+            color: var(--color-text);
         }
 
-        .view-all-link {
-            color: var(--color-teacher-primary);
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 14px;
-            transition: all 0.3s ease;
-        }
-
-        .view-all-link:hover {
-            color: #fee140;
-            transform: translateX(3px);
-        }
-
-        /* ============================================
-           CREATE ASSESSMENT BUTTON
-           ============================================ */
-        .create-assessment-btn {
-            padding: 12px 30px;
-            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-weight: 700;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            text-decoration: none;
-        }
-
-        .create-assessment-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(250, 112, 154, 0.4);
-        }
-
-        /* ============================================
-           MY ASSESSMENTS SECTION
-           ============================================ */
-        .assessments-section {
-            background: white;
-            border-radius: 20px;
-            padding: 25px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-        }
-
-        /* Filter tabs */
         .filter-tabs {
             display: flex;
             gap: 10px;
-            margin-bottom: 20px;
             flex-wrap: wrap;
         }
 
         .filter-tab {
-            padding: 8px 18px;
-            background: #f7fafc;
-            border: none;
+            padding: 8px 16px;
+            background: var(--color-white);
+            border: 2px solid var(--color-border);
             border-radius: 8px;
-            cursor: pointer;
             font-size: 14px;
             font-weight: 600;
-            color: #718096;
-            transition: all 0.3s ease;
+            color: var(--color-text-light);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .filter-tab:hover {
+            border-color: var(--color-teacher-secondary);
+            color: var(--color-teacher-secondary);
         }
 
         .filter-tab.active {
             background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
-            color: white;
+            border-color: var(--color-teacher-primary);
+            color: var(--color-white);
         }
 
-        .filter-tab:hover:not(.active) {
-            background: #e2e8f0;
-        }
-
-        /* Assessment cards */
-        .assessment-list {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
+        /* ============================================
+           ASSESSMENTS GRID
+           ============================================ */
+        .assessments-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 24px;
+            margin-bottom: 30px;
         }
 
         .assessment-card {
-            background: #f7fafc;
-            border-radius: 15px;
-            padding: 20px;
+            background: var(--color-white);
+            border-radius: var(--border-radius);
+            padding: 24px;
+            box-shadow: var(--shadow-sm);
             transition: var(--transition);
-            border: 2px solid transparent;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .assessment-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
+        }
+
+        .assessment-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-md);
         }
 
         .assessment-card.hidden {
             display: none;
         }
 
-        .assessment-card:hover {
-            border-color: var(--color-teacher-primary);
-            background: var(--color-white);
-            box-shadow: 0 4px 15px rgba(250, 112, 154, 0.15);
-        }
-
         .assessment-header {
             display: flex;
+            align-items: flex-start;
             justify-content: space-between;
-            align-items: start;
-            margin-bottom: 12px;
+            margin-bottom: 16px;
         }
 
         .assessment-title {
             font-size: 18px;
             font-weight: 700;
-            color: #2d3748;
-            margin-bottom: 5px;
+            color: var(--color-text);
+            margin-bottom: 8px;
         }
 
         .assessment-category {
-            font-size: 13px;
-            color: #718096;
-        }
-
-        /* Status badge */
-        .status-badge {
-            padding: 5px 12px;
+            display: inline-block;
+            padding: 4px 12px;
+            background: #f0f9ff;
+            color: #0284c7;
             border-radius: 6px;
             font-size: 12px;
             font-weight: 600;
         }
 
-        .status-badge.active {
-            background: #c6f6d5;
-            color: #22543d;
-        }
-
-        .status-badge.draft {
-            background: #feebc8;
-            color: #7c2d12;
-        }
-
-        .status-badge.inactive {
-            background: #e2e8f0;
-            color: #718096;
-        }
-
-        /* Assessment metadata */
         .assessment-meta {
             display: flex;
-            gap: 20px;
-            margin-bottom: 15px;
-            flex-wrap: wrap;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 16px;
+            padding: 12px;
+            background: var(--color-bg-light);
+            border-radius: 8px;
         }
 
         .meta-item {
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
             font-size: 13px;
-            color: #718096;
+            color: var(--color-text-light);
         }
 
         .meta-icon {
             font-size: 16px;
         }
 
-        /* Action buttons for teachers */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .status-badge.active {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-badge.draft {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .status-badge.completed {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .status-badge.scheduled {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+
         .assessment-actions {
             display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
+            gap: 8px;
         }
 
-        .btn-view {
-            padding: 8px 20px;
-            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
-            color: white;
+        .btn {
+            padding: 10px 16px;
             border: none;
             border-radius: 8px;
-            font-weight: 600;
-            font-size: 13px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .btn-view:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(250, 112, 154, 0.4);
-        }
-
-        .btn-edit {
-            padding: 8px 20px;
-            background: white;
-            color: var(--color-teacher-primary);
-            border: 2px solid var(--color-teacher-primary);
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 13px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .btn-edit:hover {
-            background: var(--color-teacher-primary);
-            color: white;
-        }
-
-        .btn-delete {
-            padding: 8px 20px;
-            background: white;
-            color: #f56565;
-            border: 2px solid #f56565;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 13px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .btn-delete:hover {
-            background: #f56565;
-            color: white;
-        }
-
-        /* ============================================
-           SIDEBAR
-           ============================================ */
-        .sidebar {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .sidebar-card {
-            background: white;
-            border-radius: 20px;
-            padding: 25px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-        }
-
-        .sidebar-card-title {
-            font-size: 18px;
-            font-weight: 700;
-            color: #2d3748;
-            margin-bottom: 20px;
-        }
-
-        /* Recent submissions */
-        .activity-list {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .activity-item {
-            display: flex;
-            gap: 12px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid #e2e8f0;
-        }
-
-        .activity-item:last-child {
-            border-bottom: none;
-            padding-bottom: 0;
-        }
-
-        .activity-icon {
-            width: 40px;
-            height: 40px;
-            background: #f7fafc;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--color-teacher-primary);
-            font-size: 18px;
-            flex-shrink: 0;
-        }
-
-        .activity-content {
-            flex: 1;
-        }
-
-        .activity-title {
             font-size: 14px;
             font-weight: 600;
-            color: #2d3748;
-            margin-bottom: 4px;
-        }
-
-        .activity-time {
-            font-size: 12px;
-            color: #a0aec0;
-        }
-
-        /* Class performance chart */
-        .performance-chart {
-            height: 200px;
-            background: linear-gradient(135deg, #f7fafc 0%, #e2e8f0 100%);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #718096;
-            font-size: 14px;
-            margin-bottom: 15px;
-        }
-
-        /* Quick action list */
-        .quick-actions-list {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .quick-action-item {
-            padding: 12px;
-            background: #f7fafc;
-            border-radius: var(--border-radius);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
             cursor: pointer;
             transition: var(--transition);
-            text-decoration: none;
-            color: inherit;
+            flex: 1;
+            text-align: center;
         }
 
-        .quick-action-item:hover {
-            background: linear-gradient(135deg, rgba(250, 112, 154, 0.1), rgba(254, 225, 64, 0.1));
-            transform: translateX(5px);
+        .btn-primary {
+            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
+            color: var(--color-white);
         }
 
-        .quick-action-text {
-            font-size: 14px;
-            font-weight: 600;
-            color: #2d3748;
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(46, 7, 63, 0.3);
         }
 
-        .quick-action-icon {
-            color: var(--color-teacher-primary);
-            font-size: 18px;
+        .btn-secondary {
+            background: var(--color-bg-light);
+            color: var(--color-text);
+        }
+
+        .btn-secondary:hover {
+            background: var(--color-border);
+        }
+
+        .btn-danger {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .btn-danger:hover {
+            background: #fecaca;
         }
 
         /* ============================================
@@ -752,416 +625,423 @@ $userInitials = strtoupper(substr($userName, 0, 2));
             position: fixed;
             bottom: 30px;
             right: 30px;
-            z-index: 50;
+            z-index: 999;
         }
 
         .fab-button {
             width: 60px;
             height: 60px;
-            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
             border-radius: 50%;
+            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
+            color: var(--color-white);
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: var(--shadow-lg);
+            transition: var(--transition);
             display: flex;
             align-items: center;
             justify-content: center;
-            color: var(--color-white);
-            font-size: 24px;
-            cursor: pointer;
-            box-shadow: 0 6px 20px rgba(250, 112, 154, 0.4);
-            transition: var(--transition);
-            border: none;
             text-decoration: none;
         }
 
         .fab-button:hover {
-            transform: scale(1.1);
-            box-shadow: 0 8px 30px rgba(250, 112, 154, 0.6);
+            transform: scale(1.1) rotate(90deg);
+            box-shadow: 0 8px 25px rgba(46, 7, 63, 0.4);
         }
 
         /* ============================================
            RESPONSIVE DESIGN
            ============================================ */
-        @media (max-width: 1024px) {
-            .main-content {
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px 15px;
+            }
+
+            .welcome-title {
+                font-size: 22px;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .assessments-grid {
                 grid-template-columns: 1fr;
             }
 
             .nav-search {
                 display: none;
             }
-        }
 
-        @media (max-width: 768px) {
             .navbar {
-                padding: 15px;
+                padding: 10px 15px;
             }
 
-            .container {
-                padding: 15px;
+            .filter-tabs {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
             }
 
-            .welcome-section {
+            .section-header {
                 flex-direction: column;
                 align-items: flex-start;
-                gap: 20px;
-            }
-
-            .assessment-meta {
-                flex-direction: column;
-                gap: 10px;
-            }
-
-            .assessment-actions {
-                flex-direction: column;
-            }
-
-            .profile-name {
-                display: none;
-            }
-
-            .profile-dropdown {
-                right: -10px;
+                gap: 15px;
             }
         }
 
-        /* ============================================
-           LOADING ANIMATION
-           ============================================ */
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 40px;
-        }
+        @media (max-width: 480px) {
+            .welcome-title {
+                font-size: 20px;
+            }
 
-        .loading.active {
-            display: block;
-        }
+            .stat-value {
+                font-size: 28px;
+            }
 
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid #e2e8f0;
-            border-top-color: var(--color-teacher-primary);
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin: 0 auto 15px;
-        }
+            .assessment-title {
+                font-size: 16px;
+            }
 
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
+            .fab-button {
+                width: 50px;
+                height: 50px;
+                font-size: 20px;
+            }
+
+            .fab-container {
+                bottom: 20px;
+                right: 20px;
             }
         }
     </style>
 </head>
 <body>
-    <!-- ============================================
-         NAVIGATION BAR
-         ============================================ -->
+    <!-- Navigation Bar -->
     <nav class="navbar">
         <a href="teacher-dashboard.php" class="navbar-brand">
-            <div class="brand-logo">P</div>
-            <span>Teacher Portal</span>
+            <div class="brand-logo">PT</div>
+            <span>Placement Portal</span>
         </a>
 
-        <!-- Search bar -->
         <div class="nav-search">
-            <input type="text" class="search-input" placeholder="Search assessments, students..." id="searchInput" aria-label="Search assessments and students" autocomplete="off">
-            <span class="search-icon" aria-hidden="true">🔍</span>
+            <input type="text" class="search-input" id="searchInput" placeholder="Search assessments..." aria-label="Search assessments">
+            <span class="search-icon">🔍</span>
         </div>
 
-        <!-- User profile section -->
         <div class="nav-profile">
-            <!-- Notification icon with badge -->
-            <button class="notification-icon" onclick="showNotifications()" aria-label="View notifications" aria-describedby="notification-count">
-                <span aria-hidden="true">🔔</span>
-                <div class="notification-badge" id="notification-count" aria-live="polite">5</div>
+            <div class="notification-icon" onclick="showNotifications()" aria-label="Notifications" title="Notifications">
+                🔔
+                <span class="notification-badge">5</span>
+            </div>
+
+            <button class="profile-button" onclick="toggleProfileDropdown()" aria-expanded="false" aria-haspopup="true">
+                <div class="profile-avatar"><?= htmlspecialchars($userInitials) ?></div>
+                <span class="profile-name"><?= htmlspecialchars($userName) ?></span>
+                <span style="color: #a0aec0;">▼</span>
             </button>
 
-            <!-- Profile dropdown button -->
-            <button class="profile-button" onclick="toggleProfileDropdown()" aria-label="Profile menu" aria-expanded="false">
-                <div class="profile-avatar" aria-hidden="true"><?php echo $userInitials; ?></div>
-                <span class="profile-name"><?php echo htmlspecialchars($userName); ?></span>
-                <span class="dropdown-arrow">▼</span>
-                <!-- Profile Dropdown Menu -->
-                <div class="profile-dropdown" id="profileDropdown">
-                    <div class="profile-dropdown-header">
-                        <div class="dropdown-avatar"><?php echo $userInitials; ?></div>
-                        <div class="dropdown-user-info">
-                            <div class="dropdown-user-name"><?php echo htmlspecialchars($userName); ?></div>
-                            <div class="dropdown-user-email"><?php echo htmlspecialchars($userEmail); ?></div>
-                        </div>
-                    </div>
-                    <div class="profile-dropdown-menu">
-                        <a href="teacher-profile.php" class="dropdown-item">
-                            <span class="dropdown-item-icon">👤</span>
-                            <span>My Profile</span>
-                        </a>
-                        <a href="teacher-classes.php" class="dropdown-item">
-                            <span class="dropdown-item-icon">👥</span>
-                            <span>View Classes</span>
-                        </a>
-                        <a href="teacher-assessments.php" class="dropdown-item">
-                            <span class="dropdown-item-icon">📝</span>
-                            <span>My Assessments</span>
-                        </a>
-                        <div class="dropdown-divider"></div>
-                        <a onclick="handleLogout()" class="dropdown-item logout">
-                            <span class="dropdown-item-icon">🚪</span>
-                            <span>Logout</span>
-                        </a>
-                    </div>
+            <div class="profile-dropdown" id="profileDropdown">
+                <div class="dropdown-header">
+                    <div class="dropdown-name"><?= htmlspecialchars($userName) ?></div>
+                    <div class="dropdown-email"><?= htmlspecialchars($userEmail) ?></div>
                 </div>
-            </button>
+                <div class="dropdown-menu">
+                    <a href="profile.php" class="dropdown-item">
+                        <span>👤</span>
+                        <span>My Profile</span>
+                    </a>
+                    <a href="settings.php" class="dropdown-item">
+                        <span>⚙️</span>
+                        <span>Settings</span>
+                    </a>
+                    <a href="help.php" class="dropdown-item">
+                        <span>❓</span>
+                        <span>Help & Support</span>
+                    </a>
+                    <div class="dropdown-divider"></div>
+                    <a onclick="handleLogout()" class="dropdown-item danger">
+                        <span>🚪</span>
+                        <span>Logout</span>
+                    </a>
+                </div>
+            </div>
         </div>
     </nav>
 
-    <!-- ============================================
-         MAIN DASHBOARD CONTAINER
-         ============================================ -->
+    <!-- Main Container -->
     <div class="container">
-        <!-- Welcome section with quick stats -->
+        <!-- Welcome Section -->
         <div class="welcome-section">
-            <div class="welcome-content">
-                <h1>Welcome back, <?php echo htmlspecialchars($userName); ?>! 👨‍🏫</h1>
-                <p>Manage your assessments and track student performance</p>
+            <h1 class="welcome-title">Welcome back, <?= htmlspecialchars($userName) ?>! 👋</h1>
+            <p class="welcome-subtitle">Here's what's happening with your assessments today</p>
+        </div>
+
+        <!-- Statistics Cards -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">Total Assessments</span>
+                    <div class="stat-icon">📝</div>
+                </div>
+                <div class="stat-value">24</div>
+                <div class="stat-change">↑ 3 new this month</div>
             </div>
-            <div class="quick-stats">
-                <div class="stat-item">
-                    <span class="stat-number">15</span>
-                    <span class="stat-label">Active Tests</span>
+
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">Active Students</span>
+                    <div class="stat-icon">👥</div>
                 </div>
-                <div class="stat-item">
-                    <span class="stat-number">342</span>
-                    <span class="stat-label">Students</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-number">1,248</span>
-                    <span class="stat-label">Submissions</span>
-                </div>
+                <div class="stat-value">156</div>
+                <div class="stat-change">↑ 12 this week</div>
             </div>
         </div>
 
-        <!-- Main content grid -->
-        <div class="main-content">
-            <!-- My assessments section -->
-            <div class="assessments-section">
-                <div class="section-header">
-                    <h2 class="section-title">My Assessments</h2>
-                    <a href="create-assessment.php" class="create-assessment-btn">
-                        ➕ Create New Test
-                    </a>
+        <!-- Assessments Section -->
+        <div class="section-header">
+            <h2 class="section-title">My Assessments</h2>
+            <div class="filter-tabs" role="tablist">
+                <button class="filter-tab active" data-status="all" role="tab" aria-selected="true">All</button>
+                <button class="filter-tab" data-status="active" role="tab" aria-selected="false">Active</button>
+                <button class="filter-tab" data-status="draft" role="tab" aria-selected="false">Draft</button>
+                <button class="filter-tab" data-status="completed" role="tab" aria-selected="false">Completed</button>
+            </div>
+        </div>
+
+        <!-- Assessments Grid -->
+        <div class="assessments-grid">
+            <!-- Assessment Card 1 -->
+            <div class="assessment-card" data-status="active">
+                <div class="assessment-header">
+                    <div>
+                        <h3 class="assessment-title">Python Programming Basics</h3>
+                        <span class="assessment-category">Programming</span>
+                    </div>
+                </div>
+                
+                <div class="assessment-meta">
+                    <div class="meta-item">
+                        <span class="meta-icon">📅</span>
+                        <span>Due: Feb 15, 2026</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-icon">⏱️</span>
+                        <span>Duration: 60 minutes</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-icon">📝</span>
+                        <span>25 Questions</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-icon">👥</span>
+                        <span>42 Students Enrolled</span>
+                    </div>
                 </div>
 
-                <!-- Filter tabs -->
-                <div class="filter-tabs" role="tablist" aria-label="Filter assessments by status">
-                    <button class="filter-tab active" data-status="all" role="tab" aria-selected="true" aria-controls="assessmentList">All Tests</button>
-                    <button class="filter-tab" data-status="active" role="tab" aria-selected="false" aria-controls="assessmentList">Active</button>
-                    <button class="filter-tab" data-status="draft" role="tab" aria-selected="false" aria-controls="assessmentList">Drafts</button>
-                    <button class="filter-tab" data-status="inactive" role="tab" aria-selected="false" aria-controls="assessmentList">Inactive</button>
-                </div>
+                <span class="status-badge active">
+                    <span>●</span>
+                    <span>Active</span>
+                </span>
 
-                <!-- Assessment list -->
-                <div class="assessment-list" id="assessmentList">
-                    <!-- Assessment Card 1 - Active -->
-                    <div class="assessment-card" data-status="active">
-                        <div class="assessment-header">
-                            <div>
-                                <div class="assessment-title">Quantitative Aptitude - Set 1</div>
-                                <div class="assessment-category">Aptitude • Mathematics</div>
-                            </div>
-                            <span class="status-badge active">Active</span>
-                        </div>
-                        <div class="assessment-meta">
-                            <div class="meta-item">
-                                <span class="meta-icon">❓</span>
- Questions</span>
-                            </div>
-                            <div class="meta-item">
-                                <span class="meta-icon">👥</span>
-                                <span>85 Attempts</span>
-                            </div>
-                            <div class="meta-item">
-                                <span class="meta-icon">📊</span>
-                                <span>Avg: 76%</span>
-                            </div>
-                            <div class="meta-item">
-                                <span class="meta-icon">📅</span>
-                                <span>Created: Dec 1, 2025</span>
-                            </div>
-                        </div>
-                        <div class="assessment-actions">
-                            <button class="btn-view" data-assessment-id="1" aria-label="View results for Quantitative Aptitude - Set 1">View Results</button>
-                            <button class="btn-edit" data-assessment-id="1" aria-label="Edit Quantitative Aptitude - Set 1">Edit</button>
-                            <button class="btn-delete" data-assessment-id="1" aria-label="Delete Quantitative Aptitude - Set 1">Delete</button>
-                        </div>
-                    </div>
-
-                    <!-- Assessment Card 2 - Draft -->
-                    <div class="assessment-card" data-status="draft">
-                        <div class="assessment-header">
-                            <div>
-                                <div class="assessment-title">Data Structures Advanced</div>
-                                <div class="assessment-category">Technical • CS Fundamentals</div>
-                            </div>
-                            <span class="status-badge draft">Draft</span>
-                        </div>
-                        <div class="assessment-meta">
-                            <div class="meta-item">
-                                <span class="meta-icon">❓</span>
-                                <span>18 Questions</span>
-                            </div>
-                            <div class="meta-item">
-                                <span class="meta-icon">⚠️</span>
-                                <span>Incomplete</span>
-                            </div>
-                            <div class="meta-item">
-                                <span class="meta-icon">📅</span>
-                                <span>Last edited: Dec 18, 2025</span>
-                            </div>
-                        </div>
-                        <div class="assessment-actions">
-                            <button class="btn-edit" data-assessment-id="2" aria-label="Continue editing Data Structures Advanced">Continue Editing</button>
-                            <button class="btn-delete" data-assessment-id="2" aria-label="Delete Data Structures Advanced">Delete</button>
-                        </div>
-                    </div>
-
-                    <!-- Assessment Card 3 - Active -->
-                    <div class="assessment-card" data-status="active">
-                        <div class="assessment-header">
-                            <div>
-                                <div class="assessment-title">Python Programming Basics</div>
-                                <div class="assessment-category">Coding • Python</div>
-                            </div>
-                            <span class="status-badge active">Active</span>
-                        </div>
-                        <div class="assessment-meta">
-                            <div class="meta-item">
-                                <span class="meta-icon">❓</span>
-                                <span>25 Questions</span>
-                            </div>
-                            <div class="meta-item">
-                                <span class="meta-icon">👥</span>
-                                <span>124 Attempts</span>
-                            </div>
-                            <div class="meta-item">
-                                <span class="meta-icon">📊</span>
-                                <span>Avg: 68%</span>
-                            </div>
-                            <div class="meta-item">
-                                <span class="meta-icon">📅</span>
-                                <span>Created: Nov 28, 2025</span>
-                            </div>
-                        </div>
-                        <div class="assessment-actions">
-                            <button class="btn-view" data-assessment-id="3">View Results</button>
-                            <button class="btn-edit" data-assessment-id="3">Edit</button>
-                            <button class="btn-delete" data-assessment-id="3">Delete</button>
-                        </div>
-                    </div>
-
-                    <!-- Assessment Card 4 - Inactive -->
-                    <div class="assessment-card" data-status="inactive">
-                        <div class="assessment-header">
-                            <div>
-                                <div class="assessment-title">Logical Reasoning Set 2</div>
-                                <div class="assessment-category">Aptitude • Logic</div>
-                            </div>
-                            <span class="status-badge inactive">Inactive</span>
-                        </div>
-                        <div class="assessment-meta">
-                            <div class="meta-item">
-                                <span class="meta-icon">❓</span>
-                                <span>35 Questions</span>
-                            </div>
-                            <div class="meta-item">
-                                <span class="meta-icon">👥</span>
-                                <span>56 Attempts</span>
-                            </div>
-                            <div class="meta-item">
-                                <span class="meta-icon">📊</span>
-                                <span>Avg: 71%</span>
-                            </div>
-                            <div class="meta-item">
-                                <span class="meta-icon">📅</span>
-                                <span>Deactivated: Dec 10, 2025</span>
-                            </div>
-                        </div>
-                        <div class="assessment-actions">
-                            <button class="btn-view" data-assessment-id="4">View Results</button>
-                            <button class="btn-edit" data-assessment-id="4">Edit</button>
-                            <button class="btn-delete" data-assessment-id="4">Delete</button>
-                        </div>
-                    </div>
+                <div class="assessment-actions">
+                    <button class="btn btn-primary btn-view" data-assessment-id="1">View Results</button>
+                    <button class="btn btn-secondary btn-edit" data-assessment-id="1">Edit</button>
                 </div>
             </div>
 
-            <!-- Sidebar with activity and quick actions -->
-            <div class="sidebar">
-                <!-- Recent submissions card -->
-                <div class="sidebar-card">
-                    <h3 class="sidebar-card-title">Recent Submissions</h3>
-                    <div class="activity-list">
-                        <div class="activity-item">
-                            <div class="activity-icon">📝</div>
-                            <div class="activity-content">
-                                <div class="activity-title">Alice Johnson - Python Test</div>
-                                <div class="activity-time">5 minutes ago • Score: 88%</div>
-                            </div>
-                        </div>
-                        <div class="activity-item">
-                            <div class="activity-icon">📝</div>
-                            <div class="activity-content">
-                                <div class="activity-title">Bob Smith - Aptitude Test</div>
-                                <div class="activity-time">12 minutes ago • Score: 74%</div>
-                            </div>
-                        </div>
-                        <div class="activity-item">
-                            <div class="activity-icon">📝</div>
-                            <div class="activity-content">
-                                <div class="activity-title">Carol White - Data Structures</div>
-                                <div class="activity-time">23 minutes ago • Score: 92%</div>
-                            </div>
-                        </div>
-                        <div class="activity-item">
-                            <div class="activity-icon">📝</div>
-                            <div class="activity-content">
-                                <div class="activity-title">David Lee - SQL Basics</div>
-                                <div class="activity-time">1 hour ago • Score: 81%</div>
-                            </div>
-                        </div>
+            <!-- Assessment Card 2 -->
+            <div class="assessment-card" data-status="draft">
+                <div class="assessment-header">
+                    <div>
+                        <h3 class="assessment-title">Data Structures & Algorithms</h3>
+                        <span class="assessment-category">Computer Science</span>
+                    </div>
+                </div>
+                
+                <div class="assessment-meta">
+                    <div class="meta-item">
+                        <span class="meta-icon">📅</span>
+                        <span>Scheduled: Feb 20, 2026</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-icon">⏱️</span>
+                        <span>Duration: 90 minutes</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-icon">📝</span>
+                        <span>30 Questions</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-icon">👥</span>
+                        <span>0 Students Enrolled</span>
                     </div>
                 </div>
 
-                <!-- Class performance card -->
-                <div class="sidebar-card">
-                    <h3 class="sidebar-card-title">Class Performance</h3>
-                    <div class="performance-chart">
-                        📈 Performance Trends
-                        <br><small>(Chart visualization will be here)</small>
+                <span class="status-badge draft">
+                    <span>●</span>
+                    <span>Draft</span>
+                </span>
+
+                <div class="assessment-actions">
+                    <button class="btn btn-primary btn-edit" data-assessment-id="2">Continue Editing</button>
+                    <button class="btn btn-danger btn-delete" data-assessment-id="2">Delete</button>
+                </div>
+            </div>
+
+            <!-- Assessment Card 3 -->
+            <div class="assessment-card" data-status="completed">
+                <div class="assessment-header">
+                    <div>
+                        <h3 class="assessment-title">Database Management Quiz</h3>
+                        <span class="assessment-category">Database</span>
+                    </div>
+                </div>
+                
+                <div class="assessment-meta">
+                    <div class="meta-item">
+                        <span class="meta-icon">📅</span>
+                        <span>Completed: Jan 28, 2026</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-icon">⏱️</span>
+                        <span>Duration: 45 minutes</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-icon">📝</span>
+                        <span>20 Questions</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-icon">👥</span>
+                        <span>38 Students Completed</span>
                     </div>
                 </div>
 
-                <!-- Quick actions card -->
-                <div class="sidebar-card">
-                    <h3 class="sidebar-card-title">Quick Actions</h3>
-                    <div class="quick-actions-list">
-                        <a href="create-assessment.php" class="quick-action-item" role="button" aria-label="Create New Assessment">
-                            <span class="quick-action-text">Create New Assessment</span>
-                            <span class="quick-action-icon" aria-hidden="true">➕</span>
-                        </a>
-                        <a href="view-all-results.php" class="quick-action-item" role="button" aria-label="View All Results">
-                            <span class="quick-action-text">View All Results</span>
-                            <span class="quick-action-icon" aria-hidden="true">📊</span>
-                        </a>
-                        <a href="student-management.php" class="quick-action-item" role="button" aria-label="Manage Students">
-                            <span class="quick-action-text">Manage Students</span>
-                            <span class="quick-action-icon" aria-hidden="true">👥</span>
-                        </a>
-                        <a href="reports.php" class="quick-action-item" role="button" aria-label="Generate Reports">
-                            <span class="quick-action-text">Generate Reports</span>
-                            <span class="quick-action-icon" aria-hidden="true">📄</span>
-                        </a>
+                <span class="status-badge completed">
+                    <span>●</span>
+                    <span>Completed</span>
+                </span>
+
+                <div class="assessment-actions">
+                    <button class="btn btn-primary btn-view" data-assessment-id="3">View Results</button>
+                    <button class="btn btn-secondary btn-edit" data-assessment-id="3">Review</button>
+                </div>
+            </div>
+
+            <!-- Assessment Card 4 -->
+            <div class="assessment-card" data-status="active">
+                <div class="assessment-header">
+                    <div>
+                        <h3 class="assessment-title">Web Development Fundamentals</h3>
+                        <span class="assessment-category">Web Development</span>
                     </div>
+                </div>
+                
+                <div class="assessment-meta">
+                    <div class="meta-item">
+                        <span class="meta-icon">📅</span>
+                        <span>Due: Feb 18, 2026</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-icon">⏱️</span>
+                        <span>Duration: 75 minutes</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-icon">📝</span>
+                        <span>28 Questions</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-icon">👥</span>
+                        <span>51 Students Enrolled</span>
+                    </div>
+                </div>
+
+                <span class="status-badge active">
+                    <span>●</span>
+                    <span>Active</span>
+                </span>
+
+                <div class="assessment-actions">
+                    <button class="btn btn-primary btn-view" data-assessment-id="4">View Results</button>
+                    <button class="btn btn-secondary btn-edit" data-assessment-id="4">Edit</button>
+                </div>
+            </div>
+
+            <!-- Assessment Card 5 -->
+            <div class="assessment-card" data-status="scheduled">
+                <div class="assessment-header">
+                    <div>
+                        <h3 class="assessment-title">Machine Learning Basics</h3>
+                        <span class="assessment-category">AI & ML</span>
+                    </div>
+                </div>
+                
+                <div class="assessment-meta">
+                    <div class="meta-item">
+                        <span class="meta-icon">📅</span>
+                        <span>Scheduled: Feb 25, 2026</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-icon">⏱️</span>
+                        <span>Duration: 120 minutes</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-icon">📝</span>
+                        <span>35 Questions</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-icon">👥</span>
+                        <span>28 Students Enrolled</span>
+                    </div>
+                </div>
+
+                <span class="status-badge scheduled">
+                    <span>●</span>
+                    <span>Scheduled</span>
+                </span>
+
+                <div class="assessment-actions">
+                    <button class="btn btn-secondary btn-edit" data-assessment-id="5">Preview</button>
+                    <button class="btn btn-secondary btn-edit" data-assessment-id="5">Edit</button>
+                </div>
+            </div>
+
+            <!-- Assessment Card 6 -->
+            <div class="assessment-card" data-status="completed">
+                <div class="assessment-header">
+                    <div>
+                        <h3 class="assessment-title">Networking Essentials</h3>
+                        <span class="assessment-category">Networking</span>
+                    </div>
+                </div>
+                
+                <div class="assessment-meta">
+                    <div class="meta-item">
+                        <span class="meta-icon">📅</span>
+                        <span>Completed: Jan 15, 2026</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-icon">⏱️</span>
+                        <span>Duration: 50 minutes</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-icon">📝</span>
+                        <span>22 Questions</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-icon">👥</span>
+                        <span>45 Students Completed</span>
+                    </div>
+                </div>
+
+                <span class="status-badge completed">
+                    <span>●</span>
+                    <span>Completed</span>
+                </span>
+
+                <div class="assessment-actions">
+                    <button class="btn btn-primary btn-view" data-assessment-id="6">View Results</button>
+                    <button class="btn btn-secondary btn-edit" data-assessment-id="6">Archive</button>
                 </div>
             </div>
         </div>
