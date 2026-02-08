@@ -14,6 +14,8 @@
    2. Fixed ALL references from 'uid' to 'user_id'
    3. Session started BEFORE including config.php
    4. Added proper error logging
+   5. Fixed NULL handling - skip logging for non-existent users
+   6. Fixed column name from 'name' to 'full_name'
    ======================================== */
 
 // Start session FIRST before including config (which also tries to start session)
@@ -44,12 +46,18 @@ function redirectWithError($error) {
 /**
  * Log login activity to database
  * @param mysqli $conn Database connection
- * @param int $userId User ID (or null for failed attempts)
+ * @param int|null $userId User ID (null to skip logging - for non-existent users)
  * @param string $email Attempted email
  * @param bool $success Whether login succeeded
  * @param string|null $failureReason Reason for failure
  */
 function logLoginActivity($conn, $userId, $email, $success, $failureReason = null) {
+    // Skip logging if user_id is null (user doesn't exist)
+    if ($userId === null) {
+        error_log("Skipping login activity log - user does not exist (email: $email)");
+        return;
+    }
+    
     $ipAddress = $_SERVER['REMOTE_ADDR'] ?? null;
     $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? null;
     
@@ -67,11 +75,9 @@ function logLoginActivity($conn, $userId, $email, $success, $failureReason = nul
     );
     
     if ($stmt) {
-        // Convert userId to null if 0 or less
-        $userIdForLog = ($userId > 0) ? $userId : null;
         $isSuccessInt = $success ? 1 : 0; // Convert boolean to integer
         
-        $stmt->bind_param("issis", $userIdForLog, $ipAddress, $userAgent, $isSuccessInt, $failureReason);
+        $stmt->bind_param("issis", $userId, $ipAddress, $userAgent, $isSuccessInt, $failureReason);
         
         if (!$stmt->execute()) {
             error_log("Failed to log login activity: " . $stmt->error);
@@ -214,7 +220,7 @@ if (isAccountLocked($conn, $email)) {
 /* ========================================
    DATABASE QUERY
    
-   IMPORTANT: Using 'password_hash' as the password column name
+   IMPORTANT: Using 'password_hash' and 'full_name' as column names
    ======================================== */
 
 $stmt = $conn->prepare(
@@ -249,8 +255,8 @@ $result = $stmt->get_result();
 // Check if user exists with matching role
 if ($result->num_rows !== 1) {
     error_log("User not found or role mismatch - Email: $email, Role: $role");
-    // Log failed attempt (user_id = 0 for non-existent users)
-    logLoginActivity($conn, 0, $email, false, 'user_not_found_or_role_mismatch');
+    // Skip logging for non-existent users (pass null as user_id)
+    logLoginActivity($conn, null, $email, false, 'user_not_found_or_role_mismatch');
     $stmt->close();
     redirectWithError('invalid_credentials');
 }
@@ -258,7 +264,7 @@ if ($result->num_rows !== 1) {
 $user = $result->fetch_assoc();
 $stmt->close();
 
-error_log("User found - user_id: {$user['user_id']}, Name: {$user['name']}, Verified: {$user['is_verified']}, Active: {$user['is_active']}");
+error_log("User found - user_id: {$user['user_id']}, Name: {$user['full_name']}, Verified: {$user['is_verified']}, Active: {$user['is_active']}");
 
 /* ========================================
    ACCOUNT STATUS CHECKS
@@ -337,8 +343,8 @@ $_SESSION = array();
 // student-dashboard.php checks for 'uid', but your database uses 'user_id'
 $_SESSION['uid'] = $user['user_id'];  // student-dashboard.php checks for 'uid'
 $_SESSION['user_id'] = $user['user_id'];  // Actual database field name
-$_SESSION['name'] = $user['name'];  // student-dashboard.php uses 'name'
-$_SESSION['full_name'] = $user['name'];  // Also set full_name for compatibility
+$_SESSION['name'] = $user['full_name'];  // student-dashboard.php uses 'name'
+$_SESSION['full_name'] = $user['full_name'];  // Also set full_name for compatibility
 $_SESSION['email'] = $user['email'];
 $_SESSION['role'] = $user['user_type'];  // student-dashboard.php checks for 'role'
 $_SESSION['user_type'] = $user['user_type'];  // Also set user_type for compatibility
@@ -411,16 +417,17 @@ exit;
    
    Your actual database schema:
    - users.user_id (PRIMARY KEY) - Main user identifier
-   - users.name - User's full name
+   - users.full_name - User's full name
    - users.password_hash - Hashed password
    - users.user_type - Role (student/teacher/admin)
    
    login_activity table:
-   - login_activity.user_id (FOREIGN KEY to users.user_id)
+   - login_activity.user_id (FOREIGN KEY to users.user_id, NOT NULL)
    
    Session variables for compatibility:
    - $_SESSION['uid'] = user_id (for student-dashboard.php)
    - $_SESSION['user_id'] = user_id (actual DB field)
+   - $_SESSION['name'] = full_name (for student-dashboard.php)
    - $_SESSION['role'] = user_type (for student-dashboard.php)
    ======================================== */
 ?>
