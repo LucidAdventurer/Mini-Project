@@ -2,6 +2,9 @@
 # GENERAL
 # =============================================================================
 
+student-dashboard.html
+teacher-dashboard.html
+
 # IDE and editor files
 .idea/
 .vscode/
