@@ -622,29 +622,39 @@ if ($availableResult) {
                 <span>🔔</span>
                 <div class="notification-badge">3</div>
             </button>
-            <button class="profile-button" onclick="toggleProfileDropdown()" aria-label="Profile menu" aria-expanded="false">
-                <div class="profile-avatar" aria-hidden="true"><?php echo $userInitials; ?></div>
-                <span class="profile-name"><?php echo htmlspecialchars($userName); ?></span>
-                <span class="dropdown-arrow">▼</span>
-            </button>
-            <div class="profile-dropdown" id="profileDropdown">
-                <div class="dropdown-header">
-                    <div class="dropdown-avatar"><?php echo $userInitials; ?></div>
-                    <div class="dropdown-user-info">
-                        <div class="dropdown-user-name"><?php echo htmlspecialchars($userName); ?></div>
-                        <div class="dropdown-user-email"><?php echo htmlspecialchars($userEmail); ?></div>
+            <div class="profile-dropdown-container">
+                <button class="profile-button" onclick="toggleProfileDropdown()" aria-label="Profile menu" aria-expanded="false">
+                    <div class="profile-avatar" aria-hidden="true"><?php echo $userInitials; ?></div>
+                    <span class="profile-name"><?php echo htmlspecialchars($userName); ?></span>
+                    <span class="dropdown-arrow">▼</span>
+                </button>
+                <div class="profile-dropdown" id="profileDropdown">
+                    <div class="dropdown-header">
+                        <div class="dropdown-avatar"><?php echo $userInitials; ?></div>
+                        <div class="dropdown-user-info">
+                            <div class="dropdown-user-name"><?php echo htmlspecialchars($userName); ?></div>
+                            <div class="dropdown-user-email"><?php echo htmlspecialchars($userEmail); ?></div>
+                        </div>
                     </div>
-                </div>
-                <div class="dropdown-menu">
-                    <a href="view-profile.php" class="dropdown-item">
-                        <span class="dropdown-item-icon">👤</span>
-                        <span>View Profile</span>
-                    </a>
-                    <div class="dropdown-divider"></div>
-                    <a onclick="handleLogout()" class="dropdown-item logout">
-                        <span class="dropdown-item-icon">🚪</span>
-                        <span>Logout</span>
-                    </a>
+                    <div class="dropdown-menu">
+                        <a href="student-profile.php" class="dropdown-item">
+                            <span class="dropdown-item-icon">👤</span>
+                            <span>My Profile</span>
+                        </a>
+                        <a href="student-dashboard.php" class="dropdown-item">
+                            <span class="dropdown-item-icon">🏠</span>
+                            <span>Dashboard</span>
+                        </a>
+                        <a href="home.html" class="dropdown-item">
+                            <span class="dropdown-item-icon">📝</span>
+                            <span>Practice Tests</span>
+                        </a>
+                        <div class="dropdown-divider"></div>
+                        <button onclick="handleLogout()" class="dropdown-item logout">
+                            <span class="dropdown-item-icon">🚪</span>
+                            <span>Logout</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
