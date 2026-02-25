@@ -645,9 +645,13 @@ if ($availableResult) {
                             <span class="dropdown-item-icon">🏠</span>
                             <span>Dashboard</span>
                         </a>
-                        <a href="home.html" class="dropdown-item">
+                        <a href="home.php" class="dropdown-item">
                             <span class="dropdown-item-icon">📝</span>
                             <span>Practice Tests</span>
+                        </a>
+                        <a href="help.html" target="_blank" rel="noopener noreferrer" class="dropdown-item">
+                            <span>❓</span>
+                            <span>Help & Support</span>
                         </a>
                         <div class="dropdown-divider"></div>
                         <button onclick="handleLogout()" class="dropdown-item logout">

@@ -410,22 +410,32 @@ $dashboardLabel = match($userRole) {
                             </div>
                         </div>
                         <div class="dropdown-menu">
-                            <?php if ($dashboardUrl): ?>
-                            <a href="<?php echo $dashboardUrl; ?>" class="dropdown-item">
-                                <span class="dropdown-item-icon">🏠</span>
-                                <span><?php echo $dashboardLabel; ?></span>
-                            </a>
-                            <?php endif; ?>
                             <?php if ($userRole === 'student'): ?>
                             <a href="student-profile.php" class="dropdown-item">
                                 <span class="dropdown-item-icon">👤</span>
                                 <span>My Profile</span>
                             </a>
                             <?php endif; ?>
+                            <?php if ($userRole === 'teacher'): ?>
+                            <a href="teacher-profile.php" class="dropdown-item">
+                                <span class="dropdown-item-icon">👤</span>
+                                <span>My Profile</span>
+                            </a>
+                            <?php endif; ?>
+                            <?php if ($dashboardUrl): ?>
+                            <a href="<?php echo $dashboardUrl; ?>" class="dropdown-item">
+                                <span class="dropdown-item-icon">🏠</span>
+                                <span><?php echo $dashboardLabel; ?></span>
+                            </a>
+                            <?php endif; ?>
                             <a href="home.php" class="dropdown-item">
                                 <span class="dropdown-item-icon">📝</span>
                                 <span>Practice Tests</span>
                             </a>
+                            <a href="help.html" target="_blank" rel="noopener noreferrer" class="dropdown-item">
+                                <span>❓</span>
+                                <span>Help & Support</span>
+                                </a>
                             <div class="dropdown-divider"></div>
                             <button onclick="confirmLogout()" class="dropdown-item logout">
                                 <span class="dropdown-item-icon">🚪</span>

@@ -745,17 +745,24 @@ $userInitials = strtoupper(substr($userName, 0, 2));
                 <div class="dropdown-header">
                     <div class="dropdown-name"><?= htmlspecialchars($userName) ?></div>
                     <div class="dropdown-email"><?= htmlspecialchars($userEmail) ?></div>
+                    <div style="margin-top:6px;">
+                        <span style="display:inline-block;padding:2px 10px;background:linear-gradient(135deg,var(--color-teacher-primary),var(--color-teacher-secondary));color:#fff;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:0.5px;">Teacher</span>
+                    </div>
                 </div>
                 <div class="dropdown-menu">
-                    <a href="profile.php" class="dropdown-item">
+                    <a href="teacher-profile.php" class="dropdown-item">
                         <span>👤</span>
                         <span>My Profile</span>
                     </a>
-                    <a href="settings.php" class="dropdown-item">
-                        <span>⚙️</span>
-                        <span>Settings</span>
+                    <a href="teacher-dashboard.php" class="dropdown-item">
+                        <span>📊</span>
+                        <span>Dashboard</span>
                     </a>
-                    <a href="help.php" class="dropdown-item">
+                    <a href="home.php" class="dropdown-item">
+                        <span class="dropdown-item-icon">📝</span>
+                        <span>Practice Tests</span>
+                    </a>
+                    <a href="help.html" target="_blank" rel="noopener noreferrer" class="dropdown-item">
                         <span>❓</span>
                         <span>Help & Support</span>
                     </a>

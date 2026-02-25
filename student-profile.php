@@ -8,16 +8,16 @@ require_once "db-guard.php";
 
 $user = validateSession($conn, 'student');
 
-$userName     = $user['full_name']          ?? 'Student';
-$userEmail    = $user['email']              ?? '';
-$userDept     = $user['department']         ?? '';
+$userName     = $user['full_name']           ?? 'Student';
+$userEmail    = $user['email']               ?? '';
+$userDept     = $user['department']          ?? '';
 $userRegNo    = $user['registration_number'] ?? '';
 $userInitials = strtoupper(substr($userName, 0, 2));
 $userId       = $user['user_id'];
+$memberSince  = !empty($user['created_at']) ? date('F Y', strtotime($user['created_at'])) : 'N/A';
+$lastLogin    = $user['last_login'] ?? null;
 
 // ── Aggregate stats from assessment_attempts ──────────────────────────────
-// Uses: percentage, score, correct_answers, wrong_answers, unanswered,
-//       start_time, end_time, submitted_at — all real columns per schema.
 $statsQuery = "
     SELECT
         COUNT(DISTINCT a.attempt_id)             AS tests_completed,
@@ -44,7 +44,6 @@ if ($statsResult['success'] && $statsResult['result']) {
 }
 
 // ── Recent attempts (last 10) ─────────────────────────────────────────────
-// time_taken derived from end_time - start_time since no time_taken_minutes col.
 $recentQuery = "
     SELECT
         a.attempt_id,
@@ -120,10 +119,6 @@ $updateType    = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     // ── Update profile ────────────────────────────────────────────────────
-    // Only fields that exist on the users table: department (editable),
-    // registration_number is read-only (set by admin). We persist extra
-    // student info in a student_profiles table if it exists, otherwise
-    // we gracefully degrade to updating only what's in users.
     if ($_POST['action'] === 'update_profile') {
 
         $phone  = trim($_POST['phone']   ?? '');
@@ -132,7 +127,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $degree = trim($_POST['degree']  ?? '');
         $branch = trim($_POST['branch']  ?? '');
 
-        // Check whether student_profiles table exists
         $tableCheck = safeQuery($conn, "SHOW TABLES LIKE 'student_profiles'");
         $tableExists = false;
         if ($tableCheck) {
@@ -141,7 +135,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
 
         if ($tableExists) {
-            // Check if row exists for this user
             $existsResult = safePreparedQuery(
                 $conn, "SELECT user_id FROM student_profiles WHERE user_id = ?", "i", [$userId]
             );
@@ -170,8 +163,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $updateType    = 'error';
             }
         } else {
-            // Fallback: no student_profiles table yet — update only allowed
-            // fields on users (department is the only flexible field there)
             $updateMessage = 'Profile details cannot be saved yet — student_profiles table not found.';
             $updateType    = 'error';
         }
@@ -188,9 +179,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     // ── Change password ───────────────────────────────────────────────────
     if ($_POST['action'] === 'change_password') {
-        $current = $_POST['current_password']  ?? '';
-        $new     = $_POST['new_password']       ?? '';
-        $confirm = $_POST['confirm_password']   ?? '';
+        $current = $_POST['current_password'] ?? '';
+        $new     = $_POST['new_password']     ?? '';
+        $confirm = $_POST['confirm_password'] ?? '';
 
         if ($new !== $confirm) {
             $updateMessage = 'New passwords do not match.';
@@ -215,7 +206,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 if ($upResult['success']) {
                     $updateMessage = 'Password changed successfully.';
                     $updateType    = 'success';
-                    // Log it
                     safePreparedQuery(
                         $conn,
                         "INSERT INTO audit_logs (user_id, action, entity_type, entity_id, ip_address) VALUES (?, 'password_change', 'user', ?, ?)",
@@ -266,9 +256,6 @@ if ($loginResult['success'] && $loginResult['result']) {
     $loginResult['result']->free();
 }
 
-// ── Last login from users table ───────────────────────────────────────────
-$lastLogin = $user['last_login'] ?? null;
-
 // ── Helpers ───────────────────────────────────────────────────────────────
 function scoreColor(int $s): string {
     if ($s >= 80) return '#22543d';
@@ -312,910 +299,987 @@ function parseUA(string $ua): string {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Profile – PTA Platform</title>
+    <title>My Profile – Student | Placement Portal</title>
     <style>
+        /* ============================================
+           CSS VARIABLES
+           ============================================ */
         :root {
-            --primary:      #234C6A;
-            --primary-dark: #456882;
-            --accent:       #4facfe;
-            --accent-2:     #00f2fe;
-            --bg:           linear-gradient(135deg, #D3DAD9 0%, white 100%);
-            --white:        #ffffff;
-            --gray-50:      #f7fafc;
-            --gray-100:     #e2e8f0;
-            --gray-400:     #a0aec0;
-            --gray-500:     #718096;
-            --gray-700:     #4a5568;
-            --gray-800:     #2d3748;
-            --red:          #f56565;
-            --red-bg:       #fff5f5;
-            --green:        #48bb78;
-            --green-bg:     #f0fff4;
-            --shadow-sm:    0 2px 8px rgba(0,0,0,0.06);
-            --shadow-md:    0 4px 20px rgba(0,0,0,0.08);
-            --shadow-lg:    0 8px 30px rgba(0,0,0,0.12);
-            --radius:       16px;
-            --radius-sm:    10px;
-        }
-        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: var(--bg);
-            min-height: 100vh;
-            padding-top: 71px;
-            color: var(--gray-800);
+            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            --color-primary: #234C6A;
+            --color-primary-dark: #456882;
+            --color-accent: #4facfe;
+            --color-text: #2d3748;
+            --color-text-light: #718096;
+            --color-bg-light: #f5f7fa;
+            --color-white: #ffffff;
+            --color-border: #e2e8f0;
+            --color-success: #48bb78;
+            --color-error: #f56565;
+            --shadow-sm: 0 2px 10px rgba(0,0,0,0.1);
+            --shadow-md: 0 4px 20px rgba(0,0,0,0.08);
+            --shadow-lg: 0 8px 30px rgba(0,0,0,0.15);
+            --border-radius: 10px;
+            --transition: all 0.3s ease;
         }
 
-        /* ── Navbar ── */
+        /* ============================================
+           BASE
+           ============================================ */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--font-family);
+            background: #D3DAD9;
+            min-height: 100vh;
+            color: var(--color-text);
+            padding-top: 71px;
+        }
+
+        /* ============================================
+           NAVBAR
+           ============================================ */
         .navbar {
-            background: var(--primary);
+            background: var(--color-primary);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
             padding: 12px 28px;
             display: flex; align-items: center; justify-content: space-between;
             position: fixed; top: 0; left: 0; right: 0;
             z-index: 1000;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
         }
+
         .navbar-brand {
             display: flex; align-items: center; gap: 12px;
-            color: white; text-decoration: none;
-            font-weight: 700; font-size: 20px;
+            font-size: 20px; font-weight: 700; color: white; text-decoration: none;
         }
+
         .brand-logo {
             width: 44px; height: 44px;
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
             border-radius: 10px;
             display: flex; align-items: center; justify-content: center;
             color: white; font-weight: 700; font-size: 18px;
+            border: 2px solid rgba(255,255,255,0.3);
         }
-        .nav-right { display: flex; align-items: center; gap: 12px; }
 
-        /* ── Profile dropdown ── */
-        .profile-dropdown-container { position: relative; }
+        .nav-profile { display: flex; align-items: center; gap: 15px; }
+
         .profile-button {
             display: flex; align-items: center; gap: 10px;
-            padding: 7px 13px;
-            background: rgba(255,255,255,0.12);
-            border: none; border-radius: 10px; cursor: pointer; transition: 0.2s;
+            padding: 8px 15px;
+            background: #f7fafc;
+            border: none; border-radius: 10px;
+            cursor: pointer; transition: var(--transition);
+            position: relative;
         }
-        .profile-button:hover { background: rgba(255,255,255,0.22); }
-        .nav-avatar {
+
+        .profile-button:hover { background: #e2e8f0; }
+
+        .profile-avatar {
             width: 35px; height: 35px;
-            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
             border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
-            color: white; font-weight: 700; font-size: 14px; flex-shrink: 0;
+            color: white; font-weight: bold; font-size: 14px;
         }
-        .nav-username { color: white; font-weight: 600; font-size: 14px; }
-        .dropdown-arrow { font-size: 11px; color: rgba(255,255,255,0.7); }
+
+        .profile-name { font-weight: 600; font-size: 14px; color: var(--color-text); }
+
+        /* Dropdown */
         .profile-dropdown {
             position: absolute; top: calc(100% + 10px); right: 0;
-            background: white; border-radius: 12px;
+            background: var(--color-white); border-radius: var(--border-radius);
             box-shadow: var(--shadow-lg); min-width: 220px;
-            opacity: 0; visibility: hidden; transform: translateY(-8px);
-            transition: 0.25s cubic-bezier(.22,1,.36,1); z-index: 1001;
+            opacity: 0; visibility: hidden; transform: translateY(-10px);
+            transition: var(--transition); z-index: 1001;
         }
-        .profile-dropdown.show { opacity: 1; visibility: visible; transform: translateY(0); }
-        .dropdown-header {
-            padding: 16px 18px; border-bottom: 1px solid var(--gray-100);
-            display: flex; align-items: center; gap: 12px;
+
+        .profile-dropdown.active { opacity: 1; visibility: visible; transform: translateY(0); }
+
+        .profile-dropdown::before {
+            content: ''; position: absolute; top: -8px; right: 20px;
+            width: 16px; height: 16px; background: var(--color-white);
+            transform: rotate(45deg); border-radius: 3px;
         }
-        .dropdown-header-avatar {
-            width: 42px; height: 42px;
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-            border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            color: white; font-weight: 700; font-size: 16px; flex-shrink: 0;
-        }
-        .dropdown-header-name  { font-size: 14px; font-weight: 700; color: var(--gray-800); margin-bottom: 2px; }
-        .dropdown-header-email { font-size: 12px; color: var(--gray-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
-        .dropdown-menu { padding: 6px 0; }
+
+        .dropdown-header { padding: 15px 20px; border-bottom: 1px solid var(--color-border); }
+        .dropdown-name  { font-weight: 600; font-size: 14px; color: var(--color-text); margin-bottom: 4px; }
+        .dropdown-email { font-size: 13px; color: var(--color-text-light); }
+        .dropdown-menu  { padding: 8px 0; }
+
         .dropdown-item {
-            display: flex; align-items: center; gap: 11px;
-            padding: 10px 18px; color: var(--gray-800); text-decoration: none;
-            font-size: 14px; font-weight: 500; cursor: pointer;
-            border: none; background: none; width: 100%;
-            text-align: left; font-family: inherit; transition: background 0.15s;
-        }
-        .dropdown-item:hover { background: var(--gray-50); }
-        .dropdown-item-icon { font-size: 16px; width: 20px; text-align: center; }
-        .dropdown-divider { height: 1px; background: var(--gray-100); margin: 4px 0; }
-        .dropdown-item.logout { color: var(--red); }
-        .dropdown-item.logout:hover { background: var(--red-bg); }
-        .dropdown-overlay {
-            position: fixed; inset: 0; background: transparent;
-            z-index: 999; display: none;
-        }
-        .dropdown-overlay.show { display: block; }
-
-        /* ── Layout ── */
-        .container { max-width: 1300px; margin: 0 auto; padding: 30px; }
-        .page-grid {
-            display: grid;
-            grid-template-columns: 310px 1fr;
-            gap: 28px; align-items: start;
+            display: flex; align-items: center; gap: 12px;
+            padding: 12px 20px; color: var(--color-text); text-decoration: none;
+            font-size: 14px; transition: var(--transition);
+            cursor: pointer; border: none; background: none;
+            width: 100%; text-align: left; font-family: inherit;
         }
 
-        /* ── Toast ── */
-        .toast {
-            position: fixed; top: 85px; right: 28px; z-index: 2000;
-            padding: 14px 22px; border-radius: 10px;
-            font-size: 14px; font-weight: 600;
-            box-shadow: var(--shadow-lg);
-            display: flex; align-items: center; gap: 10px;
-            transform: translateX(120%);
-            transition: transform 0.35s cubic-bezier(.22,1,.36,1);
-        }
-        .toast.show       { transform: translateX(0); }
-        .toast.success    { background: var(--green-bg); color: #22543d; border: 1px solid #9ae6b4; }
-        .toast.error      { background: var(--red-bg);   color: #742a2a; border: 1px solid #feb2b2; }
+        .dropdown-item:hover { background: var(--color-bg-light); }
+        .dropdown-item.danger { color: var(--color-error); }
+        .dropdown-item.danger:hover { background: rgba(245,101,101,0.1); }
+        .dropdown-divider { height: 1px; background: var(--color-border); margin: 8px 0; }
 
-        /* ── Cards ── */
-        .card { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow-md); overflow: hidden; }
-        .card-body { padding: 24px; }
-        .card-title {
-            font-size: 16px; font-weight: 700; color: var(--gray-800);
-            margin-bottom: 18px; padding-bottom: 14px;
-            border-bottom: 1px solid var(--gray-100);
-            display: flex; align-items: center; gap: 10px;
+        /* ============================================
+           BREADCRUMB
+           ============================================ */
+        .breadcrumb {
+            max-width: 1100px; margin: 24px auto 0; padding: 0 20px;
+            display: flex; align-items: center; gap: 8px;
+            font-size: 14px; color: var(--color-text-light);
         }
-        .card-title-icon {
-            width: 32px; height: 32px;
-            background: linear-gradient(135deg, rgba(79,172,254,.15), rgba(0,242,254,.12));
-            border-radius: 8px;
+
+        .breadcrumb a { color: var(--color-accent); text-decoration: none; font-weight: 600; }
+        .breadcrumb a:hover { text-decoration: underline; }
+
+        /* ============================================
+           PAGE LAYOUT
+           ============================================ */
+        .container {
+            max-width: 1100px; margin: 24px auto 40px; padding: 0 20px;
+            display: grid; grid-template-columns: 300px 1fr; gap: 24px;
+        }
+
+        /* ============================================
+           PROFILE CARD (left column)
+           ============================================ */
+        .profile-card {
+            background: var(--color-white); border-radius: var(--border-radius);
+            padding: 32px 24px; box-shadow: var(--shadow-sm);
+            text-align: center; height: fit-content;
+            position: sticky; top: 90px;
+        }
+
+        .avatar-large {
+            width: 110px; height: 110px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
             display: flex; align-items: center; justify-content: center;
-            font-size: 15px;
+            font-size: 36px; font-weight: 700; color: white;
+            margin: 0 auto 16px;
+            border: 4px solid rgba(79,172,254,0.2);
         }
 
-        /* ── Profile Hero ── */
-        .hero-banner {
-            height: 90px;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 50%, var(--accent) 100%);
-        }
-        .hero-body { padding: 0 22px 22px; }
-        .avatar-wrap { margin-top: -38px; margin-bottom: 12px; }
-        .profile-avatar-lg {
-            width: 76px; height: 76px;
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-            border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            color: white; font-weight: 700; font-size: 26px;
-            border: 4px solid white;
-            box-shadow: var(--shadow-md);
-        }
-        .hero-name  { font-size: 20px; font-weight: 800; color: var(--gray-800); margin-bottom: 3px; }
-        .hero-email { font-size: 13px; color: var(--gray-500); margin-bottom: 10px; }
-        .hero-meta  { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
-        .hero-meta-item {
-            display: flex; align-items: center; gap: 7px;
-            font-size: 12px; color: var(--gray-500);
-        }
+        .profile-card-name { font-size: 20px; font-weight: 700; color: var(--color-text); margin-bottom: 6px; }
+
         .role-badge {
-            display: inline-flex; align-items: center; gap: 5px;
-            padding: 4px 12px;
-            background: linear-gradient(135deg, rgba(79,172,254,.12), rgba(0,242,254,.08));
-            border: 1px solid rgba(79,172,254,.28);
-            border-radius: 20px;
-            font-size: 12px; font-weight: 700; color: var(--primary);
+            display: inline-block; padding: 4px 14px;
+            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+            color: white; border-radius: 20px;
+            font-size: 12px; font-weight: 600; letter-spacing: 0.5px;
             margin-bottom: 16px;
         }
-        .hero-stats {
-            display: grid; grid-template-columns: repeat(2,1fr); gap: 8px;
-        }
-        .hero-stat {
-            background: var(--gray-50); border-radius: 9px; padding: 11px;
-            text-align: center; border: 1px solid var(--gray-100);
-        }
-        .hero-stat-num   { font-size: 21px; font-weight: 800; color: var(--primary); line-height: 1; margin-bottom: 3px; }
-        .hero-stat-label { font-size: 10px; color: var(--gray-500); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
 
-        /* ── Category bars ── */
-        .cat-list { display: flex; flex-direction: column; gap: 13px; }
-        .cat-header { display: flex; justify-content: space-between; margin-bottom: 6px; }
-        .cat-name   { font-size: 13px; font-weight: 700; color: var(--gray-800); }
-        .cat-meta   { font-size: 11px; color: var(--gray-400); }
-        .cat-bar    { height: 9px; background: var(--gray-100); border-radius: 9px; overflow: hidden; }
-        .cat-fill   { height: 100%; border-radius: 9px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .6s ease; }
-
-        /* ── Tabs ── */
-        .tab-nav {
-            display: flex; gap: 4px; background: var(--gray-50);
-            padding: 5px; border-radius: 12px; margin-bottom: 22px;
-        }
-        .tab-btn {
-            flex: 1; padding: 9px 12px;
-            background: transparent; border: none; border-radius: 9px;
-            font-size: 13px; font-weight: 600; color: var(--gray-500);
-            cursor: pointer; transition: 0.2s;
+        .profile-card-detail {
+            font-size: 13px; color: var(--color-text-light); margin-bottom: 6px;
             display: flex; align-items: center; justify-content: center; gap: 6px;
         }
-        .tab-btn.active { background: white; color: var(--primary); box-shadow: var(--shadow-sm); }
-        .tab-btn:hover:not(.active) { color: var(--gray-700); }
+
+        .profile-divider { height: 1px; background: var(--color-border); margin: 20px 0; }
+
+        .stat-row { display: flex; justify-content: space-around; }
+        .stat-item { text-align: center; }
+        .stat-item-value { font-size: 22px; font-weight: 700; color: var(--color-accent); }
+        .stat-item-label { font-size: 11px; color: var(--color-text-light); text-transform: uppercase; letter-spacing: 0.5px; }
+
+        .cat-bar  { height: 9px; background: var(--color-border); border-radius: 9px; overflow: hidden; }
+        .cat-fill { height: 100%; border-radius: 9px; background: linear-gradient(90deg, var(--color-accent), #00f2fe); transition: width .6s ease; }
+
+        /* Sidebar nav */
+        .profile-nav { margin-top: 20px; display: flex; flex-direction: column; gap: 4px; }
+
+        .profile-nav-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 11px 14px; border-radius: 8px;
+            font-size: 14px; font-weight: 500; color: var(--color-text-light);
+            cursor: pointer; transition: var(--transition);
+            border: none; background: transparent;
+            width: 100%; text-align: left;
+        }
+
+        .profile-nav-item:hover { background: var(--color-bg-light); color: var(--color-text); }
+
+        .profile-nav-item.active {
+            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+            color: white;
+        }
+
+        /* ============================================
+           RIGHT COLUMN — PANELS
+           ============================================ */
         .tab-panel { display: none; }
         .tab-panel.active { display: block; }
 
-        /* ── Form ── */
-        .form-grid   { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-        .form-group  { display: flex; flex-direction: column; gap: 6px; }
-        .form-group.full { grid-column: 1 / -1; }
-        .form-label  { font-size: 13px; font-weight: 700; color: var(--gray-700); }
-        .form-label .req { color: var(--red); margin-left: 2px; }
-        .form-input, .form-select, .form-textarea {
-            padding: 10px 13px;
-            border: 2px solid var(--gray-100);
-            border-radius: 9px;
-            font-size: 14px; color: var(--gray-800); font-family: inherit;
-            background: var(--white); transition: 0.2s; width: 100%;
+        .card {
+            background: var(--color-white); border-radius: var(--border-radius);
+            padding: 28px; box-shadow: var(--shadow-sm); margin-bottom: 24px;
         }
-        .form-input:focus, .form-select:focus, .form-textarea:focus {
-            outline: none; border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(79,172,254,.1);
+
+        .card-title {
+            font-size: 18px; font-weight: 700; color: var(--color-text);
+            margin-bottom: 20px; padding-bottom: 12px;
+            border-bottom: 2px solid var(--color-border);
+            display: flex; align-items: center; gap: 10px;
         }
-        .form-input:disabled {
-            background: var(--gray-50); color: var(--gray-500); cursor: not-allowed;
+
+        /* Forms */
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-group.full-width { grid-column: 1 / -1; }
+
+        .form-label { font-size: 13px; font-weight: 600; color: var(--color-text-light); text-transform: uppercase; letter-spacing: 0.5px; }
+        .form-label .req { color: var(--color-error); margin-left: 2px; }
+
+        .form-control {
+            padding: 10px 14px; border: 2px solid var(--color-border); border-radius: 8px;
+            font-size: 14px; font-family: var(--font-family); color: var(--color-text);
+            background: var(--color-white); transition: var(--transition); width: 100%;
         }
-        .form-textarea { resize: vertical; min-height: 88px; line-height: 1.5; }
-        .form-hint     { font-size: 11px; color: var(--gray-400); }
-        .form-footer {
-            margin-top: 22px; padding-top: 18px;
-            border-top: 1px solid var(--gray-100);
+
+        .form-control:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px rgba(79,172,254,0.1); }
+        .form-control[disabled], .form-control[readonly] { background: var(--color-bg-light); color: var(--color-text-light); cursor: not-allowed; }
+        textarea.form-control { resize: vertical; min-height: 88px; line-height: 1.5; }
+        .form-hint { font-size: 11px; color: var(--color-text-light); }
+
+        .form-actions {
             display: flex; align-items: center; justify-content: space-between;
+            margin-top: 24px; padding-top: 18px;
+            border-top: 1px solid var(--color-border);
         }
-        .last-updated { font-size: 12px; color: var(--gray-400); }
-        .btn-primary {
-            padding: 11px 26px;
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-            color: white; border: none; border-radius: 9px;
-            font-size: 14px; font-weight: 700; cursor: pointer; transition: 0.2s;
+
+        .form-actions-right { display: flex; gap: 12px; }
+
+        .btn {
+            padding: 10px 24px; border-radius: 8px;
+            font-size: 14px; font-weight: 600;
+            cursor: pointer; transition: var(--transition); border: none;
             display: inline-flex; align-items: center; gap: 8px;
         }
-        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(35,76,106,.32); }
-        .btn-primary:active { transform: translateY(0); }
 
-        /* ── Info badge row ── */
-        .info-grid {
-            display: grid; grid-template-columns: repeat(2,1fr); gap: 10px;
+        .btn-primary {
+            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+            color: white;
         }
-        .info-box {
-            background: var(--gray-50); border-radius: 9px;
-            padding: 13px; border: 1px solid var(--gray-100);
+
+        .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+
+        .btn-secondary { background: var(--color-bg-light); color: var(--color-text); border: 2px solid var(--color-border); }
+        .btn-secondary:hover { background: var(--color-border); }
+
+        /* Alert banners */
+        .alert {
+            padding: 14px 18px; border-radius: 8px;
+            font-size: 14px; font-weight: 500; margin-bottom: 20px;
+            display: flex; align-items: center; gap: 10px;
         }
-        .info-box-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--gray-400); margin-bottom: 4px; }
-        .info-box-value { font-size: 15px; font-weight: 700; color: var(--primary); }
+
+        .alert-success { background: rgba(72,187,120,0.1); color: #276749; border: 1px solid rgba(72,187,120,0.3); }
+        .alert-error   { background: rgba(245,101,101,0.1); color: #c53030; border: 1px solid rgba(245,101,101,0.3); }
+
+        /* Info boxes */
+        .info-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 10px; }
+
+        .info-box { background: var(--color-bg-light); border-radius: 9px; padding: 13px; border: 1px solid var(--color-border); }
+        .info-box-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--color-text-light); margin-bottom: 4px; }
+        .info-box-value { font-size: 15px; font-weight: 700; color: var(--color-primary); }
         .info-box-value.mono { font-family: 'Courier New', monospace; font-size: 13px; }
 
-        /* ── History table ── */
+        /* History table */
         .history-table { width: 100%; border-collapse: collapse; }
+
         .history-table th {
             text-align: left; padding: 9px 13px;
             font-size: 11px; font-weight: 700; text-transform: uppercase;
-            letter-spacing: .5px; color: var(--gray-500);
-            background: var(--gray-50); border-bottom: 1px solid var(--gray-100);
+            letter-spacing: .5px; color: var(--color-text-light);
+            background: var(--color-bg-light); border-bottom: 1px solid var(--color-border);
         }
+
         .history-table th:first-child { border-radius: 8px 0 0 8px; }
         .history-table th:last-child  { border-radius: 0 8px 8px 0; }
+
         .history-table td {
             padding: 12px 13px; font-size: 13px;
-            border-bottom: 1px solid var(--gray-100); vertical-align: middle;
+            border-bottom: 1px solid var(--color-border); vertical-align: middle;
         }
-        .history-table tr:last-child td { border-bottom: none; }
-        .history-table tr:hover td { background: var(--gray-50); }
-        .score-pill {
-            display: inline-block; padding: 3px 10px;
-            border-radius: 20px; font-size: 12px; font-weight: 700;
-        }
-        .test-name { font-weight: 600; color: var(--gray-800); margin-bottom: 2px; }
-        .test-cat  { font-size: 11px; color: var(--gray-400); }
 
-        /* ── Password ── */
-        .pw-grid     { display: flex; flex-direction: column; gap: 14px; }
-        .pw-wrap     { position: relative; }
-        .pw-wrap .form-input { padding-right: 42px; }
+        .history-table tr:last-child td { border-bottom: none; }
+        .history-table tr:hover td { background: var(--color-bg-light); }
+
+        .score-pill { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; }
+        .test-name  { font-weight: 600; color: var(--color-text); margin-bottom: 2px; }
+        .test-cat   { font-size: 11px; color: var(--color-text-light); }
+
+        /* Password */
+        .pw-wrap { position: relative; }
+        .pw-wrap .form-control { padding-right: 42px; }
+
         .pw-eye {
             position: absolute; right: 12px; top: 50%;
             transform: translateY(-50%);
             background: none; border: none; cursor: pointer;
-            font-size: 16px; color: var(--gray-400); padding: 0;
+            font-size: 16px; color: var(--color-text-light); padding: 0;
         }
-        .pw-eye:hover { color: var(--gray-700); }
-        .strength-bar  { height: 4px; background: var(--gray-100); border-radius: 4px; overflow: hidden; margin-top: 7px; margin-bottom: 4px; }
-        .strength-fill { height: 100%; border-radius: 4px; transition: .3s; }
-        .strength-text { font-size: 12px; font-weight: 600; }
-        .match-msg     { font-size: 12px; font-weight: 600; margin-top: 5px; min-height: 16px; }
 
-        /* ── Login history ── */
+        .pw-eye:hover { color: var(--color-text); }
+
+        .password-strength { margin-top: 6px; height: 4px; border-radius: 2px; background: var(--color-border); overflow: hidden; }
+        .password-strength-bar { height: 100%; border-radius: 2px; transition: var(--transition); width: 0%; }
+        .strength-weak   { width: 25%;  background: var(--color-error); }
+        .strength-fair   { width: 50%;  background: #ed8936; }
+        .strength-good   { width: 75%;  background: #ecc94b; }
+        .strength-strong { width: 100%; background: var(--color-success); }
+        .strength-label  { font-size: 12px; font-weight: 600; margin-top: 4px; }
+        .match-msg       { font-size: 12px; font-weight: 600; margin-top: 5px; min-height: 16px; }
+
+        /* Login history */
         .login-row {
             display: flex; align-items: center; justify-content: space-between;
-            padding: 10px 14px; border-radius: 9px;
-            background: var(--gray-50); border: 1px solid var(--gray-100);
+            padding: 12px 14px; border-radius: 9px;
+            background: var(--color-bg-light); border: 1px solid var(--color-border);
             margin-bottom: 8px;
         }
-        .login-row:last-child { margin-bottom: 0; }
-        .login-info { display: flex; align-items: center; gap: 10px; }
-        .login-icon { font-size: 18px; }
-        .login-detail  { font-size: 13px; font-weight: 600; color: var(--gray-800); }
-        .login-ip      { font-size: 11px; color: var(--gray-400); font-family: monospace; }
-        .login-time    { font-size: 12px; color: var(--gray-500); }
 
-        /* ── Empty state ── */
-        .empty-state { text-align: center; padding: 44px 20px; color: var(--gray-500); }
+        .login-row:last-child { margin-bottom: 0; }
+        .login-info   { display: flex; align-items: center; gap: 10px; }
+        .login-icon   { font-size: 18px; }
+        .login-detail { font-size: 13px; font-weight: 600; color: var(--color-text); }
+        .login-ip     { font-size: 11px; color: var(--color-text-light); font-family: monospace; }
+        .login-time   { font-size: 12px; color: var(--color-text-light); }
+
+        /* Empty state */
+        .empty-state { text-align: center; padding: 44px 20px; color: var(--color-text-light); }
         .empty-icon  { font-size: 38px; margin-bottom: 10px; }
-        .empty-title { font-size: 15px; font-weight: 600; margin-bottom: 5px; }
+        .empty-title { font-size: 15px; font-weight: 600; margin-bottom: 5px; color: var(--color-text); }
         .empty-sub   { font-size: 13px; }
 
-        /* ── Divider ── */
-        .divider { height: 1px; background: var(--gray-100); margin: 26px 0; }
+        .divider { height: 1px; background: var(--color-border); margin: 24px 0; }
 
-        /* ── Responsive ── */
-        @media (max-width: 1024px) {
-            .page-grid { grid-template-columns: 1fr; }
+        /* ============================================
+           RESPONSIVE
+           ============================================ */
+        @media (max-width: 900px) {
+            .container { grid-template-columns: 1fr; }
+            .profile-card { position: static; }
+            .profile-nav { flex-direction: row; flex-wrap: wrap; }
+            .profile-nav-item { flex: 1; min-width: 120px; justify-content: center; }
         }
-        @media (max-width: 640px) {
-            .container { padding: 14px; }
+
+        @media (max-width: 600px) {
             .form-grid { grid-template-columns: 1fr; }
-            .nav-username { display: none; }
             .info-grid { grid-template-columns: 1fr; }
+            .navbar { padding: 12px 16px; }
+            .container { padding: 0 14px; }
         }
     </style>
 </head>
 <body>
 
-<!-- ── Navbar ── -->
+<!-- ================================================
+     NAVBAR
+     ================================================ -->
 <nav class="navbar">
     <a href="student-dashboard.php" class="navbar-brand">
-        <div class="brand-logo">P</div>
-        <span>Student Portal</span>
+        <div class="brand-logo">PT</div>
+        <span>Placement Portal</span>
     </a>
-    <div class="nav-right">
-        <div class="profile-dropdown-container">
-            <button class="profile-button" onclick="toggleDropdown()" aria-label="Profile menu">
-                <div class="nav-avatar"><?php echo $userInitials; ?></div>
-                <span class="nav-username"><?php echo htmlspecialchars($userName); ?></span>
-                <span class="dropdown-arrow">▼</span>
-            </button>
-            <div class="profile-dropdown" id="profileDropdown">
-                <div class="dropdown-header">
-                    <div class="dropdown-header-avatar"><?php echo $userInitials; ?></div>
-                    <div>
-                        <div class="dropdown-header-name"><?php echo htmlspecialchars($userName); ?></div>
-                        <div class="dropdown-header-email" title="<?php echo htmlspecialchars($userEmail); ?>"><?php echo htmlspecialchars($userEmail); ?></div>
-                    </div>
+
+    <div class="nav-profile">
+        <button class="profile-button" onclick="toggleProfileDropdown()" aria-expanded="false" aria-haspopup="true">
+            <div class="profile-avatar"><?php echo htmlspecialchars($userInitials); ?></div>
+            <span class="profile-name"><?php echo htmlspecialchars($userName); ?></span>
+            <span style="color:#a0aec0;">▼</span>
+        </button>
+
+        <div class="profile-dropdown" id="profileDropdown">
+            <div class="dropdown-header">
+                <div class="dropdown-name"><?php echo htmlspecialchars($userName); ?></div>
+                <div class="dropdown-email"><?php echo htmlspecialchars($userEmail); ?></div>
+                <div style="margin-top:6px;">
+                    <span style="display:inline-block;padding:2px 10px;background:linear-gradient(135deg,var(--color-primary),var(--color-primary-dark));color:#fff;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:0.5px;">Student</span>
                 </div>
-                <div class="dropdown-menu">
-                    <a href="student-profile.php" class="dropdown-item">
-                        <span class="dropdown-item-icon">👤</span>
-                        <span>My Profile</span>
-                    </a>
-                    <a href="student-dashboard.php" class="dropdown-item">
-                        <span class="dropdown-item-icon">🏠</span>
-                        <span>Dashboard</span>
-                    </a>
-                    <a href="home.php" class="dropdown-item">
-                        <span class="dropdown-item-icon">📝</span>
-                        <span>Practice Tests</span>
-                    </a>
-                    <div class="dropdown-divider"></div>
-                    <button onclick="confirmLogout()" class="dropdown-item logout">
-                        <span class="dropdown-item-icon">🚪</span>
-                        <span>Logout</span>
-                    </button>
-                </div>
+            </div>
+            <div class="dropdown-menu">
+                <a href="student-profile.php" class="dropdown-item" style="background:var(--color-bg-light);">
+                    <span>👤</span><span>My Profile</span>
+                </a>
+                <a href="student-dashboard.php" class="dropdown-item">
+                    <span>📊</span><span>Dashboard</span>
+                </a>
+                <a href="home.php" class="dropdown-item">
+                    <span>📝</span><span>Practice Tests</span>
+                </a>
+                <a href="help.html" target="_blank" rel="noopener noreferrer" class="dropdown-item">
+                    <span>❓</span>
+                    <span>Help & Support</span>
+                </a>
+                <div class="dropdown-divider"></div>
+                <button onclick="handleLogout()" class="dropdown-item danger">
+                    <span>🚪</span><span>Logout</span>
+                </button>
             </div>
         </div>
     </div>
 </nav>
-<div class="dropdown-overlay" id="dropdownOverlay" onclick="closeDropdown()"></div>
 
-<!-- ── Toast ── -->
-<?php if ($updateMessage): ?>
-<div class="toast <?php echo $updateType; ?> show" id="toast">
-    <span><?php echo $updateType === 'success' ? '✅' : '❌'; ?></span>
-    <span><?php echo htmlspecialchars($updateMessage); ?></span>
+<!-- Breadcrumb -->
+<div class="breadcrumb">
+    <a href="student-dashboard.php">Dashboard</a>
+    <span>›</span>
+    <span>My Profile</span>
 </div>
-<?php endif; ?>
 
+<!-- ================================================
+     MAIN LAYOUT
+     ================================================ -->
 <div class="container">
-    <div class="page-grid">
 
-        <!-- ══ LEFT COLUMN ══ -->
-        <div style="display:flex;flex-direction:column;gap:20px;">
+    <!-- ── LEFT: Profile Card ── -->
+    <aside>
+        <div class="profile-card">
 
-            <!-- Profile Hero -->
-            <div class="card">
-                <div class="hero-banner"></div>
-                <div class="hero-body">
-                    <div class="avatar-wrap">
-                        <div class="profile-avatar-lg"><?php echo $userInitials; ?></div>
-                    </div>
-                    <div class="hero-name"><?php echo htmlspecialchars($userName); ?></div>
-                    <div class="hero-email"><?php echo htmlspecialchars($userEmail); ?></div>
-                    <div class="hero-meta">
-                        <?php if ($userDept): ?>
-                        <div class="hero-meta-item"><span>🏛️</span><span><?php echo htmlspecialchars($userDept); ?></span></div>
-                        <?php endif; ?>
-                        <?php if ($userRegNo): ?>
-                        <div class="hero-meta-item"><span>🆔</span><span><?php echo htmlspecialchars($userRegNo); ?></span></div>
-                        <?php endif; ?>
-                        <?php if (!empty($profile['college'])): ?>
-                        <div class="hero-meta-item"><span>🏫</span><span><?php echo htmlspecialchars($profile['college']); ?></span></div>
-                        <?php endif; ?>
-                        <?php if ($lastLogin): ?>
-                        <div class="hero-meta-item"><span>🕐</span><span>Last login <?php echo timeAgo($lastLogin); ?></span></div>
-                        <?php endif; ?>
-                    </div>
-                    <div class="role-badge"><span>🎓</span> Student</div>
-                    <div class="hero-stats">
-                        <div class="hero-stat">
-                            <div class="hero-stat-num"><?php echo $testsCompleted; ?></div>
-                            <div class="hero-stat-label">Tests Done</div>
-                        </div>
-                        <div class="hero-stat">
-                            <div class="hero-stat-num"><?php echo $avgScore; ?>%</div>
-                            <div class="hero-stat-label">Avg Score</div>
-                        </div>
-                        <div class="hero-stat">
-                            <div class="hero-stat-num"><?php echo $bestScore; ?>%</div>
-                            <div class="hero-stat-label">Best Score</div>
-                        </div>
-                        <div class="hero-stat">
-                            <div class="hero-stat-num"><?php echo $activeDays; ?></div>
-                            <div class="hero-stat-label">Active Days</div>
-                        </div>
-                    </div>
+            <div class="avatar-large"><?php echo htmlspecialchars($userInitials); ?></div>
+
+            <div class="profile-card-name"><?php echo htmlspecialchars($userName); ?></div>
+            <div class="role-badge">🎓 Student</div>
+
+            <?php if ($userDept): ?>
+                <div class="profile-card-detail">🏛️ <?php echo htmlspecialchars($userDept); ?></div>
+            <?php endif; ?>
+
+            <?php if ($userRegNo): ?>
+                <div class="profile-card-detail">🆔 <?php echo htmlspecialchars($userRegNo); ?></div>
+            <?php endif; ?>
+
+            <div class="profile-card-detail">✉️ <?php echo htmlspecialchars($userEmail); ?></div>
+
+            <?php if ($lastLogin): ?>
+                <div class="profile-card-detail">🕐 Last login <?php echo timeAgo($lastLogin); ?></div>
+            <?php endif; ?>
+
+            <div class="profile-card-detail">📅 Member since <?php echo htmlspecialchars($memberSince); ?></div>
+
+            <div class="profile-divider"></div>
+
+            <!-- Live stats -->
+            <div class="stat-row">
+                <div class="stat-item">
+                    <div class="stat-item-value"><?php echo $testsCompleted; ?></div>
+                    <div class="stat-item-label">Tests</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-item-value"><?php echo $avgScore; ?>%</div>
+                    <div class="stat-item-label">Avg</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-item-value"><?php echo $bestScore; ?>%</div>
+                    <div class="stat-item-label">Best</div>
                 </div>
             </div>
 
-            <!-- Category Breakdown -->
             <?php if (!empty($categories)): ?>
-            <div class="card">
-                <div class="card-body">
-                    <div class="card-title">
-                        <div class="card-title-icon">📊</div>
-                        Performance by Category
-                    </div>
-                    <div class="cat-list">
-                        <?php foreach ($categories as $cat):
-                            $cs = (int)round($cat['avg_score']);
-                        ?>
-                        <div>
-                            <div class="cat-header">
-                                <span class="cat-name"><?php echo htmlspecialchars(ucfirst($cat['category'])); ?></span>
-                                <span class="cat-meta"><?php echo $cat['attempts']; ?> tests · <?php echo $cs; ?>%</span>
-                            </div>
-                            <div class="cat-bar">
-                                <div class="cat-fill" style="width:<?php echo $cs; ?>%"></div>
-                            </div>
-                        </div>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-            </div>
-            <?php endif; ?>
-
-            <!-- Answer Accuracy Summary -->
-            <?php if ($testsCompleted > 0): ?>
-            <div class="card">
-                <div class="card-body">
-                    <div class="card-title">
-                        <div class="card-title-icon">🎯</div>
-                        Answer Accuracy
-                    </div>
-                    <?php
-                        $total     = $totalCorrect + $totalWrong;
-                        $accRate   = $total > 0 ? round(($totalCorrect / $total) * 100) : 0;
+            <div class="profile-divider"></div>
+            <div style="text-align:left;">
+                <div style="font-size:12px;font-weight:700;color:var(--color-text-light);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">Performance by Category</div>
+                <div style="display:flex;flex-direction:column;gap:10px;">
+                    <?php foreach ($categories as $cat):
+                        $cs = (int)round($cat['avg_score']);
                     ?>
-                    <div style="display:flex;flex-direction:column;gap:10px;">
-                        <div>
-                            <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
-                                <span style="font-size:13px;font-weight:700;color:#22543d;">Correct</span>
-                                <span style="font-size:13px;font-weight:700;color:#22543d;"><?php echo $totalCorrect; ?></span>
-                            </div>
-                            <div class="cat-bar">
-                                <div class="cat-fill" style="width:<?php echo $accRate; ?>%;background:linear-gradient(90deg,#48bb78,#9ae6b4);"></div>
-                            </div>
+                    <div>
+                        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                            <span style="font-size:12px;font-weight:700;color:var(--color-text);"><?php echo htmlspecialchars(ucfirst($cat['category'])); ?></span>
+                            <span style="font-size:11px;color:var(--color-text-light);"><?php echo $cat['attempts']; ?> · <?php echo $cs; ?>%</span>
                         </div>
-                        <div>
-                            <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
-                                <span style="font-size:13px;font-weight:700;color:#c53030;">Wrong</span>
-                                <span style="font-size:13px;font-weight:700;color:#c53030;"><?php echo $totalWrong; ?></span>
-                            </div>
-                            <div class="cat-bar">
-                                <div class="cat-fill" style="width:<?php echo (100 - $accRate); ?>%;background:linear-gradient(90deg,#fc8181,#feb2b2);"></div>
-                            </div>
+                        <div class="cat-bar">
+                            <div class="cat-fill" style="width:<?php echo $cs; ?>%"></div>
                         </div>
-                        <div style="text-align:center;padding-top:5px;">
-                            <span style="font-size:24px;font-weight:800;color:var(--primary);"><?php echo $accRate; ?>%</span>
-                            <div style="font-size:11px;color:var(--gray-500);font-weight:600;text-transform:uppercase;letter-spacing:.5px;">accuracy rate</div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <?php if ($testsCompleted > 0):
+                $total   = $totalCorrect + $totalWrong;
+                $accRate = $total > 0 ? round(($totalCorrect / $total) * 100) : 0;
+            ?>
+            <div class="profile-divider"></div>
+            <div style="text-align:left;">
+                <div style="font-size:12px;font-weight:700;color:var(--color-text-light);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">Answer Accuracy</div>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                    <div>
+                        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                            <span style="font-size:12px;font-weight:700;color:#22543d;">Correct</span>
+                            <span style="font-size:12px;font-weight:700;color:#22543d;"><?php echo $totalCorrect; ?></span>
                         </div>
+                        <div class="cat-bar">
+                            <div class="cat-fill" style="width:<?php echo $accRate; ?>%;background:linear-gradient(90deg,#48bb78,#9ae6b4);"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                            <span style="font-size:12px;font-weight:700;color:#c53030;">Wrong</span>
+                            <span style="font-size:12px;font-weight:700;color:#c53030;"><?php echo $totalWrong; ?></span>
+                        </div>
+                        <div class="cat-bar">
+                            <div class="cat-fill" style="width:<?php echo (100 - $accRate); ?>%;background:linear-gradient(90deg,#fc8181,#feb2b2);"></div>
+                        </div>
+                    </div>
+                    <div style="text-align:center;padding-top:4px;">
+                        <span style="font-size:20px;font-weight:800;color:var(--color-primary);"><?php echo $accRate; ?>%</span>
+                        <div style="font-size:10px;color:var(--color-text-light);font-weight:600;text-transform:uppercase;letter-spacing:.5px;">accuracy rate</div>
                     </div>
                 </div>
             </div>
             <?php endif; ?>
 
-        </div>
-        <!-- ══ END LEFT ══ -->
+            <div class="profile-divider"></div>
 
-        <!-- ══ RIGHT COLUMN ══ -->
-        <div>
+            <!-- Sidebar nav -->
+            <nav class="profile-nav">
+                <button class="profile-nav-item active" onclick="switchTab('info')" id="nav-info">
+                    <span>👤</span> Personal Info
+                </button>
+                <button class="profile-nav-item" onclick="switchTab('history')" id="nav-history">
+                    <span>📋</span> Test History
+                </button>
+                <button class="profile-nav-item" onclick="switchTab('security')" id="nav-security">
+                    <span>🔒</span> Security
+                </button>
+            </nav>
+        </div>
+    </aside>
+
+    <!-- ── RIGHT: Tab Panels ── -->
+    <main>
+
+        <?php if ($updateMessage): ?>
+            <div class="alert alert-<?php echo $updateType; ?>">
+                <?php echo $updateType === 'success' ? '✅' : '⚠️'; ?>
+                <?php echo htmlspecialchars($updateMessage); ?>
+            </div>
+        <?php endif; ?>
+
+        <!-- ══ TAB: Personal Info ══ -->
+        <div class="tab-panel active" id="panel-info">
             <div class="card">
-                <div class="card-body">
+                <div class="card-title">👤 Personal Information</div>
+                <form method="POST" action="">
+                    <input type="hidden" name="action" value="update_profile">
+                    <div class="form-grid">
 
-                    <div class="tab-nav">
-                        <button class="tab-btn active" onclick="switchTab('profile',this)"><span>👤</span> Profile</button>
-                        <button class="tab-btn"         onclick="switchTab('history',this)"><span>📋</span> History</button>
-                        <button class="tab-btn"         onclick="switchTab('security',this)"><span>🔒</span> Security</button>
-                    </div>
-
-                    <!-- ════ TAB: Profile Info ════ -->
-                    <div class="tab-panel active" id="tab-profile">
-                        <form method="POST" action="">
-                            <input type="hidden" name="action" value="update_profile">
-                            <div class="form-grid">
-
-                                <div class="form-group">
-                                    <label class="form-label">Full Name</label>
-                                    <input type="text" class="form-input" value="<?php echo htmlspecialchars($userName); ?>" disabled>
-                                    <span class="form-hint">Managed by admin.</span>
-                                </div>
-
-                                <div class="form-group">
-                                    <label class="form-label">Email Address</label>
-                                    <input type="email" class="form-input" value="<?php echo htmlspecialchars($userEmail); ?>" disabled>
-                                    <span class="form-hint">Managed by admin.</span>
-                                </div>
-
-                                <div class="form-group">
-                                    <label class="form-label">Department</label>
-                                    <input type="text" class="form-input" value="<?php echo htmlspecialchars($userDept); ?>" disabled>
-                                    <span class="form-hint">Managed by admin.</span>
-                                </div>
-
-                                <div class="form-group">
-                                    <label class="form-label">Registration Number</label>
-                                    <input type="text" class="form-input" value="<?php echo htmlspecialchars($userRegNo); ?>" disabled>
-                                    <span class="form-hint">Managed by admin.</span>
-                                </div>
-
-                                <?php if ($spExists): ?>
-
-                                <div class="form-group">
-                                    <label class="form-label">Phone Number</label>
-                                    <input type="tel" name="phone" class="form-input"
-                                           placeholder="+91 9876543210"
-                                           value="<?php echo htmlspecialchars($profile['phone'] ?? ''); ?>"
-                                           maxlength="20">
-                                </div>
-
-                                <div class="form-group">
-                                    <label class="form-label">Year of Study</label>
-                                    <select name="year" class="form-select">
-                                        <option value="0">Select year</option>
-                                        <?php for ($y = 1; $y <= 5; $y++): ?>
-                                        <option value="<?php echo $y; ?>"
-                                            <?php echo (($profile['year_of_study'] ?? 0) == $y) ? 'selected' : ''; ?>>
-                                            Year <?php echo $y; ?>
-                                        </option>
-                                        <?php endfor; ?>
-                                    </select>
-                                </div>
-
-                                <div class="form-group">
-                                    <label class="form-label">Degree</label>
-                                    <select name="degree" class="form-select">
-                                        <option value="">Select degree</option>
-                                        <?php foreach (['B.Tech','B.E.','B.Sc','B.Com','BBA','B.A','M.Tech','MBA','M.Sc','PhD','Other'] as $d): ?>
-                                        <option value="<?php echo $d; ?>" <?php echo (($profile['degree'] ?? '') === $d) ? 'selected' : ''; ?>>
-                                            <?php echo $d; ?>
-                                        </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-
-                                <div class="form-group">
-                                    <label class="form-label">Branch / Specialization</label>
-                                    <input type="text" name="branch" class="form-input"
-                                           placeholder="e.g. Computer Science"
-                                           value="<?php echo htmlspecialchars($profile['branch'] ?? ''); ?>"
-                                           maxlength="100">
-                                </div>
-
-                                <div class="form-group full">
-                                    <label class="form-label">College / University</label>
-                                    <input type="text" name="college" class="form-input"
-                                           placeholder="e.g. Indian Institute of Technology"
-                                           value="<?php echo htmlspecialchars($profile['college'] ?? ''); ?>"
-                                           maxlength="150">
-                                </div>
-
-                                <div class="form-group full">
-                                    <label class="form-label">Bio</label>
-                                    <textarea name="bio" class="form-textarea"
-                                              placeholder="Tell us a little about yourself..."
-                                              maxlength="500"><?php echo htmlspecialchars($profile['bio'] ?? ''); ?></textarea>
-                                    <span class="form-hint">Max 500 characters.</span>
-                                </div>
-
-                                <?php else: ?>
-                                <div class="form-group full">
-                                    <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:9px;padding:14px;font-size:13px;color:#92400e;">
-                                        ⚠️ The <code>student_profiles</code> table does not exist yet.
-                                        Additional profile fields (phone, degree, bio, etc.) will be available once it is created.
-                                        Name, email, department, and registration number are still shown above from the <code>users</code> table.
-                                    </div>
-                                </div>
-                                <?php endif; ?>
-
-                            </div>
-                            <?php if ($spExists): ?>
-                            <div class="form-footer">
-                                <span class="last-updated">
-                                    <?php if (!empty($profile['updated_at'])): ?>
-                                        Last updated: <?php echo date('M j, Y', strtotime($profile['updated_at'])); ?>
-                                    <?php else: ?>
-                                        Profile not yet saved.
-                                    <?php endif; ?>
-                                </span>
-                                <button type="submit" class="btn-primary">
-                                    <span>💾</span> Save Changes
-                                </button>
-                            </div>
-                            <?php endif; ?>
-                        </form>
-                    </div>
-
-                    <!-- ════ TAB: Test History ════ -->
-                    <div class="tab-panel" id="tab-history">
-                        <?php if (empty($recentAttempts)): ?>
-                        <div class="empty-state">
-                            <div class="empty-icon">📝</div>
-                            <div class="empty-title">No tests completed yet</div>
-                            <div class="empty-sub">Complete your first assessment to see history here.</div>
+                        <div class="form-group">
+                            <label class="form-label">Full Name</label>
+                            <input type="text" class="form-control" value="<?php echo htmlspecialchars($userName); ?>" disabled>
+                            <span class="form-hint">Managed by admin.</span>
                         </div>
-                        <?php else: ?>
-                        <div style="overflow-x:auto;">
-                        <table class="history-table">
-                            <thead>
-                                <tr>
-                                    <th>Assessment</th>
-                                    <th>Score</th>
-                                    <th>Breakdown</th>
-                                    <th>Duration</th>
-                                    <th>Submitted</th>
-                                    <th>Result</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($recentAttempts as $a):
-                                    $pct  = (int)round($a['percentage'] ?? 0);
-                                    $mins = $a['time_taken_minutes'] ?? 0;
-                                    $cor  = $a['correct_answers']    ?? 0;
-                                    $wrg  = $a['wrong_answers']      ?? 0;
-                                    $unans= $a['unanswered']         ?? 0;
-                                ?>
-                                <tr>
-                                    <td>
-                                        <div class="test-name"><?php echo htmlspecialchars($a['test_title']); ?></div>
-                                        <div class="test-cat">
-                                            <?php echo htmlspecialchars(ucfirst($a['category'] ?? '')); ?>
-                                            &nbsp;<?php echo difficultyBadge($a['difficulty'] ?? 'medium'); ?>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <span class="score-pill" style="background:<?php echo scoreBg($pct); ?>;color:<?php echo scoreColor($pct); ?>">
-                                            <?php echo $pct; ?>%
-                                        </span>
-                                        <div style="font-size:11px;color:var(--gray-400);margin-top:3px;">
-                                            <?php echo number_format($a['score'] ?? 0,1); ?> / <?php echo $a['total_marks'] ?? '—'; ?> marks
-                                        </div>
-                                    </td>
-                                    <td style="font-size:12px;color:var(--gray-600);">
-                                        <span style="color:#22543d;font-weight:700;">✓<?php echo $cor; ?></span>&nbsp;
-                                        <span style="color:#c53030;font-weight:700;">✗<?php echo $wrg; ?></span>&nbsp;
-                                        <span style="color:var(--gray-400);">–<?php echo $unans; ?></span>
-                                    </td>
-                                    <td style="font-size:12px;color:var(--gray-500);">
-                                        <?php echo $mins ? $mins . ' min' : '—'; ?>
-                                    </td>
-                                    <td style="font-size:12px;color:var(--gray-500);">
-                                        <?php echo $a['submitted_at'] ? timeAgo($a['submitted_at']) : '—'; ?>
-                                    </td>
-                                    <td style="font-size:12px;font-weight:700;color:<?php echo scoreColor($pct); ?>">
-                                        <?php echo scoreLabel($pct); ?>
-                                    </td>
-                                </tr>
+
+                        <div class="form-group">
+                            <label class="form-label">Email Address</label>
+                            <input type="email" class="form-control" value="<?php echo htmlspecialchars($userEmail); ?>" disabled>
+                            <span class="form-hint">Managed by admin.</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Department</label>
+                            <input type="text" class="form-control" value="<?php echo htmlspecialchars($userDept); ?>" disabled>
+                            <span class="form-hint">Managed by admin.</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Registration Number</label>
+                            <input type="text" class="form-control" value="<?php echo htmlspecialchars($userRegNo); ?>" disabled>
+                            <span class="form-hint">Managed by admin.</span>
+                        </div>
+
+                        <?php if ($spExists): ?>
+
+                        <div class="form-group">
+                            <label class="form-label">Phone Number</label>
+                            <input type="tel" name="phone" class="form-control"
+                                   placeholder="+91 9876543210"
+                                   value="<?php echo htmlspecialchars($profile['phone'] ?? ''); ?>"
+                                   maxlength="20">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Year of Study</label>
+                            <select name="year" class="form-control">
+                                <option value="0">Select year</option>
+                                <?php for ($y = 1; $y <= 5; $y++): ?>
+                                <option value="<?php echo $y; ?>"
+                                    <?php echo (($profile['year_of_study'] ?? 0) == $y) ? 'selected' : ''; ?>>
+                                    Year <?php echo $y; ?>
+                                </option>
+                                <?php endfor; ?>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Degree</label>
+                            <select name="degree" class="form-control">
+                                <option value="">Select degree</option>
+                                <?php foreach (['B.Tech','B.E.','B.Sc','B.Com','BBA','B.A','M.Tech','MBA','M.Sc','PhD','Other'] as $d): ?>
+                                <option value="<?php echo $d; ?>" <?php echo (($profile['degree'] ?? '') === $d) ? 'selected' : ''; ?>>
+                                    <?php echo $d; ?>
+                                </option>
                                 <?php endforeach; ?>
-                            </tbody>
-                        </table>
+                            </select>
                         </div>
-                        <div style="text-align:center;margin-top:16px;">
-                            <a href="all-results.php" style="color:var(--accent);font-size:13px;font-weight:700;text-decoration:none;">
-                                View full history →
-                            </a>
+
+                        <div class="form-group">
+                            <label class="form-label">Branch / Specialization</label>
+                            <input type="text" name="branch" class="form-control"
+                                   placeholder="e.g. Computer Science"
+                                   value="<?php echo htmlspecialchars($profile['branch'] ?? ''); ?>"
+                                   maxlength="100">
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label class="form-label">College / University</label>
+                            <input type="text" name="college" class="form-control"
+                                   placeholder="e.g. Indian Institute of Technology"
+                                   value="<?php echo htmlspecialchars($profile['college'] ?? ''); ?>"
+                                   maxlength="150">
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label class="form-label">Bio</label>
+                            <textarea name="bio" class="form-control"
+                                      placeholder="Tell us a little about yourself..."
+                                      maxlength="500"><?php echo htmlspecialchars($profile['bio'] ?? ''); ?></textarea>
+                            <span class="form-hint">Max 500 characters.</span>
+                        </div>
+
+                        <?php else: ?>
+                        <div class="form-group full-width">
+                            <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:9px;padding:14px;font-size:13px;color:#92400e;">
+                                ⚠️ The <code>student_profiles</code> table does not exist yet.
+                                Additional profile fields (phone, degree, bio, etc.) will be available once it is created.
+                            </div>
                         </div>
                         <?php endif; ?>
+
                     </div>
 
-                    <!-- ════ TAB: Security ════ -->
-                    <div class="tab-panel" id="tab-security">
-
-                        <!-- Change Password -->
-                        <form method="POST" action="">
-                            <input type="hidden" name="action" value="change_password">
-                            <div class="pw-grid">
-
-                                <div class="form-group">
-                                    <label class="form-label">Current Password <span class="req">*</span></label>
-                                    <div class="pw-wrap">
-                                        <input type="password" name="current_password" class="form-input"
-                                               id="pwCurrent" placeholder="Enter current password"
-                                               autocomplete="current-password" required>
-                                        <button type="button" class="pw-eye" onclick="togglePw('pwCurrent',this)">👁️</button>
-                                    </div>
-                                </div>
-
-                                <div class="form-group">
-                                    <label class="form-label">New Password <span class="req">*</span></label>
-                                    <div class="pw-wrap">
-                                        <input type="password" name="new_password" class="form-input"
-                                               id="pwNew" placeholder="Minimum 8 characters"
-                                               autocomplete="new-password" required
-                                               oninput="checkStrength(this.value)">
-                                        <button type="button" class="pw-eye" onclick="togglePw('pwNew',this)">👁️</button>
-                                    </div>
-                                    <div id="strengthWrap" style="display:none;">
-                                        <div class="strength-bar">
-                                            <div class="strength-fill" id="strengthFill"></div>
-                                        </div>
-                                        <div class="strength-text" id="strengthText"></div>
-                                    </div>
-                                </div>
-
-                                <div class="form-group">
-                                    <label class="form-label">Confirm New Password <span class="req">*</span></label>
-                                    <div class="pw-wrap">
-                                        <input type="password" name="confirm_password" class="form-input"
-                                               id="pwConfirm" placeholder="Repeat new password"
-                                               autocomplete="new-password" required
-                                               oninput="checkMatch()">
-                                        <button type="button" class="pw-eye" onclick="togglePw('pwConfirm',this)">👁️</button>
-                                    </div>
-                                    <div class="match-msg" id="matchMsg"></div>
-                                </div>
-
-                                <div class="form-footer" style="margin-top:4px;">
-                                    <span class="last-updated">Use letters, numbers, and symbols.</span>
-                                    <button type="submit" class="btn-primary">
-                                        <span>🔑</span> Update Password
-                                    </button>
-                                </div>
-
-                            </div>
-                        </form>
-
-                        <div class="divider"></div>
-
-                        <!-- Account Info -->
-                        <div class="card-title" style="margin-bottom:14px;">
-                            <div class="card-title-icon">ℹ️</div>
-                            Account Information
-                        </div>
-                        <div class="info-grid" style="margin-bottom:20px;">
-                            <div class="info-box">
-                                <div class="info-box-label">User ID</div>
-                                <div class="info-box-value mono">#<?php echo $userId; ?></div>
-                            </div>
-                            <div class="info-box">
-                                <div class="info-box-label">Role</div>
-                                <div class="info-box-value">Student</div>
-                            </div>
-                            <div class="info-box">
-                                <div class="info-box-label">Account Status</div>
-                                <div class="info-box-value" style="color:#22543d;">
-                                    <?php echo $user['is_active'] ? '✅ Active' : '❌ Inactive'; ?>
-                                </div>
-                            </div>
-                            <div class="info-box">
-                                <div class="info-box-label">Verified</div>
-                                <div class="info-box-value" style="color:<?php echo $user['is_verified'] ? '#22543d' : '#c53030'; ?>">
-                                    <?php echo $user['is_verified'] ? '✅ Yes' : '❌ No'; ?>
-                                </div>
-                            </div>
-                            <?php if (!empty($user['created_at'])): ?>
-                            <div class="info-box" style="grid-column:1/-1;">
-                                <div class="info-box-label">Member Since</div>
-                                <div class="info-box-value" style="font-size:14px;">
-                                    <?php echo date('F j, Y', strtotime($user['created_at'])); ?>
-                                </div>
-                            </div>
+                    <?php if ($spExists): ?>
+                    <div class="form-actions">
+                        <span style="font-size:12px;color:var(--color-text-light);">
+                            <?php if (!empty($profile['updated_at'])): ?>
+                                Last updated: <?php echo date('M j, Y', strtotime($profile['updated_at'])); ?>
+                            <?php else: ?>
+                                Profile not yet saved.
                             <?php endif; ?>
+                        </span>
+                        <div class="form-actions-right">
+                            <button type="reset" class="btn btn-secondary">Reset</button>
+                            <button type="submit" class="btn btn-primary"><span>💾</span> Save Changes</button>
                         </div>
+                    </div>
+                    <?php endif; ?>
+                </form>
+            </div>
 
-                        <!-- Login History -->
-                        <?php if (!empty($loginHistory)): ?>
-                        <div class="card-title" style="margin-bottom:14px;">
-                            <div class="card-title-icon">🔐</div>
-                            Recent Login Activity
+            <!-- Account Details -->
+            <div class="card">
+                <div class="card-title">🔧 Account Details</div>
+                <div class="info-grid">
+                    <div class="info-box">
+                        <div class="info-box-label">User ID</div>
+                        <div class="info-box-value mono">#<?php echo $userId; ?></div>
+                    </div>
+                    <div class="info-box">
+                        <div class="info-box-label">Role</div>
+                        <div class="info-box-value">Student</div>
+                    </div>
+                    <div class="info-box">
+                        <div class="info-box-label">Account Status</div>
+                        <div class="info-box-value" style="color:<?php echo $user['is_active'] ? '#22543d' : '#c53030'; ?>;">
+                            <?php echo $user['is_active'] ? '✅ Active' : '❌ Inactive'; ?>
                         </div>
-                        <?php foreach ($loginHistory as $ll): ?>
-                        <div class="login-row">
-                            <div class="login-info">
-                                <span class="login-icon"><?php echo parseUA($ll['user_agent'] ?? ''); ?></span>
-                                <div>
-                                    <div class="login-detail"><?php echo parseUA($ll['user_agent'] ?? ''); ?></div>
-                                    <div class="login-ip"><?php echo htmlspecialchars($ll['ip_address'] ?? '—'); ?></div>
-                                </div>
-                            </div>
-                            <div class="login-time"><?php echo timeAgo($ll['created_at']); ?></div>
+                    </div>
+                    <div class="info-box">
+                        <div class="info-box-label">Verified</div>
+                        <div class="info-box-value" style="color:<?php echo $user['is_verified'] ? '#22543d' : '#c53030'; ?>;">
+                            <?php echo $user['is_verified'] ? '✅ Yes' : '❌ No'; ?>
                         </div>
-                        <?php endforeach; ?>
-                        <div style="margin-top:6px;font-size:11px;color:var(--gray-400);text-align:right;">
-                            Showing last <?php echo count($loginHistory); ?> successful logins
+                    </div>
+                    <?php if (!empty($user['created_at'])): ?>
+                    <div class="info-box" style="grid-column:1/-1;">
+                        <div class="info-box-label">Member Since</div>
+                        <div class="info-box-value" style="font-size:14px;">
+                            <?php echo date('F j, Y', strtotime($user['created_at'])); ?>
                         </div>
-                        <?php endif; ?>
-
-                    </div><!-- /tab-security -->
-
-                </div><!-- /card-body -->
-            </div><!-- /card -->
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
         </div>
-        <!-- ══ END RIGHT ══ -->
 
-    </div>
+        <!-- ══ TAB: Test History ══ -->
+        <div class="tab-panel" id="panel-history">
+            <div class="card">
+                <div class="card-title">📋 Test History</div>
+                <?php if (empty($recentAttempts)): ?>
+                <div class="empty-state">
+                    <div class="empty-icon">📝</div>
+                    <div class="empty-title">No tests completed yet</div>
+                    <div class="empty-sub">Complete your first assessment to see history here.</div>
+                </div>
+                <?php else: ?>
+                <div style="overflow-x:auto;">
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>Assessment</th>
+                                <th>Score</th>
+                                <th>Breakdown</th>
+                                <th>Duration</th>
+                                <th>Submitted</th>
+                                <th>Result</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($recentAttempts as $a):
+                                $pct  = (int)round($a['percentage'] ?? 0);
+                                $mins = $a['time_taken_minutes'] ?? 0;
+                                $cor  = $a['correct_answers']    ?? 0;
+                                $wrg  = $a['wrong_answers']      ?? 0;
+                                $unans= $a['unanswered']         ?? 0;
+                            ?>
+                            <tr>
+                                <td>
+                                    <div class="test-name"><?php echo htmlspecialchars($a['test_title']); ?></div>
+                                    <div class="test-cat">
+                                        <?php echo htmlspecialchars(ucfirst($a['category'] ?? '')); ?>
+                                        &nbsp;<?php echo difficultyBadge($a['difficulty'] ?? 'medium'); ?>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="score-pill" style="background:<?php echo scoreBg($pct); ?>;color:<?php echo scoreColor($pct); ?>">
+                                        <?php echo $pct; ?>%
+                                    </span>
+                                    <div style="font-size:11px;color:var(--color-text-light);margin-top:3px;">
+                                        <?php echo number_format($a['score'] ?? 0, 1); ?> / <?php echo $a['total_marks'] ?? '—'; ?> marks
+                                    </div>
+                                </td>
+                                <td style="font-size:12px;">
+                                    <span style="color:#22543d;font-weight:700;">✓<?php echo $cor; ?></span>&nbsp;
+                                    <span style="color:#c53030;font-weight:700;">✗<?php echo $wrg; ?></span>&nbsp;
+                                    <span style="color:var(--color-text-light);">–<?php echo $unans; ?></span>
+                                </td>
+                                <td style="font-size:12px;color:var(--color-text-light);">
+                                    <?php echo $mins ? $mins . ' min' : '—'; ?>
+                                </td>
+                                <td style="font-size:12px;color:var(--color-text-light);">
+                                    <?php echo $a['submitted_at'] ? timeAgo($a['submitted_at']) : '—'; ?>
+                                </td>
+                                <td style="font-size:12px;font-weight:700;color:<?php echo scoreColor($pct); ?>">
+                                    <?php echo scoreLabel($pct); ?>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <div style="text-align:center;margin-top:16px;">
+                    <a href="all-results.php" style="color:var(--color-accent);font-size:13px;font-weight:700;text-decoration:none;">
+                        View full history →
+                    </a>
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <!-- ══ TAB: Security ══ -->
+        <div class="tab-panel" id="panel-security">
+
+            <div class="card">
+                <div class="card-title">🔒 Change Password</div>
+                <form method="POST" action="">
+                    <input type="hidden" name="action" value="change_password">
+                    <div class="form-grid">
+
+                        <div class="form-group full-width">
+                            <label class="form-label">Current Password <span class="req">*</span></label>
+                            <div class="pw-wrap">
+                                <input type="password" name="current_password" class="form-control"
+                                       id="pwCurrent" placeholder="Enter current password"
+                                       autocomplete="current-password" required>
+                                <button type="button" class="pw-eye" onclick="togglePw('pwCurrent',this)">👁️</button>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">New Password <span class="req">*</span></label>
+                            <div class="pw-wrap">
+                                <input type="password" name="new_password" class="form-control"
+                                       id="pwNew" placeholder="Minimum 8 characters"
+                                       autocomplete="new-password" required
+                                       oninput="checkStrength(this.value)">
+                                <button type="button" class="pw-eye" onclick="togglePw('pwNew',this)">👁️</button>
+                            </div>
+                            <div class="password-strength">
+                                <div class="password-strength-bar" id="strengthBar"></div>
+                            </div>
+                            <span class="strength-label" id="strengthLabel" style="color:var(--color-text-light);"></span>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Confirm New Password <span class="req">*</span></label>
+                            <div class="pw-wrap">
+                                <input type="password" name="confirm_password" class="form-control"
+                                       id="pwConfirm" placeholder="Repeat new password"
+                                       autocomplete="new-password" required
+                                       oninput="checkMatch()">
+                                <button type="button" class="pw-eye" onclick="togglePw('pwConfirm',this)">👁️</button>
+                            </div>
+                            <div class="match-msg" id="matchMsg"></div>
+                        </div>
+
+                    </div>
+                    <div class="form-actions">
+                        <span style="font-size:12px;color:var(--color-text-light);">Use letters, numbers, and symbols.</span>
+                        <button type="submit" class="btn btn-primary"><span>🔑</span> Update Password</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="card">
+                <div class="card-title">ℹ️ Account Information</div>
+                <div class="info-grid" style="margin-bottom:<?php echo !empty($loginHistory) ? '24px' : '0'; ?>;">
+                    <div class="info-box">
+                        <div class="info-box-label">User ID</div>
+                        <div class="info-box-value mono">#<?php echo $userId; ?></div>
+                    </div>
+                    <div class="info-box">
+                        <div class="info-box-label">Role</div>
+                        <div class="info-box-value">Student</div>
+                    </div>
+                    <div class="info-box">
+                        <div class="info-box-label">Account Status</div>
+                        <div class="info-box-value" style="color:<?php echo $user['is_active'] ? '#22543d' : '#c53030'; ?>;">
+                            <?php echo $user['is_active'] ? '✅ Active' : '❌ Inactive'; ?>
+                        </div>
+                    </div>
+                    <div class="info-box">
+                        <div class="info-box-label">Verified</div>
+                        <div class="info-box-value" style="color:<?php echo $user['is_verified'] ? '#22543d' : '#c53030'; ?>;">
+                            <?php echo $user['is_verified'] ? '✅ Yes' : '❌ No'; ?>
+                        </div>
+                    </div>
+                    <?php if (!empty($user['created_at'])): ?>
+                    <div class="info-box" style="grid-column:1/-1;">
+                        <div class="info-box-label">Member Since</div>
+                        <div class="info-box-value" style="font-size:14px;">
+                            <?php echo date('F j, Y', strtotime($user['created_at'])); ?>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+
+                <?php if (!empty($loginHistory)): ?>
+                <div class="divider"></div>
+                <div class="card-title" style="margin-bottom:14px;">🔐 Recent Login Activity</div>
+                <?php foreach ($loginHistory as $ll): ?>
+                <div class="login-row">
+                    <div class="login-info">
+                        <span class="login-icon"><?php echo parseUA($ll['user_agent'] ?? ''); ?></span>
+                        <div>
+                            <div class="login-detail"><?php echo parseUA($ll['user_agent'] ?? ''); ?></div>
+                            <div class="login-ip"><?php echo htmlspecialchars($ll['ip_address'] ?? '—'); ?></div>
+                        </div>
+                    </div>
+                    <div class="login-time"><?php echo timeAgo($ll['created_at']); ?></div>
+                </div>
+                <?php endforeach; ?>
+                <div style="margin-top:8px;font-size:11px;color:var(--color-text-light);text-align:right;">
+                    Showing last <?php echo count($loginHistory); ?> successful logins
+                </div>
+                <?php endif; ?>
+            </div>
+
+        </div><!-- /panel-security -->
+
+    </main>
 </div>
 
 <script>
-    // ── Profile dropdown ──────────────────────────────────────────────────
-    function toggleDropdown() {
-        const dd = document.getElementById('profileDropdown');
-        const ov = document.getElementById('dropdownOverlay');
-        dd.classList.toggle('show');
-        ov.classList.toggle('show');
-    }
-    function closeDropdown() {
-        document.getElementById('profileDropdown').classList.remove('show');
-        document.getElementById('dropdownOverlay').classList.remove('show');
-    }
-
-    // ── Tabs ──────────────────────────────────────────────────────────────
-    function switchTab(name, btn) {
+    /* ============================================
+       TAB SWITCHING
+       ============================================ */
+    function switchTab(tab) {
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        document.getElementById('tab-' + name).classList.add('active');
-        btn.classList.add('active');
+        document.querySelectorAll('.profile-nav-item').forEach(n => n.classList.remove('active'));
+        const panel = document.getElementById('panel-' + tab);
+        const nav   = document.getElementById('nav-' + tab);
+        if (panel) panel.classList.add('active');
+        if (nav)   nav.classList.add('active');
     }
 
-    // ── Password eye toggle ───────────────────────────────────────────────
+    /* ============================================
+       PROFILE DROPDOWN
+       ============================================ */
+    function toggleProfileDropdown() {
+        const dropdown = document.getElementById('profileDropdown');
+        const button   = document.querySelector('.profile-button');
+        dropdown.classList.toggle('active');
+        button.setAttribute('aria-expanded', dropdown.classList.contains('active'));
+    }
+
+    document.addEventListener('click', function(e) {
+        const btn      = document.querySelector('.profile-button');
+        const dropdown = document.getElementById('profileDropdown');
+        if (!btn.contains(e.target) && dropdown.classList.contains('active')) {
+            dropdown.classList.remove('active');
+            btn.setAttribute('aria-expanded', 'false');
+        }
+    });
+
+    function handleLogout() {
+        if (confirm('Are you sure you want to logout?')) {
+            window.location.href = 'logout.php';
+        }
+    }
+
+    /* ============================================
+       PASSWORD EYE TOGGLE
+       ============================================ */
     function togglePw(id, btn) {
         const inp = document.getElementById(id);
         if (inp.type === 'password') { inp.type = 'text';     btn.textContent = '🙈'; }
         else                         { inp.type = 'password'; btn.textContent = '👁️'; }
     }
 
-    // ── Password strength ─────────────────────────────────────────────────
+    /* ============================================
+       PASSWORD STRENGTH METER
+       ============================================ */
     function checkStrength(val) {
-        const wrap = document.getElementById('strengthWrap');
-        const fill = document.getElementById('strengthFill');
-        const text = document.getElementById('strengthText');
-        if (!val) { wrap.style.display = 'none'; return; }
-        wrap.style.display = 'block';
+        const bar   = document.getElementById('strengthBar');
+        const label = document.getElementById('strengthLabel');
+
+        if (!val) { bar.className = 'password-strength-bar'; label.textContent = ''; return; }
+
         let score = 0;
-        if (val.length >= 8)          score++;
-        if (/[A-Z]/.test(val))        score++;
-        if (/[0-9]/.test(val))        score++;
-        if (/[^A-Za-z0-9]/.test(val)) score++;
+        if (val.length >= 8)            score++;
+        if (/[A-Z]/.test(val))          score++;
+        if (/[0-9]/.test(val))          score++;
+        if (/[^A-Za-z0-9]/.test(val))   score++;
+
         const levels = [
-            { w: '25%',  c: '#f56565', l: 'Weak'   },
-            { w: '50%',  c: '#ed8936', l: 'Fair'   },
-            { w: '75%',  c: '#ecc94b', l: 'Good'   },
-            { w: '100%', c: '#48bb78', l: 'Strong' }
+            { cls: 'strength-weak',   label: 'Weak',   color: '#f56565' },
+            { cls: 'strength-fair',   label: 'Fair',   color: '#ed8936' },
+            { cls: 'strength-good',   label: 'Good',   color: '#ecc94b' },
+            { cls: 'strength-strong', label: 'Strong', color: '#48bb78' },
         ];
-        const lvl         = levels[Math.max(score - 1, 0)];
-        fill.style.width       = lvl.w;
-        fill.style.background  = lvl.c;
-        text.style.color       = lvl.c;
-        text.textContent       = lvl.l;
+
+        const lvl             = levels[Math.max(score - 1, 0)];
+        bar.className         = 'password-strength-bar ' + lvl.cls;
+        label.textContent     = lvl.label;
+        label.style.color     = lvl.color;
     }
 
-    // ── Password match ────────────────────────────────────────────────────
+    /* ============================================
+       PASSWORD MATCH CHECK
+       ============================================ */
     function checkMatch() {
         const nw  = document.getElementById('pwNew').value;
         const cf  = document.getElementById('pwConfirm').value;
@@ -1225,13 +1289,9 @@ function parseUA(string $ua): string {
         else           { msg.style.color = '#742a2a'; msg.textContent = '✗ Passwords do not match'; }
     }
 
-    // ── Logout ────────────────────────────────────────────────────────────
-    function confirmLogout() {
-        closeDropdown();
-        if (confirm('Are you sure you want to logout?')) window.location.href = 'logout.php';
-    }
-
-    // ── Animate bars on load ──────────────────────────────────────────────
+    /* ============================================
+       ANIMATE CATEGORY BARS ON LOAD
+       ============================================ */
     window.addEventListener('load', () => {
         document.querySelectorAll('.cat-fill').forEach(bar => {
             const w = bar.style.width;
@@ -1240,9 +1300,15 @@ function parseUA(string $ua): string {
         });
     });
 
-    // ── Auto-dismiss toast ────────────────────────────────────────────────
-    const toast = document.getElementById('toast');
-    if (toast) setTimeout(() => toast.classList.remove('show'), 4500);
+    /* ============================================
+       AUTO-OPEN TAB FROM URL HASH
+       ============================================ */
+    window.addEventListener('DOMContentLoaded', function() {
+        const hash = window.location.hash.replace('#', '');
+        const validTabs = ['info', 'history', 'security'];
+        if (validTabs.includes(hash)) switchTab(hash);
+    });
 </script>
+
 </body>
 </html>
