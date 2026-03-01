@@ -1,0 +1,2103 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Logs - PTA Admin</title>
+    <style>
+        :root {
+            --blue-400: #3385FF;
+            --blue-500: #0066FF;
+            --blue-600: #0052CC;
+            --blue-700: #003D99;
+            --bg: #0a0c10;
+            --surface: #111318;
+            --surface2: #181c24;
+            --surface3: #1e2330;
+            --border: rgba(0, 102, 255, 0.15);
+            --border2: rgba(255, 255, 255, 0.06);
+            --text: #e8eaf0;
+            --muted: #6b7280;
+            --sidebar-w: 240px;
+            --green: #22c55e;
+            --yellow: #eab308;
+            --red: #ef4444;
+            --orange: #f97316;
+            --purple: #7c3aed;
+            --cyan: #0891b2;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            background-image: linear-gradient(rgba(0, 102, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 102, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+        }
+
+        /* ── SIDEBAR ── */
+        .sidebar {
+            width: var(--sidebar-w);
+            background: var(--surface);
+            border-right: 1px solid var(--border2);
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            z-index: 100;
+        }
+
+        .sidebar-brand {
+            padding: 22px 20px 18px;
+            border-bottom: 1px solid var(--border2);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-logo {
+            width: 36px;
+            height: 36px;
+            background: var(--blue-500);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .brand-logo svg {
+            width: 18px;
+            height: 18px;
+            fill: white;
+        }
+
+        .brand-text {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+            line-height: 1.3;
+        }
+
+        .brand-text span {
+            font-size: 11px;
+            font-weight: 400;
+            color: var(--muted);
+            display: block;
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            padding: 14px 10px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .nav-section-label {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--muted);
+            padding: 10px 10px 6px;
+            margin-top: 6px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            color: #9ca3af;
+            font-size: 13.5px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .nav-item:hover {
+            background: var(--surface2);
+            color: var(--text);
+        }
+
+        .nav-item.active {
+            background: rgba(0, 102, 255, 0.15);
+            color: var(--blue-400);
+            border: 1px solid rgba(0, 102, 255, 0.2);
+        }
+
+        .nav-item svg {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            flex-shrink: 0;
+        }
+
+        .nav-badge {
+            margin-left: auto;
+            background: var(--red);
+            color: white;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 10px;
+            min-width: 18px;
+            text-align: center;
+        }
+
+        .nav-badge.blue {
+            background: var(--blue-600);
+        }
+
+        .sidebar-bottom {
+            padding: 12px 10px;
+            border-top: 1px solid var(--border2);
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        /* ── MAIN ── */
+        .main {
+            margin-left: var(--sidebar-w);
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .topbar {
+            height: 58px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border2);
+            display: flex;
+            align-items: center;
+            padding: 0 28px;
+            gap: 16px;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .topbar-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text);
+            flex: 1;
+        }
+
+        .topbar-title span {
+            color: var(--muted);
+            font-weight: 400;
+            font-size: 13px;
+        }
+
+        .topbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .icon-btn {
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--muted);
+            transition: color 0.15s, border-color 0.15s;
+            position: relative;
+        }
+
+        .icon-btn:hover {
+            color: var(--text);
+            border-color: var(--border);
+        }
+
+        .icon-btn svg {
+            width: 15px;
+            height: 15px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+        }
+
+        .notif-dot {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            width: 7px;
+            height: 7px;
+            background: var(--red);
+            border-radius: 50%;
+            border: 1.5px solid var(--surface);
+        }
+
+        .admin-chip {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            border-radius: 20px;
+            padding: 4px 12px 4px 4px;
+            cursor: pointer;
+        }
+
+        .admin-avatar {
+            width: 26px;
+            height: 26px;
+            background: var(--blue-600);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            color: white;
+        }
+
+        .admin-chip span {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .content {
+            padding: 28px;
+            flex: 1;
+        }
+
+        /* ── STATS ── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 14px;
+            margin-bottom: 22px;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 14px;
+            padding: 18px;
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.2s, transform 0.2s;
+        }
+
+        .stat-card:hover {
+            border-color: var(--border);
+            transform: translateY(-2px);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            filter: blur(25px);
+            opacity: 0.25;
+        }
+
+        .stat-card.blue::before {
+            background: var(--blue-500);
+        }
+
+        .stat-card.green::before {
+            background: var(--green);
+        }
+
+        .stat-card.yellow::before {
+            background: var(--yellow);
+        }
+
+        .stat-card.red::before {
+            background: var(--red);
+        }
+
+        .stat-card.orange::before {
+            background: var(--orange);
+        }
+
+        .stat-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 12px;
+        }
+
+        .stat-icon svg {
+            width: 17px;
+            height: 17px;
+            fill: none;
+            stroke-width: 2;
+        }
+
+        .stat-card.blue .stat-icon {
+            background: rgba(0, 102, 255, 0.18);
+            border: 1px solid rgba(0, 102, 255, 0.3);
+        }
+
+        .stat-card.blue .stat-icon svg {
+            stroke: var(--blue-400);
+        }
+
+        .stat-card.green .stat-icon {
+            background: rgba(34, 197, 94, 0.14);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .stat-card.green .stat-icon svg {
+            stroke: var(--green);
+        }
+
+        .stat-card.yellow .stat-icon {
+            background: rgba(234, 179, 8, 0.14);
+            border: 1px solid rgba(234, 179, 8, 0.3);
+        }
+
+        .stat-card.yellow .stat-icon svg {
+            stroke: var(--yellow);
+        }
+
+        .stat-card.red .stat-icon {
+            background: rgba(239, 68, 68, 0.14);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .stat-card.red .stat-icon svg {
+            stroke: var(--red);
+        }
+
+        .stat-card.orange .stat-icon {
+            background: rgba(249, 115, 22, 0.14);
+            border: 1px solid rgba(249, 115, 22, 0.3);
+        }
+
+        .stat-card.orange .stat-icon svg {
+            stroke: var(--orange);
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 800;
+            line-height: 1;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 11.5px;
+            color: var(--muted);
+        }
+
+        .stat-sub {
+            font-size: 10.5px;
+            margin-top: 6px;
+        }
+
+        .stat-sub.up {
+            color: var(--green);
+        }
+
+        .stat-sub.down {
+            color: var(--red);
+        }
+
+        .stat-sub.warn {
+            color: var(--yellow);
+        }
+
+        /* ── CARDS ── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 14px;
+            overflow: hidden;
+            margin-bottom: 18px;
+        }
+
+        .card-header {
+            padding: 16px 22px;
+            border-bottom: 1px solid var(--border2);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .card-header h3 {
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .card-header p {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+
+        /* ── TWO COL ── */
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+
+        /* ── BUTTONS ── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border-radius: 8px;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.15s;
+        }
+
+        .btn svg {
+            width: 13px;
+            height: 13px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+        }
+
+        .btn-primary {
+            background: var(--blue-500);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--blue-600);
+            box-shadow: 0 4px 16px rgba(0, 102, 255, 0.3);
+        }
+
+        .btn-ghost {
+            background: var(--surface2);
+            color: var(--text);
+            border: 1px solid var(--border2);
+        }
+
+        .btn-ghost:hover {
+            border-color: var(--border);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--red);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.2);
+        }
+
+        .btn-warning {
+            background: rgba(234, 179, 8, 0.1);
+            color: var(--yellow);
+            border: 1px solid rgba(234, 179, 8, 0.2);
+        }
+
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 11px;
+            border-radius: 6px;
+        }
+
+        .btn-xs {
+            padding: 3px 8px;
+            font-size: 10px;
+            border-radius: 5px;
+        }
+
+        /* ── BADGES ── */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 9px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .badge.success {
+            background: rgba(34, 197, 94, 0.12);
+            color: var(--green);
+            border: 1px solid rgba(34, 197, 94, 0.25);
+        }
+
+        .badge.fail {
+            background: rgba(239, 68, 68, 0.12);
+            color: var(--red);
+            border: 1px solid rgba(239, 68, 68, 0.25);
+        }
+
+        .badge.warn {
+            background: rgba(234, 179, 8, 0.12);
+            color: var(--yellow);
+            border: 1px solid rgba(234, 179, 8, 0.25);
+        }
+
+        .badge.info {
+            background: rgba(0, 102, 255, 0.12);
+            color: var(--blue-400);
+            border: 1px solid rgba(0, 102, 255, 0.25);
+        }
+
+        .badge.block-b {
+            background: rgba(249, 115, 22, 0.12);
+            color: var(--orange);
+            border: 1px solid rgba(249, 115, 22, 0.25);
+        }
+
+        .badge.pending {
+            background: rgba(234, 179, 8, 0.12);
+            color: var(--yellow);
+            border: 1px solid rgba(234, 179, 8, 0.25);
+        }
+
+        .badge.sent {
+            background: rgba(34, 197, 94, 0.12);
+            color: var(--green);
+            border: 1px solid rgba(34, 197, 94, 0.25);
+        }
+
+        .badge.failed {
+            background: rgba(239, 68, 68, 0.12);
+            color: var(--red);
+            border: 1px solid rgba(239, 68, 68, 0.25);
+        }
+
+        .badge.create {
+            background: rgba(34, 197, 94, 0.1);
+            color: var(--green);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .badge.update {
+            background: rgba(0, 102, 255, 0.1);
+            color: var(--blue-400);
+            border: 1px solid rgba(0, 102, 255, 0.2);
+        }
+
+        .badge.delete {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--red);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .badge.login-b {
+            background: rgba(124, 58, 237, 0.1);
+            color: #a78bfa;
+            border: 1px solid rgba(124, 58, 237, 0.2);
+        }
+
+        /* ── TABS ── */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            background: var(--surface2);
+            padding: 4px;
+            border-radius: 10px;
+            width: fit-content;
+        }
+
+        .tab {
+            padding: 7px 18px;
+            border-radius: 7px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            color: var(--muted);
+            transition: all 0.15s;
+            border: none;
+            background: none;
+            font-family: Arial, sans-serif;
+        }
+
+        .tab.active {
+            background: var(--surface);
+            color: var(--text);
+            box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
+        }
+
+        .tab-count {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 1px 7px;
+            font-size: 10px;
+            margin-left: 5px;
+        }
+
+        .tab.active .tab-count {
+            background: rgba(0, 102, 255, 0.2);
+            color: var(--blue-400);
+        }
+
+        /* ── TOOLBAR ── */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 22px;
+            flex-wrap: wrap;
+            border-bottom: 1px solid var(--border2);
+        }
+
+        .search-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            border-radius: 9px;
+            padding: 8px 14px;
+            flex: 1;
+            min-width: 220px;
+            transition: border-color 0.2s;
+        }
+
+        .search-wrap:focus-within {
+            border-color: var(--blue-500);
+            box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1);
+        }
+
+        .search-wrap svg {
+            width: 14px;
+            height: 14px;
+            stroke: var(--muted);
+            fill: none;
+            stroke-width: 2;
+            flex-shrink: 0;
+        }
+
+        .search-wrap input {
+            background: none;
+            border: none;
+            outline: none;
+            font-family: Arial, sans-serif;
+            font-size: 13px;
+            color: var(--text);
+            flex: 1;
+        }
+
+        .search-wrap input::placeholder {
+            color: var(--muted);
+        }
+
+        .filter-select {
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            border-radius: 9px;
+            padding: 8px 12px;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            color: var(--text);
+            outline: none;
+            cursor: pointer;
+        }
+
+        .filter-select:focus {
+            border-color: var(--blue-500);
+        }
+
+        input[type="date"] {
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            border-radius: 9px;
+            padding: 7px 12px;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            color: var(--text);
+            outline: none;
+            cursor: pointer;
+        }
+
+        input[type="date"]:focus {
+            border-color: var(--blue-500);
+        }
+
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(0.5);
+            cursor: pointer;
+        }
+
+        /* ── LOG TABLE ── */
+        .log-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        .log-table thead th {
+            padding: 10px 16px;
+            text-align: left;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--muted);
+            background: var(--surface2);
+            border-bottom: 1px solid var(--border2);
+            white-space: nowrap;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .log-table thead th:hover {
+            color: var(--text);
+        }
+
+        .log-table tbody tr {
+            border-bottom: 1px solid var(--border2);
+            transition: background 0.12s;
+        }
+
+        .log-table tbody tr:hover {
+            background: rgba(0, 102, 255, 0.04);
+        }
+
+        .log-table tbody tr:last-child {
+            border-bottom: none;
+        }
+
+        .log-table tbody td {
+            padding: 11px 16px;
+            vertical-align: middle;
+        }
+
+        /* monospace cells */
+        .mono {
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: var(--muted);
+        }
+
+        .ip-cell {
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .ip-flag {
+            font-size: 14px;
+        }
+
+        /* user cell */
+        .user-cell {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+        }
+
+        .user-av {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 700;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .user-name {
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .user-email {
+            font-size: 10px;
+            color: var(--muted);
+        }
+
+        /* diff viewer */
+        .diff-box {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .diff-old {
+            background: rgba(239, 68, 68, 0.06);
+            border: 1px solid rgba(239, 68, 68, 0.15);
+            border-radius: 7px;
+            padding: 10px 12px;
+            font-size: 11px;
+            font-family: 'Courier New', monospace;
+            color: #fca5a5;
+        }
+
+        .diff-new {
+            background: rgba(34, 197, 94, 0.06);
+            border: 1px solid rgba(34, 197, 94, 0.15);
+            border-radius: 7px;
+            padding: 10px 12px;
+            font-size: 11px;
+            font-family: 'Courier New', monospace;
+            color: #86efac;
+        }
+
+        .diff-label {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 4px;
+        }
+
+        /* ── ALERT BANNER ── */
+        .alert-banner {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 18px;
+            border-radius: 12px;
+            margin-bottom: 18px;
+        }
+
+        .alert-banner.danger {
+            background: rgba(239, 68, 68, 0.08);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .alert-banner.warning {
+            background: rgba(234, 179, 8, 0.08);
+            border: 1px solid rgba(234, 179, 8, 0.2);
+        }
+
+        .alert-banner svg {
+            width: 16px;
+            height: 16px;
+            fill: none;
+            stroke-width: 2;
+            flex-shrink: 0;
+        }
+
+        .alert-banner.danger svg {
+            stroke: var(--red);
+        }
+
+        .alert-banner.warning svg {
+            stroke: var(--yellow);
+        }
+
+        .alert-banner p {
+            font-size: 13px;
+            line-height: 1.5;
+            flex: 1;
+        }
+
+        .alert-banner.danger p {
+            color: #fca5a5;
+        }
+
+        .alert-banner.warning p {
+            color: var(--yellow);
+        }
+
+        /* ── MINI BARS ── */
+        .bar-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .bar-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .bar-label {
+            font-size: 12px;
+            color: var(--muted);
+            width: 100px;
+            flex-shrink: 0;
+        }
+
+        .bar-track {
+            flex: 1;
+            height: 5px;
+            background: var(--surface3);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: 10px;
+        }
+
+        .bar-fill.blue {
+            background: var(--blue-500);
+        }
+
+        .bar-fill.green {
+            background: var(--green);
+        }
+
+        .bar-fill.red {
+            background: var(--red);
+        }
+
+        .bar-fill.yellow {
+            background: var(--yellow);
+        }
+
+        .bar-fill.orange {
+            background: var(--orange);
+        }
+
+        .bar-val {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text);
+            width: 36px;
+            text-align: right;
+        }
+
+        /* ── LIVE DOT ── */
+        .live-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--green);
+            animation: pulse 2s infinite;
+            flex-shrink: 0;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5);
+            }
+
+            50% {
+                box-shadow: 0 0 0 5px rgba(34, 197, 94, 0);
+            }
+        }
+
+        /* ── PAGINATION ── */
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 13px 20px;
+            border-top: 1px solid var(--border2);
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .page-btns {
+            display: flex;
+            gap: 4px;
+        }
+
+        .page-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 7px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text);
+            transition: all 0.15s;
+        }
+
+        .page-btn:hover {
+            border-color: var(--border);
+        }
+
+        .page-btn.active {
+            background: var(--blue-500);
+            border-color: var(--blue-500);
+            color: white;
+        }
+
+        .page-btn svg {
+            width: 12px;
+            height: 12px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+        }
+
+        /* ── MODAL ── */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: rgba(0, 0, 0, 0.72);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .modal-overlay.open {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .modal {
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 18px;
+            width: 560px;
+            max-width: 96vw;
+            max-height: 90vh;
+            overflow-y: auto;
+            transform: scale(0.95) translateY(20px);
+            transition: transform 0.2s;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+        }
+
+        .modal-overlay.open .modal {
+            transform: scale(1) translateY(0);
+        }
+
+        .modal-header {
+            padding: 22px 24px 18px;
+            border-bottom: 1px solid var(--border2);
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .modal-header h3 {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .modal-header p {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 3px;
+        }
+
+        .modal-close {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--muted);
+            flex-shrink: 0;
+        }
+
+        .modal-close:hover {
+            color: var(--text);
+        }
+
+        .modal-close svg {
+            width: 14px;
+            height: 14px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+        }
+
+        .modal-body {
+            padding: 22px 24px;
+        }
+
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid var(--border2);
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .detail-row {
+            display: flex;
+            border-bottom: 1px solid var(--border2);
+            padding: 10px 0;
+            gap: 12px;
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--muted);
+            width: 130px;
+            flex-shrink: 0;
+            padding-top: 1px;
+        }
+
+        .detail-value {
+            font-size: 13px;
+            color: var(--text);
+            flex: 1;
+            word-break: break-all;
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 28px;
+            right: 28px;
+            z-index: 999;
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 12px;
+            padding: 14px 18px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            transform: translateY(80px);
+            opacity: 0;
+            transition: transform 0.3s, opacity 0.3s;
+            font-size: 13px;
+            min-width: 260px;
+        }
+
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .toast-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .toast.success .toast-dot {
+            background: var(--green);
+        }
+
+        .toast.error .toast-dot {
+            background: var(--red);
+        }
+
+        .toast.info .toast-dot {
+            background: var(--blue-500);
+        }
+
+        .toast.warning .toast-dot {
+            background: var(--yellow);
+        }
+
+        @media(max-width:1100px) {
+            .stats-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .two-col {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media(max-width:768px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+
+            .main {
+                margin-left: 0;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ── SIDEBAR ── -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-logo"><svg viewBox="0 0 24 24">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                </svg></div>
+            <div class="brand-text">PTA Portal <span>Admin Panel</span></div>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-section-label">Main</div>
+            <a class="nav-item" href="admin-dashboard.html">
+                <svg viewBox="0 0 24 24">
+                    <rect x="3" y="3" width="7" height="7" rx="1" />
+                    <rect x="14" y="3" width="7" height="7" rx="1" />
+                    <rect x="3" y="14" width="7" height="7" rx="1" />
+                    <rect x="14" y="14" width="7" height="7" rx="1" />
+                </svg>System Overview
+            </a>
+            <div class="nav-section-label">Management</div>
+            <a class="nav-item" href="user-management.html">
+                <svg viewBox="0 0 24 24">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>User Management
+                <span class="nav-badge blue">2,840</span>
+            </a>
+            <a class="nav-item" href="test-management.html">
+                <svg viewBox="0 0 24 24">
+                    <path d="M9 11l3 3L22 4" />
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                </svg>Test Management
+                <span class="nav-badge">12</span>
+            </a>
+            <a class="nav-item" href="resources.html">
+                <svg viewBox="0 0 24 24">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                </svg>Resources
+            </a>
+            <div class="nav-section-label">System</div>
+            <a class="nav-item active" href="system-logs.html">
+                <svg viewBox="0 0 24 24">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                </svg>System Logs
+                <span class="nav-badge">3</span>
+            </a>
+            <div class="nav-section-label">Account</div>
+            <a class="nav-item" href="#"><svg viewBox="0 0 24 24">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                </svg>Profile</a>
+            <a class="nav-item" href="#"><svg viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="3" />
+                    <path
+                        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>Settings</a>
+        </nav>
+        <div class="sidebar-bottom">
+            <a class="nav-item" style="color:#ef4444;"
+                onclick="if(confirm('Log out?'))location.href='admin-login.html'">
+                <svg viewBox="0 0 24 24">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>Log Out
+            </a>
+        </div>
+    </aside>
+
+    <!-- ── MAIN ── -->
+    <div class="main">
+        <header class="topbar">
+            <div class="topbar-title" id="topbarTitle">System Logs <span>/ Login Activity</span></div>
+            <div class="topbar-actions">
+                <div class="icon-btn"><svg viewBox="0 0 24 24">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                    </svg>
+                    <div class="notif-dot"></div>
+                </div>
+                <div class="icon-btn" onclick="showToast('Logs refreshed','success')" title="Refresh">
+                    <svg viewBox="0 0 24 24">
+                        <polyline points="23 4 23 10 17 10" />
+                        <polyline points="1 20 1 14 7 14" />
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                    </svg>
+                </div>
+                <div class="admin-chip">
+                    <div class="admin-avatar">SA</div><span>Super Admin</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="content">
+
+            <!-- Page Header -->
+            <div
+                style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:12px;">
+                <div>
+                    <h2 style="font-size:18px;font-weight:800;">System Logs</h2>
+                    <p style="font-size:13px;color:var(--muted);margin-top:3px;">Real-time monitoring of <code
+                            style="color:var(--blue-400);font-size:11px;">login_activity</code>, <code
+                            style="color:var(--blue-400);font-size:11px;">audit_logs</code> &amp; <code
+                            style="color:var(--blue-400);font-size:11px;">email_queue</code></p>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                    <div
+                        style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--green);background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);padding:5px 12px;border-radius:20px;">
+                        <div class="live-dot"></div> Live monitoring
+                    </div>
+                    <button class="btn btn-ghost" onclick="exportLogs()">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>Export Logs
+                    </button>
+                    <button class="btn btn-danger btn-sm"
+                        onclick="if(confirm('Clear all logs? This cannot be undone.'))showToast('Logs cleared','error')">
+                        <svg viewBox="0 0 24 24">
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6l-1 14H6L5 6" />
+                        </svg>Clear Logs
+                    </button>
+                </div>
+            </div>
+
+            <!-- Security Alerts -->
+            <div class="alert-banner danger">
+                <svg viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                <p><strong>Security Alert:</strong> IP <code style="color:#fca5a5;">192.168.1.44</code> has made
+                    <strong>5 failed login attempts</strong> in the last 30 minutes. Account lockout triggered. <a
+                        href="#" style="color:var(--red);text-decoration:underline;"
+                        onclick="showToast('IP blocked','success')">Block IP</a></p>
+                <button class="btn btn-sm"
+                    style="background:rgba(239,68,68,0.15);color:var(--red);border:1px solid rgba(239,68,68,0.25);flex-shrink:0;"
+                    onclick="this.closest('.alert-banner').style.display='none'">Dismiss</button>
+            </div>
+            <div class="alert-banner warning">
+                <svg viewBox="0 0 24 24">
+                    <path
+                        d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                <p><strong>Email Queue Warning:</strong> 3 emails have failed delivery after max retries. Check SMTP
+                    configuration in Settings.</p>
+                <button class="btn btn-sm"
+                    style="background:rgba(234,179,8,0.15);color:var(--yellow);border:1px solid rgba(234,179,8,0.25);flex-shrink:0;"
+                    onclick="this.closest('.alert-banner').style.display='none'">Dismiss</button>
+            </div>
+
+            <!-- Stats -->
+            <div class="stats-grid">
+                <div class="stat-card blue">
+                    <div class="stat-icon"><svg viewBox="0 0 24 24">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                            <circle cx="9" cy="7" r="4" />
+                        </svg></div>
+                    <div class="stat-value">1,284</div>
+                    <div class="stat-label">Total Login Events</div>
+                    <div class="stat-sub up">↑ 42 today</div>
+                </div>
+                <div class="stat-card green">
+                    <div class="stat-icon"><svg viewBox="0 0 24 24">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                            <polyline points="22 4 12 14.01 9 11.01" />
+                        </svg></div>
+                    <div class="stat-value">1,221</div>
+                    <div class="stat-label">Successful Logins</div>
+                    <div class="stat-sub up">95.1% success rate</div>
+                </div>
+                <div class="stat-card red">
+                    <div class="stat-icon"><svg viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                        </svg></div>
+                    <div class="stat-value">63</div>
+                    <div class="stat-label">Failed Logins</div>
+                    <div class="stat-sub down">5 from suspicious IP</div>
+                </div>
+                <div class="stat-card yellow">
+                    <div class="stat-icon"><svg viewBox="0 0 24 24">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg></div>
+                    <div class="stat-value">408</div>
+                    <div class="stat-label">Audit Log Entries</div>
+                    <div class="stat-sub">12 today</div>
+                </div>
+                <div class="stat-card orange">
+                    <div class="stat-icon"><svg viewBox="0 0 24 24">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                            <polyline points="22,6 12,13 2,6" />
+                        </svg></div>
+                    <div class="stat-value">96</div>
+                    <div class="stat-label">Emails in Queue</div>
+                    <div class="stat-sub warn">3 failed</div>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="two-col">
+                <div class="card" style="margin-bottom:0;">
+                    <div class="card-header">
+                        <div>
+                            <h3>Login Activity Breakdown</h3>
+                            <p>Events by result type</p>
+                        </div>
+                    </div>
+                    <div style="padding:20px 22px;">
+                        <div class="bar-chart">
+                            <div class="bar-row">
+                                <div class="bar-label">Success</div>
+                                <div class="bar-track">
+                                    <div class="bar-fill green" style="width:95%"></div>
+                                </div>
+                                <div class="bar-val">1,221</div>
+                            </div>
+                            <div class="bar-row">
+                                <div class="bar-label">Wrong Pwd</div>
+                                <div class="bar-track">
+                                    <div class="bar-fill red" style="width:35%"></div>
+                                </div>
+                                <div class="bar-val">38</div>
+                            </div>
+                            <div class="bar-row">
+                                <div class="bar-label">Locked Out</div>
+                                <div class="bar-track">
+                                    <div class="bar-fill orange" style="width:14%"></div>
+                                </div>
+                                <div class="bar-val">15</div>
+                            </div>
+                            <div class="bar-row">
+                                <div class="bar-label">OTP Reset</div>
+                                <div class="bar-track">
+                                    <div class="bar-fill yellow" style="width:8%"></div>
+                                </div>
+                                <div class="bar-val">10</div>
+                            </div>
+                        </div>
+                        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border2);">
+                            <div
+                                style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:10px;">
+                                Top IPs Today</div>
+                            <div style="display:flex;flex-direction:column;gap:6px;">
+                                <div style="display:flex;justify-content:space-between;font-size:12px;"><code
+                                        style="color:var(--blue-400);">10.0.1.21</code><span
+                                        style="color:var(--green);">14 logins — clean</span></div>
+                                <div style="display:flex;justify-content:space-between;font-size:12px;"><code
+                                        style="color:var(--blue-400);">10.0.1.8</code><span
+                                        style="color:var(--green);">9 logins — clean</span></div>
+                                <div style="display:flex;justify-content:space-between;font-size:12px;"><code
+                                        style="color:var(--red);">192.168.1.44</code><span style="color:var(--red);">5
+                                        failures — BLOCKED</span></div>
+                                <div style="display:flex;justify-content:space-between;font-size:12px;"><code
+                                        style="color:var(--blue-400);">10.0.2.14</code><span
+                                        style="color:var(--yellow);">3 logins — new device</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card" style="margin-bottom:0;">
+                    <div class="card-header">
+                        <div>
+                            <h3>Audit Actions Breakdown</h3>
+                            <p>Sensitive operations today</p>
+                        </div>
+                    </div>
+                    <div style="padding:20px 22px;">
+                        <div class="bar-chart">
+                            <div class="bar-row">
+                                <div class="bar-label">User Updates</div>
+                                <div class="bar-track">
+                                    <div class="bar-fill blue" style="width:80%"></div>
+                                </div>
+                                <div class="bar-val">48</div>
+                            </div>
+                            <div class="bar-row">
+                                <div class="bar-label">Assessment</div>
+                                <div class="bar-track">
+                                    <div class="bar-fill green" style="width:60%"></div>
+                                </div>
+                                <div class="bar-val">36</div>
+                            </div>
+                            <div class="bar-row">
+                                <div class="bar-label">Settings</div>
+                                <div class="bar-track">
+                                    <div class="bar-fill yellow" style="width:28%"></div>
+                                </div>
+                                <div class="bar-val">17</div>
+                            </div>
+                            <div class="bar-row">
+                                <div class="bar-label">Deletions</div>
+                                <div class="bar-track">
+                                    <div class="bar-fill red" style="width:20%"></div>
+                                </div>
+                                <div class="bar-val">12</div>
+                            </div>
+                            <div class="bar-row">
+                                <div class="bar-label">File Uploads</div>
+                                <div class="bar-track">
+                                    <div class="bar-fill orange" style="width:14%"></div>
+                                </div>
+                                <div class="bar-val">8</div>
+                            </div>
+                        </div>
+                        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border2);">
+                            <div
+                                style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:10px;">
+                                Email Queue Status</div>
+                            <div style="display:flex;gap:20px;">
+                                <div style="text-align:center;">
+                                    <div style="font-size:18px;font-weight:800;color:var(--yellow);">18</div>
+                                    <div style="font-size:11px;color:var(--muted);">Pending</div>
+                                </div>
+                                <div style="text-align:center;">
+                                    <div style="font-size:18px;font-weight:800;color:var(--green);">75</div>
+                                    <div style="font-size:11px;color:var(--muted);">Sent</div>
+                                </div>
+                                <div style="text-align:center;">
+                                    <div style="font-size:18px;font-weight:800;color:var(--red);">3</div>
+                                    <div style="font-size:11px;color:var(--muted);">Failed</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Log Card -->
+            <div class="card">
+                <!-- Tab header -->
+                <div
+                    style="padding:16px 22px 0;border-bottom:1px solid var(--border2);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                    <div class="tabs" style="margin-bottom:0;">
+                        <button class="tab active" onclick="switchTab(this,'login')">Login Activity <span
+                                class="tab-count">1,284</span></button>
+                        <button class="tab" onclick="switchTab(this,'audit')">Audit Log <span
+                                class="tab-count">408</span></button>
+                        <button class="tab" onclick="switchTab(this,'email')">Email Queue <span
+                                class="tab-count">96</span></button>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);">
+                        <div class="live-dot"></div> Auto-refreshing every 30s
+                    </div>
+                </div>
+
+                <!-- Toolbar -->
+                <div class="toolbar">
+                    <div class="search-wrap">
+                        <svg viewBox="0 0 24 24">
+                            <circle cx="11" cy="11" r="8" />
+                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                        <input id="logSearch" placeholder="Search by user, IP, action, email..."
+                            oninput="renderLogs()" />
+                    </div>
+                    <select class="filter-select" id="logFilter" onchange="renderLogs()">
+                        <option value="">All Results</option>
+                        <option value="success">Success</option>
+                        <option value="fail">Failed</option>
+                        <option value="blocked">Blocked</option>
+                        <option value="otp">OTP</option>
+                    </select>
+                    <input type="date" id="dateFrom" onchange="renderLogs()" title="From date" />
+                    <input type="date" id="dateTo" onchange="renderLogs()" title="To date" />
+                    <button class="btn btn-ghost btn-sm" onclick="clearFilters()">
+                        <svg viewBox="0 0 24 24">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>Clear
+                    </button>
+                </div>
+
+                <!-- Tables (swapped by tab) -->
+                <div id="loginView">
+                    <div class="table-wrap">
+                        <table class="log-table">
+                            <thead>
+                                <tr>
+                                    <th onclick="sortLog('time')">Timestamp ↕</th>
+                                    <th onclick="sortLog('result')">Result ↕</th>
+                                    <th>User</th>
+                                    <th onclick="sortLog('ip')">IP Address ↕</th>
+                                    <th>Device / Browser</th>
+                                    <th>Reason</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="loginBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="auditView" style="display:none;">
+                    <div class="table-wrap">
+                        <table class="log-table">
+                            <thead>
+                                <tr>
+                                    <th onclick="sortLog('time')">Timestamp ↕</th>
+                                    <th onclick="sortLog('action')">Action ↕</th>
+                                    <th>User</th>
+                                    <th onclick="sortLog('entity')">Entity ↕</th>
+                                    <th>Entity ID</th>
+                                    <th>IP Address</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="auditBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="emailView" style="display:none;">
+                    <div class="table-wrap">
+                        <table class="log-table">
+                            <thead>
+                                <tr>
+                                    <th onclick="sortLog('time')">Created ↕</th>
+                                    <th onclick="sortLog('status')">Status ↕</th>
+                                    <th>Recipient</th>
+                                    <th>Subject</th>
+                                    <th onclick="sortLog('type')">Type ↕</th>
+                                    <th>Attempts</th>
+                                    <th>Sent At</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="emailBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="pagination">
+                    <span id="logInfo">Showing 1–10 of 1,284</span>
+                    <div class="page-btns">
+                        <div class="page-btn"><svg viewBox="0 0 24 24">
+                                <polyline points="15 18 9 12 15 6" />
+                            </svg></div>
+                        <div class="page-btn active">1</div>
+                        <div class="page-btn">2</div>
+                        <div class="page-btn">3</div>
+                        <div class="page-btn">…</div>
+                        <div class="page-btn">129</div>
+                        <div class="page-btn"><svg viewBox="0 0 24 24">
+                                <polyline points="9 18 15 12 9 6" />
+                            </svg></div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ════════ LOGIN DETAIL MODAL ════════ -->
+    <div class="modal-overlay" id="loginModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div>
+                    <h3>Login Event Detail</h3>
+                    <p>Full record from <code style="color:var(--blue-400);font-size:11px;">login_activity</code></p>
+                </div>
+                <div class="modal-close" onclick="closeModal('loginModal')"><svg viewBox="0 0 24 24">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg></div>
+            </div>
+            <div class="modal-body" id="loginDetail"></div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('loginModal')">Close</button>
+                <button class="btn btn-danger" id="loginBlockBtn">Block This IP</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ════════ AUDIT DETAIL MODAL ════════ -->
+    <div class="modal-overlay" id="auditModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div>
+                    <h3>Audit Log Detail</h3>
+                    <p>Full record from <code style="color:var(--blue-400);font-size:11px;">audit_logs</code></p>
+                </div>
+                <div class="modal-close" onclick="closeModal('auditModal')"><svg viewBox="0 0 24 24">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg></div>
+            </div>
+            <div class="modal-body" id="auditDetail"></div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('auditModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ════════ EMAIL DETAIL MODAL ════════ -->
+    <div class="modal-overlay" id="emailModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div>
+                    <h3>Email Queue Detail</h3>
+                    <p>Full record from <code style="color:var(--blue-400);font-size:11px;">email_queue</code></p>
+                </div>
+                <div class="modal-close" onclick="closeModal('emailModal')"><svg viewBox="0 0 24 24">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg></div>
+            </div>
+            <div class="modal-body" id="emailDetail"></div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('emailModal')">Close</button>
+                <button class="btn btn-primary" id="emailRetryBtn">Retry Send</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast">
+        <div class="toast-dot"></div><span id="toastMsg"></span>
+    </div>
+
+    <script>
+        // ── DATA ──
+        const avColors = ['#0052CC', '#16a34a', '#7c3aed', '#c2410c', '#0e7490', '#92400e'];
+        const randColor = name => avColors[name.charCodeAt(0) % avColors.length];
+        const initials = name => name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+
+        const loginLogs = [
+            { id: 1, time: '2026-03-01 14:32:18', user: 'Rahul Kumar', email: 'rahul@college.edu', ip: '10.0.1.21', device: 'Chrome 121 / Windows', result: 'success', reason: '' },
+            { id: 2, time: '2026-03-01 14:28:04', user: 'Unknown', email: 'unknown', ip: '192.168.1.44', device: 'Firefox / Linux', result: 'fail', reason: 'Invalid password (5th attempt)' },
+            { id: 3, time: '2026-03-01 14:27:51', user: 'Unknown', email: 'unknown', ip: '192.168.1.44', device: 'Firefox / Linux', result: 'fail', reason: 'Invalid password (4th attempt)' },
+            { id: 4, time: '2026-03-01 14:15:33', user: 'Anita Sharma', email: 'anita@college.edu', ip: '10.0.1.8', device: 'Safari / macOS', result: 'success', reason: '' },
+            { id: 5, time: '2026-03-01 13:58:02', user: 'Priya Menon', email: 'priya@college.edu', ip: '10.0.1.55', device: 'Chrome / Android', result: 'otp', reason: 'Password reset OTP sent' },
+            { id: 6, time: '2026-03-01 13:40:11', user: 'Super Admin', email: 'admin@pta.edu', ip: '10.0.0.1', device: 'Chrome / Windows', result: 'success', reason: '' },
+            { id: 7, time: '2026-03-01 13:12:44', user: 'Vikram Rao', email: 'vikram@college.edu', ip: '10.0.1.33', device: 'Chrome / Windows', result: 'blocked', reason: 'Max login attempts exceeded' },
+            { id: 8, time: '2026-03-01 12:05:29', user: 'Rahul Kumar', email: 'rahul@college.edu', ip: '10.0.2.14', device: 'Chrome / iPhone', result: 'success', reason: 'New device detected' },
+            { id: 9, time: '2026-03-01 11:44:18', user: 'Sneha Patel', email: 'sneha@college.edu', ip: '10.0.1.9', device: 'Edge / Windows', result: 'success', reason: '' },
+            { id: 10, time: '2026-03-01 10:30:05', user: 'Nisha Kapoor', email: 'nisha@college.edu', ip: '10.0.1.8', device: 'Chrome / macOS', result: 'success', reason: '' },
+        ];
+
+        const auditLogs = [
+            { id: 1, time: '2026-03-01 14:30:00', user: 'Super Admin', action: 'UPDATE_USER', entity: 'user', entityId: 3, ip: '10.0.0.1', oldVal: { status: 'Active' }, newVal: { status: 'Blocked' } },
+            { id: 2, time: '2026-03-01 14:20:00', user: 'Prof. Anita', action: 'CREATE_ASSESSMENT', entity: 'assessment', entityId: 9, ip: '10.0.1.8', oldVal: null, newVal: { title: 'OS Concepts Quiz', status: 'draft' } },
+            { id: 3, time: '2026-03-01 13:55:00', user: 'Super Admin', action: 'DELETE_MATERIAL', entity: 'material', entityId: 14, ip: '10.0.0.1', oldVal: { title: 'Old CV Tips PDF' }, newVal: null },
+            { id: 4, time: '2026-03-01 13:40:00', user: 'Super Admin', action: 'UPDATE_SETTING', entity: 'setting', entityId: null, ip: '10.0.0.1', oldVal: { otp_expiry_minutes: '10' }, newVal: { otp_expiry_minutes: '15' } },
+            { id: 5, time: '2026-03-01 13:10:00', user: 'Prof. Nisha', action: 'PUBLISH_ASSESSMENT', entity: 'assessment', entityId: 8, ip: '10.0.1.8', oldVal: { status: 'draft' }, newVal: { status: 'active' } },
+            { id: 6, time: '2026-03-01 12:45:00', user: 'Super Admin', action: 'CREATE_USER', entity: 'user', entityId: 42, ip: '10.0.0.1', oldVal: null, newVal: { name: 'Arjun Das', role: 'student' } },
+            { id: 7, time: '2026-03-01 12:00:00', user: 'Prof. Anita', action: 'UPLOAD_MATERIAL', entity: 'material', entityId: 13, ip: '10.0.1.8', oldVal: null, newVal: { title: 'System Design Notes', type: 'pdf' } },
+            { id: 8, time: '2026-03-01 11:30:00', user: 'Super Admin', action: 'DELETE_USER', entity: 'user', entityId: 39, ip: '10.0.0.1', oldVal: { name: 'Test User', role: 'student' }, newVal: null },
+        ];
+
+        const emailQueue = [
+            { id: 1, time: '2026-03-01 14:32:00', recipient: 'rahul@college.edu', name: 'Rahul Kumar', subject: 'Login from new device detected', type: 'notification', status: 'sent', attempts: 1, sentAt: '2026-03-01 14:32:05', error: '' },
+            { id: 2, time: '2026-03-01 13:58:00', recipient: 'priya@college.edu', name: 'Priya Menon', subject: 'Your OTP for password reset is 482910', type: 'password_reset', status: 'sent', attempts: 1, sentAt: '2026-03-01 13:58:10', error: '' },
+            { id: 3, time: '2026-03-01 13:00:00', recipient: 'batch@college.edu', name: 'Batch CSE', subject: 'New assessment available: DS Mock 3', type: 'notification', status: 'failed', attempts: 3, sentAt: '', error: 'SMTP connection refused' },
+            { id: 4, time: '2026-03-01 12:45:00', recipient: 'arjun@college.edu', name: 'Arjun Das', subject: 'Welcome to PTA Portal!', type: 'verification', status: 'sent', attempts: 1, sentAt: '2026-03-01 12:45:18', error: '' },
+            { id: 5, time: '2026-03-01 12:00:00', recipient: 'vikram@college.edu', name: 'Vikram Rao', subject: 'Account temporarily locked', type: 'notification', status: 'sent', attempts: 1, sentAt: '2026-03-01 12:00:22', error: '' },
+            { id: 6, time: '2026-03-01 11:30:00', recipient: 'sneha@college.edu', name: 'Sneha Patel', subject: 'Your assessment result is ready', type: 'result', status: 'sent', attempts: 1, sentAt: '2026-03-01 11:30:30', error: '' },
+            { id: 7, time: '2026-03-01 10:00:00', recipient: 'bulk@college.edu', name: 'All Students', subject: 'Aptitude Test scheduled for March 15', type: 'reminder', status: 'pending', attempts: 0, sentAt: '', error: '' },
+            { id: 8, time: '2026-03-01 09:30:00', recipient: 'nisha@college.edu', name: 'Nisha Kapoor', subject: 'Resource upload confirmation', type: 'notification', status: 'failed', attempts: 3, sentAt: '', error: 'Invalid recipient address' },
+        ];
+
+        let currentTab = 'login';
+        let logSortKey = 'time'; let logSortDir = -1;
+
+        // ── RESULT BADGE ──
+        function resultBadge(r) {
+            const map = { success: `<span class="badge success">✓ SUCCESS</span>`, fail: `<span class="badge fail">✗ FAIL</span>`, blocked: `<span class="badge block-b">⊘ BLOCKED</span>`, otp: `<span class="badge warn">⟳ OTP</span>` };
+            return map[r] || r;
+        }
+        function actionBadge(a) {
+            if (a.includes('CREATE') || a.includes('UPLOAD') || a.includes('PUBLISH')) return `<span class="badge create">${a}</span>`;
+            if (a.includes('UPDATE')) return `<span class="badge update">${a}</span>`;
+            if (a.includes('DELETE')) return `<span class="badge delete">${a}</span>`;
+            return `<span class="badge login-b">${a}</span>`;
+        }
+        function emailStatusBadge(s) {
+            return { sent: `<span class="badge sent">✓ Sent</span>`, failed: `<span class="badge failed">✗ Failed</span>`, pending: `<span class="badge pending">⟳ Pending</span>` }[s] || s;
+        }
+
+        // ── RENDER ──
+        function renderLogs() {
+            if (currentTab === 'login') renderLogin();
+            if (currentTab === 'audit') renderAudit();
+            if (currentTab === 'email') renderEmail();
+        }
+
+        function renderLogin() {
+            const s = document.getElementById('logSearch').value.toLowerCase();
+            const f = document.getElementById('logFilter').value;
+            let data = loginLogs.filter(l => {
+                const ms = !s || l.user.toLowerCase().includes(s) || l.email.toLowerCase().includes(s) || l.ip.includes(s) || l.reason.toLowerCase().includes(s);
+                const mf = !f || l.result === f;
+                return ms && mf;
+            });
+            document.getElementById('logInfo').textContent = `Showing 1–${data.length} of 1,284`;
+            document.getElementById('loginBody').innerHTML = data.map(l => `
+        <tr>
+            <td class="mono">${l.time}</td>
+            <td>${resultBadge(l.result)}</td>
+            <td>
+                <div class="user-cell">
+                    <div class="user-av" style="background:${randColor(l.user)}">${initials(l.user)}</div>
+                    <div>
+                        <div class="user-name">${l.user}</div>
+                        <div class="user-email">${l.email}</div>
+                    </div>
+                </div>
+            </td>
+            <td>
+                <div class="ip-cell">
+                    ${l.ip.startsWith('192') ? '<span style="color:var(--red);">⚠</span>' : ''}
+                    <code style="color:${l.ip.startsWith('192') ? 'var(--red)' : 'var(--blue-400)'}">${l.ip}</code>
+                </div>
+            </td>
+            <td style="color:var(--muted);font-size:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${l.device}</td>
+            <td style="font-size:12px;color:var(--muted);max-width:180px;">${l.reason || '—'}</td>
+            <td>
+                <div style="display:flex;gap:4px;">
+                    <button class="btn btn-ghost btn-xs" onclick="viewLoginLog(${l.id})">Detail</button>
+                    ${l.ip.startsWith('192') ? `<button class="btn btn-danger btn-xs" onclick="showToast('IP ${l.ip} blocked','success')">Block IP</button>` : ''}
+                </div>
+            </td>
+        </tr>
+    `).join('');
+        }
+
+        function renderAudit() {
+            const s = document.getElementById('logSearch').value.toLowerCase();
+            let data = auditLogs.filter(l => !s || l.user.toLowerCase().includes(s) || l.action.toLowerCase().includes(s) || l.entity.toLowerCase().includes(s));
+            document.getElementById('logInfo').textContent = `Showing 1–${data.length} of 408`;
+            document.getElementById('auditBody').innerHTML = data.map(l => `
+        <tr>
+            <td class="mono">${l.time}</td>
+            <td>${actionBadge(l.action)}</td>
+            <td>
+                <div class="user-cell">
+                    <div class="user-av" style="background:${randColor(l.user)}">${initials(l.user)}</div>
+                    <div class="user-name">${l.user}</div>
+                </div>
+            </td>
+            <td><code style="color:var(--blue-400);font-size:11px;">${l.entity}</code></td>
+            <td class="mono">${l.entityId !== null ? '#' + l.entityId : '—'}</td>
+            <td><code style="color:var(--muted);font-size:11px;">${l.ip}</code></td>
+            <td><button class="btn btn-ghost btn-xs" onclick="viewAuditLog(${l.id})">Detail</button></td>
+        </tr>
+    `).join('');
+        }
+
+        function renderEmail() {
+            const s = document.getElementById('logSearch').value.toLowerCase();
+            const f = document.getElementById('logFilter').value;
+            let data = emailQueue.filter(l => {
+                const ms = !s || l.recipient.toLowerCase().includes(s) || l.subject.toLowerCase().includes(s) || l.name.toLowerCase().includes(s);
+                const mf = !f || l.status === f;
+                return ms && mf;
+            });
+            document.getElementById('logInfo').textContent = `Showing 1–${data.length} of 96`;
+            document.getElementById('emailBody').innerHTML = data.map(l => `
+        <tr>
+            <td class="mono">${l.time}</td>
+            <td>${emailStatusBadge(l.status)}</td>
+            <td>
+                <div>
+                    <div style="font-size:12px;font-weight:600;">${l.name}</div>
+                    <div style="font-size:11px;color:var(--muted);">${l.recipient}</div>
+                </div>
+            </td>
+            <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${l.subject}">${l.subject}</td>
+            <td><span class="badge info" style="font-size:10px;">${l.type}</span></td>
+            <td style="font-size:12px;text-align:center;color:${l.attempts >= 3 ? 'var(--red)' : 'var(--muted)'};">${l.attempts}</td>
+            <td class="mono">${l.sentAt || '—'}</td>
+            <td>
+                <div style="display:flex;gap:4px;">
+                    <button class="btn btn-ghost btn-xs" onclick="viewEmailLog(${l.id})">Detail</button>
+                    ${l.status === 'failed' ? `<button class="btn btn-primary btn-xs" onclick="retryEmail(${l.id})">Retry</button>` : ''}
+                </div>
+            </td>
+        </tr>
+    `).join('');
+        }
+
+        // ── TAB SWITCH ──
+        function switchTab(el, tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            el.classList.add('active');
+            currentTab = tab;
+            document.getElementById('loginView').style.display = tab === 'login' ? 'block' : 'none';
+            document.getElementById('auditView').style.display = tab === 'audit' ? 'block' : 'none';
+            document.getElementById('emailView').style.display = tab === 'email' ? 'block' : 'none';
+
+            // update topbar
+            const titles = { login: 'Login Activity', audit: 'Audit Log', email: 'Email Queue' };
+            document.getElementById('topbarTitle').innerHTML = `System Logs <span>/ ${titles[tab]}</span>`;
+
+            // update filter options
+            const f = document.getElementById('logFilter');
+            f.innerHTML = tab === 'login'
+                ? `<option value="">All Results</option><option value="success">Success</option><option value="fail">Failed</option><option value="blocked">Blocked</option><option value="otp">OTP</option>`
+                : tab === 'email'
+                    ? `<option value="">All Status</option><option value="sent">Sent</option><option value="pending">Pending</option><option value="failed">Failed</option>`
+                    : `<option value="">All Actions</option>`;
+            renderLogs();
+        }
+
+        // ── DETAIL MODALS ──
+        function viewLoginLog(id) {
+            const l = loginLogs.find(x => x.id === id);
+            if (!l) return;
+            document.getElementById('loginDetail').innerHTML = `
+        <div style="display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--border2);margin-bottom:16px;">
+            <div class="user-av" style="background:${randColor(l.user)};width:42px;height:42px;font-size:14px;">${initials(l.user)}</div>
+            <div><div style="font-size:15px;font-weight:700;">${l.user}</div><div style="font-size:12px;color:var(--muted);">${l.email}</div></div>
+            <div style="margin-left:auto;">${resultBadge(l.result)}</div>
+        </div>
+        ${[
+                    { l: 'Log ID', v: `#${l.id}` },
+                    { l: 'Timestamp', v: `<code class="mono">${l.time}</code>` },
+                    { l: 'IP Address', v: `<code style="color:${l.ip.startsWith('192') ? 'var(--red)' : 'var(--blue-400)'}">${l.ip}</code>${l.ip.startsWith('192') ? ' <span style="color:var(--red);font-size:11px;">⚠ Suspicious</span>' : ''}` },
+                    { l: 'Result', v: resultBadge(l.result) },
+                    { l: 'Device', v: l.device },
+                    { l: 'Failure Reason', v: l.reason || '<span style="color:var(--muted)">None</span>' },
+                ].map(r => `<div class="detail-row"><div class="detail-label">${r.l}</div><div class="detail-value">${r.v}</div></div>`).join('')}
+    `;
+            document.getElementById('loginBlockBtn').onclick = () => { showToast(`IP ${l.ip} blocked`, 'success'); closeModal('loginModal'); };
+            document.getElementById('loginModal').classList.add('open');
+        }
+
+        function viewAuditLog(id) {
+            const l = auditLogs.find(x => x.id === id);
+            if (!l) return;
+            const oldStr = l.oldVal ? JSON.stringify(l.oldVal, null, 2) : 'null';
+            const newStr = l.newVal ? JSON.stringify(l.newVal, null, 2) : 'null';
+            document.getElementById('auditDetail').innerHTML = `
+        ${[
+                    { l: 'Log ID', v: `#${l.id}` },
+                    { l: 'Timestamp', v: `<code class="mono">${l.time}</code>` },
+                    { l: 'Action', v: actionBadge(l.action) },
+                    { l: 'Performed By', v: `<div class="user-cell"><div class="user-av" style="background:${randColor(l.user)};width:26px;height:26px;font-size:10px;">${initials(l.user)}</div><span>${l.user}</span></div>` },
+                    { l: 'Entity Type', v: `<code style="color:var(--blue-400)">${l.entity}</code>` },
+                    { l: 'Entity ID', v: l.entityId !== null ? `<code class="mono">#${l.entityId}</code>` : '—' },
+                    { l: 'IP Address', v: `<code style="color:var(--muted)">${l.ip}</code>` },
+                ].map(r => `<div class="detail-row"><div class="detail-label">${r.l}</div><div class="detail-value">${r.v}</div></div>`).join('')}
+        <div style="margin-top:16px;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:8px;">Change Diff (old_values → new_values)</div>
+            <div class="diff-box">
+                <div class="diff-old"><div class="diff-label" style="color:var(--red);">− Before</div>${oldStr}</div>
+                <div class="diff-new"><div class="diff-label" style="color:var(--green);">+ After</div>${newStr}</div>
+            </div>
+        </div>
+    `;
+            document.getElementById('auditModal').classList.add('open');
+        }
+
+        function viewEmailLog(id) {
+            const l = emailQueue.find(x => x.id === id);
+            if (!l) return;
+            document.getElementById('emailDetail').innerHTML = `
+        ${[
+                    { label: 'Email ID', val: `#${l.id}` },
+                    { label: 'Status', val: emailStatusBadge(l.status) },
+                    { label: 'Recipient', val: `${l.name} &lt;${l.recipient}&gt;` },
+                    { label: 'Subject', val: l.subject },
+                    { label: 'Type', val: `<span class="badge info">${l.type}</span>` },
+                    { label: 'Attempts', val: `<span style="color:${l.attempts >= 3 ? 'var(--red)' : 'var(--text)'};font-weight:700;">${l.attempts}/3</span>` },
+                    { label: 'Created At', val: `<code class="mono">${l.time}</code>` },
+                    { label: 'Sent At', val: l.sentAt ? `<code class="mono">${l.sentAt}</code>` : '<span style="color:var(--muted)">Not sent</span>' },
+                    { label: 'Error', val: l.error ? `<span style="color:var(--red);font-size:12px;">${l.error}</span>` : '<span style="color:var(--muted)">None</span>' },
+                ].map(r => `<div class="detail-row"><div class="detail-label">${r.label}</div><div class="detail-value">${r.val}</div></div>`).join('')}
+    `;
+            document.getElementById('emailRetryBtn').style.display = l.status === 'failed' ? 'flex' : 'none';
+            document.getElementById('emailRetryBtn').onclick = () => { retryEmail(l.id); closeModal('emailModal'); };
+            document.getElementById('emailModal').classList.add('open');
+        }
+
+        function retryEmail(id) {
+            const l = emailQueue.find(x => x.id === id);
+            if (l) { l.status = 'pending'; l.attempts += 1; renderLogs(); showToast('Email queued for retry', 'info'); }
+        }
+
+        function sortLog(key) {
+            if (logSortKey === key) logSortDir *= -1; else { logSortKey = key; logSortDir = 1; }
+            renderLogs();
+        }
+
+        function clearFilters() {
+            document.getElementById('logSearch').value = '';
+            document.getElementById('logFilter').value = '';
+            document.getElementById('dateFrom').value = '';
+            document.getElementById('dateTo').value = '';
+            renderLogs();
+        }
+
+        function exportLogs() { showToast('Exporting logs as CSV...', 'info'); }
+
+        function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+        document.querySelectorAll('.modal-overlay').forEach(o => o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); }));
+
+        let toastTimer;
+        function showToast(msg, type = 'info') {
+            const t = document.getElementById('toast'), m = document.getElementById('toastMsg');
+            t.className = `toast ${type}`; m.textContent = msg; t.classList.add('show');
+            clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+        }
+
+        // Init
+        renderLogs();
+    </script>
+</body>
+
+</html>
