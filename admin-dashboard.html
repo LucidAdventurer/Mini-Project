@@ -1,19 +1,29 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard - Placement Portal</title>
+    <title>Admin Dashboard - PTA Portal</title>
     <style>
         :root {
-            --color-admin-primary: #1a1a2e;
-            --color-admin-secondary: #16213e;
-            --color-admin-accent: #e94560;
-            --color-admin-accent-light: #ff6b6b;
-            --color-success: #4ade80;
-            --color-warning: #fbbf24;
-            --color-info: #60a5fa;
-            --sidebar-width: 240px;
+            --blue-400: #3385FF;
+            --blue-500: #0066FF;
+            --blue-600: #0052CC;
+            --blue-700: #003D99;
+            --bg: #0a0c10;
+            --surface: #111318;
+            --surface2: #181c24;
+            --surface3: #1e2330;
+            --border: rgba(0, 102, 255, 0.15);
+            --border2: rgba(255, 255, 255, 0.06);
+            --text: #e8eaf0;
+            --muted: #6b7280;
+            --sidebar-w: 240px;
+            --green: #22c55e;
+            --yellow: #eab308;
+            --red: #ef4444;
+            --orange: #f97316;
         }
 
         * {
@@ -23,596 +33,1214 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #0f0f0f;
-            color: #ffffff;
+            font-family: Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
             overflow-x: hidden;
         }
 
-        /* Sidebar */
+        /* ── Sidebar ── */
         .sidebar {
+            width: var(--sidebar-w);
+            background: var(--surface);
+            border-right: 1px solid var(--border2);
+            display: flex;
+            flex-direction: column;
             position: fixed;
-            left: 0;
             top: 0;
-            width: var(--sidebar-width);
-            height: 100vh;
-            background: linear-gradient(to bottom, rgba(0, 0, 0, 0.98), rgba(26, 26, 46, 0.98));
-            border-right: 2px solid rgba(233, 69, 96, 0.3);
-            z-index: 1000;
-            overflow-y: auto;
-            overflow-x: hidden;
+            left: 0;
+            bottom: 0;
+            z-index: 100;
             transition: transform 0.3s ease;
         }
 
-        .sidebar.hidden {
-            transform: translateX(calc(-1 * var(--sidebar-width) + 40px));
+        .sidebar-brand {
+            padding: 22px 20px 18px;
+            border-bottom: 1px solid var(--border2);
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
 
-        .sidebar.hidden .sidebar-header,
-        .sidebar.hidden .nav-menu span:not(.nav-icon) {
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        .sidebar.hidden .nav-item {
-            justify-content: center;
-        }
-
-        .sidebar-header {
-            padding: 30px 20px;
-            border-bottom: 2px solid rgba(233, 69, 96, 0.2);
-            text-align: center;
-            transition: opacity 0.3s ease;
-        }
-
-        .sidebar-logo {
-            width: 60px;
-            height: 60px;
-            margin: 0 auto 12px;
-            background: linear-gradient(135deg, var(--color-admin-accent), var(--color-admin-accent-light));
-            border-radius: 50%;
+        .brand-logo {
+            width: 36px;
+            height: 36px;
+            background: var(--blue-500);
+            border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 28px;
-            box-shadow: 0 0 20px rgba(233, 69, 96, 0.5);
+            flex-shrink: 0;
         }
 
-        .sidebar-title {
-            font-size: 16px;
+        .brand-logo svg {
+            width: 18px;
+            height: 18px;
+            fill: white;
+        }
+
+        .brand-text {
+            font-size: 13px;
             font-weight: 700;
-            color: #ffffff;
-            letter-spacing: 1px;
+            color: var(--text);
+            line-height: 1.3;
         }
 
-        .nav-menu {
-            padding: 20px 0;
+        .brand-text span {
+            font-size: 11px;
+            font-weight: 400;
+            color: var(--muted);
+            display: block;
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            padding: 14px 10px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .nav-section-label {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--muted);
+            padding: 10px 10px 6px;
+            margin-top: 6px;
         }
 
         .nav-item {
-            padding: 14px 20px;
             display: flex;
             align-items: center;
-            gap: 12px;
-            color: #aaa;
+            gap: 10px;
+            padding: 9px 12px;
+            border-radius: 8px;
             cursor: pointer;
-            transition: all 0.3s ease;
-            border-left: 3px solid transparent;
-            font-size: 14px;
+            transition: background 0.15s, color 0.15s;
+            color: #9ca3af;
+            font-size: 13.5px;
             font-weight: 500;
-        }
-
-        .nav-item span:not(.nav-icon) {
-            transition: opacity 0.3s ease;
+            user-select: none;
+            text-decoration: none;
+            position: relative;
         }
 
         .nav-item:hover {
-            background: rgba(233, 69, 96, 0.1);
-            color: #ffffff;
-            border-left-color: var(--color-admin-accent);
+            background: var(--surface2);
+            color: var(--text);
         }
 
         .nav-item.active {
-            background: rgba(233, 69, 96, 0.2);
-            color: #ffffff;
-            border-left-color: var(--color-admin-accent);
+            background: rgba(0, 102, 255, 0.15);
+            color: var(--blue-400);
+            border: 1px solid rgba(0, 102, 255, 0.2);
         }
 
-        .nav-icon {
-            font-size: 18px;
-            width: 20px;
+        .nav-item svg {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            flex-shrink: 0;
         }
 
-        /* Main Content */
-        .main-content {
-            margin-left: var(--sidebar-width);
-            min-height: 100vh;
-            background: linear-gradient(135deg, var(--color-admin-primary), var(--color-admin-secondary));
-            transition: margin-left 0.3s ease;
-        }
-
-        .sidebar.hidden ~ .main-content {
-            margin-left: 40px;
-        }
-
-        /* Sidebar edge indicator when hidden */
-        .sidebar::after {
-            content: '';
-            position: absolute;
-            right: 0;
-            top: 0;
-            width: 40px;
-            height: 100%;
-            background: linear-gradient(135deg, #3B1C32, #3B1C32);
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-
-        .sidebar.hidden::after {
-            opacity: 1;
-        }
-
-        .sidebar.hidden::before {
-            opacity: 1;
-        }
-
-        .sidebar.hidden::before {
-            transform: translateY(-50%) translateX(4px);
-        }
-        
-        .sidebar::before {
-            content: '❯'; /* arrow icon */
-            position: absolute;
-            right: 12px;          /* centered inside the 40px strip */
-            top: 50%;
-            transform: translateY(-50%);
-
-            font-size: 22px;
-            color: rgba(233, 69, 96, 0.9);
-            text-shadow: 0 0 8px rgba(233, 69, 96, 0.6);
-
-            opacity: 0;
-            transition: opacity 0.3s ease, transform 0.3s ease;
-            pointer-events: none;
-
-        }
-
-        .sidebar:hover::before {
-            opacity: 0;
-        }
-
-        /* Top Bar */
-        .topbar {
-            background: rgba(0, 0, 0, 0.9);
-            border-bottom: 2px solid rgba(233, 69, 96, 0.3);
-            padding: 20px 30px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            backdrop-filter: blur(10px);
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 1001;
-            width: 100%;
-            margin-left: var(--sidebar-width);
-            width: calc(100% - var(--sidebar-width));
-            transition: all 0.3s ease;
-        }
-
-        .sidebar.hidden ~ .main-content .topbar {
-            margin-left: 0;
-            width: 100%;
-        }
-
-        .page-title {
-            font-size: 24px;
+        .nav-badge {
+            margin-left: auto;
+            background: var(--red);
+            color: white;
+            font-size: 10px;
             font-weight: 700;
-            color: #ffffff;
+            padding: 1px 6px;
+            border-radius: 10px;
+            min-width: 18px;
+            text-align: center;
         }
 
-        .admin-profile {
+        .nav-badge.blue {
+            background: var(--blue-600);
+        }
+
+        .sidebar-bottom {
+            padding: 12px 10px;
+            border-top: 1px solid var(--border2);
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        /* ── Main ── */
+        .main {
+            margin-left: var(--sidebar-w);
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        /* ── Topbar ── */
+        .topbar {
+            height: 58px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border2);
             display: flex;
             align-items: center;
-            gap: 12px;
-            padding: 8px 15px;
-            background: rgba(233, 69, 96, 0.1);
-            border: 1px solid rgba(233, 69, 96, 0.3);
-            border-radius: 10px;
+            padding: 0 28px;
+            gap: 16px;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .topbar-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text);
+            flex: 1;
+        }
+
+        .topbar-title span {
+            color: var(--muted);
+            font-weight: 400;
+            font-size: 13px;
+        }
+
+        .topbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .icon-btn {
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--muted);
+            transition: color 0.15s, border-color 0.15s;
+            position: relative;
+        }
+
+        .icon-btn:hover {
+            color: var(--text);
+            border-color: var(--border);
+        }
+
+        .icon-btn svg {
+            width: 15px;
+            height: 15px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+        }
+
+        .notif-dot {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            width: 7px;
+            height: 7px;
+            background: var(--red);
+            border-radius: 50%;
+            border: 1.5px solid var(--surface);
+        }
+
+        .admin-chip {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            border-radius: 20px;
+            padding: 4px 12px 4px 4px;
+            cursor: pointer;
         }
 
         .admin-avatar {
-            width: 35px;
-            height: 35px;
-            background: linear-gradient(135deg, var(--color-admin-accent), var(--color-admin-accent-light));
+            width: 26px;
+            height: 26px;
+            background: var(--blue-600);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 16px;
-        }
-
-        .admin-info {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .admin-name {
-            font-size: 14px;
-            font-weight: 600;
-        }
-
-        .admin-role {
             font-size: 11px;
-            color: var(--color-admin-accent);
+            font-weight: 700;
+            color: white;
         }
 
-        /* Dashboard Content */
-        .dashboard-content {
-            padding: 30px;
-            padding-top: calc(30px + 70px);
+        .admin-chip span {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text);
         }
 
-        /* Content Section */
-        .content-section {
+        /* ── Content ── */
+        .content {
+            padding: 28px;
+            flex: 1;
+        }
+
+        /* Pages */
+        .page {
             display: none;
         }
 
-        .content-section.active {
+        .page.active {
             display: block;
         }
 
-        /* Panel */
-        .panel {
-            background: rgba(0, 0, 0, 0.6);
-            border: 2px solid rgba(233, 69, 96, 0.2);
-            border-radius: 12px;
-            padding: 25px;
-            margin-bottom: 20px;
-        }
-
-        .panel-header {
+        /* ── Section Header ── */
+        .section-header {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 2px solid rgba(233, 69, 96, 0.2);
+            justify-content: space-between;
+            margin-bottom: 24px;
         }
 
-        .panel-title {
+        .section-header h2 {
             font-size: 18px;
             font-weight: 700;
         }
 
-        /* Tabs */
-        .tabs {
+        .section-header p {
+            font-size: 13px;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+
+        /* ── Stats Grid ── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 14px;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.2s, transform 0.2s;
+        }
+
+        .stat-card:hover {
+            border-color: var(--border);
+            transform: translateY(-2px);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            filter: blur(30px);
+            opacity: 0.3;
+        }
+
+        .stat-card.blue::before {
+            background: var(--blue-500);
+        }
+
+        .stat-card.green::before {
+            background: var(--green);
+        }
+
+        .stat-card.yellow::before {
+            background: var(--yellow);
+        }
+
+        .stat-card.red::before {
+            background: var(--red);
+        }
+
+        .stat-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
             display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 14px;
         }
 
-        .tab-btn {
-            padding: 10px 20px;
-            background: rgba(233, 69, 96, 0.1);
-            border: 2px solid rgba(233, 69, 96, 0.3);
-            border-radius: 8px;
-            color: #aaa;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-size: 14px;
-            font-weight: 600;
+        .stat-icon svg {
+            width: 18px;
+            height: 18px;
+            stroke: white;
+            fill: none;
+            stroke-width: 2;
         }
 
-        .tab-btn:hover {
-            background: rgba(233, 69, 96, 0.2);
-            color: #ffffff;
+        .stat-card.blue .stat-icon {
+            background: rgba(0, 102, 255, 0.2);
+            border: 1px solid rgba(0, 102, 255, 0.3);
         }
 
-        .tab-btn.active {
-            background: var(--color-admin-accent);
-            color: white;
-            border-color: var(--color-admin-accent);
+        .stat-card.green .stat-icon {
+            background: rgba(34, 197, 94, 0.15);
+            border: 1px solid rgba(34, 197, 94, 0.3);
         }
 
-        /* Filters */
-        .filters {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
+        .stat-card.yellow .stat-icon {
+            background: rgba(234, 179, 8, 0.15);
+            border: 1px solid rgba(234, 179, 8, 0.3);
         }
 
-        .filter-group {
-            flex: 1;
-            min-width: 200px;
+        .stat-card.red .stat-icon {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
         }
 
-        .filter-label {
-            display: block;
+        .stat-card.blue .stat-icon svg {
+            stroke: var(--blue-400);
+        }
+
+        .stat-card.green .stat-icon svg {
+            stroke: var(--green);
+        }
+
+        .stat-card.yellow .stat-icon svg {
+            stroke: var(--yellow);
+        }
+
+        .stat-card.red .stat-icon svg {
+            stroke: var(--red);
+        }
+
+        .stat-value {
+            font-size: 26px;
+            font-weight: 800;
+            color: var(--text);
+            line-height: 1;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
             font-size: 12px;
-            color: #888;
-            margin-bottom: 6px;
-            font-weight: 600;
+            color: var(--muted);
+            margin-bottom: 8px;
         }
 
-        .filter-select, .filter-input {
+        .stat-change {
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .stat-change.up {
+            color: var(--green);
+        }
+
+        .stat-change.down {
+            color: var(--red);
+        }
+
+        /* ── Cards ── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 14px;
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 18px 20px;
+            border-bottom: 1px solid var(--border2);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .card-header h3 {
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .card-header p {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+
+        .card-body {
+            padding: 20px;
+        }
+
+        /* ── Two col grid ── */
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .three-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        /* ── Table ── */
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+        table {
             width: 100%;
-            padding: 10px 12px;
-            background: rgba(0, 0, 0, 0.5);
-            border: 2px solid rgba(233, 69, 96, 0.3);
-            border-radius: 8px;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        thead th {
+            padding: 10px 16px;
+            text-align: left;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--muted);
+            background: var(--surface2);
+            border-bottom: 1px solid var(--border2);
+        }
+
+        tbody tr {
+            border-bottom: 1px solid var(--border2);
+            transition: background 0.15s;
+        }
+
+        tbody tr:hover {
+            background: var(--surface2);
+        }
+
+        tbody tr:last-child {
+            border-bottom: none;
+        }
+
+        tbody td {
+            padding: 11px 16px;
+            color: var(--text);
+            vertical-align: middle;
+        }
+
+        .user-cell {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .user-av {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
             color: white;
-            font-size: 14px;
+            flex-shrink: 0;
         }
 
-        .filter-select:focus, .filter-input:focus {
-            outline: none;
-            border-color: var(--color-admin-accent);
+        .user-av.blue {
+            background: var(--blue-600);
         }
 
-        /* Buttons */
-        .btn {
-            padding: 10px 20px;
-            border-radius: 8px;
+        .user-av.green {
+            background: #16a34a;
+        }
+
+        .user-av.purple {
+            background: #7c3aed;
+        }
+
+        .user-av.orange {
+            background: #c2410c;
+        }
+
+        .user-name {
+            font-size: 13px;
             font-weight: 600;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            border: none;
+        }
+
+        .user-email {
+            font-size: 11px;
+            color: var(--muted);
+        }
+
+        /* ── Badges ── */
+        .badge {
             display: inline-flex;
             align-items: center;
-            gap: 8px;
+            gap: 4px;
+            padding: 3px 9px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge.active {
+            background: rgba(34, 197, 94, 0.12);
+            color: var(--green);
+            border: 1px solid rgba(34, 197, 94, 0.25);
+        }
+
+        .badge.inactive {
+            background: rgba(107, 114, 128, 0.12);
+            color: #9ca3af;
+            border: 1px solid rgba(107, 114, 128, 0.2);
+        }
+
+        .badge.student {
+            background: rgba(0, 102, 255, 0.1);
+            color: var(--blue-400);
+            border: 1px solid rgba(0, 102, 255, 0.2);
+        }
+
+        .badge.teacher {
+            background: rgba(124, 58, 237, 0.1);
+            color: #a78bfa;
+            border: 1px solid rgba(124, 58, 237, 0.2);
+        }
+
+        .badge.admin-b {
+            background: rgba(239, 68, 68, 0.1);
+            color: #fca5a5;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .badge.easy {
+            background: rgba(34, 197, 94, 0.1);
+            color: var(--green);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .badge.medium {
+            background: rgba(234, 179, 8, 0.1);
+            color: var(--yellow);
+            border: 1px solid rgba(234, 179, 8, 0.2);
+        }
+
+        .badge.hard {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--red);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .badge.draft {
+            background: rgba(107, 114, 128, 0.12);
+            color: #9ca3af;
+            border: 1px solid rgba(107, 114, 128, 0.2);
+        }
+
+        .badge.published {
+            background: rgba(34, 197, 94, 0.12);
+            color: var(--green);
+            border: 1px solid rgba(34, 197, 94, 0.25);
+        }
+
+        .badge.archived {
+            background: rgba(249, 115, 22, 0.1);
+            color: var(--orange);
+            border: 1px solid rgba(249, 115, 22, 0.2);
+        }
+
+        .badge.info {
+            background: rgba(0, 102, 255, 0.1);
+            color: var(--blue-400);
+            border: 1px solid rgba(0, 102, 255, 0.2);
+        }
+
+        .badge.warning {
+            background: rgba(234, 179, 8, 0.1);
+            color: var(--yellow);
+            border: 1px solid rgba(234, 179, 8, 0.2);
+        }
+
+        .badge.error {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--red);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .badge.success {
+            background: rgba(34, 197, 94, 0.12);
+            color: var(--green);
+            border: 1px solid rgba(34, 197, 94, 0.25);
+        }
+
+        /* ── Mini bar chart ── */
+        .bar-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .bar-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .bar-label {
+            font-size: 12px;
+            color: var(--muted);
+            width: 90px;
+            flex-shrink: 0;
+        }
+
+        .bar-track {
+            flex: 1;
+            height: 6px;
+            background: var(--surface3);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: 10px;
+            background: var(--blue-500);
+            transition: width 1s ease;
+        }
+
+        .bar-fill.green {
+            background: var(--green);
+        }
+
+        .bar-fill.yellow {
+            background: var(--yellow);
+        }
+
+        .bar-val {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text);
+            width: 32px;
+            text-align: right;
+        }
+
+        /* ── Activity list ── */
+        .activity-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+
+        .activity-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border2);
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
+        .activity-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-top: 4px;
+            flex-shrink: 0;
+        }
+
+        .activity-dot.blue {
+            background: var(--blue-500);
+        }
+
+        .activity-dot.green {
+            background: var(--green);
+        }
+
+        .activity-dot.yellow {
+            background: var(--yellow);
+        }
+
+        .activity-dot.red {
+            background: var(--red);
+        }
+
+        .activity-text {
+            font-size: 13px;
+            color: var(--text);
+            line-height: 1.5;
+        }
+
+        .activity-time {
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+
+        /* ── Btn ── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border-radius: 8px;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.15s;
+        }
+
+        .btn svg {
+            width: 13px;
+            height: 13px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, var(--color-admin-accent), var(--color-admin-accent-light));
+            background: var(--blue-500);
             color: white;
         }
 
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(233, 69, 96, 0.4);
+            background: var(--blue-600);
         }
 
-        .btn-secondary {
-            background: rgba(233, 69, 96, 0.1);
-            border: 2px solid rgba(233, 69, 96, 0.3);
-            color: var(--color-admin-accent-light);
+        .btn-ghost {
+            background: var(--surface2);
+            color: var(--text);
+            border: 1px solid var(--border2);
         }
 
-        .btn-secondary:hover {
-            background: rgba(233, 69, 96, 0.2);
+        .btn-ghost:hover {
+            border-color: var(--border);
         }
 
         .btn-danger {
+            background: rgba(239, 68, 68, 0.12);
+            color: var(--red);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .btn-danger:hover {
             background: rgba(239, 68, 68, 0.2);
-            border: 2px solid rgba(239, 68, 68, 0.5);
-            color: #ef4444;
         }
 
-        .btn-success {
-            background: rgba(74, 222, 128, 0.2);
-            border: 2px solid rgba(74, 222, 128, 0.5);
-            color: var(--color-success);
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 11px;
         }
 
-        /* Table */
-        .data-table {
-            overflow-x: auto;
-        }
-
-        .data-table table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .data-table th {
-            background: rgba(233, 69, 96, 0.2);
-            padding: 12px;
-            text-align: left;
-            font-size: 12px;
-            font-weight: 700;
-            color: #ffffff;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .data-table td {
-            padding: 12px;
-            font-size: 13px;
-            color: #ccc;
-            border-bottom: 1px solid rgba(233, 69, 96, 0.1);
-        }
-
-        .data-table tr:hover td {
-            background: rgba(233, 69, 96, 0.05);
-        }
-
-        .table-actions {
+        /* ── Log entries ── */
+        .log-entry {
             display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--border2);
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-time {
+            color: var(--muted);
+            width: 140px;
+            flex-shrink: 0;
+        }
+
+        .log-level {
+            width: 60px;
+            flex-shrink: 0;
+        }
+
+        .log-user {
+            color: var(--blue-400);
+            width: 120px;
+            flex-shrink: 0;
+        }
+
+        .log-msg {
+            color: var(--text);
+            flex: 1;
+        }
+
+        .log-ip {
+            color: var(--muted);
+            width: 100px;
+            flex-shrink: 0;
+            text-align: right;
+        }
+
+        /* ── Settings form ── */
+        .settings-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .setting-group {
+            margin-bottom: 20px;
+        }
+
+        .setting-group label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: #9ca3af;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .setting-input {
+            width: 100%;
+            padding: 9px 12px;
+            background: var(--surface2);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            font-family: Arial, sans-serif;
+            font-size: 13px;
+            color: var(--text);
+            outline: none;
+        }
+
+        .setting-input:focus {
+            border-color: var(--blue-500);
+            box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1);
+        }
+
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border2);
+        }
+
+        .toggle-row:last-child {
+            border-bottom: none;
+        }
+
+        .toggle-info h4 {
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .toggle-info p {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+
+        .toggle {
+            position: relative;
+            width: 40px;
+            height: 22px;
+        }
+
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            inset: 0;
+            background: var(--surface3);
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background 0.2s;
+            border: 1px solid var(--border2);
+        }
+
+        .toggle-slider::before {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            left: 2px;
+            top: 2px;
+            background: #6b7280;
+            border-radius: 50%;
+            transition: transform 0.2s, background 0.2s;
+        }
+
+        .toggle input:checked+.toggle-slider {
+            background: rgba(0, 102, 255, 0.2);
+            border-color: rgba(0, 102, 255, 0.4);
+        }
+
+        .toggle input:checked+.toggle-slider::before {
+            transform: translateX(18px);
+            background: var(--blue-500);
+        }
+
+        /* ── Profile ── */
+        .profile-hero {
+            background: linear-gradient(135deg, #001433, #0047b3);
+            border-radius: 14px;
+            padding: 32px;
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            margin-bottom: 20px;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(0, 102, 255, 0.2);
+        }
+
+        .profile-hero::after {
+            content: '';
+            position: absolute;
+            right: -60px;
+            top: -60px;
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .profile-avatar-lg {
+            width: 72px;
+            height: 72px;
+            background: var(--blue-500);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: 800;
+            color: white;
+            border: 3px solid rgba(255, 255, 255, 0.2);
+            flex-shrink: 0;
+        }
+
+        .profile-hero h2 {
+            font-size: 20px;
+            font-weight: 800;
+            color: white;
+        }
+
+        .profile-hero p {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.65);
+            margin-top: 4px;
+        }
+
+        .profile-hero .badge {
+            margin-top: 8px;
+        }
+
+        /* ── Donut chart (CSS) ── */
+        .donut-wrap {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .donut {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: conic-gradient(var(--blue-500) 0% 62%, var(--green) 62% 82%, var(--yellow) 82% 92%, var(--red) 92% 100%);
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .donut::after {
+            content: '';
+            position: absolute;
+            top: 18px;
+            left: 18px;
+            width: 64px;
+            height: 64px;
+            background: var(--surface);
+            border-radius: 50%;
+        }
+
+        .donut-legend {
+            display: flex;
+            flex-direction: column;
             gap: 8px;
         }
 
-        .action-icon {
-            cursor: pointer;
-            padding: 6px;
-            border-radius: 6px;
-            transition: all 0.3s ease;
-            font-size: 16px;
-        }
-
-        .action-icon:hover {
-            background: rgba(233, 69, 96, 0.2);
-        }
-
-        /* Modal */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            z-index: 2000;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .modal.active {
+        .legend-item {
             display: flex;
-        }
-
-        .modal-content {
-            background: var(--color-admin-primary);
-            border: 2px solid rgba(233, 69, 96, 0.3);
-            border-radius: 12px;
-            padding: 30px;
-            max-width: 600px;
-            width: 90%;
-            max-height: 80vh;
-            overflow-y: auto;
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 2px solid rgba(233, 69, 96, 0.2);
+            gap: 8px;
+            font-size: 12px;
         }
 
-        .modal-title {
-            font-size: 20px;
-            font-weight: 700;
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
+            flex-shrink: 0;
         }
 
-        .close-modal {
-            font-size: 24px;
-            cursor: pointer;
-            color: #888;
-        }
-
-        .close-modal:hover {
-            color: var(--color-admin-accent);
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-label {
-            display: block;
+        /* ── Search ── */
+        .search-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            border-radius: 8px;
+            padding: 7px 12px;
             font-size: 13px;
-            color: #aaa;
-            margin-bottom: 8px;
-            font-weight: 600;
+            color: var(--muted);
+            margin-bottom: 16px;
         }
 
-        .form-input, .form-select, .form-textarea {
-            width: 100%;
-            padding: 12px;
-            background: rgba(0, 0, 0, 0.5);
-            border: 2px solid rgba(233, 69, 96, 0.3);
-            border-radius: 8px;
-            color: white;
-            font-size: 14px;
+        .search-bar svg {
+            width: 14px;
+            height: 14px;
+            stroke: var(--muted);
+            fill: none;
+            stroke-width: 2;
         }
 
-        .form-textarea {
-            resize: vertical;
-            min-height: 100px;
-        }
-
-        .form-input:focus, .form-select:focus, .form-textarea:focus {
+        .search-bar input {
+            background: none;
+            border: none;
             outline: none;
-            border-color: var(--color-admin-accent);
+            font-family: Arial, sans-serif;
+            font-size: 13px;
+            color: var(--text);
+            flex: 1;
         }
 
-        /* Upload Area */
-        .upload-area {
-            border: 2px dashed rgba(233, 69, 96, 0.3);
-            border-radius: 8px;
-            padding: 40px;
-            text-align: center;
+        .search-bar input::placeholder {
+            color: var(--muted);
+        }
+
+        /* ── Tabs ── */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 18px;
+            background: var(--surface2);
+            padding: 4px;
+            border-radius: 10px;
+            width: fit-content;
+        }
+
+        .tab {
+            padding: 6px 16px;
+            border-radius: 7px;
+            font-size: 12px;
+            font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s ease;
+            color: var(--muted);
+            transition: all 0.15s;
+            border: none;
+            background: none;
+            font-family: Arial, sans-serif;
         }
 
-        .upload-area:hover {
-            border-color: var(--color-admin-accent);
-            background: rgba(233, 69, 96, 0.05);
+        .tab.active {
+            background: var(--surface);
+            color: var(--text);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
         }
 
-        .upload-icon {
-            font-size: 48px;
-            margin-bottom: 10px;
-        }
-
-        .upload-text {
-            color: #888;
-            font-size: 14px;
-        }
-
-        /* Resource Grid */
+        /* ── Resource cards ── */
         .resource-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 15px;
-            margin-top: 20px;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
         }
 
         .resource-card {
-            background: rgba(0, 0, 0, 0.5);
-            border: 2px solid rgba(233, 69, 96, 0.2);
-            border-radius: 8px;
-            padding: 15px;
-            text-align: center;
-            transition: all 0.3s ease;
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 12px;
+            padding: 18px;
+            transition: border-color 0.2s, transform 0.2s;
+            cursor: pointer;
         }
 
         .resource-card:hover {
-            border-color: var(--color-admin-accent);
-            transform: translateY(-3px);
+            border-color: var(--border);
+            transform: translateY(-2px);
         }
 
         .resource-icon {
-            font-size: 40px;
-            margin-bottom: 10px;
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 12px;
+            font-size: 18px;
         }
 
-        .resource-name {
+        .resource-card h4 {
             font-size: 13px;
-            color: #ccc;
-            margin-bottom: 10px;
-            word-break: break-word;
+            font-weight: 700;
+            margin-bottom: 4px;
         }
 
-        .badge {
-            display: inline-block;
-            padding: 4px 10px;
-            border-radius: 12px;
+        .resource-card p {
+            font-size: 12px;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .resource-meta {
             font-size: 11px;
-            font-weight: 600;
+            color: var(--muted);
+            margin-top: 10px;
+            display: flex;
+            justify-content: space-between;
         }
 
-        .badge-active {
-            background: rgba(74, 222, 128, 0.2);
-            color: var(--color-success);
+        /* BG grid */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            background-image: linear-gradient(rgba(0, 102, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 102, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
         }
 
-        .badge-inactive {
-            background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-        }
+        /* ── Responsive ── */
+        @media (max-width: 1100px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
 
-        .badge-pending {
-            background: rgba(251, 191, 36, 0.2);
-            color: var(--color-warning);
+            .three-col {
+                grid-template-columns: 1fr 1fr;
+            }
         }
 
         @media (max-width: 768px) {
@@ -620,363 +1248,590 @@
                 transform: translateX(-100%);
             }
 
-            .main-content {
+            .main {
                 margin-left: 0;
             }
 
-            .filters {
-                flex-direction: column;
-            }
-
-            .filter-group {
-                width: 100%;
+            .two-col,
+            .three-col {
+                grid-template-columns: 1fr;
             }
         }
     </style>
 </head>
+
 <body>
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <div class="sidebar-header">
-            <div class="sidebar-logo">🛠️</div>
-            <div class="sidebar-title">ADMIN PANEL</div>
+
+    <!-- ── SIDEBAR ── -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-logo">
+                <svg viewBox="0 0 24 24">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                </svg>
+            </div>
+            <div class="brand-text">PTA Portal <span>Admin Panel</span></div>
         </div>
 
-        <nav class="nav-menu">
-            <div class="nav-item active" data-section="overview">
-                <span class="nav-icon">🏠</span>
-                <span>Overview</span>
-            </div>
-            <div class="nav-item" data-section="users">
-                <span class="nav-icon">👥</span>
-                <span>User Management</span>
-            </div>
-            <div class="nav-item" data-section="tests">
-                <span class="nav-icon">📝</span>
-                <span>Test Management</span>
-            </div>
-            <div class="nav-item" data-section="resources">
-                <span class="nav-icon">📚</span>
-                <span>Resources</span>
-            </div>
-            <div class="nav-item" data-section="logs">
-                <span class="nav-icon">📋</span>
-                <span>System Logs</span>
-            </div>
-            <div class="nav-item" data-section="settings">
-                <span class="nav-icon">⚙️</span>
-                <span>Settings</span>
-            </div>
-            <div class="nav-item" data-section="logout">
-                <span class="nav-icon">🚪</span>
-                <span>Logout</span>
-            </div>
+        <nav class="sidebar-nav">
+            <div class="nav-section-label">Main</div>
+
+            <a class="nav-item active" onclick="showPage('overview', this)">
+                <svg viewBox="0 0 24 24">
+                    <rect x="3" y="3" width="7" height="7" rx="1" />
+                    <rect x="14" y="3" width="7" height="7" rx="1" />
+                    <rect x="3" y="14" width="7" height="7" rx="1" />
+                    <rect x="14" y="14" width="7" height="7" rx="1" />
+                </svg>
+                System Overview
+            </a>
+
+            <div class="nav-section-label">Management</div>
+
+            <a class="nav-item" onclick="showPage('users', this)">
+                <svg viewBox="0 0 24 24">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+                User Management
+                <span class="nav-badge blue">2,840</span>
+            </a>
+
+            <a class="nav-item" onclick="showPage('tests', this)">
+                <svg viewBox="0 0 24 24">
+                    <path d="M9 11l3 3L22 4" />
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                </svg>
+                Test Management
+                <span class="nav-badge">12</span>
+            </a>
+
+            <a class="nav-item" onclick="showPage('resources', this)">
+                <svg viewBox="0 0 24 24">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                </svg>
+                Resources
+            </a>
+
+            <div class="nav-section-label">System</div>
+
+            <a class="nav-item" onclick="showPage('logs', this)">
+                <svg viewBox="0 0 24 24">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                    <line x1="10" y1="9" x2="8" y2="9" />
+                </svg>
+                System Logs
+                <span class="nav-badge">3</span>
+            </a>
+
+            <div class="nav-section-label">Account</div>
+
+            <a class="nav-item" onclick="showPage('profile', this)">
+                <svg viewBox="0 0 24 24">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                </svg>
+                Profile
+            </a>
+
+            <a class="nav-item" onclick="showPage('settings', this)">
+                <svg viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="3" />
+                    <path
+                        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+                Settings
+            </a>
         </nav>
-    </div>
 
-    <!-- Main Content -->
-    <div class="main-content">
-        <!-- Top Bar -->
-        <div class="topbar">
-            <div class="page-title" id="pageTitle">User Management</div>
-            <div class="admin-profile">
-                <div class="admin-avatar">👤</div>
-                <div class="admin-info">
-                    <div class="admin-name">Admin User</div>
-                    <div class="admin-role">Super Admin</div>
-                </div>
-            </div>
+        <div class="sidebar-bottom">
+            <a class="nav-item" style="color: #ef4444;" onclick="confirmLogout()">
+                <svg viewBox="0 0 24 24">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+                Log Out
+            </a>
         </div>
+    </aside>
 
-        <!-- Dashboard Content -->
-        <div class="dashboard-content">
-            <!-- Overview Section -->
-            <div class="content-section active" id="overview-section">
-                <div class="panel">
-                    <div class="panel-header">
-                        <div class="panel-title">System Overview</div>
+    <!-- ── MAIN ── -->
+    <div class="main">
+
+        <!-- Topbar -->
+        <header class="topbar">
+            <div class="topbar-title" id="topbarTitle">System Overview <span>/ Dashboard</span></div>
+            <div class="topbar-actions">
+                <div class="icon-btn" title="Notifications">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                    </svg>
+                    <div class="notif-dot"></div>
+                </div>
+                <div class="icon-btn" title="Refresh">
+                    <svg viewBox="0 0 24 24">
+                        <polyline points="23 4 23 10 17 10" />
+                        <polyline points="1 20 1 14 7 14" />
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                    </svg>
+                </div>
+                <div class="admin-chip">
+                    <div class="admin-avatar">SA</div>
+                    <span>Super Admin</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Content -->
+        <div class="content">
+
+            <!-- ═══════════════════════════════ OVERVIEW ═══════════════════════════════ -->
+            <div class="page active" id="page-overview">
+                <div class="section-header">
+                    <div>
+                        <h2>System Overview</h2>
+                        <p>PTA Placement Training & Assessment — live snapshot</p>
                     </div>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
-                        <div style="background: rgba(233, 69, 96, 0.1); padding: 20px; border-radius: 8px; border-left: 4px solid var(--color-admin-accent);">
-                            <div style="font-size: 32px; font-weight: 700; margin-bottom: 5px;">1,248</div>
-                            <div style="color: #888; font-size: 14px;">Total Students</div>
+                    <button class="btn btn-primary">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        Export Report
+                    </button>
+                </div>
+
+                <!-- Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card blue">
+                        <div class="stat-icon">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                                <circle cx="9" cy="7" r="4" />
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                            </svg>
                         </div>
-                        <div style="background: rgba(233, 69, 96, 0.1); padding: 20px; border-radius: 8px; border-left: 4px solid var(--color-admin-accent);">
-                            <div style="font-size: 32px; font-weight: 700; margin-bottom: 5px;">87</div>
-                            <div style="color: #888; font-size: 14px;">Total Teachers</div>
+                        <div class="stat-value">2,840</div>
+                        <div class="stat-label">Total Users</div>
+                        <div class="stat-change up">↑ 4.2% this month</div>
+                    </div>
+                    <div class="stat-card green">
+                        <div class="stat-icon">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M9 11l3 3L22 4" />
+                                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                            </svg>
                         </div>
-                        <div style="background: rgba(233, 69, 96, 0.1); padding: 20px; border-radius: 8px; border-left: 4px solid var(--color-admin-accent);">
-                            <div style="font-size: 32px; font-weight: 700; margin-bottom: 5px;">342</div>
-                            <div style="color: #888; font-size: 14px;">Active Tests</div>
+                        <div class="stat-value">148</div>
+                        <div class="stat-label">Active Assessments</div>
+                        <div class="stat-change up">↑ 12 new this week</div>
+                    </div>
+                    <div class="stat-card yellow">
+                        <div class="stat-icon">
+                            <svg viewBox="0 0 24 24">
+                                <line x1="18" y1="20" x2="18" y2="10" />
+                                <line x1="12" y1="20" x2="12" y2="4" />
+                                <line x1="6" y1="20" x2="6" y2="14" />
+                            </svg>
                         </div>
-                        <div style="background: rgba(233, 69, 96, 0.1); padding: 20px; border-radius: 8px; border-left: 4px solid var(--color-admin-accent);">
-                            <div style="font-size: 32px; font-weight: 700; margin-bottom: 5px;">156</div>
-                            <div style="color: #888; font-size: 14px;">Resources</div>
+                        <div class="stat-value">9,412</div>
+                        <div class="stat-label">Total Attempts</div>
+                        <div class="stat-change up">↑ 8.7% this week</div>
+                    </div>
+                    <div class="stat-card red">
+                        <div class="stat-icon">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="12" y1="8" x2="12" y2="12" />
+                                <line x1="12" y1="16" x2="12.01" y2="16" />
+                            </svg>
+                        </div>
+                        <div class="stat-value">23</div>
+                        <div class="stat-label">Failed Logins Today</div>
+                        <div class="stat-change down">↑ 5 suspicious IPs</div>
+                    </div>
+                </div>
+
+                <!-- Row 2 -->
+                <div class="two-col">
+                    <!-- User Breakdown -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3>User Distribution</h3>
+                                <p>Breakdown by role and department</p>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="donut-wrap" style="margin-bottom:20px;">
+                                <div class="donut"></div>
+                                <div class="donut-legend">
+                                    <div class="legend-item">
+                                        <div class="legend-dot" style="background:var(--blue-500)"></div> Students — 62%
+                                    </div>
+                                    <div class="legend-item">
+                                        <div class="legend-dot" style="background:var(--green)"></div> Teachers — 20%
+                                    </div>
+                                    <div class="legend-item">
+                                        <div class="legend-dot" style="background:var(--yellow)"></div> Unverified — 10%
+                                    </div>
+                                    <div class="legend-item">
+                                        <div class="legend-dot" style="background:var(--red)"></div> Inactive — 8%
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bar-chart">
+                                <div class="bar-row">
+                                    <div class="bar-label">CSE</div>
+                                    <div class="bar-track">
+                                        <div class="bar-fill" style="width:78%"></div>
+                                    </div>
+                                    <div class="bar-val">78%</div>
+                                </div>
+                                <div class="bar-row">
+                                    <div class="bar-label">IT</div>
+                                    <div class="bar-track">
+                                        <div class="bar-fill" style="width:62%"></div>
+                                    </div>
+                                    <div class="bar-val">62%</div>
+                                </div>
+                                <div class="bar-row">
+                                    <div class="bar-label">ECE</div>
+                                    <div class="bar-track">
+                                        <div class="bar-fill green" style="width:45%"></div>
+                                    </div>
+                                    <div class="bar-val">45%</div>
+                                </div>
+                                <div class="bar-row">
+                                    <div class="bar-label">MECH</div>
+                                    <div class="bar-track">
+                                        <div class="bar-fill yellow" style="width:30%"></div>
+                                    </div>
+                                    <div class="bar-val">30%</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Activity -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3>Recent Activity</h3>
+                                <p>Latest system events</p>
+                            </div>
+                            <button class="btn btn-ghost btn-sm"
+                                onclick="showPage('logs', document.querySelector('[onclick*=logs]'))">View Logs</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="activity-list">
+                                <div class="activity-item">
+                                    <div class="activity-dot blue"></div>
+                                    <div>
+                                        <div class="activity-text">New assessment <b>"Data Structures - Mock 3"</b>
+                                            created by Prof. Anita</div>
+                                        <div class="activity-time">2 mins ago</div>
+                                    </div>
+                                </div>
+                                <div class="activity-item">
+                                    <div class="activity-dot green"></div>
+                                    <div>
+                                        <div class="activity-text">Student <b>Rahul Kumar</b> completed Aptitude Test
+                                            with 92%</div>
+                                        <div class="activity-time">11 mins ago</div>
+                                    </div>
+                                </div>
+                                <div class="activity-item">
+                                    <div class="activity-dot yellow"></div>
+                                    <div>
+                                        <div class="activity-text">Password reset OTP sent to <b>priya@college.edu</b>
+                                        </div>
+                                        <div class="activity-time">28 mins ago</div>
+                                    </div>
+                                </div>
+                                <div class="activity-item">
+                                    <div class="activity-dot red"></div>
+                                    <div>
+                                        <div class="activity-text">5 failed login attempts from IP <b>192.168.1.44</b>
+                                        </div>
+                                        <div class="activity-time">45 mins ago</div>
+                                    </div>
+                                </div>
+                                <div class="activity-item">
+                                    <div class="activity-dot blue"></div>
+                                    <div>
+                                        <div class="activity-text">New resource <b>"GATE 2025 Prep Pack"</b> uploaded to
+                                            Materials</div>
+                                        <div class="activity-time">1 hr ago</div>
+                                    </div>
+                                </div>
+                                <div class="activity-item">
+                                    <div class="activity-dot green"></div>
+                                    <div>
+                                        <div class="activity-text">12 new student registrations verified in batch</div>
+                                        <div class="activity-time">2 hrs ago</div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- User Management Section -->
-            <div class="content-section" id="users-section">
-                <div class="panel">
-                    <div class="panel-header">
-                        <div class="panel-title">User Management</div>
-                        <button class="btn btn-primary" onclick="openModal('createUserModal')">
-                            ➕ Add User
+                <!-- Assessment Status Summary -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h3>Assessment Status Summary</h3>
+                            <p>All assessments across categories</p>
+                        </div>
+                        <button class="btn btn-primary btn-sm"
+                            onclick="showPage('tests', document.querySelector('[onclick*=tests]'))">
+                            <svg viewBox="0 0 24 24">
+                                <line x1="12" y1="5" x2="12" y2="19" />
+                                <line x1="5" y1="12" x2="19" y2="12" />
+                            </svg>
+                            New Assessment
                         </button>
                     </div>
-
-                    <!-- Tabs -->
-                    <div class="tabs">
-                        <button class="tab-btn active" onclick="switchUserTab('students')">Students</button>
-                        <button class="tab-btn" onclick="switchUserTab('teachers')">Teachers</button>
-                    </div>
-
-                    <!-- Filters -->
-                    <div class="filters">
-                        <div class="filter-group">
-                            <label class="filter-label">Search</label>
-                            <input type="text" class="filter-input" placeholder="Search by name or ID...">
-                        </div>
-                        <div class="filter-group" id="studentFilter">
-                            <label class="filter-label">Filter by Teacher</label>
-                            <select class="filter-select">
-                                <option value="">All Teachers</option>
-                                <option value="1">Prof. John Smith</option>
-                                <option value="2">Dr. Sarah Johnson</option>
-                                <option value="3">Prof. Mike Davis</option>
-                            </select>
-                        </div>
-                        <div class="filter-group" id="teacherFilter" style="display: none;">
-                            <label class="filter-label">Filter by Students</label>
-                            <select class="filter-select">
-                                <option value="">All Students</option>
-                                <option value="has">Has Students</option>
-                                <option value="none">No Students</option>
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label class="filter-label">Status</label>
-                            <select class="filter-select">
-                                <option value="">All Status</option>
-                                <option value="active">Active</option>
-                                <option value="inactive">Inactive</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <!-- Students Table -->
-                    <div class="data-table" id="studentsTable">
+                    <div class="table-wrap">
                         <table>
                             <thead>
                                 <tr>
-                                    <th>Student ID</th>
-                                    <th>Name</th>
-                                    <th>Email</th>
-                                    <th>Teacher</th>
-                                    <th>Tests Taken</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>STU-2024-001</td>
-                                    <td>Sarah Smith</td>
-                                    <td>sarah.smith@email.com</td>
-                                    <td>Prof. John Smith</td>
-                                    <td>24</td>
-                                    <td><span class="badge badge-active">Active</span></td>
-                                    <td>
-                                        <div class="table-actions">
-                                            <span class="action-icon" onclick="editUser('student', 1)" title="Edit">✏️</span>
-                                            <span class="action-icon" onclick="deleteUser('student', 1)" title="Delete">🗑️</span>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td>STU-2024-002</td>
-                                    <td>Mike Johnson</td>
-                                    <td>mike.j@email.com</td>
-                                    <td>Dr. Sarah Johnson</td>
-                                    <td>18</td>
-                                    <td><span class="badge badge-active">Active</span></td>
-                                    <td>
-                                        <div class="table-actions">
-                                            <span class="action-icon" onclick="editUser('student', 2)" title="Edit">✏️</span>
-                                            <span class="action-icon" onclick="deleteUser('student', 2)" title="Delete">🗑️</span>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td>STU-2024-003</td>
-                                    <td>Emily Davis</td>
-                                    <td>emily.d@email.com</td>
-                                    <td>Prof. Mike Davis</td>
-                                    <td>31</td>
-                                    <td><span class="badge badge-active">Active</span></td>
-                                    <td>
-                                        <div class="table-actions">
-                                            <span class="action-icon" onclick="editUser('student', 3)" title="Edit">✏️</span>
-                                            <span class="action-icon" onclick="deleteUser('student', 3)" title="Delete">🗑️</span>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <!-- Teachers Table -->
-                    <div class="data-table" id="teachersTable" style="display: none;">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Teacher ID</th>
-                                    <th>Name</th>
-                                    <th>Email</th>
-                                    <th>Department</th>
-                                    <th>Students</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>TEA-2023-001</td>
-                                    <td>Prof. John Smith</td>
-                                    <td>john.smith@college.edu</td>
-                                    <td>Computer Science</td>
-                                    <td>45</td>
-                                    <td><span class="badge badge-active">Active</span></td>
-                                    <td>
-                                        <div class="table-actions">
-                                            <span class="action-icon" onclick="editUser('teacher', 1)" title="Edit">✏️</span>
-                                            <span class="action-icon" onclick="deleteUser('teacher', 1)" title="Delete">🗑️</span>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td>TEA-2023-002</td>
-                                    <td>Dr. Sarah Johnson</td>
-                                    <td>sarah.j@college.edu</td>
-                                    <td>Mathematics</td>
-                                    <td>38</td>
-                                    <td><span class="badge badge-active">Active</span></td>
-                                    <td>
-                                        <div class="table-actions">
-                                            <span class="action-icon" onclick="editUser('teacher', 2)" title="Edit">✏️</span>
-                                            <span class="action-icon" onclick="deleteUser('teacher', 2)" title="Delete">🗑️</span>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Test Management Section -->
-            <div class="content-section" id="tests-section">
-                <div class="panel">
-                    <div class="panel-header">
-                        <div class="panel-title">Test Management</div>
-                        <button class="btn btn-primary" onclick="openModal('createTestModal')">
-                            ➕ Create Test
-                        </button>
-                    </div>
-
-                    <div class="filters">
-                        <div class="filter-group">
-                            <label class="filter-label">Search</label>
-                            <input type="text" class="filter-input" placeholder="Search tests...">
-                        </div>
-                        <div class="filter-group">
-                            <label class="filter-label">Category</label>
-                            <select class="filter-select">
-                                <option value="">All Categories</option>
-                                <option value="aptitude">Aptitude</option>
-                                <option value="verbal">Verbal Ability</option>
-                                <option value="logical">Logical Reasoning</option>
-                                <option value="technical">Technical</option>
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label class="filter-label">Difficulty</label>
-                            <select class="filter-select">
-                                <option value="">All Levels</option>
-                                <option value="easy">Easy</option>
-                                <option value="medium">Medium</option>
-                                <option value="hard">Hard</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="data-table">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Test ID</th>
-                                    <th>Test Name</th>
+                                    <th>Title</th>
                                     <th>Category</th>
                                     <th>Difficulty</th>
-                                    <th>Questions</th>
                                     <th>Duration</th>
                                     <th>Attempts</th>
+                                    <th>Pass Rate</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Aptitude Test – Batch A</td>
+                                    <td>Aptitude</td>
+                                    <td><span class="badge easy">Easy</span></td>
+                                    <td>45 min</td>
+                                    <td>312</td>
+                                    <td>87%</td>
+                                    <td><span class="badge published">Active</span></td>
+                                </tr>
+                                <tr>
+                                    <td>Data Structures Mock 3</td>
+                                    <td>Technical</td>
+                                    <td><span class="badge hard">Hard</span></td>
+                                    <td>90 min</td>
+                                    <td>98</td>
+                                    <td>61%</td>
+                                    <td><span class="badge published">Active</span></td>
+                                </tr>
+                                <tr>
+                                    <td>Verbal Reasoning – Round 1</td>
+                                    <td>Communication</td>
+                                    <td><span class="badge medium">Medium</span></td>
+                                    <td>30 min</td>
+                                    <td>528</td>
+                                    <td>74%</td>
+                                    <td><span class="badge published">Active</span></td>
+                                </tr>
+                                <tr>
+                                    <td>OS Concepts Quiz</td>
+                                    <td>Technical</td>
+                                    <td><span class="badge medium">Medium</span></td>
+                                    <td>60 min</td>
+                                    <td>0</td>
+                                    <td>—</td>
+                                    <td><span class="badge draft">Draft</span></td>
+                                </tr>
+                                <tr>
+                                    <td>HR Interview Prep</td>
+                                    <td>Soft Skills</td>
+                                    <td><span class="badge easy">Easy</span></td>
+                                    <td>20 min</td>
+                                    <td>891</td>
+                                    <td>93%</td>
+                                    <td><span class="badge archived">Archived</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════════════════════ USERS ═══════════════════════════════ -->
+            <div class="page" id="page-users">
+                <div class="section-header">
+                    <div>
+                        <h2>User Management</h2>
+                        <p>Manage students, teachers, and admins</p>
+                    </div>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn btn-ghost">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="7 10 12 15 17 10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                            Export
+                        </button>
+                        <button class="btn btn-primary">
+                            <svg viewBox="0 0 24 24">
+                                <line x1="12" y1="5" x2="12" y2="19" />
+                                <line x1="5" y1="12" x2="19" y2="12" />
+                            </svg>
+                            Add User
+                        </button>
+                    </div>
+                </div>
+
+                <div class="tabs">
+                    <button class="tab active" onclick="setTab(this)">All Users</button>
+                    <button class="tab" onclick="setTab(this)">Students</button>
+                    <button class="tab" onclick="setTab(this)">Teachers</button>
+                    <button class="tab" onclick="setTab(this)">Admins</button>
+                </div>
+
+                <div class="search-bar">
+                    <svg viewBox="0 0 24 24">
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                    <input placeholder="Search by name, email, registration number..." />
+                </div>
+
+                <div class="card">
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Role</th>
+                                    <th>Department</th>
+                                    <th>Reg. No.</th>
+                                    <th>Last Login</th>
+                                    <th>Verified</th>
                                     <th>Status</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr>
-                                    <td>TEST-001</td>
-                                    <td>Quantitative Aptitude Basics</td>
-                                    <td>Aptitude</td>
-                                    <td>Easy</td>
-                                    <td>30</td>
-                                    <td>45 min</td>
-                                    <td>2,345</td>
-                                    <td><span class="badge badge-active">Active</span></td>
                                     <td>
-                                        <div class="table-actions">
-                                            <span class="action-icon" onclick="editTest(1)" title="Edit">✏️</span>
-                                            <span class="action-icon" onclick="viewTest(1)" title="View">👁️</span>
-                                            <span class="action-icon" onclick="deleteTest(1)" title="Delete">🗑️</span>
+                                        <div class="user-cell">
+                                            <div class="user-av blue">RK</div>
+                                            <div>
+                                                <div class="user-name">Rahul Kumar</div>
+                                                <div class="user-email">rahul@college.edu</div>
+                                            </div>
                                         </div>
+                                    </td>
+                                    <td><span class="badge student">Student</span></td>
+                                    <td>CSE</td>
+                                    <td>21CSE001</td>
+                                    <td>2 hrs ago</td>
+                                    <td><span class="badge success">✓ Yes</span></td>
+                                    <td><span class="badge active">Active</span></td>
+                                    <td>
+                                        <div style="display:flex;gap:6px;"><button
+                                                class="btn btn-ghost btn-sm">Edit</button><button
+                                                class="btn btn-danger btn-sm">Block</button></div>
                                     </td>
                                 </tr>
                                 <tr>
-                                    <td>TEST-002</td>
-                                    <td>English Grammar & Vocabulary</td>
-                                    <td>Verbal</td>
-                                    <td>Medium</td>
-                                    <td>25</td>
-                                    <td>30 min</td>
-                                    <td>1,823</td>
-                                    <td><span class="badge badge-active">Active</span></td>
                                     <td>
-                                        <div class="table-actions">
-                                            <span class="action-icon" onclick="editTest(2)" title="Edit">✏️</span>
-                                            <span class="action-icon" onclick="viewTest(2)" title="View">👁️</span>
-                                            <span class="action-icon" onclick="deleteTest(2)" title="Delete">🗑️</span>
+                                        <div class="user-cell">
+                                            <div class="user-av green">AS</div>
+                                            <div>
+                                                <div class="user-name">Anita Sharma</div>
+                                                <div class="user-email">anita@college.edu</div>
+                                            </div>
                                         </div>
+                                    </td>
+                                    <td><span class="badge teacher">Teacher</span></td>
+                                    <td>CSE</td>
+                                    <td>—</td>
+                                    <td>1 day ago</td>
+                                    <td><span class="badge success">✓ Yes</span></td>
+                                    <td><span class="badge active">Active</span></td>
+                                    <td>
+                                        <div style="display:flex;gap:6px;"><button
+                                                class="btn btn-ghost btn-sm">Edit</button><button
+                                                class="btn btn-danger btn-sm">Block</button></div>
                                     </td>
                                 </tr>
                                 <tr>
-                                    <td>TEST-003</td>
-                                    <td>Data Structures & Algorithms</td>
-                                    <td>Technical</td>
-                                    <td>Hard</td>
-                                    <td>40</td>
-                                    <td>60 min</td>
-                                    <td>3,127</td>
-                                    <td><span class="badge badge-active">Active</span></td>
                                     <td>
-                                        <div class="table-actions">
-                                            <span class="action-icon" onclick="editTest(3)" title="Edit">✏️</span>
-                                            <span class="action-icon" onclick="viewTest(3)" title="View">👁️</span>
-                                            <span class="action-icon" onclick="deleteTest(3)" title="Delete">🗑️</span>
+                                        <div class="user-cell">
+                                            <div class="user-av purple">PM</div>
+                                            <div>
+                                                <div class="user-name">Priya Menon</div>
+                                                <div class="user-email">priya@college.edu</div>
+                                            </div>
                                         </div>
+                                    </td>
+                                    <td><span class="badge student">Student</span></td>
+                                    <td>IT</td>
+                                    <td>21IT042</td>
+                                    <td>3 hrs ago</td>
+                                    <td><span class="badge warning">Pending</span></td>
+                                    <td><span class="badge active">Active</span></td>
+                                    <td>
+                                        <div style="display:flex;gap:6px;"><button
+                                                class="btn btn-ghost btn-sm">Edit</button><button
+                                                class="btn btn-danger btn-sm">Block</button></div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <div class="user-cell">
+                                            <div class="user-av orange">VR</div>
+                                            <div>
+                                                <div class="user-name">Vikram Rao</div>
+                                                <div class="user-email">vikram@college.edu</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td><span class="badge student">Student</span></td>
+                                    <td>ECE</td>
+                                    <td>21ECE019</td>
+                                    <td>5 days ago</td>
+                                    <td><span class="badge success">✓ Yes</span></td>
+                                    <td><span class="badge inactive">Inactive</span></td>
+                                    <td>
+                                        <div style="display:flex;gap:6px;"><button
+                                                class="btn btn-ghost btn-sm">Edit</button><button
+                                                class="btn btn-primary btn-sm">Activate</button></div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <div class="user-cell">
+                                            <div class="user-av blue">SA</div>
+                                            <div>
+                                                <div class="user-name">Super Admin</div>
+                                                <div class="user-email">admin@pta.edu</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td><span class="badge admin-b">Admin</span></td>
+                                    <td>—</td>
+                                    <td>—</td>
+                                    <td>Now</td>
+                                    <td><span class="badge success">✓ Yes</span></td>
+                                    <td><span class="badge active">Active</span></td>
+                                    <td>
+                                        <div style="display:flex;gap:6px;"><button
+                                                class="btn btn-ghost btn-sm">Edit</button></div>
                                     </td>
                                 </tr>
                             </tbody>
@@ -985,166 +1840,161 @@
                 </div>
             </div>
 
-            <!-- Resources Section -->
-            <div class="content-section" id="resources-section">
-                <div class="panel">
-                    <div class="panel-header">
-                        <div class="panel-title">Resource Library</div>
-                        <button class="btn btn-primary" onclick="openModal('uploadResourceModal')">
-                            ⬆️ Upload Resource
-                        </button>
+            <!-- ═══════════════════════════════ TESTS ═══════════════════════════════ -->
+            <div class="page" id="page-tests">
+                <div class="section-header">
+                    <div>
+                        <h2>Test Management</h2>
+                        <p>Create, schedule, and manage assessments</p>
                     </div>
+                    <button class="btn btn-primary">
+                        <svg viewBox="0 0 24 24">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        New Assessment
+                    </button>
+                </div>
 
-                    <div class="filters">
-                        <div class="filter-group">
-                            <label class="filter-label">Search</label>
-                            <input type="text" class="filter-input" placeholder="Search resources...">
-                        </div>
-                        <div class="filter-group">
-                            <label class="filter-label">File Type</label>
-                            <select class="filter-select">
-                                <option value="">All Types</option>
-                                <option value="pdf">PDF</option>
-                                <option value="image">Images</option>
-                                <option value="doc">Documents</option>
-                                <option value="video">Videos</option>
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label class="filter-label">Category</label>
-                            <select class="filter-select">
-                                <option value="">All Categories</option>
-                                <option value="study">Study Material</option>
-                                <option value="syllabus">Syllabus</option>
-                                <option value="solution">Solutions</option>
-                            </select>
-                        </div>
+                <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;">
+                    <div class="stat-card blue">
+                        <div class="stat-icon"><svg viewBox="0 0 24 24">
+                                <path d="M9 11l3 3L22 4" />
+                                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                            </svg></div>
+                        <div class="stat-value">148</div>
+                        <div class="stat-label">Total Assessments</div>
                     </div>
-
-                    <div class="resource-grid">
-                        <div class="resource-card">
-                            <div class="resource-icon">📄</div>
-                            <div class="resource-name">Aptitude_Formula_Sheet.pdf</div>
-                            <div style="display: flex; gap: 5px; justify-content: center; margin-top: 10px;">
-                                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="downloadResource(1)">📥</button>
-                                <button class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;" onclick="deleteResource(1)">🗑️</button>
-                            </div>
-                        </div>
-                        <div class="resource-card">
-                            <div class="resource-icon">🖼️</div>
-                            <div class="resource-name">Geometry_Diagrams.png</div>
-                            <div style="display: flex; gap: 5px; justify-content: center; margin-top: 10px;">
-                                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="downloadResource(2)">📥</button>
-                                <button class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;" onclick="deleteResource(2)">🗑️</button>
-                            </div>
-                        </div>
-                        <div class="resource-card">
-                            <div class="resource-icon">📄</div>
-                            <div class="resource-name">DSA_Study_Guide.pdf</div>
-                            <div style="display: flex; gap: 5px; justify-content: center; margin-top: 10px;">
-                                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="downloadResource(3)">📥</button>
-                                <button class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;" onclick="deleteResource(3)">🗑️</button>
-                            </div>
-                        </div>
-                        <div class="resource-card">
-                            <div class="resource-icon">📄</div>
-                            <div class="resource-name">Verbal_Ability_Tips.pdf</div>
-                            <div style="display: flex; gap: 5px; justify-content: center; margin-top: 10px;">
-                                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="downloadResource(4)">📥</button>
-                                <button class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;" onclick="deleteResource(4)">🗑️</button>
-                            </div>
-                        </div>
+                    <div class="stat-card green">
+                        <div class="stat-icon"><svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                                <polyline points="12 6 12 12 16 14" />
+                            </svg></div>
+                        <div class="stat-value">34</div>
+                        <div class="stat-label">Active / Live</div>
+                    </div>
+                    <div class="stat-card yellow">
+                        <div class="stat-icon"><svg viewBox="0 0 24 24">
+                                <rect x="3" y="4" width="18" height="18" rx="2" />
+                                <line x1="16" y1="2" x2="16" y2="6" />
+                                <line x1="8" y1="2" x2="8" y2="6" />
+                                <line x1="3" y1="10" x2="21" y2="10" />
+                            </svg></div>
+                        <div class="stat-value">12</div>
+                        <div class="stat-label">Drafts</div>
+                    </div>
+                    <div class="stat-card red">
+                        <div class="stat-icon"><svg viewBox="0 0 24 24">
+                                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                                <polyline points="17 6 23 6 23 12" />
+                            </svg></div>
+                        <div class="stat-value">74.3%</div>
+                        <div class="stat-label">Avg Pass Rate</div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Logs Section -->
-            <div class="content-section" id="logs-section">
-                <div class="panel">
-                    <div class="panel-header">
-                        <div class="panel-title">System Logs</div>
-                        <button class="btn btn-secondary">🔄 Refresh</button>
-                    </div>
+                <div class="search-bar">
+                    <svg viewBox="0 0 24 24">
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                    <input placeholder="Search assessments by title, category, difficulty..." />
+                </div>
 
-                    <div class="filters">
-                        <div class="filter-group">
-                            <label class="filter-label">Log Type</label>
-                            <select class="filter-select">
-                                <option value="">All Logs</option>
-                                <option value="login">Login Attempts</option>
-                                <option value="user">User Actions</option>
-                                <option value="test">Test Activities</option>
-                                <option value="system">System Events</option>
-                                <option value="security">Security Alerts</option>
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label class="filter-label">Date Range</label>
-                            <input type="date" class="filter-input">
-                        </div>
-                        <div class="filter-group">
-                            <label class="filter-label">Severity</label>
-                            <select class="filter-select">
-                                <option value="">All Levels</option>
-                                <option value="info">Info</option>
-                                <option value="warning">Warning</option>
-                                <option value="error">Error</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="data-table">
+                <div class="card">
+                    <div class="table-wrap">
                         <table>
                             <thead>
                                 <tr>
-                                    <th>Timestamp</th>
-                                    <th>Type</th>
-                                    <th>User</th>
-                                    <th>Action</th>
-                                    <th>IP Address</th>
+                                    <th>Title</th>
+                                    <th>Category</th>
+                                    <th>Difficulty</th>
+                                    <th>Duration</th>
+                                    <th>Total Marks</th>
+                                    <th>Pass Marks</th>
+                                    <th>Max Attempts</th>
                                     <th>Status</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr>
-                                    <td>2026-01-09 14:32:15</td>
-                                    <td>Login</td>
-                                    <td>admin@portal.com</td>
-                                    <td>Successful login</td>
-                                    <td>192.168.1.100</td>
-                                    <td><span class="badge badge-active">Success</span></td>
+                                    <td><b>Aptitude Test – Batch A</b></td>
+                                    <td>Aptitude</td>
+                                    <td><span class="badge easy">Easy</span></td>
+                                    <td>45 min</td>
+                                    <td>100</td>
+                                    <td>40</td>
+                                    <td>2</td>
+                                    <td><span class="badge published">Active</span></td>
+                                    <td>
+                                        <div style="display:flex;gap:6px;"><button
+                                                class="btn btn-ghost btn-sm">Edit</button><button
+                                                class="btn btn-ghost btn-sm">Questions</button><button
+                                                class="btn btn-danger btn-sm">Archive</button></div>
+                                    </td>
                                 </tr>
                                 <tr>
-                                    <td>2026-01-09 14:28:42</td>
-                                    <td>User</td>
-                                    <td>STU-2024-001</td>
-                                    <td>Completed test: TEST-001</td>
-                                    <td>192.168.1.45</td>
-                                    <td><span class="badge badge-active">Success</span></td>
+                                    <td><b>Data Structures Mock 3</b></td>
+                                    <td>Technical</td>
+                                    <td><span class="badge hard">Hard</span></td>
+                                    <td>90 min</td>
+                                    <td>150</td>
+                                    <td>75</td>
+                                    <td>1</td>
+                                    <td><span class="badge published">Active</span></td>
+                                    <td>
+                                        <div style="display:flex;gap:6px;"><button
+                                                class="btn btn-ghost btn-sm">Edit</button><button
+                                                class="btn btn-ghost btn-sm">Questions</button><button
+                                                class="btn btn-danger btn-sm">Archive</button></div>
+                                    </td>
                                 </tr>
                                 <tr>
-                                    <td>2026-01-09 14:15:33</td>
-                                    <td>Security</td>
-                                    <td>unknown</td>
-                                    <td>3 failed login attempts</td>
-                                    <td>45.123.67.89</td>
-                                    <td><span class="badge badge-inactive">Failed</span></td>
+                                    <td><b>Verbal Reasoning – Round 1</b></td>
+                                    <td>Communication</td>
+                                    <td><span class="badge medium">Medium</span></td>
+                                    <td>30 min</td>
+                                    <td>50</td>
+                                    <td>25</td>
+                                    <td>1</td>
+                                    <td><span class="badge published">Active</span></td>
+                                    <td>
+                                        <div style="display:flex;gap:6px;"><button
+                                                class="btn btn-ghost btn-sm">Edit</button><button
+                                                class="btn btn-ghost btn-sm">Questions</button><button
+                                                class="btn btn-danger btn-sm">Archive</button></div>
+                                    </td>
                                 </tr>
                                 <tr>
-                                    <td>2026-01-09 13:45:21</td>
-                                    <td>System</td>
-                                    <td>system</td>
-                                    <td>Database backup completed</td>
-                                    <td>127.0.0.1</td>
-                                    <td><span class="badge badge-active">Success</span></td>
+                                    <td><b>OS Concepts Quiz</b></td>
+                                    <td>Technical</td>
+                                    <td><span class="badge medium">Medium</span></td>
+                                    <td>60 min</td>
+                                    <td>100</td>
+                                    <td>50</td>
+                                    <td>1</td>
+                                    <td><span class="badge draft">Draft</span></td>
+                                    <td>
+                                        <div style="display:flex;gap:6px;"><button
+                                                class="btn btn-ghost btn-sm">Edit</button><button
+                                                class="btn btn-primary btn-sm">Publish</button></div>
+                                    </td>
                                 </tr>
                                 <tr>
-                                    <td>2026-01-09 13:22:18</td>
-                                    <td>Test</td>
-                                    <td>admin@portal.com</td>
-                                    <td>Created new test: TEST-004</td>
-                                    <td>192.168.1.100</td>
-                                    <td><span class="badge badge-active">Success</span></td>
+                                    <td><b>HR Interview Prep</b></td>
+                                    <td>Soft Skills</td>
+                                    <td><span class="badge easy">Easy</span></td>
+                                    <td>20 min</td>
+                                    <td>50</td>
+                                    <td>20</td>
+                                    <td>3</td>
+                                    <td><span class="badge archived">Archived</span></td>
+                                    <td>
+                                        <div style="display:flex;gap:6px;"><button
+                                                class="btn btn-ghost btn-sm">Restore</button><button
+                                                class="btn btn-danger btn-sm">Delete</button></div>
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
@@ -1152,347 +2002,395 @@
                 </div>
             </div>
 
-            <!-- Settings Section -->
-            <div class="content-section" id="settings-section">
-                <div class="panel">
-                    <div class="panel-header">
-                        <div class="panel-title">System Settings</div>
+            <!-- ═══════════════════════════════ RESOURCES ═══════════════════════════════ -->
+            <div class="page" id="page-resources">
+                <div class="section-header">
+                    <div>
+                        <h2>Resources</h2>
+                        <p>Study materials, uploads, and learning content</p>
                     </div>
-
-                    <div class="form-group">
-                        <label class="form-label">Portal Name</label>
-                        <input type="text" class="form-input" value="Placement Portal">
-                    </div>
-
-                    <div class="form-group">
-                        <label class="form-label">Admin Email</label>
-                        <input type="email" class="form-input" value="admin@portal.com">
-                    </div>
-
-                    <div class="form-group">
-                        <label class="form-label">Max Login Attempts</label>
-                        <input type="number" class="form-input" value="3">
-                    </div>
-
-                    <div class="form-group">
-                        <label class="form-label">Session Timeout (minutes)</label>
-                        <input type="number" class="form-input" value="30">
-                    </div>
-
-                    <div class="form-group">
-                        <label class="form-label">Enable User Registration</label>
-                        <select class="form-select">
-                            <option value="yes">Yes</option>
-                            <option value="no">No</option>
-                        </select>
-                    </div>
-
-                    <button class="btn btn-primary">💾 Save Settings</button>
+                    <button class="btn btn-primary">
+                        <svg viewBox="0 0 24 24">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        Upload Resource
+                    </button>
                 </div>
 
-                <div class="panel" style="margin-top: 20px;">
-                    <div class="panel-header">
-                        <div class="panel-title">Database Management</div>
+                <div class="three-col" style="margin-bottom:20px;">
+                    <div class="stat-card blue">
+                        <div class="stat-icon"><svg viewBox="0 0 24 24">
+                                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                            </svg></div>
+                        <div class="stat-value">234</div>
+                        <div class="stat-label">Total Materials</div>
                     </div>
-                    <div style="display: flex; gap: 15px; flex-wrap: wrap;">
-                        <button class="btn btn-secondary">💾 Backup Database</button>
-                        <button class="btn btn-secondary">⬆️ Restore Database</button>
-                        <button class="btn btn-danger">🗑️ Clear Old Logs</button>
+                    <div class="stat-card green">
+                        <div class="stat-icon"><svg viewBox="0 0 24 24">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="17 8 12 3 7 8" />
+                                <line x1="12" y1="3" x2="12" y2="15" />
+                            </svg></div>
+                        <div class="stat-value">18.4 GB</div>
+                        <div class="stat-label">Storage Used</div>
+                    </div>
+                    <div class="stat-card yellow">
+                        <div class="stat-icon"><svg viewBox="0 0 24 24">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="7 10 12 15 17 10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg></div>
+                        <div class="stat-value">4,821</div>
+                        <div class="stat-label">Total Downloads</div>
+                    </div>
+                </div>
+
+                <div class="resource-grid">
+                    <div class="resource-card">
+                        <div class="resource-icon" style="background:rgba(0,102,255,0.12);">📄</div>
+                        <h4>GATE 2025 Prep Pack</h4>
+                        <p>Full question bank with solutions for CS topics</p>
+                        <div class="resource-meta"><span>PDF · 42 MB</span><span>↓ 892 downloads</span></div>
+                    </div>
+                    <div class="resource-card">
+                        <div class="resource-icon" style="background:rgba(34,197,94,0.12);">🎬</div>
+                        <h4>Data Structures Videos</h4>
+                        <p>Complete DSA series — arrays, trees, graphs</p>
+                        <div class="resource-meta"><span>Video · 2.1 GB</span><span>↓ 1,204 downloads</span></div>
+                    </div>
+                    <div class="resource-card">
+                        <div class="resource-icon" style="background:rgba(234,179,8,0.12);">📊</div>
+                        <h4>Aptitude Formula Sheet</h4>
+                        <p>Quick reference for quants and reasoning</p>
+                        <div class="resource-meta"><span>PDF · 1.2 MB</span><span>↓ 2,140 downloads</span></div>
+                    </div>
+                    <div class="resource-card">
+                        <div class="resource-icon" style="background:rgba(124,58,237,0.12);">🖥️</div>
+                        <h4>System Design Notes</h4>
+                        <p>Interview-focused system design concepts</p>
+                        <div class="resource-meta"><span>DOCX · 3.8 MB</span><span>↓ 341 downloads</span></div>
+                    </div>
+                    <div class="resource-card">
+                        <div class="resource-icon" style="background:rgba(239,68,68,0.12);">🎙️</div>
+                        <h4>HR Interview Guide</h4>
+                        <p>Common questions, answers, and tips</p>
+                        <div class="resource-meta"><span>PDF · 900 KB</span><span>↓ 244 downloads</span></div>
+                    </div>
+                    <div class="resource-card"
+                        style="border-style:dashed;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;min-height:140px;">
+                        <div style="font-size:28px;margin-bottom:8px;">+</div>
+                        <div style="font-size:13px;color:var(--muted);">Upload New Resource</div>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <!-- Create User Modal -->
-    <div class="modal" id="createUserModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <div class="modal-title">Add New User</div>
-                <span class="close-modal" onclick="closeModal('createUserModal')">✕</span>
-            </div>
-            <div class="form-group">
-                <label class="form-label">User Type</label>
-                <select class="form-select" id="userType" onchange="toggleUserFields()">
-                    <option value="student">Student</option>
-                    <option value="teacher">Teacher</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Full Name</label>
-                <input type="text" class="form-input" placeholder="Enter full name">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Email</label>
-                <input type="email" class="form-input" placeholder="Enter email">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Password</label>
-                <input type="password" class="form-input" placeholder="Enter password">
-            </div>
-            <div class="form-group" id="teacherField" style="display: none;">
-                <label class="form-label">Department</label>
-                <input type="text" class="form-input" placeholder="Enter department">
-            </div>
-            <div class="form-group" id="studentField">
-                <label class="form-label">Assign Teacher</label>
-                <select class="form-select">
-                    <option value="">Select Teacher</option>
-                    <option value="1">Prof. John Smith</option>
-                    <option value="2">Dr. Sarah Johnson</option>
-                    <option value="3">Prof. Mike Davis</option>
-                </select>
-            </div>
-            <div style="display: flex; gap: 10px; margin-top: 20px;">
-                <button class="btn btn-primary" onclick="createUser()">✅ Create User</button>
-                <button class="btn btn-secondary" onclick="closeModal('createUserModal')">Cancel</button>
-            </div>
-        </div>
-    </div>
+            <!-- ═══════════════════════════════ LOGS ═══════════════════════════════ -->
+            <div class="page" id="page-logs">
+                <div class="section-header">
+                    <div>
+                        <h2>System Logs</h2>
+                        <p>Login activity, audit trail, and security events</p>
+                    </div>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn btn-ghost">
+                            <svg viewBox="0 0 24 24">
+                                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                            </svg>
+                            Filter
+                        </button>
+                        <button class="btn btn-ghost">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="7 10 12 15 17 10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                            Export
+                        </button>
+                    </div>
+                </div>
 
-    <!-- Create Test Modal -->
-    <div class="modal" id="createTestModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <div class="modal-title">Create New Test</div>
-                <span class="close-modal" onclick="closeModal('createTestModal')">✕</span>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Test Name</label>
-                <input type="text" class="form-input" placeholder="Enter test name">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Description</label>
-                <textarea class="form-textarea" placeholder="Enter test description"></textarea>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Category</label>
-                <select class="form-select">
-                    <option value="aptitude">Aptitude</option>
-                    <option value="verbal">Verbal Ability</option>
-                    <option value="logical">Logical Reasoning</option>
-                    <option value="technical">Technical</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Difficulty</label>
-                <select class="form-select">
-                    <option value="easy">Easy</option>
-                    <option value="medium">Medium</option>
-                    <option value="hard">Hard</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Number of Questions</label>
-                <input type="number" class="form-input" placeholder="Enter number of questions">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Duration (minutes)</label>
-                <input type="number" class="form-input" placeholder="Enter duration">
-            </div>
-            <div style="display: flex; gap: 10px; margin-top: 20px;">
-                <button class="btn btn-primary" onclick="createTest()">✅ Create Test</button>
-                <button class="btn btn-secondary" onclick="closeModal('createTestModal')">Cancel</button>
-            </div>
-        </div>
-    </div>
+                <div class="tabs">
+                    <button class="tab active" onclick="setTab(this)">Login Activity</button>
+                    <button class="tab" onclick="setTab(this)">Audit Logs</button>
+                    <button class="tab" onclick="setTab(this)">Email Queue</button>
+                </div>
 
-    <!-- Upload Resource Modal -->
-    <div class="modal" id="uploadResourceModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <div class="modal-title">Upload Resource</div>
-                <span class="close-modal" onclick="closeModal('uploadResourceModal')">✕</span>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Resource Name</label>
-                <input type="text" class="form-input" placeholder="Enter resource name">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Category</label>
-                <select class="form-select">
-                    <option value="study">Study Material</option>
-                    <option value="syllabus">Syllabus</option>
-                    <option value="solution">Solutions</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">File Upload</label>
-                <div class="upload-area" onclick="document.getElementById('fileInput').click()">
-                    <div class="upload-icon">📁</div>
-                    <div class="upload-text">Click to select file or drag and drop</div>
-                    <input type="file" id="fileInput" style="display: none;" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.mp4">
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h3>Login Activity</h3>
+                            <p>Recent authentication events from <code
+                                    style="color:var(--blue-400);font-size:11px;">login_activity</code></p>
+                        </div>
+                        <span class="badge error">3 alerts</span>
+                    </div>
+                    <div>
+                        <div class="log-entry"><span class="log-time">2026-03-01 14:32:18</span><span
+                                class="log-level"><span class="badge success"
+                                    style="font-size:10px;">SUCCESS</span></span><span
+                                class="log-user">rahul@college.edu</span><span class="log-msg">Login
+                                successful</span><span class="log-ip">10.0.1.21</span></div>
+                        <div class="log-entry"><span class="log-time">2026-03-01 14:28:04</span><span
+                                class="log-level"><span class="badge error"
+                                    style="font-size:10px;">FAIL</span></span><span class="log-user">unknown</span><span
+                                class="log-msg">Invalid password — 5th attempt</span><span
+                                class="log-ip">192.168.1.44</span></div>
+                        <div class="log-entry"><span class="log-time">2026-03-01 14:27:51</span><span
+                                class="log-level"><span class="badge error"
+                                    style="font-size:10px;">FAIL</span></span><span class="log-user">unknown</span><span
+                                class="log-msg">Invalid password — 4th attempt</span><span
+                                class="log-ip">192.168.1.44</span></div>
+                        <div class="log-entry"><span class="log-time">2026-03-01 14:15:33</span><span
+                                class="log-level"><span class="badge success"
+                                    style="font-size:10px;">SUCCESS</span></span><span
+                                class="log-user">anita@college.edu</span><span class="log-msg">Login
+                                successful</span><span class="log-ip">10.0.1.8</span></div>
+                        <div class="log-entry"><span class="log-time">2026-03-01 13:58:02</span><span
+                                class="log-level"><span class="badge warning"
+                                    style="font-size:10px;">OTP</span></span><span
+                                class="log-user">priya@college.edu</span><span class="log-msg">Password reset OTP
+                                sent</span><span class="log-ip">10.0.1.55</span></div>
+                        <div class="log-entry"><span class="log-time">2026-03-01 13:40:11</span><span
+                                class="log-level"><span class="badge success"
+                                    style="font-size:10px;">SUCCESS</span></span><span
+                                class="log-user">admin@pta.edu</span><span class="log-msg">Admin login
+                                successful</span><span class="log-ip">10.0.0.1</span></div>
+                        <div class="log-entry"><span class="log-time">2026-03-01 13:12:44</span><span
+                                class="log-level"><span class="badge error"
+                                    style="font-size:10px;">BLOCK</span></span><span
+                                class="log-user">vikram@college.edu</span><span class="log-msg">Account locked — max
+                                attempts exceeded</span><span class="log-ip">10.0.1.33</span></div>
+                        <div class="log-entry"><span class="log-time">2026-03-01 12:05:29</span><span
+                                class="log-level"><span class="badge success"
+                                    style="font-size:10px;">SUCCESS</span></span><span
+                                class="log-user">rahul@college.edu</span><span class="log-msg">Login successful from new
+                                device</span><span class="log-ip">10.0.2.14</span></div>
+                    </div>
                 </div>
             </div>
-            <div style="display: flex; gap: 10px; margin-top: 20px;">
-                <button class="btn btn-primary" onclick="uploadResource()">⬆️ Upload</button>
-                <button class="btn btn-secondary" onclick="closeModal('uploadResourceModal')">Cancel</button>
+
+            <!-- ═══════════════════════════════ PROFILE ═══════════════════════════════ -->
+            <div class="page" id="page-profile">
+                <div class="section-header">
+                    <div>
+                        <h2>Profile</h2>
+                        <p>Your admin account details</p>
+                    </div>
+                    <button class="btn btn-primary">Save Changes</button>
+                </div>
+
+                <div class="profile-hero">
+                    <div class="profile-avatar-lg">SA</div>
+                    <div>
+                        <h2>Super Admin</h2>
+                        <p>admin@pta.edu</p>
+                        <span class="badge admin-b" style="margin-top:8px;display:inline-flex;">Admin</span>
+                    </div>
+                </div>
+
+                <div class="two-col">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Personal Information</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="settings-grid">
+                                <div class="setting-group"><label>Full Name</label><input class="setting-input"
+                                        value="Super Admin" /></div>
+                                <div class="setting-group"><label>Email</label><input class="setting-input"
+                                        value="admin@pta.edu" /></div>
+                                <div class="setting-group"><label>Department</label><input class="setting-input"
+                                        value="Administration" /></div>
+                                <div class="setting-group"><label>Role</label><input class="setting-input"
+                                        value="Administrator" disabled style="opacity:0.5;" /></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Security</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="setting-group"><label>Current Password</label><input class="setting-input"
+                                    type="password" placeholder="••••••••" /></div>
+                            <div class="setting-group"><label>New Password</label><input class="setting-input"
+                                    type="password" placeholder="Min 8 characters" /></div>
+                            <div class="setting-group"><label>Confirm Password</label><input class="setting-input"
+                                    type="password" placeholder="Re-enter password" /></div>
+                            <button class="btn btn-primary" style="width:100%;">Update Password</button>
+                        </div>
+                    </div>
+                </div>
             </div>
-        </div>
-    </div>
+
+            <!-- ═══════════════════════════════ SETTINGS ═══════════════════════════════ -->
+            <div class="page" id="page-settings">
+                <div class="section-header">
+                    <div>
+                        <h2>Settings</h2>
+                        <p>System configuration from <code
+                                style="color:var(--blue-400);font-size:12px;">system_settings</code> table</p>
+                    </div>
+                    <button class="btn btn-primary">Save All</button>
+                </div>
+
+                <div class="two-col">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Security Configuration</h3>
+                            <p>OTP, session, and lockout settings</p>
+                        </div>
+                        <div class="card-body">
+                            <div class="settings-grid">
+                                <div class="setting-group"><label>OTP Expiry (minutes)</label><input
+                                        class="setting-input" type="number" value="15" /></div>
+                                <div class="setting-group"><label>Max Login Attempts</label><input class="setting-input"
+                                        type="number" value="5" /></div>
+                                <div class="setting-group"><label>Lockout Duration (minutes)</label><input
+                                        class="setting-input" type="number" value="30" /></div>
+                                <div class="setting-group"><label>Session Timeout (minutes)</label><input
+                                        class="setting-input" type="number" value="60" /></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>System Features</h3>
+                            <p>Toggle system-wide features</p>
+                        </div>
+                        <div class="card-body">
+                            <div class="toggle-row">
+                                <div class="toggle-info">
+                                    <h4>Maintenance Mode</h4>
+                                    <p>Block all non-admin logins</p>
+                                </div>
+                                <label class="toggle"><input type="checkbox"><span class="toggle-slider"></span></label>
+                            </div>
+                            <div class="toggle-row">
+                                <div class="toggle-info">
+                                    <h4>Allow Guest Tests</h4>
+                                    <p>Public access to assessments</p>
+                                </div>
+                                <label class="toggle"><input type="checkbox" checked><span
+                                        class="toggle-slider"></span></label>
+                            </div>
+                            <div class="toggle-row">
+                                <div class="toggle-info">
+                                    <h4>Enable Proctoring</h4>
+                                    <p>Camera/screen monitoring during tests</p>
+                                </div>
+                                <label class="toggle"><input type="checkbox"><span class="toggle-slider"></span></label>
+                            </div>
+                            <div class="toggle-row">
+                                <div class="toggle-info">
+                                    <h4>SMTP Configured</h4>
+                                    <p>Email delivery status</p>
+                                </div>
+                                <label class="toggle"><input type="checkbox"><span class="toggle-slider"></span></label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Storage & Retention</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="settings-grid">
+                                <div class="setting-group"><label>Max File Size (MB)</label><input class="setting-input"
+                                        type="number" value="10" /></div>
+                                <div class="setting-group"><label>Results Retention (days)</label><input
+                                        class="setting-input" type="number" value="365" /></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Database Overview</h3>
+                            <p>PTA schema summary</p>
+                        </div>
+                        <div class="card-body">
+                            <div class="bar-chart">
+                                <div class="bar-row">
+                                    <div class="bar-label">users</div>
+                                    <div class="bar-track">
+                                        <div class="bar-fill" style="width:85%"></div>
+                                    </div>
+                                    <div class="bar-val">2,840</div>
+                                </div>
+                                <div class="bar-row">
+                                    <div class="bar-label">assessments</div>
+                                    <div class="bar-track">
+                                        <div class="bar-fill" style="width:60%"></div>
+                                    </div>
+                                    <div class="bar-val">148</div>
+                                </div>
+                                <div class="bar-row">
+                                    <div class="bar-label">attempts</div>
+                                    <div class="bar-track">
+                                        <div class="bar-fill green" style="width:95%"></div>
+                                    </div>
+                                    <div class="bar-val">9,412</div>
+                                </div>
+                                <div class="bar-row">
+                                    <div class="bar-label">notifications</div>
+                                    <div class="bar-track">
+                                        <div class="bar-fill yellow" style="width:50%"></div>
+                                    </div>
+                                    <div class="bar-val">3,201</div>
+                                </div>
+                                <div class="bar-row">
+                                    <div class="bar-label">audit_logs</div>
+                                    <div class="bar-track">
+                                        <div class="bar-fill" style="width:40%"></div>
+                                    </div>
+                                    <div class="bar-val">1,088</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- /content -->
+    </div><!-- /main -->
 
     <script>
-        // Sidebar auto-hide functionality
-        let sidebarTimeout;
-        const sidebar = document.querySelector('.sidebar');
-        
-        function hideSidebar() {
-            sidebar.classList.add('hidden');
-        }
-        
-        function showSidebar() {
-            sidebar.classList.remove('hidden');
-            resetSidebarTimeout();
-        }
-        
-        function resetSidebarTimeout() {
-            clearTimeout(sidebarTimeout);
-            sidebarTimeout = setTimeout(hideSidebar, 3000); // Hide after 3 seconds of inactivity
-        }
-        
-        // Show sidebar on hover
-        sidebar.addEventListener('mouseenter', showSidebar);
-        
-        // Reset timeout on mouse movement within sidebar
-        sidebar.addEventListener('mousemove', resetSidebarTimeout);
-        
-        // Hide sidebar when mouse leaves
-        sidebar.addEventListener('mouseleave', () => {
-            clearTimeout(sidebarTimeout);
-            sidebarTimeout = setTimeout(hideSidebar, 60);
-        });
-        
-        // Hide sidebar immediately on page load
-        hideSidebar();
-        // Reset timeout for auto-hide functionality
-        resetSidebarTimeout();
+        const titles = {
+            overview: 'System Overview <span>/ Dashboard</span>',
+            users: 'User Management <span>/ Users</span>',
+            tests: 'Test Management <span>/ Assessments</span>',
+            resources: 'Resources <span>/ Materials</span>',
+            logs: 'System Logs <span>/ Activity</span>',
+            profile: 'Profile <span>/ Account</span>',
+            settings: 'Settings <span>/ Configuration</span>',
+        };
 
-        // Navigation
-        document.querySelectorAll('.nav-item').forEach(item => {
-            item.addEventListener('click', function() {
-                const section = this.dataset.section;
-                
-                if (section === 'logout') {
-                    if (confirm('Are you sure you want to logout?')) {
-                        window.location.href = 'admin-login.html';
-                    }
-                    return;
-                }
-
-                document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-                this.classList.add('active');
-
-                document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
-                document.getElementById(section + '-section').classList.add('active');
-
-                const titles = {
-                    'overview': 'Overview',
-                    'users': 'User Management',
-                    'tests': 'Test Management',
-                    'resources': 'Resources',
-                    'logs': 'System Logs',
-                    'settings': 'Settings'
-                };
-                document.getElementById('pageTitle').textContent = titles[section];
-            });
-        });
-
-        // User Tab Switching
-        function switchUserTab(tab) {
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
-
-            if (tab === 'students') {
-                document.getElementById('studentsTable').style.display = 'block';
-                document.getElementById('teachersTable').style.display = 'none';
-                document.getElementById('studentFilter').style.display = 'block';
-                document.getElementById('teacherFilter').style.display = 'none';
-            } else {
-                document.getElementById('studentsTable').style.display = 'none';
-                document.getElementById('teachersTable').style.display = 'block';
-                document.getElementById('studentFilter').style.display = 'none';
-                document.getElementById('teacherFilter').style.display = 'block';
-            }
+        function showPage(id, el) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.getElementById('page-' + id).classList.add('active');
+            if (el) el.classList.add('active');
+            document.getElementById('topbarTitle').innerHTML = titles[id] || id;
         }
 
-        // Modal Functions
-        function openModal(modalId) {
-            document.getElementById(modalId).classList.add('active');
+        function setTab(el) {
+            const tabs = el.closest('.tabs').querySelectorAll('.tab');
+            tabs.forEach(t => t.classList.remove('active'));
+            el.classList.add('active');
         }
 
-        function closeModal(modalId) {
-            document.getElementById(modalId).classList.remove('active');
-        }
-
-        function toggleUserFields() {
-            const userType = document.getElementById('userType').value;
-            if (userType === 'teacher') {
-                document.getElementById('teacherField').style.display = 'block';
-                document.getElementById('studentField').style.display = 'none';
-            } else {
-                document.getElementById('teacherField').style.display = 'none';
-                document.getElementById('studentField').style.display = 'block';
-            }
-        }
-
-        // User Functions
-        function createUser() {
-            alert('✅ User created successfully!\n\nIn production, this will:\n• Validate input\n• Create user in database\n• Send welcome email\n• Update user list');
-            closeModal('createUserModal');
-        }
-
-        function editUser(type, id) {
-            alert(`✏️ Editing ${type}: ${id}\n\nOpening edit form...`);
-        }
-
-        function deleteUser(type, id) {
-            if (confirm(`⚠️ Are you sure you want to delete this ${type}?`)) {
-                alert(`🗑️ ${type} deleted successfully!`);
-            }
-        }
-
-        // Test Functions
-        function createTest() {
-            alert('✅ Test created successfully!\n\nIn production, this will:\n• Save test details\n• Allow adding questions\n• Publish to home page');
-            closeModal('createTestModal');
-        }
-
-        function editTest(id) {
-            alert(`✏️ Editing Test: ${id}\n\nOpening test editor...`);
-        }
-
-        function viewTest(id) {
-            alert(`👁️ Viewing Test: ${id}\n\nShowing test preview...`);
-        }
-
-        function deleteTest(id) {
-            if (confirm('⚠️ Are you sure you want to delete this test?')) {
-                alert('🗑️ Test deleted successfully!');
-            }
-        }
-
-        // Resource Functions
-        function uploadResource() {
-            alert('⬆️ Resource uploaded successfully!\n\nFile will be stored and made available for download.');
-            closeModal('uploadResourceModal');
-        }
-
-        function downloadResource(id) {
-            alert(`📥 Downloading resource ${id}...`);
-        }
-
-        function deleteResource(id) {
-            if (confirm('⚠️ Are you sure you want to delete this resource?')) {
-                alert('🗑️ Resource deleted successfully!');
-            }
-        }
-
-        // Close modal on outside click
-        window.onclick = function(event) {
-            if (event.target.classList.contains('modal')) {
-                event.target.classList.remove('active');
+        function confirmLogout() {
+            if (confirm('Are you sure you want to log out?')) {
+                window.location.href = 'admin-login.html';
             }
         }
     </script>
 </body>
+
 </html>
