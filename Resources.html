@@ -1,0 +1,2540 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resources - PTA Admin</title>
+    <style>
+        :root {
+            --blue-400: #3385FF;
+            --blue-500: #0066FF;
+            --blue-600: #0052CC;
+            --blue-700: #003D99;
+            --bg: #0a0c10;
+            --surface: #111318;
+            --surface2: #181c24;
+            --surface3: #1e2330;
+            --border: rgba(0, 102, 255, 0.15);
+            --border2: rgba(255, 255, 255, 0.06);
+            --text: #e8eaf0;
+            --muted: #6b7280;
+            --sidebar-w: 240px;
+            --green: #22c55e;
+            --yellow: #eab308;
+            --red: #ef4444;
+            --orange: #f97316;
+            --purple: #7c3aed;
+            --cyan: #0891b2;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            background-image: linear-gradient(rgba(0, 102, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 102, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+        }
+
+        /* ── SIDEBAR ── */
+        .sidebar {
+            width: var(--sidebar-w);
+            background: var(--surface);
+            border-right: 1px solid var(--border2);
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            z-index: 100;
+        }
+
+        .sidebar-brand {
+            padding: 22px 20px 18px;
+            border-bottom: 1px solid var(--border2);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-logo {
+            width: 36px;
+            height: 36px;
+            background: var(--blue-500);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .brand-logo svg {
+            width: 18px;
+            height: 18px;
+            fill: white;
+        }
+
+        .brand-text {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+            line-height: 1.3;
+        }
+
+        .brand-text span {
+            font-size: 11px;
+            font-weight: 400;
+            color: var(--muted);
+            display: block;
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            padding: 14px 10px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .nav-section-label {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--muted);
+            padding: 10px 10px 6px;
+            margin-top: 6px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            color: #9ca3af;
+            font-size: 13.5px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .nav-item:hover {
+            background: var(--surface2);
+            color: var(--text);
+        }
+
+        .nav-item.active {
+            background: rgba(0, 102, 255, 0.15);
+            color: var(--blue-400);
+            border: 1px solid rgba(0, 102, 255, 0.2);
+        }
+
+        .nav-item svg {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            flex-shrink: 0;
+        }
+
+        .nav-badge {
+            margin-left: auto;
+            background: var(--red);
+            color: white;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 10px;
+            min-width: 18px;
+            text-align: center;
+        }
+
+        .nav-badge.blue {
+            background: var(--blue-600);
+        }
+
+        .sidebar-bottom {
+            padding: 12px 10px;
+            border-top: 1px solid var(--border2);
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        /* ── MAIN ── */
+        .main {
+            margin-left: var(--sidebar-w);
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .topbar {
+            height: 58px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border2);
+            display: flex;
+            align-items: center;
+            padding: 0 28px;
+            gap: 16px;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .topbar-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text);
+            flex: 1;
+        }
+
+        .topbar-title span {
+            color: var(--muted);
+            font-weight: 400;
+            font-size: 13px;
+        }
+
+        .topbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .icon-btn {
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--muted);
+            transition: color 0.15s, border-color 0.15s;
+            position: relative;
+        }
+
+        .icon-btn:hover {
+            color: var(--text);
+            border-color: var(--border);
+        }
+
+        .icon-btn svg {
+            width: 15px;
+            height: 15px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+        }
+
+        .notif-dot {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            width: 7px;
+            height: 7px;
+            background: var(--red);
+            border-radius: 50%;
+            border: 1.5px solid var(--surface);
+        }
+
+        .admin-chip {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            border-radius: 20px;
+            padding: 4px 12px 4px 4px;
+            cursor: pointer;
+        }
+
+        .admin-avatar {
+            width: 26px;
+            height: 26px;
+            background: var(--blue-600);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            color: white;
+        }
+
+        .admin-chip span {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .content {
+            padding: 28px;
+            flex: 1;
+        }
+
+        /* ── STAT CARDS ── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 14px;
+            margin-bottom: 22px;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 14px;
+            padding: 18px;
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.2s, transform 0.2s;
+        }
+
+        .stat-card:hover {
+            border-color: var(--border);
+            transform: translateY(-2px);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            filter: blur(25px);
+            opacity: 0.25;
+        }
+
+        .stat-card.blue::before {
+            background: var(--blue-500);
+        }
+
+        .stat-card.green::before {
+            background: var(--green);
+        }
+
+        .stat-card.yellow::before {
+            background: var(--yellow);
+        }
+
+        .stat-card.red::before {
+            background: var(--red);
+        }
+
+        .stat-card.cyan::before {
+            background: var(--cyan);
+        }
+
+        .stat-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 12px;
+        }
+
+        .stat-icon svg {
+            width: 17px;
+            height: 17px;
+            fill: none;
+            stroke-width: 2;
+        }
+
+        .stat-card.blue .stat-icon {
+            background: rgba(0, 102, 255, 0.18);
+            border: 1px solid rgba(0, 102, 255, 0.3);
+        }
+
+        .stat-card.blue .stat-icon svg {
+            stroke: var(--blue-400);
+        }
+
+        .stat-card.green .stat-icon {
+            background: rgba(34, 197, 94, 0.14);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .stat-card.green .stat-icon svg {
+            stroke: var(--green);
+        }
+
+        .stat-card.yellow .stat-icon {
+            background: rgba(234, 179, 8, 0.14);
+            border: 1px solid rgba(234, 179, 8, 0.3);
+        }
+
+        .stat-card.yellow .stat-icon svg {
+            stroke: var(--yellow);
+        }
+
+        .stat-card.red .stat-icon {
+            background: rgba(239, 68, 68, 0.14);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .stat-card.red .stat-icon svg {
+            stroke: var(--red);
+        }
+
+        .stat-card.cyan .stat-icon {
+            background: rgba(8, 145, 178, 0.14);
+            border: 1px solid rgba(8, 145, 178, 0.3);
+        }
+
+        .stat-card.cyan .stat-icon svg {
+            stroke: #22d3ee;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 800;
+            line-height: 1;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 11.5px;
+            color: var(--muted);
+        }
+
+        .stat-sub {
+            font-size: 10.5px;
+            margin-top: 6px;
+        }
+
+        .stat-sub.up {
+            color: var(--green);
+        }
+
+        .stat-sub.down {
+            color: var(--red);
+        }
+
+        /* ── CARDS ── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 14px;
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 18px 22px;
+            border-bottom: 1px solid var(--border2);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .card-header h3 {
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .card-header p {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+
+        .card-body {
+            padding: 20px 22px;
+        }
+
+        /* ── LAYOUT ── */
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+
+        .three-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+
+        /* ── BUTTONS ── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border-radius: 8px;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.15s;
+        }
+
+        .btn svg {
+            width: 13px;
+            height: 13px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+        }
+
+        .btn-primary {
+            background: var(--blue-500);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--blue-600);
+            box-shadow: 0 4px 16px rgba(0, 102, 255, 0.3);
+        }
+
+        .btn-ghost {
+            background: var(--surface2);
+            color: var(--text);
+            border: 1px solid var(--border2);
+        }
+
+        .btn-ghost:hover {
+            border-color: var(--border);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--red);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.2);
+        }
+
+        .btn-success {
+            background: rgba(34, 197, 94, 0.1);
+            color: var(--green);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .btn-success:hover {
+            background: rgba(34, 197, 94, 0.2);
+        }
+
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 11px;
+            border-radius: 6px;
+        }
+
+        .btn-xs {
+            padding: 3px 8px;
+            font-size: 10px;
+            border-radius: 5px;
+        }
+
+        /* ── BADGES ── */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 9px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge.pdf {
+            background: rgba(239, 68, 68, 0.1);
+            color: #fca5a5;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .badge.video {
+            background: rgba(124, 58, 237, 0.1);
+            color: #a78bfa;
+            border: 1px solid rgba(124, 58, 237, 0.2);
+        }
+
+        .badge.link {
+            background: rgba(0, 102, 255, 0.1);
+            color: var(--blue-400);
+            border: 1px solid rgba(0, 102, 255, 0.2);
+        }
+
+        .badge.article {
+            background: rgba(8, 145, 178, 0.1);
+            color: #22d3ee;
+            border: 1px solid rgba(8, 145, 178, 0.2);
+        }
+
+        .badge.quiz {
+            background: rgba(234, 179, 8, 0.1);
+            color: var(--yellow);
+            border: 1px solid rgba(234, 179, 8, 0.2);
+        }
+
+        .badge.beginner {
+            background: rgba(34, 197, 94, 0.1);
+            color: var(--green);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .badge.intermediate {
+            background: rgba(234, 179, 8, 0.1);
+            color: var(--yellow);
+            border: 1px solid rgba(234, 179, 8, 0.2);
+        }
+
+        .badge.advanced {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--red);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .badge.public {
+            background: rgba(34, 197, 94, 0.1);
+            color: var(--green);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .badge.private {
+            background: rgba(107, 114, 128, 0.1);
+            color: #9ca3af;
+            border: 1px solid rgba(107, 114, 128, 0.2);
+        }
+
+        .badge.active {
+            background: rgba(34, 197, 94, 0.12);
+            color: var(--green);
+            border: 1px solid rgba(34, 197, 94, 0.25);
+        }
+
+        .badge.deleted {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--red);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        /* ── TABS ── */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            background: var(--surface2);
+            padding: 4px;
+            border-radius: 10px;
+            width: fit-content;
+        }
+
+        .tab {
+            padding: 7px 18px;
+            border-radius: 7px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            color: var(--muted);
+            transition: all 0.15s;
+            border: none;
+            background: none;
+            font-family: Arial, sans-serif;
+        }
+
+        .tab.active {
+            background: var(--surface);
+            color: var(--text);
+            box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
+        }
+
+        .tab-count {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 1px 7px;
+            font-size: 10px;
+            margin-left: 5px;
+        }
+
+        .tab.active .tab-count {
+            background: rgba(0, 102, 255, 0.2);
+            color: var(--blue-400);
+        }
+
+        /* ── TOOLBAR ── */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .search-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            border-radius: 9px;
+            padding: 8px 14px;
+            flex: 1;
+            min-width: 240px;
+            transition: border-color 0.2s;
+        }
+
+        .search-wrap:focus-within {
+            border-color: var(--blue-500);
+            box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1);
+        }
+
+        .search-wrap svg {
+            width: 14px;
+            height: 14px;
+            stroke: var(--muted);
+            fill: none;
+            stroke-width: 2;
+            flex-shrink: 0;
+        }
+
+        .search-wrap input {
+            background: none;
+            border: none;
+            outline: none;
+            font-family: Arial, sans-serif;
+            font-size: 13px;
+            color: var(--text);
+            flex: 1;
+        }
+
+        .search-wrap input::placeholder {
+            color: var(--muted);
+        }
+
+        .filter-select {
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            border-radius: 9px;
+            padding: 8px 12px;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            color: var(--text);
+            outline: none;
+            cursor: pointer;
+        }
+
+        .filter-select:focus {
+            border-color: var(--blue-500);
+        }
+
+        /* ── VIEW TOGGLE ── */
+        .view-toggle {
+            display: flex;
+            gap: 3px;
+            background: var(--surface2);
+            padding: 3px;
+            border-radius: 8px;
+            border: 1px solid var(--border2);
+        }
+
+        .view-btn {
+            width: 30px;
+            height: 28px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: none;
+            background: none;
+            color: var(--muted);
+            transition: all 0.15s;
+        }
+
+        .view-btn.active {
+            background: var(--surface);
+            color: var(--text);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .view-btn svg {
+            width: 14px;
+            height: 14px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+        }
+
+        /* ── RESOURCE GRID (card view) ── */
+        .resource-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .resource-card {
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 14px;
+            overflow: hidden;
+            transition: border-color 0.2s, transform 0.2s;
+            cursor: default;
+        }
+
+        .resource-card:hover {
+            border-color: var(--border);
+            transform: translateY(-2px);
+        }
+
+        .resource-card-top {
+            padding: 18px 18px 14px;
+        }
+
+        .resource-type-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            margin-bottom: 12px;
+            flex-shrink: 0;
+        }
+
+        .resource-card h4 {
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 5px;
+            line-height: 1.3;
+        }
+
+        .resource-card p {
+            font-size: 12px;
+            color: var(--muted);
+            line-height: 1.5;
+            margin-bottom: 10px;
+        }
+
+        .resource-tags {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .resource-tag {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--muted);
+            border: 1px solid var(--border2);
+        }
+
+        .resource-card-bottom {
+            padding: 12px 18px;
+            border-top: 1px solid var(--border2);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--surface2);
+        }
+
+        .resource-meta {
+            display: flex;
+            gap: 14px;
+            font-size: 11px;
+            color: var(--muted);
+        }
+
+        .resource-meta span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .resource-meta svg {
+            width: 11px;
+            height: 11px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+        }
+
+        .resource-actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        /* ── ADD UPLOAD CARD ── */
+        .upload-card {
+            background: var(--surface);
+            border: 2px dashed rgba(0, 102, 255, 0.2);
+            border-radius: 14px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 30px;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            min-height: 200px;
+        }
+
+        .upload-card:hover {
+            border-color: var(--blue-500);
+            background: rgba(0, 102, 255, 0.03);
+        }
+
+        .upload-card svg {
+            width: 32px;
+            height: 32px;
+            stroke: var(--blue-400);
+            fill: none;
+            stroke-width: 1.5;
+            margin-bottom: 10px;
+        }
+
+        .upload-card h4 {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 4px;
+        }
+
+        .upload-card p {
+            font-size: 11px;
+            color: var(--muted);
+            text-align: center;
+        }
+
+        /* ── TABLE VIEW ── */
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        thead th {
+            padding: 11px 16px;
+            text-align: left;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--muted);
+            background: var(--surface2);
+            border-bottom: 1px solid var(--border2);
+            white-space: nowrap;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        thead th:hover {
+            color: var(--text);
+        }
+
+        tbody tr {
+            border-bottom: 1px solid var(--border2);
+            transition: background 0.12s;
+        }
+
+        tbody tr:hover {
+            background: var(--surface2);
+        }
+
+        tbody tr:last-child {
+            border-bottom: none;
+        }
+
+        tbody td {
+            padding: 12px 16px;
+            color: var(--text);
+            vertical-align: middle;
+        }
+
+        /* ── MINI BARS ── */
+        .bar-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 11px;
+        }
+
+        .bar-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .bar-label {
+            font-size: 12px;
+            color: var(--muted);
+            width: 90px;
+            flex-shrink: 0;
+        }
+
+        .bar-track {
+            flex: 1;
+            height: 5px;
+            background: var(--surface3);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: 10px;
+            background: var(--blue-500);
+        }
+
+        .bar-fill.g {
+            background: var(--green);
+        }
+
+        .bar-fill.y {
+            background: var(--yellow);
+        }
+
+        .bar-fill.r {
+            background: var(--red);
+        }
+
+        .bar-fill.p {
+            background: var(--purple);
+        }
+
+        .bar-fill.c {
+            background: var(--cyan);
+        }
+
+        .bar-val {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text);
+            width: 40px;
+            text-align: right;
+        }
+
+        /* ── STORAGE BAR ── */
+        .storage-bar {
+            height: 8px;
+            background: var(--surface3);
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+            position: relative;
+        }
+
+        .storage-segments {
+            display: flex;
+            height: 100%;
+        }
+
+        .storage-seg {
+            height: 100%;
+        }
+
+        .storage-legend {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: var(--muted);
+        }
+
+        .legend-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+
+        /* ── PAGINATION ── */
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px;
+            border-top: 1px solid var(--border2);
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .page-btns {
+            display: flex;
+            gap: 4px;
+        }
+
+        .page-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 7px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text);
+            transition: all 0.15s;
+        }
+
+        .page-btn:hover {
+            border-color: var(--border);
+        }
+
+        .page-btn.active {
+            background: var(--blue-500);
+            border-color: var(--blue-500);
+            color: white;
+        }
+
+        .page-btn svg {
+            width: 12px;
+            height: 12px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+        }
+
+        /* ── MODAL ── */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: rgba(0, 0, 0, 0.72);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .modal-overlay.open {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .modal {
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 18px;
+            width: 580px;
+            max-width: 96vw;
+            max-height: 92vh;
+            overflow-y: auto;
+            transform: scale(0.95) translateY(20px);
+            transition: transform 0.2s;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+        }
+
+        .modal-overlay.open .modal {
+            transform: scale(1) translateY(0);
+        }
+
+        .modal-sm .modal {
+            width: 400px;
+        }
+
+        .modal-header {
+            padding: 22px 24px 18px;
+            border-bottom: 1px solid var(--border2);
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .modal-header h3 {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .modal-header p {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 3px;
+        }
+
+        .modal-close {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--muted);
+            flex-shrink: 0;
+        }
+
+        .modal-close:hover {
+            color: var(--text);
+        }
+
+        .modal-close svg {
+            width: 14px;
+            height: 14px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+        }
+
+        .modal-body {
+            padding: 22px 24px;
+        }
+
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid var(--border2);
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        /* ── FORM ── */
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .form-full {
+            grid-column: 1/-1;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .field label {
+            font-size: 11px;
+            font-weight: 700;
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .field input,
+        .field select,
+        .field textarea {
+            background: var(--surface2);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 9px;
+            padding: 9px 12px;
+            font-family: Arial, sans-serif;
+            font-size: 13px;
+            color: var(--text);
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            width: 100%;
+        }
+
+        .field textarea {
+            resize: vertical;
+            min-height: 70px;
+        }
+
+        .field input:focus,
+        .field select:focus,
+        .field textarea:focus {
+            border-color: var(--blue-500);
+            box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1);
+        }
+
+        .field input::placeholder,
+        .field textarea::placeholder {
+            color: #4b5563;
+        }
+
+        .field select option {
+            background: var(--surface2);
+        }
+
+        .section-divider {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--blue-400);
+            padding: 6px 0 10px;
+            border-bottom: 1px solid var(--border2);
+            margin-bottom: 16px;
+            grid-column: 1/-1;
+        }
+
+        /* Upload drop zone */
+        .drop-zone {
+            border: 2px dashed rgba(0, 102, 255, 0.25);
+            border-radius: 10px;
+            padding: 28px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        .drop-zone:hover,
+        .drop-zone.drag {
+            border-color: var(--blue-500);
+            background: rgba(0, 102, 255, 0.04);
+        }
+
+        .drop-zone svg {
+            width: 28px;
+            height: 28px;
+            stroke: var(--blue-400);
+            fill: none;
+            stroke-width: 1.5;
+            margin-bottom: 8px;
+        }
+
+        .drop-zone h4 {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .drop-zone p {
+            font-size: 11px;
+            color: var(--muted);
+        }
+
+        .drop-zone input[type="file"] {
+            display: none;
+        }
+
+        /* View modal */
+        .view-hero {
+            background: linear-gradient(135deg, #001433, #0047b3);
+            border-radius: 12px;
+            padding: 22px 24px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(0, 102, 255, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 18px;
+        }
+
+        .view-hero-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+
+        .view-hero h3 {
+            font-size: 16px;
+            font-weight: 800;
+            color: white;
+            margin-bottom: 4px;
+        }
+
+        .view-hero p {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.65);
+            line-height: 1.5;
+        }
+
+        .view-pills {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+
+        .pill {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 3px 10px;
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .view-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+
+        .view-item label {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--muted);
+            margin-bottom: 4px;
+            display: block;
+        }
+
+        .view-item p {
+            font-size: 13px;
+            color: var(--text);
+        }
+
+        /* Progress list */
+        .progress-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 9px 0;
+            border-bottom: 1px solid var(--border2);
+            font-size: 12px;
+        }
+
+        .progress-row:last-child {
+            border-bottom: none;
+        }
+
+        .pr-av {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 700;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .pr-bar-wrap {
+            flex: 1;
+        }
+
+        .pr-name {
+            font-size: 12px;
+            margin-bottom: 3px;
+        }
+
+        .pr-bar {
+            height: 4px;
+            background: var(--surface3);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .pr-fill {
+            height: 100%;
+            border-radius: 10px;
+            background: var(--blue-500);
+        }
+
+        .pr-fill.done {
+            background: var(--green);
+        }
+
+        .pr-pct {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text);
+            width: 34px;
+            text-align: right;
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 28px;
+            right: 28px;
+            z-index: 999;
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 12px;
+            padding: 14px 18px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            transform: translateY(80px);
+            opacity: 0;
+            transition: transform 0.3s, opacity 0.3s;
+            font-size: 13px;
+            min-width: 260px;
+        }
+
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .toast-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .toast.success .toast-dot {
+            background: var(--green);
+        }
+
+        .toast.error .toast-dot {
+            background: var(--red);
+        }
+
+        .toast.info .toast-dot {
+            background: var(--blue-500);
+        }
+
+        .toast.warning .toast-dot {
+            background: var(--yellow);
+        }
+
+        @media (max-width:1200px) {
+            .resource-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width:900px) {
+
+            .two-col,
+            .three-col {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width:768px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+
+            .main {
+                margin-left: 0;
+            }
+
+            .resource-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ── SIDEBAR ── -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-logo"><svg viewBox="0 0 24 24">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                </svg></div>
+            <div class="brand-text">PTA Portal <span>Admin Panel</span></div>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-section-label">Main</div>
+            <a class="nav-item" href="admin-dashboard.html">
+                <svg viewBox="0 0 24 24">
+                    <rect x="3" y="3" width="7" height="7" rx="1" />
+                    <rect x="14" y="3" width="7" height="7" rx="1" />
+                    <rect x="3" y="14" width="7" height="7" rx="1" />
+                    <rect x="14" y="14" width="7" height="7" rx="1" />
+                </svg>System Overview
+            </a>
+            <div class="nav-section-label">Management</div>
+            <a class="nav-item" href="user-management.html">
+                <svg viewBox="0 0 24 24">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>User Management
+                <span class="nav-badge blue">2,840</span>
+            </a>
+            <a class="nav-item" href="test-management.html">
+                <svg viewBox="0 0 24 24">
+                    <path d="M9 11l3 3L22 4" />
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                </svg>Test Management
+                <span class="nav-badge">12</span>
+            </a>
+            <a class="nav-item active" href="resources.html">
+                <svg viewBox="0 0 24 24">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                </svg>Resources
+            </a>
+            <div class="nav-section-label">System</div>
+            <a class="nav-item" href="#">
+                <svg viewBox="0 0 24 24">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                </svg>System Logs
+                <span class="nav-badge">3</span>
+            </a>
+            <div class="nav-section-label">Account</div>
+            <a class="nav-item" href="#"><svg viewBox="0 0 24 24">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                </svg>Profile</a>
+            <a class="nav-item" href="#"><svg viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="3" />
+                    <path
+                        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>Settings</a>
+        </nav>
+        <div class="sidebar-bottom">
+            <a class="nav-item" style="color:#ef4444;"
+                onclick="if(confirm('Log out?'))location.href='admin-login.html'">
+                <svg viewBox="0 0 24 24">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>Log Out
+            </a>
+        </div>
+    </aside>
+
+    <!-- ── MAIN ── -->
+    <div class="main">
+        <header class="topbar">
+            <div class="topbar-title">Resources <span>/ Training Materials</span></div>
+            <div class="topbar-actions">
+                <div class="icon-btn"><svg viewBox="0 0 24 24">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                    </svg>
+                    <div class="notif-dot"></div>
+                </div>
+                <div class="icon-btn" onclick="showToast('Refreshed','success')"><svg viewBox="0 0 24 24">
+                        <polyline points="23 4 23 10 17 10" />
+                        <polyline points="1 20 1 14 7 14" />
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                    </svg></div>
+                <div class="admin-chip">
+                    <div class="admin-avatar">SA</div><span>Super Admin</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="content">
+
+            <!-- Header -->
+            <div
+                style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:12px;">
+                <div>
+                    <h2 style="font-size:18px;font-weight:800;">Resources</h2>
+                    <p style="font-size:13px;color:var(--muted);margin-top:3px;">Manage study materials, PDFs, videos,
+                        links and learning content from <code
+                            style="color:var(--blue-400);font-size:11px;">training_materials</code></p>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <button class="btn btn-ghost" onclick="showToast('Exporting list...','info')">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>Export
+                    </button>
+                    <button class="btn btn-primary" onclick="openUploadModal()">
+                        <svg viewBox="0 0 24 24">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>Upload Resource
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="stats-grid">
+                <div class="stat-card blue">
+                    <div class="stat-icon"><svg viewBox="0 0 24 24">
+                            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                        </svg></div>
+                    <div class="stat-value">234</div>
+                    <div class="stat-label">Total Materials</div>
+                    <div class="stat-sub up">↑ 8 added this week</div>
+                </div>
+                <div class="stat-card green">
+                    <div class="stat-icon"><svg viewBox="0 0 24 24">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg></div>
+                    <div class="stat-value">18.4 GB</div>
+                    <div class="stat-label">Storage Used</div>
+                    <div class="stat-sub">of 50 GB limit</div>
+                </div>
+                <div class="stat-card yellow">
+                    <div class="stat-icon"><svg viewBox="0 0 24 24">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
+                        </svg></div>
+                    <div class="stat-value">14,820</div>
+                    <div class="stat-label">Total Views</div>
+                    <div class="stat-sub up">↑ 12% this month</div>
+                </div>
+                <div class="stat-card red">
+                    <div class="stat-icon"><svg viewBox="0 0 24 24">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="17 8 12 3 7 8" />
+                            <line x1="12" y1="3" x2="12" y2="15" />
+                        </svg></div>
+                    <div class="stat-value">4,821</div>
+                    <div class="stat-label">Total Downloads</div>
+                    <div class="stat-sub up">↑ 320 this week</div>
+                </div>
+                <div class="stat-card cyan">
+                    <div class="stat-icon"><svg viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="10" />
+                            <polyline points="12 6 12 12 16 14" />
+                        </svg></div>
+                    <div class="stat-value">62%</div>
+                    <div class="stat-label">Avg Completion Rate</div>
+                    <div class="stat-sub up">↑ 4% this month</div>
+                </div>
+            </div>
+
+            <!-- Charts row -->
+            <div class="two-col">
+                <!-- Storage breakdown -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h3>Storage Breakdown</h3>
+                            <p>Usage by file type across <code
+                                    style="color:var(--blue-400);font-size:11px;">uploaded_files</code></p>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div
+                            style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px;">
+                            <span>18.4 GB used</span><span style="color:var(--text);font-weight:700;">50 GB total</span>
+                        </div>
+                        <div class="storage-bar">
+                            <div class="storage-segments">
+                                <div class="storage-seg" style="width:48%;background:var(--red);opacity:0.8;"></div>
+                                <div class="storage-seg" style="width:30%;background:var(--purple);opacity:0.8;"></div>
+                                <div class="storage-seg" style="width:12%;background:var(--blue-500);opacity:0.8;">
+                                </div>
+                                <div class="storage-seg" style="width:5%;background:var(--yellow);opacity:0.8;"></div>
+                                <div class="storage-seg" style="width:5%;background:var(--cyan);opacity:0.8;"></div>
+                            </div>
+                        </div>
+                        <div class="storage-legend">
+                            <div class="legend-item">
+                                <div class="legend-dot" style="background:var(--red)"></div>Video — 8.8 GB
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-dot" style="background:var(--purple)"></div>PDF — 5.5 GB
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-dot" style="background:var(--blue-500)"></div>Article — 2.2 GB
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-dot" style="background:var(--yellow)"></div>Quiz — 1.0 GB
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-dot" style="background:var(--cyan)"></div>Link — 0.9 GB
+                            </div>
+                        </div>
+                        <div style="margin-top:18px;">
+                            <div class="bar-chart">
+                                <div class="bar-row">
+                                    <div class="bar-label">PDF</div>
+                                    <div class="bar-track">
+                                        <div class="bar-fill r" style="width:82%"></div>
+                                    </div>
+                                    <div class="bar-val">96 files</div>
+                                </div>
+                                <div class="bar-row">
+                                    <div class="bar-label">Video</div>
+                                    <div class="bar-track">
+                                        <div class="bar-fill p" style="width:54%"></div>
+                                    </div>
+                                    <div class="bar-val">62 files</div>
+                                </div>
+                                <div class="bar-row">
+                                    <div class="bar-label">Article</div>
+                                    <div class="bar-track">
+                                        <div class="bar-fill" style="width:40%"></div>
+                                    </div>
+                                    <div class="bar-val">46 files</div>
+                                </div>
+                                <div class="bar-row">
+                                    <div class="bar-label">Link</div>
+                                    <div class="bar-track">
+                                        <div class="bar-fill y" style="width:22%"></div>
+                                    </div>
+                                    <div class="bar-val">24 files</div>
+                                </div>
+                                <div class="bar-row">
+                                    <div class="bar-label">Quiz</div>
+                                    <div class="bar-track">
+                                        <div class="bar-fill g" style="width:10%"></div>
+                                    </div>
+                                    <div class="bar-val">6 files</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Top downloaded -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h3>Top Downloaded</h3>
+                            <p>Most accessed resources this month</p>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="bar-chart">
+                            <div class="bar-row">
+                                <div class="bar-label" style="width:140px;">Aptitude Formula</div>
+                                <div class="bar-track">
+                                    <div class="bar-fill" style="width:95%"></div>
+                                </div>
+                                <div class="bar-val">2,140</div>
+                            </div>
+                            <div class="bar-row">
+                                <div class="bar-label" style="width:140px;">DSA Videos</div>
+                                <div class="bar-track">
+                                    <div class="bar-fill p" style="width:80%"></div>
+                                </div>
+                                <div class="bar-val">1,204</div>
+                            </div>
+                            <div class="bar-row">
+                                <div class="bar-label" style="width:140px;">GATE 2025 Pack</div>
+                                <div class="bar-track">
+                                    <div class="bar-fill r" style="width:58%"></div>
+                                </div>
+                                <div class="bar-val">892</div>
+                            </div>
+                            <div class="bar-row">
+                                <div class="bar-label" style="width:140px;">System Design</div>
+                                <div class="bar-track">
+                                    <div class="bar-fill y" style="width:30%"></div>
+                                </div>
+                                <div class="bar-val">341</div>
+                            </div>
+                            <div class="bar-row">
+                                <div class="bar-label" style="width:140px;">HR Interview Guide</div>
+                                <div class="bar-track">
+                                    <div class="bar-fill g" style="width:22%"></div>
+                                </div>
+                                <div class="bar-val">244</div>
+                            </div>
+                        </div>
+                        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border2);">
+                            <div
+                                style="font-size:11px;color:var(--muted);margin-bottom:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
+                                Engagement by Difficulty</div>
+                            <div style="display:flex;gap:20px;">
+                                <div style="text-align:center;">
+                                    <div style="font-size:18px;font-weight:800;color:var(--green);">9,240</div>
+                                    <div style="font-size:11px;color:var(--muted);">Beginner views</div>
+                                </div>
+                                <div style="text-align:center;">
+                                    <div style="font-size:18px;font-weight:800;color:var(--yellow);">3,980</div>
+                                    <div style="font-size:11px;color:var(--muted);">Intermediate</div>
+                                </div>
+                                <div style="text-align:center;">
+                                    <div style="font-size:18px;font-weight:800;color:var(--red);">1,600</div>
+                                    <div style="font-size:11px;color:var(--muted);">Advanced</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resource list -->
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <h3>All Resources</h3>
+                        <p>Showing <span id="rowCount">8</span> of 234 materials</p>
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <div class="view-toggle">
+                            <button class="view-btn active" id="gridBtn" onclick="setView('grid')" title="Grid view">
+                                <svg viewBox="0 0 24 24">
+                                    <rect x="3" y="3" width="7" height="7" rx="1" />
+                                    <rect x="14" y="3" width="7" height="7" rx="1" />
+                                    <rect x="3" y="14" width="7" height="7" rx="1" />
+                                    <rect x="14" y="14" width="7" height="7" rx="1" />
+                                </svg>
+                            </button>
+                            <button class="view-btn" id="listBtn" onclick="setView('list')" title="List view">
+                                <svg viewBox="0 0 24 24">
+                                    <line x1="8" y1="6" x2="21" y2="6" />
+                                    <line x1="8" y1="12" x2="21" y2="12" />
+                                    <line x1="8" y1="18" x2="21" y2="18" />
+                                    <line x1="3" y1="6" x2="3.01" y2="6" />
+                                    <line x1="3" y1="12" x2="3.01" y2="12" />
+                                    <line x1="3" y1="18" x2="3.01" y2="18" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabs -->
+                <div style="padding:14px 22px 0;border-bottom:1px solid var(--border2);">
+                    <div class="tabs" style="margin-bottom:0;">
+                        <button class="tab active" onclick="filterTab(this,'all')">All <span
+                                class="tab-count">234</span></button>
+                        <button class="tab" onclick="filterTab(this,'pdf')">PDF <span
+                                class="tab-count">96</span></button>
+                        <button class="tab" onclick="filterTab(this,'video')">Video <span
+                                class="tab-count">62</span></button>
+                        <button class="tab" onclick="filterTab(this,'article')">Article <span
+                                class="tab-count">46</span></button>
+                        <button class="tab" onclick="filterTab(this,'link')">Link <span
+                                class="tab-count">24</span></button>
+                        <button class="tab" onclick="filterTab(this,'quiz')">Quiz <span
+                                class="tab-count">6</span></button>
+                    </div>
+                </div>
+
+                <!-- Toolbar -->
+                <div style="padding:14px 22px;">
+                    <div class="toolbar">
+                        <div class="search-wrap">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="11" cy="11" r="8" />
+                                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                            </svg>
+                            <input id="searchInput" placeholder="Search by title, category, tags..."
+                                oninput="render()" />
+                        </div>
+                        <select class="filter-select" id="catFilter" onchange="render()">
+                            <option value="">All Categories</option>
+                            <option>Aptitude</option>
+                            <option>Technical</option>
+                            <option>Communication</option>
+                            <option>Soft Skills</option>
+                            <option>Coding</option>
+                        </select>
+                        <select class="filter-select" id="diffFilter" onchange="render()">
+                            <option value="">All Levels</option>
+                            <option value="beginner">Beginner</option>
+                            <option value="intermediate">Intermediate</option>
+                            <option value="advanced">Advanced</option>
+                        </select>
+                        <select class="filter-select" id="accessFilter" onchange="render()">
+                            <option value="">All Access</option>
+                            <option value="public">Public</option>
+                            <option value="private">Private</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Grid/List -->
+                <div id="gridView" style="padding:0 22px 22px;">
+                    <div class="resource-grid" id="resourceGrid"></div>
+                </div>
+                <div id="listView" style="display:none;">
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th onclick="sortBy('title')">Title ↕</th>
+                                    <th onclick="sortBy('type')">Type ↕</th>
+                                    <th onclick="sortBy('category')">Category ↕</th>
+                                    <th onclick="sortBy('difficulty')">Level ↕</th>
+                                    <th onclick="sortBy('fileSize')">Size ↕</th>
+                                    <th onclick="sortBy('views')">Views ↕</th>
+                                    <th onclick="sortBy('downloads')">Downloads ↕</th>
+                                    <th>Access</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="resourceTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="pagination">
+                    <span id="paginationInfo">Showing 1–8 of 234</span>
+                    <div class="page-btns">
+                        <div class="page-btn"><svg viewBox="0 0 24 24">
+                                <polyline points="15 18 9 12 15 6" />
+                            </svg></div>
+                        <div class="page-btn active">1</div>
+                        <div class="page-btn">2</div>
+                        <div class="page-btn">3</div>
+                        <div class="page-btn">...</div>
+                        <div class="page-btn">30</div>
+                        <div class="page-btn"><svg viewBox="0 0 24 24">
+                                <polyline points="9 18 15 12 9 6" />
+                            </svg></div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ════════ UPLOAD MODAL ════════ -->
+    <div class="modal-overlay" id="uploadModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div>
+                    <h3 id="uploadModalTitle">Upload Resource</h3>
+                    <p id="uploadModalSub">Add a new training material to the system</p>
+                </div>
+                <div class="modal-close" onclick="closeModal('uploadModal')"><svg viewBox="0 0 24 24">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg></div>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="section-divider">Material Details</div>
+                    <div class="field form-full">
+                        <label>Title *</label>
+                        <input id="f_title" placeholder="e.g. GATE 2025 Complete Prep Pack" />
+                    </div>
+                    <div class="field form-full">
+                        <label>Description</label>
+                        <textarea id="f_desc" placeholder="Brief description of this resource..."></textarea>
+                    </div>
+                    <div class="field">
+                        <label>Material Type *</label>
+                        <select id="f_type" onchange="toggleUrlField()">
+                            <option value="">Select type</option>
+                            <option value="pdf">PDF</option>
+                            <option value="video">Video</option>
+                            <option value="link">External Link</option>
+                            <option value="article">Article</option>
+                            <option value="quiz">Quiz</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Category *</label>
+                        <select id="f_cat">
+                            <option value="">Select category</option>
+                            <option>Aptitude</option>
+                            <option>Technical</option>
+                            <option>Communication</option>
+                            <option>Soft Skills</option>
+                            <option>Coding</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Difficulty Level</label>
+                        <select id="f_diff">
+                            <option value="">Select level</option>
+                            <option value="beginner">Beginner</option>
+                            <option value="intermediate">Intermediate</option>
+                            <option value="advanced">Advanced</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Estimated Time (minutes)</label>
+                        <input id="f_time" type="number" placeholder="e.g. 30" />
+                    </div>
+                    <div class="field form-full">
+                        <label>Tags (comma separated)</label>
+                        <input id="f_tags" placeholder="e.g. aptitude, quant, placement, 2025" />
+                    </div>
+                    <div class="field form-full">
+                        <label>Prerequisites</label>
+                        <input id="f_prereq" placeholder="e.g. Basic Mathematics, Class 10 Maths" />
+                    </div>
+
+                    <div class="section-divider">File / URL</div>
+                    <div class="field form-full" id="fileUploadArea">
+                        <label>Upload File</label>
+                        <div class="drop-zone" onclick="document.getElementById('fileInput').click()"
+                            ondragover="event.preventDefault();this.classList.add('drag')"
+                            ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event)">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="17 8 12 3 7 8" />
+                                <line x1="12" y1="3" x2="12" y2="15" />
+                            </svg>
+                            <h4>Drop file here or click to browse</h4>
+                            <p id="fileLabel">Supports PDF, MP4, DOCX, ZIP · Max 10 MB</p>
+                            <input type="file" id="fileInput" onchange="handleFileSelect(this)" />
+                        </div>
+                    </div>
+                    <div class="field form-full" id="urlArea" style="display:none;">
+                        <label>External URL *</label>
+                        <input id="f_url" placeholder="https://..." type="url" />
+                    </div>
+
+                    <div class="section-divider">Access Settings</div>
+                    <div class="field form-full" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                        <div
+                            style="display:flex;align-items:center;gap:10px;background:var(--surface2);padding:12px 14px;border-radius:9px;border:1px solid var(--border2);">
+                            <input type="checkbox" id="f_public"
+                                style="width:15px;height:15px;accent-color:var(--blue-500);" />
+                            <div>
+                                <div style="font-size:13px;font-weight:600;">Public Access</div>
+                                <div style="font-size:11px;color:var(--muted);">Visible to all students</div>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label>Department Restriction</label>
+                            <select id="f_dept">
+                                <option value="">All Departments</option>
+                                <option>CSE</option>
+                                <option>IT</option>
+                                <option>ECE</option>
+                                <option>MECH</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('uploadModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveResource()">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>Upload Resource
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ════════ VIEW MODAL ════════ -->
+    <div class="modal-overlay" id="viewModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div>
+                    <h3>Resource Details</h3>
+                    <p>Full details from <code style="color:var(--blue-400);font-size:11px;">training_materials</code>
+                    </p>
+                </div>
+                <div class="modal-close" onclick="closeModal('viewModal')"><svg viewBox="0 0 24 24">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg></div>
+            </div>
+            <div class="modal-body">
+                <div class="view-hero">
+                    <div class="view-hero-icon" id="v_icon"></div>
+                    <div>
+                        <h3 id="v_title"></h3>
+                        <p id="v_desc"></p>
+                        <div class="view-pills" id="v_pills"></div>
+                    </div>
+                </div>
+                <div class="view-grid" id="v_grid"></div>
+                <div style="margin-bottom:16px;">
+                    <div
+                        style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:10px;">
+                        Student Progress (sample from <code style="color:var(--blue-400);">material_progress</code>)
+                    </div>
+                    <div id="v_progress"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('viewModal')">Close</button>
+                <button class="btn btn-ghost" id="v_edit_btn">Edit</button>
+                <button class="btn btn-danger" id="v_delete_btn">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ════════ DELETE CONFIRM MODAL ════════ -->
+    <div class="modal-overlay modal-sm" id="deleteModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div>
+                    <h3>Delete Resource</h3>
+                    <p>This action cannot be undone</p>
+                </div>
+                <div class="modal-close" onclick="closeModal('deleteModal')"><svg viewBox="0 0 24 24">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg></div>
+            </div>
+            <div class="modal-body">
+                <div
+                    style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:10px;padding:16px;display:flex;gap:12px;">
+                    <svg style="width:18px;height:18px;stroke:var(--red);fill:none;stroke-width:2;flex-shrink:0;margin-top:1px;"
+                        viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    <div>
+                        <p style="font-size:13px;font-weight:600;color:var(--red);margin-bottom:4px;">Delete this
+                            resource?</p>
+                        <p style="font-size:12px;color:var(--muted);">Deleting <strong id="delName"
+                                style="color:var(--text)"></strong> will remove the file and all student progress
+                            records from <code style="color:var(--blue-400);font-size:11px;">material_progress</code>.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('deleteModal')">Cancel</button>
+                <button class="btn btn-danger" onclick="confirmDelete()">
+                    <svg viewBox="0 0 24 24">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6l-1 14H6L5 6" />
+                    </svg>Delete
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast">
+        <div class="toast-dot"></div><span id="toastMsg"></span>
+    </div>
+
+    <script>
+        // ── DATA ──
+        const avColors = ['#0052CC', '#16a34a', '#7c3aed', '#c2410c', '#0e7490'];
+        const typeEmoji = { pdf: '📄', video: '🎬', link: '🔗', article: '📰', quiz: '📝' };
+        const typeBg = { pdf: 'rgba(239,68,68,0.12)', video: 'rgba(124,58,237,0.12)', link: 'rgba(0,102,255,0.12)', article: 'rgba(8,145,178,0.12)', quiz: 'rgba(234,179,8,0.12)' };
+        const diffLabel = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'Advanced' };
+
+        function fmtSize(bytes) {
+            if (!bytes) return '—';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        let resources = [
+            { id: 1, title: 'GATE 2025 Complete Prep Pack', desc: 'Full question bank with solutions for CS, IT topics. Covers all major units.', type: 'pdf', category: 'Technical', difficulty: 'advanced', fileSize: 44040192, views: 2140, downloads: 892, isPublic: true, tags: ['GATE', '2025', 'CS', 'prep'], estTime: 240, prereqs: 'Discrete Mathematics, Algorithms', uploadedBy: 'Prof. Anita Sharma', createdAt: '2026-01-10' },
+            { id: 2, title: 'Data Structures Video Series', desc: 'Complete DSA series — arrays, trees, graphs, dynamic programming.', type: 'video', category: 'Technical', difficulty: 'intermediate', fileSize: 2202009600, views: 3210, downloads: 1204, isPublic: true, tags: ['DSA', 'video', 'trees', 'graphs'], estTime: 480, prereqs: 'Basic Programming', uploadedBy: 'Prof. Anita Sharma', createdAt: '2026-01-05' },
+            { id: 3, title: 'Aptitude Formula Sheet', desc: 'Quick-reference cheat sheet for quantitative and logical reasoning.', type: 'pdf', category: 'Aptitude', difficulty: 'beginner', fileSize: 1258291, views: 4890, downloads: 2140, isPublic: true, tags: ['aptitude', 'quant', 'formulas'], estTime: 30, prereqs: 'None', uploadedBy: 'Prof. Nisha Kapoor', createdAt: '2025-12-20' },
+            { id: 4, title: 'System Design Interview Notes', desc: 'Comprehensive interview-focused system design concepts and templates.', type: 'article', category: 'Technical', difficulty: 'advanced', fileSize: 3984588, views: 1020, downloads: 341, isPublic: false, tags: ['system design', 'interview', 'scalability'], estTime: 120, prereqs: 'DBMS, OS, Networking', uploadedBy: 'Prof. Anita Sharma', createdAt: '2026-01-18' },
+            { id: 5, title: 'HR Interview Preparation Guide', desc: 'Common HR questions, STAR method answers, and tips for campus drives.', type: 'pdf', category: 'Soft Skills', difficulty: 'beginner', fileSize: 921600, views: 1780, downloads: 244, isPublic: true, tags: ['HR', 'interview', 'soft skills'], estTime: 45, prereqs: 'None', uploadedBy: 'Prof. Nisha Kapoor', createdAt: '2025-11-14' },
+            { id: 6, title: 'Verbal Ability Practice Set', desc: '250 questions on reading comprehension, grammar, and vocabulary.', type: 'quiz', category: 'Communication', difficulty: 'intermediate', fileSize: 512000, views: 980, downloads: 188, isPublic: true, tags: ['verbal', 'grammar', 'vocabulary'], estTime: 60, prereqs: 'None', uploadedBy: 'Prof. Nisha Kapoor', createdAt: '2026-02-01' },
+            { id: 7, title: 'Python for Placements', desc: 'Curated Python problems from top product companies — beginner to advanced.', type: 'link', category: 'Coding', difficulty: 'intermediate', fileSize: null, views: 1450, downloads: 0, isPublic: true, tags: ['python', 'coding', 'placement'], estTime: 180, prereqs: 'Basic Python', uploadedBy: 'Prof. Anita Sharma', createdAt: '2026-01-28' },
+            { id: 8, title: 'DBMS Quick Revision Notes', desc: 'One-page revision notes for all DBMS topics — ER diagrams, SQL, normalization.', type: 'pdf', category: 'Technical', difficulty: 'beginner', fileSize: 2097152, views: 860, downloads: 312, isPublic: false, tags: ['DBMS', 'SQL', 'normalization'], estTime: 40, prereqs: 'None', uploadedBy: 'Prof. Anita Sharma', createdAt: '2026-02-10' },
+        ];
+
+        let currentTab = 'all';
+        let currentView = 'grid';
+        let sortKey = null; let sortDir = 1;
+        let deleteTarget = null; let editTarget = null;
+
+        const typeBadge = t => `<span class="badge ${t}">${t.toUpperCase()}</span>`;
+        const diffBadge = d => d ? `<span class="badge ${d}">${diffLabel[d]}</span>` : '—';
+        const accessBadge = p => p ? `<span class="badge public">🌐 Public</span>` : `<span class="badge private">🔒 Private</span>`;
+
+        function filtered() {
+            const s = document.getElementById('searchInput').value.toLowerCase();
+            const c = document.getElementById('catFilter').value;
+            const d = document.getElementById('diffFilter').value;
+            const a = document.getElementById('accessFilter').value;
+            return resources.filter(r => {
+                const matchTab = currentTab === 'all' || r.type === currentTab;
+                const matchS = !s || r.title.toLowerCase().includes(s) || r.category.toLowerCase().includes(s) || (r.tags || []).join(' ').toLowerCase().includes(s);
+                const matchC = !c || r.category === c;
+                const matchD = !d || r.difficulty === d;
+                const matchA = !a || (a === 'public' ? r.isPublic : !r.isPublic);
+                return matchTab && matchS && matchC && matchD && matchA;
+            });
+        }
+
+        function render() {
+            let data = filtered();
+            if (sortKey) {
+                data.sort((a, b) => {
+                    const va = a[sortKey] ?? 0; const vb = b[sortKey] ?? 0;
+                    return typeof va === 'number' ? (va - vb) * sortDir : String(va).localeCompare(String(vb)) * sortDir;
+                });
+            }
+            document.getElementById('rowCount').textContent = data.length;
+            document.getElementById('paginationInfo').textContent = `Showing 1–${data.length} of 234`;
+            renderGrid(data);
+            renderTable(data);
+        }
+
+        function renderGrid(data) {
+            const grid = document.getElementById('resourceGrid');
+            const cards = data.map(r => `
+        <div class="resource-card">
+            <div class="resource-card-top">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;">
+                    <div class="resource-type-icon" style="background:${typeBg[r.type]}">${typeEmoji[r.type]}</div>
+                    <div style="display:flex;gap:5px;flex-wrap:wrap;">${typeBadge(r.type)} ${diffBadge(r.difficulty)}</div>
+                </div>
+                <h4>${r.title}</h4>
+                <p>${r.desc.length > 80 ? r.desc.slice(0, 80) + '…' : r.desc}</p>
+                <div class="resource-tags">${(r.tags || []).slice(0, 3).map(t => `<span class="resource-tag">${t}</span>`).join('')}</div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    ${accessBadge(r.isPublic)}
+                    ${r.estTime ? `<span style="font-size:11px;color:var(--muted);">⏱ ${r.estTime} min</span>` : ''}
+                </div>
+            </div>
+            <div class="resource-card-bottom">
+                <div class="resource-meta">
+                    <span><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>${r.views.toLocaleString()}</span>
+                    <span><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>${r.downloads.toLocaleString()}</span>
+                    ${r.fileSize ? `<span>${fmtSize(r.fileSize)}</span>` : ''}
+                </div>
+                <div class="resource-actions">
+                    <button class="btn btn-ghost btn-xs" onclick="viewResource(${r.id})">View</button>
+                    <button class="btn btn-ghost btn-xs" onclick="editResource(${r.id})">Edit</button>
+                    <button class="btn btn-danger btn-xs" onclick="openDelete(${r.id})">Del</button>
+                </div>
+            </div>
+        </div>
+    `);
+            cards.push(`
+        <div class="upload-card" onclick="openUploadModal()">
+            <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <h4>Upload New Resource</h4>
+            <p>Click to add a PDF, video,<br>link, article, or quiz</p>
+        </div>
+    `);
+            grid.innerHTML = cards.join('');
+        }
+
+        function renderTable(data) {
+            document.getElementById('resourceTable').innerHTML = data.map(r => `
+        <tr>
+            <td>
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <div style="width:32px;height:32px;border-radius:8px;background:${typeBg[r.type]};display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">${typeEmoji[r.type]}</div>
+                    <div>
+                        <div style="font-weight:600;font-size:13px;">${r.title}</div>
+                        <div style="font-size:11px;color:var(--muted);">${r.category}</div>
+                    </div>
+                </div>
+            </td>
+            <td>${typeBadge(r.type)}</td>
+            <td style="color:var(--muted);font-size:12px;">${r.category}</td>
+            <td>${diffBadge(r.difficulty)}</td>
+            <td style="font-size:12px;color:var(--muted);">${fmtSize(r.fileSize)}</td>
+            <td style="font-size:13px;font-weight:600;">${r.views.toLocaleString()}</td>
+            <td style="font-size:13px;font-weight:600;">${r.downloads.toLocaleString()}</td>
+            <td>${accessBadge(r.isPublic)}</td>
+            <td>
+                <div style="display:flex;gap:4px;">
+                    <button class="btn btn-ghost btn-xs" onclick="viewResource(${r.id})">View</button>
+                    <button class="btn btn-ghost btn-xs" onclick="editResource(${r.id})">Edit</button>
+                    <button class="btn btn-danger btn-xs" onclick="openDelete(${r.id})">Del</button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+        }
+
+        function filterTab(el, tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            el.classList.add('active');
+            currentTab = tab;
+            render();
+        }
+
+        function setView(v) {
+            currentView = v;
+            document.getElementById('gridView').style.display = v === 'grid' ? 'block' : 'none';
+            document.getElementById('listView').style.display = v === 'list' ? 'block' : 'none';
+            document.getElementById('gridBtn').classList.toggle('active', v === 'grid');
+            document.getElementById('listBtn').classList.toggle('active', v === 'list');
+        }
+
+        function sortBy(key) {
+            if (sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; }
+            render();
+        }
+
+        // ── MODALS ──
+        let uploadEditTarget = null;
+        function openUploadModal(id = null) {
+            uploadEditTarget = id;
+            const r = id ? resources.find(x => x.id === id) : null;
+            document.getElementById('uploadModalTitle').textContent = r ? 'Edit Resource' : 'Upload Resource';
+            document.getElementById('uploadModalSub').textContent = r ? `Editing: ${r.title}` : 'Add a new training material to the system';
+            document.getElementById('f_title').value = r?.title || '';
+            document.getElementById('f_desc').value = r?.desc || '';
+            document.getElementById('f_type').value = r?.type || '';
+            document.getElementById('f_cat').value = r?.category || '';
+            document.getElementById('f_diff').value = r?.difficulty || '';
+            document.getElementById('f_time').value = r?.estTime || '';
+            document.getElementById('f_tags').value = (r?.tags || []).join(', ');
+            document.getElementById('f_prereq').value = r?.prereqs || '';
+            document.getElementById('f_public').checked = r?.isPublic ?? true;
+            document.getElementById('f_url').value = '';
+            document.getElementById('fileLabel').textContent = 'Supports PDF, MP4, DOCX, ZIP · Max 10 MB';
+            toggleUrlField();
+            document.getElementById('uploadModal').classList.add('open');
+        }
+
+        function editResource(id) { openUploadModal(id); }
+
+        function toggleUrlField() {
+            const type = document.getElementById('f_type').value;
+            document.getElementById('fileUploadArea').style.display = type === 'link' ? 'none' : 'flex';
+            document.getElementById('urlArea').style.display = type === 'link' ? 'flex' : 'none';
+        }
+
+        function handleFileSelect(input) {
+            if (input.files[0]) document.getElementById('fileLabel').textContent = `Selected: ${input.files[0].name} (${fmtSize(input.files[0].size)})`;
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('drag');
+            const f = e.dataTransfer.files[0];
+            if (f) document.getElementById('fileLabel').textContent = `Selected: ${f.name} (${fmtSize(f.size)})`;
+        }
+
+        function saveResource() {
+            const title = document.getElementById('f_title').value.trim();
+            const type = document.getElementById('f_type').value;
+            const cat = document.getElementById('f_cat').value;
+            if (!title || !type || !cat) { showToast('Please fill required fields', 'error'); return; }
+            const tags = document.getElementById('f_tags').value.split(',').map(t => t.trim()).filter(Boolean);
+            const data = {
+                title, desc: document.getElementById('f_desc').value,
+                type, category: cat, difficulty: document.getElementById('f_diff').value,
+                estTime: parseInt(document.getElementById('f_time').value) || null,
+                tags, prereqs: document.getElementById('f_prereq').value,
+                isPublic: document.getElementById('f_public').checked,
+                uploadedBy: 'Super Admin', createdAt: new Date().toISOString().slice(0, 10),
+            };
+            if (uploadEditTarget) {
+                const idx = resources.findIndex(x => x.id === uploadEditTarget);
+                resources[idx] = { ...resources[idx], ...data };
+                showToast('Resource updated', 'success');
+            } else {
+                resources.unshift({ id: Date.now(), views: 0, downloads: 0, fileSize: null, ...data });
+                showToast('Resource uploaded!', 'success');
+            }
+            closeModal('uploadModal'); render();
+        }
+
+        function viewResource(id) {
+            const r = resources.find(x => x.id === id);
+            if (!r) return;
+            document.getElementById('v_icon').style.background = typeBg[r.type];
+            document.getElementById('v_icon').textContent = typeEmoji[r.type];
+            document.getElementById('v_title').textContent = r.title;
+            document.getElementById('v_desc').textContent = r.desc;
+            document.getElementById('v_pills').innerHTML = [
+                `<span class="pill">${r.category}</span>`,
+                r.estTime ? `<span class="pill">⏱ ${r.estTime} min</span>` : '',
+                r.isPublic ? `<span class="pill">🌐 Public</span>` : `<span class="pill">🔒 Private</span>`,
+                ...(r.tags || []).map(t => `<span class="pill">${t}</span>`),
+            ].join('');
+            document.getElementById('v_grid').innerHTML = [
+                { l: 'Type', v: typeBadge(r.type) },
+                { l: 'Category', v: r.category },
+                { l: 'Difficulty', v: diffBadge(r.difficulty) },
+                { l: 'File Size', v: fmtSize(r.fileSize) },
+                { l: 'Views', v: r.views.toLocaleString() },
+                { l: 'Downloads', v: r.downloads.toLocaleString() },
+                { l: 'Est. Time', v: r.estTime ? r.estTime + ' min' : '—' },
+                { l: 'Uploaded By', v: r.uploadedBy },
+                { l: 'Uploaded On', v: r.createdAt },
+                { l: 'Prerequisites', v: r.prereqs || 'None' },
+            ].map(i => `<div class="view-item"><label>${i.l}</label><p>${i.v}</p></div>`).join('');
+
+            const sampleProgress = [
+                { name: 'Rahul Kumar', pct: 100, color: '#0052CC' },
+                { name: 'Priya Menon', pct: 72, color: '#7c3aed' },
+                { name: 'Sneha Patel', pct: 45, color: '#16a34a' },
+                { name: 'Arjun Das', pct: 10, color: '#c2410c' },
+            ];
+            document.getElementById('v_progress').innerHTML = sampleProgress.map(p => `
+        <div class="progress-row">
+            <div class="pr-av" style="background:${p.color}">${p.name.split(' ').map(w => w[0]).join('').toUpperCase()}</div>
+            <div class="pr-bar-wrap">
+                <div class="pr-name">${p.name}</div>
+                <div class="pr-bar"><div class="pr-fill ${p.pct === 100 ? 'done' : ''}" style="width:${p.pct}%"></div></div>
+            </div>
+            <div class="pr-pct">${p.pct}%</div>
+        </div>
+    `).join('');
+
+            document.getElementById('v_edit_btn').onclick = () => { closeModal('viewModal'); editResource(id); };
+            document.getElementById('v_delete_btn').onclick = () => { closeModal('viewModal'); openDelete(id); };
+            document.getElementById('viewModal').classList.add('open');
+        }
+
+        function openDelete(id) {
+            deleteTarget = id;
+            document.getElementById('delName').textContent = resources.find(x => x.id === id)?.title || '';
+            document.getElementById('deleteModal').classList.add('open');
+        }
+        function confirmDelete() {
+            resources = resources.filter(x => x.id !== deleteTarget);
+            closeModal('deleteModal'); render();
+            showToast('Resource deleted', 'error');
+        }
+
+        function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+        document.querySelectorAll('.modal-overlay').forEach(o => o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); }));
+
+        // ── TOAST ──
+        let toastTimer;
+        function showToast(msg, type = 'info') {
+            const t = document.getElementById('toast'), m = document.getElementById('toastMsg');
+            t.className = `toast ${type}`; m.textContent = msg; t.classList.add('show');
+            clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+        }
+
+        render();
+    </script>
+</body>
+
+</html>
