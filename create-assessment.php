@@ -216,10 +216,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Create Assessment - Placement Portal</title>
 
-    <!-- PDF.js for PDF text extraction -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <!-- Mammoth.js for Word document text extraction -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <!-- No client-side parsing libraries needed.
+         File upload and question extraction is handled server-side
+         by api/assessment/parse-document.php -->
+
 
     <style>
         :root {
@@ -761,9 +761,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action'])) {
                 <span style="font-size:16px;font-weight:600;color:#2d3748;">Processing document...</span>
             </div>
             <div class="parsing-steps">
-                <div class="parsing-step" id="step1"><div class="step-icon">⬜</div> Reading file content</div>
+                <div class="parsing-step" id="step1"><div class="step-icon">⬜</div> Uploading file to server</div>
                 <div class="parsing-step" id="step2"><div class="step-icon">⬜</div> Extracting text</div>
-                <div class="parsing-step" id="step3"><div class="step-icon">⬜</div> Analysing questions with AI</div>
+                <div class="parsing-step" id="step3"><div class="step-icon">⬜</div> Parsing questions</div>
                 <div class="parsing-step" id="step4"><div class="step-icon">⬜</div> Preparing preview</div>
             </div>
         </div>
@@ -868,12 +868,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action'])) {
 <div class="toast" id="toast"></div>
 
 <script>
-    // ── PDF.js worker ──
-    if (typeof pdfjsLib !== 'undefined') {
-        pdfjsLib.GlobalWorkerOptions.workerSrc =
-            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    }
-
     // ── Global state ──
     let assessmentData = {
         title: '', description: '', category: '', difficulty: '',
@@ -932,8 +926,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action'])) {
 
         uploadedFile = file;
         showFileInfo(file, isPDF ? 'pdf' : 'docx');
-        if (isPDF) extractFromPDF(file);
-        else       extractFromDOCX(file);
+        uploadAndParse(file);
     }
 
     function showFileInfo(file, type) {
@@ -977,102 +970,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action'])) {
         document.getElementById('parsingStatus').classList.remove('active');
     }
 
-    // ── PDF extraction ──
-    async function extractFromPDF(file) {
-        showParsingStatus(); setStep(1, 'active');
-        try {
-            const buffer = await file.arrayBuffer();
-            setStep(1, 'done'); setStep(2, 'active');
-
-            const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-            let fullText = '';
-            for (let i = 1; i <= pdf.numPages; i++) {
-                const page    = await pdf.getPage(i);
-                const content = await page.getTextContent();
-                fullText += content.items.map(item => item.str).join(' ') + '\n';
-            }
-
-            setStep(2, 'done'); setStep(3, 'active');
-            if (!fullText.trim()) throw new Error('No text found in PDF. The file may be scanned or image-based.');
-            await parseTextWithAI(fullText);
-        } catch (err) {
-            hideParsingStatus();
-            showError('Failed to process PDF.', err.message);
-        }
-    }
-
-    // ── DOCX extraction ──
-    async function extractFromDOCX(file) {
-        showParsingStatus(); setStep(1, 'active');
-        try {
-            const buffer   = await file.arrayBuffer();
-            setStep(1, 'done'); setStep(2, 'active');
-
-            const result   = await mammoth.extractRawText({ arrayBuffer: buffer });
-            const fullText = result.value;
-
-            setStep(2, 'done'); setStep(3, 'active');
-            if (!fullText.trim()) throw new Error('No text found in the Word document.');
-            await parseTextWithAI(fullText);
-        } catch (err) {
-            hideParsingStatus();
-            showError('Failed to process Word document.', err.message);
-        }
-    }
-
-    // ── AI question parsing ──
-    async function parseTextWithAI(rawText) {
-        const prompt = `You are a question extraction assistant. Extract ALL multiple-choice questions from the text below.
-
-Return ONLY a valid JSON array — no markdown fences, no explanation — in this exact format:
-[
-  {
-    "id": 1,
-    "text": "The full question text",
-    "options": ["Option A text", "Option B text", "Option C text", "Option D text"],
-    "correctAnswer": "a"
-  }
-]
-
-Rules:
-- "correctAnswer" must be lowercase "a", "b", "c", or "d". Only set it if the answer is clearly marked in the document (e.g. "Answer: b", "Ans: (c)"). Otherwise set it to null.
-- Include ALL questions found, even with inconsistent formatting.
-- If a question has fewer than 4 options, fill missing slots with "".
-- Clean up OCR artefacts and extra whitespace.
-- id values must be sequential starting from 1.
-
-TEXT TO PARSE:
----
-${rawText.substring(0, 12000)}
----`;
+    // ── Upload file to PHP endpoint and get parsed questions back ──
+    async function uploadAndParse(file) {
+        showParsingStatus();
+        setStep(1, 'active');
 
         try {
-            const response = await fetch('https://api.anthropic.com/v1/messages', {
+            const formData = new FormData();
+            formData.append('document', file);
+
+            setStep(1, 'done');
+            setStep(2, 'active');
+
+            const response = await fetch('api/assessment/parse-document.php', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    model: 'claude-sonnet-4-20250514',
-                    max_tokens: 4000,
-                    messages: [{ role: 'user', content: prompt }]
-                })
+                body: formData
+                // No Content-Type header — browser sets it automatically with boundary for multipart
             });
 
-            if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.error?.message || 'Claude API error.');
+            setStep(2, 'done');
+            setStep(3, 'active');
+
+            const result = await response.json();
+
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Server returned an error.');
             }
 
-            const data      = await response.json();
-            const rawJson   = data.content.map(b => b.text || '').join('');
-            const cleaned   = rawJson.replace(/```json|```/gi, '').trim();
-            const questions = JSON.parse(cleaned);
+            const questions = result.questions;
 
             if (!Array.isArray(questions) || questions.length === 0) {
-                throw new Error('No questions found. Ensure the document contains MCQ-style questions with labelled options.');
+                throw new Error('No questions found. Check your document follows the expected format.');
             }
 
-            setStep(3, 'done'); setStep(4, 'active');
+            setStep(3, 'done');
+            setStep(4, 'active');
 
+            // Store questions — IDs come from server, not client
             assessmentData.questions      = questions;
             assessmentData.correctAnswers = {};
             questions.forEach(q => {
@@ -1081,17 +1015,14 @@ ${rawText.substring(0, 12000)}
 
             displayQuestions(questions);
             displayCorrectAnswersInputs(questions);
+
             setStep(4, 'done');
             hideParsingStatus();
-            showToast(`${questions.length} questions extracted successfully.`, 'success');
+            showToast(`${questions.length} question${questions.length !== 1 ? 's' : ''} extracted successfully.`, 'success');
 
         } catch (err) {
             hideParsingStatus();
-            if (err instanceof SyntaxError) {
-                showError('AI returned unexpected output.', 'Could not parse questions. Try a different document or add questions manually.');
-            } else {
-                showError('Question extraction failed.', err.message);
-            }
+            showError('Question extraction failed.', err.message);
         }
     }
 
