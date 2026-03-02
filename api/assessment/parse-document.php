@@ -14,15 +14,11 @@
 //         or { success: false, error: '...' }
 // ============================================================
 
-// ── Dependencies ──
-// Go up two levels from api/assessment/ to reach project root
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
 
-// ── Only teachers may call this endpoint ──
 validateSession($conn, 'teacher');
 
-// ── Only accept POST ──
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['success' => false, 'error' => 'Method not allowed.']);
@@ -31,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 header('Content-Type: application/json');
 
-// ── Validate uploaded file ──
+// ── Validate upload ──
 if (!isset($_FILES['document']) || $_FILES['document']['error'] !== UPLOAD_ERR_OK) {
     $uploadErrors = [
         UPLOAD_ERR_INI_SIZE   => 'File exceeds server upload limit.',
@@ -42,71 +38,52 @@ if (!isset($_FILES['document']) || $_FILES['document']['error'] !== UPLOAD_ERR_O
         UPLOAD_ERR_CANT_WRITE => 'Server failed to write file.',
         UPLOAD_ERR_EXTENSION  => 'A PHP extension blocked the upload.',
     ];
-    $code    = $_FILES['document']['error'] ?? UPLOAD_ERR_NO_FILE;
-    $message = $uploadErrors[$code] ?? 'Unknown upload error.';
+    $code = $_FILES['document']['error'] ?? UPLOAD_ERR_NO_FILE;
     http_response_code(400);
-    echo json_encode(['success' => false, 'error' => $message]);
+    echo json_encode(['success' => false, 'error' => $uploadErrors[$code] ?? 'Unknown upload error.']);
     exit;
 }
 
 $file     = $_FILES['document'];
 $origName = strtolower($file['name']);
 $tmpPath  = $file['tmp_name'];
-$fileSize = $file['size'];
 
-// ── Size limit: 10MB ──
-if ($fileSize > 10 * 1024 * 1024) {
+if ($file['size'] > 10 * 1024 * 1024) {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => 'File too large. Maximum is 10MB.']);
     exit;
 }
 
-// ── Detect type by extension and MIME ──
 $ext      = pathinfo($origName, PATHINFO_EXTENSION);
 $mimeType = mime_content_type($tmpPath);
 
-$isPDF  = ($ext === 'pdf' || $mimeType === 'application/pdf');
+$isPDF  = ($ext === 'pdf'  || $mimeType === 'application/pdf');
 $isDOCX = ($ext === 'docx' || $mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
 $isDOC  = ($ext === 'doc'  || $mimeType === 'application/msword');
 
 if ($isDOC) {
     http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Legacy .doc format is not supported. Please save as .docx or export as PDF.']);
+    echo json_encode(['success' => false, 'error' => 'Legacy .doc format is not supported. Save as .docx or export as PDF.']);
     exit;
 }
-
 if (!$isPDF && !$isDOCX) {
     http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Unsupported file type. Please upload a PDF or DOCX file.']);
+    echo json_encode(['success' => false, 'error' => 'Unsupported file type. Upload a PDF or DOCX.']);
     exit;
 }
 
-// ============================================================
-// TEXT EXTRACTION
-// ============================================================
-
-$rawText = '';
-
-if ($isDOCX) {
-    $rawText = extractTextFromDOCX($tmpPath);
-} elseif ($isPDF) {
-    $rawText = extractTextFromPDF($tmpPath);
-}
+$rawText = $isDOCX ? extractTextFromDOCX($tmpPath) : extractTextFromPDF($tmpPath);
 
 if (empty(trim($rawText))) {
     http_response_code(422);
     echo json_encode([
         'success' => false,
         'error'   => $isPDF
-            ? 'No text found in PDF. The file may be scanned or image-based. Try a text-based PDF or use DOCX instead.'
-            : 'No text found in the Word document. Make sure the file contains typed text.'
+            ? 'No text found in PDF. The file may be scanned or image-based. Try a text-based PDF or use DOCX.'
+            : 'No text found in the Word document.',
     ]);
     exit;
 }
-
-// ============================================================
-// QUESTION PARSING
-// ============================================================
 
 $questions = parseQuestions($rawText);
 
@@ -114,297 +91,558 @@ if (empty($questions)) {
     http_response_code(422);
     echo json_encode([
         'success' => false,
-        'error'   => 'No questions found. Make sure your document follows the expected format.',
-        'hint'    => 'Expected format: numbered questions (1. or 1)) followed by options labeled a) b) c) d) on separate lines. Optionally add "Answer: b" after each question.',
+        'error'   => 'No questions found. Check your document follows the expected format.',
+        'hint'    => 'Expected: numbered questions (1. or 1)) followed by options a) b) c) d). Optionally add "Answer: b".',
     ]);
     exit;
 }
 
-echo json_encode([
-    'success'   => true,
-    'count'     => count($questions),
-    'questions' => $questions,
-]);
+echo json_encode(['success' => true, 'count' => count($questions), 'questions' => $questions]);
 exit;
 
 
 // ============================================================
 // FUNCTION: extractTextFromDOCX
-//
-// A .docx file is a ZIP archive.
-// The text lives inside word/document.xml as XML.
-// We unzip it in memory and strip the XML tags.
-// No external libraries needed — just PHP's ZipArchive.
+// Reads word/document.xml from the ZIP — preserves paragraph
+// structure by replacing </w:p> with newlines before stripping tags.
 // ============================================================
 function extractTextFromDOCX(string $path): string {
     if (!class_exists('ZipArchive')) {
-        error_log('parse-document.php: ZipArchive extension not available');
+        error_log('parse-document.php: ZipArchive not available');
         return '';
     }
-
     $zip = new ZipArchive();
-    if ($zip->open($path) !== true) {
-        error_log('parse-document.php: Failed to open DOCX as ZIP');
-        return '';
-    }
-
-    // The main document content is always at this path inside the ZIP
+    if ($zip->open($path) !== true) return '';
     $xml = $zip->getFromName('word/document.xml');
     $zip->close();
+    if ($xml === false) return '';
 
-    if ($xml === false) {
-        error_log('parse-document.php: word/document.xml not found in DOCX');
-        return '';
-    }
-
-    // Insert a space before every XML tag so words don't merge when we strip tags
-    $xml = str_replace('<', ' <', $xml);
-
-    // Strip all XML tags
-    $text = strip_tags($xml);
-
-    // Collapse multiple whitespace/newlines into single spaces
-    $text = preg_replace('/\s+/', ' ', $text);
-
-    // Restore paragraph-like line breaks by treating common paragraph markers
-    // The XML uses </w:p> for paragraph end — we already stripped tags, so
-    // we use a two-pass approach: first mark paragraphs, then clean up
-    // Re-open to do a smarter pass
-    $zip2 = new ZipArchive();
-    if ($zip2->open($path) === true) {
-        $xml2 = $zip2->getFromName('word/document.xml');
-        $zip2->close();
-
-        if ($xml2 !== false) {
-            // Replace paragraph and line break tags with newlines before stripping
-            $xml2 = preg_replace('/<\/w:p>/', "\n", $xml2);
-            $xml2 = preg_replace('/<w:br[^>]*\/>/', "\n", $xml2);
-            $xml2 = strip_tags($xml2);
-            // Decode XML entities
-            $xml2 = html_entity_decode($xml2, ENT_QUOTES | ENT_XML1, 'UTF-8');
-            // Collapse blank lines but keep single newlines
-            $xml2 = preg_replace('/\n{3,}/', "\n\n", $xml2);
-            $xml2 = preg_replace('/[ \t]+/', ' ', $xml2);
-            return trim($xml2);
-        }
-    }
-
-    return trim($text);
+    $xml = preg_replace('/<\/w:p>/',     "\n", $xml);
+    $xml = preg_replace('/<w:br[^>]*\/>/', "\n", $xml);
+    $xml = strip_tags($xml);
+    $xml = html_entity_decode($xml, ENT_QUOTES | ENT_XML1, 'UTF-8');
+    $xml = preg_replace('/[ \t]+/',  ' ',    $xml);
+    $xml = preg_replace('/\n{3,}/', "\n\n", $xml);
+    return trim($xml);
 }
 
 
 // ============================================================
 // FUNCTION: extractTextFromPDF
 //
-// Pure PHP PDF text extraction without external libraries.
-// Works on text-based PDFs (not scanned/image PDFs).
-// Extracts text stream content from PDF structure.
+// Three-strategy extraction designed to handle Google Docs PDFs:
+//
+// Strategy 1 — Structured stream walk
+//   Decompresses each stream (Google Docs always uses FlateDecode/zlib).
+//   Walks PDF operators in order. Uses Td/TD/Tm/T* positioning
+//   operators to detect line breaks — this correctly reconstructs
+//   lines that Google Docs fragments across many small Tj calls.
+//
+// Strategy 2 — Simple string concatenation
+//   If strategy 1 yields no questions after parsing, falls back to
+//   naively joining all Tj/TJ strings from decompressed streams.
+//   Less structured but catches edge cases.
+//
+// Strategy 3 — Raw byte scan
+//   Scans raw PDF bytes for parenthesised strings as a last resort.
 // ============================================================
 function extractTextFromPDF(string $path): string {
     $content = @file_get_contents($path);
-    if ($content === false) {
-        error_log('parse-document.php: Could not read PDF file');
-        return '';
+    if ($content === false) return '';
+
+    preg_match_all('/stream\r?\n(.*?)\r?\nendstream/s', $content, $m);
+    $rawStreams = $m[1] ?? [];
+
+    // ── Pass 1: build ToUnicode CMap from any CMap streams ──
+    // Google Docs PDFs use CIDFonts where text operators contain hex glyph IDs
+    // like <0044> instead of (string) literals. The ToUnicode CMap maps
+    // glyph ID → Unicode codepoint. Without this, all text is invisible to us.
+    $cmap = buildToUnicodeCMap($rawStreams);
+
+    // ── Pass 2: extract lines from content streams ──
+    // Strategy A: CID hex strings decoded via CMap (Google Docs PDF)
+    // Strategy B: parenthesis string literals decoded directly (other PDFs)
+    // Both strategies walk Td/Tm/T*/ET operators to reconstruct line breaks.
+    $lines = [];
+    foreach ($rawStreams as $raw) {
+        $stream = tryDecompress($raw);
+        if ($stream === null) continue;
+
+        // Skip font/image binary streams (CMap streams start with /CIDInit)
+        if (strpos($stream, '/CIDInit') !== false) continue;
+        if (strpos($stream, 'begincmap') !== false) continue;
+
+        $streamLines = extractLinesFromStream($stream, $cmap);
+        foreach ($streamLines as $line) {
+            $line = trim($line);
+            if ($line !== '') $lines[] = $line;
+        }
     }
 
-    $text = '';
+    $text = implode("\n", $lines);
 
-    // ── Strategy 1: Extract text from PDF stream objects ──
-    // PDF streams contain the actual page content between "stream" and "endstream"
-    preg_match_all('/stream\r?\n(.*?)\r?\nendstream/s', $content, $streams);
-
-    foreach ($streams[1] as $stream) {
-        // Skip binary/compressed streams (they start with non-printable chars)
-        // Compressed streams begin with 0x78 (zlib header)
-        if (strlen($stream) > 2 && ord($stream[0]) === 0x78) {
-            // Try to decompress
-            $decompressed = @gzuncompress($stream);
-            if ($decompressed !== false) {
-                $stream = $decompressed;
-            } else {
-                continue; // Skip streams we can't decompress
-            }
-        }
-
-        // Extract text from PDF content stream operators
-        // Tj and TJ are the PDF text-showing operators
-        // BT...ET marks a text block
-
-        // Extract (string) Tj — simple text show
-        preg_match_all('/\(((?:[^()\\\\]|\\\\.)*)\)\s*Tj/s', $stream, $tjMatches);
-        foreach ($tjMatches[1] as $match) {
-            $text .= decodePdfString($match) . ' ';
-        }
-
-        // Extract [(string) num (string)] TJ — text show with kerning
-        preg_match_all('/\[((?:[^\[\]]|\((?:[^()\\\\]|\\\\.)*\))*)\]\s*TJ/s', $stream, $tjArrayMatches);
-        foreach ($tjArrayMatches[1] as $match) {
-            preg_match_all('/\(((?:[^()\\\\]|\\\\.)*)\)/', $match, $stringMatches);
-            foreach ($stringMatches[1] as $str) {
-                $text .= decodePdfString($str);
-            }
-            $text .= ' ';
-        }
-
-        // Add newline after each stream to help with line separation
-        $text .= "\n";
-    }
-
-    // ── Strategy 2: Fallback — extract raw printable strings ──
-    // If strategy 1 found nothing, pull all printable strings from the PDF
+    // ── Fallback: raw parenthesis scan if nothing found ──
     if (trim($text) === '') {
-        preg_match_all('/\(([^\)]{4,})\)/', $content, $rawStrings);
-        foreach ($rawStrings[1] as $str) {
-            $decoded = decodePdfString($str);
-            // Only keep strings that look like readable text (mostly printable ASCII)
-            if (preg_match('/^[\x20-\x7E\s]{4,}$/', $decoded)) {
-                $text .= $decoded . "\n";
-            }
-        }
+        $text = pdfRawFallback($content);
     }
 
-    // Clean up
-    $text = preg_replace('/[ \t]+/', ' ', $text);
+    $text = preg_replace('/[ \t]+/',  ' ',    $text);
     $text = preg_replace('/\n{3,}/', "\n\n", $text);
-
     return trim($text);
 }
 
 
 // ============================================================
-// FUNCTION: decodePdfString
-// Handles PDF escape sequences inside string literals
+// FUNCTION: buildToUnicodeCMap
+//
+// Parses ToUnicode CMap streams to build a glyph-ID → character map.
+// This is required for Google Docs PDFs (and most modern PDFs) which
+// use CIDFont encoding. Text operators contain hex glyph IDs like
+// <0044><0048><0051> instead of readable (string) literals.
+//
+// CMap format:
+//   beginbfchar
+//   <GLYPH_ID> <UNICODE_CODEPOINT>
+//   endbfchar
+//
+//   beginbfrange
+//   <START_GID> <END_GID> <BASE_UNICODE>
+//   endbfrange
 // ============================================================
-function decodePdfString(string $str): string {
-    // Replace PDF escape sequences
-    $str = str_replace(
-        ['\\n', '\\r', '\\t', '\\b', '\\f', '\\(', '\\)', '\\\\'],
-        ["\n",  "\r",  "\t",  "\x08", "\x0C", '(',   ')',   '\\'],
-        $str
-    );
-    // Remove remaining backslashes before other chars (octal not handled here)
-    $str = preg_replace('/\\\\(\d{3})/', '', $str); // skip octal for simplicity
-    return $str;
+function buildToUnicodeCMap(array $rawStreams): array {
+    $cmap = [];
+
+    foreach ($rawStreams as $raw) {
+        $stream = tryDecompress($raw);
+        if ($stream === null) continue;
+        if (strpos($stream, 'begincmap') === false) continue;
+
+        // Parse bfchar entries: <XXXX> <YYYY>
+        if (preg_match('/beginbfchar(.*?)endbfchar/s', $stream, $bfcharMatch)) {
+            preg_match_all('/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/', $bfcharMatch[1], $pairs);
+            foreach ($pairs[1] as $idx => $gidHex) {
+                $gid       = hexdec($gidHex);
+                $uniHex    = $pairs[2][$idx];
+                // Unicode value — convert to UTF-8 character
+                $codepoint = hexdec($uniHex);
+                if ($codepoint >= 0x20 && $codepoint <= 0x7E) {
+                    $cmap[$gid] = chr($codepoint);
+                } elseif ($codepoint > 0x7E) {
+                    // Multi-byte Unicode — encode as UTF-8
+                    $cmap[$gid] = mb_chr($codepoint, 'UTF-8');
+                }
+            }
+        }
+
+        // Parse bfrange entries: <START> <END> <BASE>
+        if (preg_match('/beginbfrange(.*?)endbfrange/s', $stream, $bfrangeMatch)) {
+            preg_match_all('/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/',
+                           $bfrangeMatch[1], $ranges);
+            foreach ($ranges[1] as $idx => $startHex) {
+                $start    = hexdec($startHex);
+                $end      = hexdec($ranges[2][$idx]);
+                $base     = hexdec($ranges[3][$idx]);
+                for ($gid = $start; $gid <= $end; $gid++) {
+                    $codepoint = $base + ($gid - $start);
+                    if ($codepoint >= 0x20 && $codepoint <= 0x7E) {
+                        $cmap[$gid] = chr($codepoint);
+                    } elseif ($codepoint > 0x7E) {
+                        $cmap[$gid] = mb_chr($codepoint, 'UTF-8');
+                    }
+                }
+            }
+        }
+
+        // Do NOT break — continue merging all CMap streams.
+        // Multi-font documents (e.g. bold headings use a second font)
+        // embed one CMap per font. We must merge them all or characters
+        // from secondary fonts will be silently dropped.
+    }
+
+    return $cmap;
+}
+
+
+// ============================================================
+// FUNCTION: tryDecompress
+//
+// Handles zlib (FlateDecode) compressed PDF streams.
+// Google Docs always compresses with zlib — magic bytes 0x78 0x9C.
+// Returns decompressed string, plain-text stream, or null for binary.
+// ============================================================
+function tryDecompress(string $stream): ?string {
+    if (strlen($stream) === 0) return null;
+
+    $b0 = ord($stream[0]);
+    $b1 = strlen($stream) > 1 ? ord($stream[1]) : 0;
+
+    if ($b0 === 0x78 && in_array($b1, [0x01, 0x5E, 0x9C, 0xDA], true)) {
+        $d = @gzuncompress($stream);
+        if ($d !== false) return $d;
+        $d = @gzinflate($stream);
+        if ($d !== false) return $d;
+        $d = @gzinflate(substr($stream, 2));
+        if ($d !== false) return $d;
+        return null;
+    }
+
+    $sample    = substr($stream, 0, 64);
+    $printable = preg_match_all('/[\x09\x0A\x0D\x20-\x7E]/', $sample);
+    $ratio     = strlen($sample) > 0 ? $printable / strlen($sample) : 0;
+    return $ratio >= 0.7 ? $stream : null;
+}
+
+
+// ============================================================
+// FUNCTION: extractLinesFromStream
+//
+// Extracts text lines from a PDF content stream.
+// Handles both encoding types:
+//   A) CID hex strings:     <0044> Tj  — decoded via ToUnicode CMap
+//   B) Parenthesis strings: (Hello) Tj — decoded directly
+//
+// Line grouping — two strategies, applied together:
+//
+//   Primary (Google Docs): the cm operator sets an absolute page Y
+//   coordinate before each visual line's BT blocks. We use that Y
+//   string as the grouping key.
+//
+//   Fallback (other PDFs): if no cm is seen, we track Y via Td/TD
+//   (relative move) and Tm (absolute matrix). A non-zero Y delta
+//   flushes the current line and starts a new group.
+// ============================================================
+function extractLinesFromStream(string $stream, array $cmap): array {
+
+    // Group text by cm Y coordinate (Google Docs layout engine)
+    // and by Td/Tm Y tracking (other PDFs)
+    $lineGroups = [];   // string_y_key => accumulated_text
+    $lineOrder  = [];   // preserves insertion order (= reading order)
+
+    $contextY    = '0'; // current Y as string key (avoids float key issues)
+    $hasCm       = false; // did this stream use cm for layout?
+    $tdY         = 0.0;   // accumulated Y from Td for fallback tracking
+    $blockChars  = '';
+    $inText      = false;
+
+    $lines = explode("\n", $stream);
+
+    foreach ($lines as $rawLine) {
+        $line = trim($rawLine);
+        if ($line === '') continue;
+
+        // ── cm operator: sets absolute page Y for the coming BT blocks ──
+        // Format: "a b c d tx ty cm"  — ty is the 6th number.
+        // Google Docs emits one cm per visual line of text.
+        // Regex is intentionally unanchored (\b not ^$) so leading
+        // whitespace or preceding tokens on the same line don't break it.
+        if (preg_match('/(-?[\d.]+\s+){5}(-?[\d.]+)\s+cm\b/', $line, $cmm)) {
+            $contextY = $cmm[2]; // ty component — unique per visual line
+            $hasCm    = true;
+            continue;
+        }
+
+        if ($line === 'BT') { $inText = true;  $blockChars = ''; continue; }
+        if ($line === 'ET') {
+            if ($blockChars !== '') {
+                if (!isset($lineGroups[$contextY])) {
+                    $lineGroups[$contextY] = '';
+                    $lineOrder[]           = $contextY;
+                }
+                $lineGroups[$contextY] .= $blockChars;
+                $blockChars = '';
+            }
+            $inText = false;
+            continue;
+        }
+
+        if (!$inText) continue;
+
+        // ── Fallback: Td/TD Y-tracking for PDFs that don't use cm per line ──
+        // Td format (on one line): "tx ty Td" or "tx ty TD"
+        // A non-zero ty means the cursor moved to a new visual line.
+        // We only apply this when cm hasn't been seen (hasCm=false) to
+        // avoid double-counting on Google Docs streams.
+        if (!$hasCm && preg_match('/(-?[\d.]+)\s+(-?[\d.]+)\s+TD?\s*$/', $line, $tdm)) {
+            $ty = (float)$tdm[2];
+            if (abs($ty) > 0.5) {
+                // Flush any pending chars under the old Y
+                if ($blockChars !== '') {
+                    if (!isset($lineGroups[$contextY])) {
+                        $lineGroups[$contextY] = '';
+                        $lineOrder[]           = $contextY;
+                    }
+                    $lineGroups[$contextY] .= $blockChars;
+                    $blockChars = '';
+                }
+                $tdY     += $ty;
+                $contextY = (string)round($tdY, 3);
+            }
+            // Fall through — the same line may also contain a Tj
+        }
+
+        // ── Fallback: Tm absolute matrix for PDFs that don't use cm ──
+        // Format: "a b c d tx ty Tm" — ty is the absolute Y position.
+        if (!$hasCm && preg_match('/(-?[\d.]+\s+){5}(-?[\d.]+)\s+Tm\b/', $line, $tmm)) {
+            $newY = (float)$tmm[2];
+            if ($contextY !== (string)round($newY, 3)) {
+                if ($blockChars !== '') {
+                    if (!isset($lineGroups[$contextY])) {
+                        $lineGroups[$contextY] = '';
+                        $lineOrder[]           = $contextY;
+                    }
+                    $lineGroups[$contextY] .= $blockChars;
+                    $blockChars = '';
+                }
+                $tdY      = $newY;
+                $contextY = (string)round($newY, 3);
+            }
+            // Fall through — same line may also contain a Tj
+        }
+
+        // ── CID hex string Tj: "tx ty Td <XXXX> Tj" or just "<XXXX> Tj" ──
+        if (!empty($cmap) && preg_match('/<([0-9A-Fa-f]+)>\s*Tj\s*$/', $line, $hexm)) {
+            $hex  = $hexm[1];
+            $text = '';
+            for ($j = 0; $j < strlen($hex); $j += 4) {
+                $chunk = substr($hex, $j, 4);
+                if (strlen($chunk) === 4) {
+                    $gid = hexdec($chunk);
+                    $text .= $cmap[$gid] ?? ''; // includes space (0x20)
+                }
+            }
+            $blockChars .= $text;
+            continue;
+        }
+
+        // ── Parenthesis string Tj: "(string) Tj" ──
+        if (preg_match('/^\((.*)\)\s*Tj\s*$/', $line, $parm)) {
+            $blockChars .= decodePdfStringFull($parm[1]);
+            continue;
+        }
+
+        // ── TJ array: "[...] TJ" — mix of hex/paren strings and kerning numbers ──
+        if (preg_match('/^\[(.+)\]\s*TJ\s*$/', $line, $tjm)) {
+            $inner = $tjm[1];
+            if (!empty($cmap)) {
+                preg_match_all('/<([0-9A-Fa-f]+)>/', $inner, $hexParts);
+                foreach ($hexParts[1] as $hex) {
+                    for ($j = 0; $j < strlen($hex); $j += 4) {
+                        $chunk = substr($hex, $j, 4);
+                        if (strlen($chunk) === 4) $blockChars .= $cmap[hexdec($chunk)] ?? '';
+                    }
+                }
+            }
+            preg_match_all('/\(((?:[^()\\\\]|\\\\.)*)\)/', $inner, $parParts);
+            foreach ($parParts[1] as $str) $blockChars .= decodePdfStringFull($str);
+            continue;
+        }
+
+        // ── T* or ' operator: explicit next line ──
+        if ($line === "T*" || $line === "'") {
+            if ($blockChars !== '') {
+                if (!isset($lineGroups[$contextY])) {
+                    $lineGroups[$contextY] = '';
+                    $lineOrder[]           = $contextY;
+                }
+                $lineGroups[$contextY] .= $blockChars;
+                $blockChars = '';
+            }
+            // Increment pseudo-Y so next text gets a new group
+            $contextY = (string)((float)$contextY + 0.001);
+            continue;
+        }
+    }
+
+    // Build output in insertion order (= reading order from stream)
+    $result = [];
+    foreach ($lineOrder as $yKey) {
+        $text = trim($lineGroups[$yKey]);
+        if ($text !== '') $result[] = $text;
+    }
+    return $result;
+}
+
+
+// ============================================================
+// FUNCTION: pdfRawFallback
+// Last-resort: scan raw PDF bytes for parenthesised strings.
+// ============================================================
+function pdfRawFallback(string $content): string {
+    $text = '';
+    preg_match_all('/\(([^)]{2,})\)/', $content, $matches);
+    foreach ($matches[1] as $raw) {
+        $decoded = decodePdfStringFull($raw);
+        if (preg_match('/^D:\d{8}/', $decoded)) continue;
+        if (strlen($decoded) < 3) continue;
+        $printable = preg_match_all('/[\x20-\x7E]/', $decoded);
+        if (strlen($decoded) > 0 && $printable / strlen($decoded) >= 0.6) {
+            $text .= $decoded . "\n";
+        }
+    }
+    return $text;
+}
+
+
+// ============================================================
+// FUNCTION: decodePdfStringFull
+// Full PDF string decoder with proper octal escape support.
+// ============================================================
+function decodePdfStringFull(string $str): string {
+    $result = '';
+    $len    = strlen($str);
+    $i      = 0;
+    while ($i < $len) {
+        if ($str[$i] === '\\' && $i + 1 < $len) {
+            $next = $str[$i + 1];
+            if ($next >= '0' && $next <= '7') {
+                $oct = '';
+                $j   = $i + 1;
+                while ($j < $len && $j < $i + 4 && $str[$j] >= '0' && $str[$j] <= '7') $oct .= $str[$j++];
+                $c = chr(octdec($oct));
+                if (ord($c) >= 0x20 && ord($c) <= 0x7E) $result .= $c;
+                $i = $j;
+                continue;
+            }
+            $map = ['n'=>"\n",'r'=>"\r",'t'=>"\t",'b'=>"\x08",'f'=>"\x0C",'('=>'(',')'=>')','\\'=>'\\'];
+            $result .= $map[$next] ?? $next;
+            $i += 2;
+            continue;
+        }
+        $result .= $str[$i++];
+    }
+    return $result;
 }
 
 
 // ============================================================
 // FUNCTION: parseQuestions
 //
-// Parses raw text into structured question objects using regex.
+// Parses raw text into MCQ question objects.
+// Tolerates spacing anomalies introduced by Google Docs PDF export.
 //
-// Supported formats:
+// Supported question formats:
+//   1. Question    1) Question    Q1. Question
 //
-// Format A (numbered with dot):
-//   1. Question text?
-//   a) Option A
-//   b) Option B
-//   c) Option C
-//   d) Option D
-//   Answer: a
+// Supported option formats — all tolerated:
+//   a) Option   a. Option   A) Option
+//   a ) Option  (a) Option  [a] Option  a  )  Option
 //
-// Format B (numbered with bracket):
-//   1) Question text?
-//   a. Option A
-//   ...
-//
-// Format C (Q prefix):
-//   Q1. Question text?
-//   A) Option A
-//   ...
-//
-// Answer line is optional. If present, it is auto-detected.
+// Answer line (optional):
+//   Answer: b   Ans: b   Key: b   Correct: b
 // ============================================================
 function parseQuestions(string $text): array {
-
     $questions = [];
 
-    // ── Normalise line endings ──
-    $text = str_replace("\r\n", "\n", $text);
-    $text = str_replace("\r", "\n", $text);
+    // Normalise line endings
+    $text = str_replace(["\r\n", "\r"], "\n", $text);
 
-    // ── Split into lines and clean up ──
     $lines = explode("\n", $text);
-    $lines = array_map('trim', $lines);
+
+    // Per-line normalisation
+    $lines = array_map(function(string $line): string {
+        $line = preg_replace('/\h+/', ' ', $line);
+        $line = preg_replace('/^(\s*[\[(]?\s*[a-dA-D])\s+([).\]])\s*/', '$1$2 ', $line);
+        return trim($line);
+    }, $lines);
     $lines = array_values(array_filter($lines, fn($l) => $l !== ''));
 
-    $i          = 0;
+    // ── Reassemble word-per-line fragments (Google Docs PDF output) ──
+    // Google Docs PDFs produce one word per line from the CID stream extractor.
+    // Join consecutive lines into the previous line unless the line starts with
+    // a recognised anchor: question number, option letter, or answer marker.
+    $reAnchor = '/^(?:'
+        . '(?:Q(?:uestion)?\s*)?\d+\s*[.):\s]'   // question number
+        . '|[a-dA-D]\s*[).]\s'                    // option letter with text after
+        . '|[a-dA-D][).]\s*$'                     // bare option label "a)"
+        . '|(?:answer|ans|key|correct)\s*[:\s.]'  // answer line
+        . ')/i';
+
+    $joined = [];
+    foreach ($lines as $line) {
+        if (empty($joined) || preg_match($reAnchor, $line)) {
+            $joined[] = $line;
+        } else {
+            $joined[count($joined) - 1] .= ' ' . $line;
+        }
+    }
+    $lines = $joined;
+
+    // Reassemble orphan option labels: ["a)", "Berlin"] → ["a) Berlin"]
+    $assembled = [];
+    for ($j = 0; $j < count($lines); $j++) {
+        $line = $lines[$j];
+        if (preg_match('/^[a-dA-D][).]$/', $line) && isset($lines[$j + 1])) {
+            $next = $lines[$j + 1];
+            if (!preg_match('/^[a-dA-D0-9][\s).\[:]/', $next)) {
+                $assembled[] = $line . ' ' . $next;
+                $j++;
+                continue;
+            }
+        }
+        $assembled[] = $line;
+    }
+
+    $lines      = $assembled;
     $totalLines = count($lines);
-    $qIndex     = 1; // sequential ID — never trust client IDs
+    $i          = 0;
+    $qIndex     = 1;
+
+    $reQuestion = '/^(?:Q(?:uestion)?\s*)?(\d+)\s*[.):\s]\s*(.{5,})/i';
+    $reOption   = '/^\s*[\[(]?\s*([a-dA-D])\s*[\].):\s]\s*(.+)/';
+    $reAnswer   = '/^(?:answer|ans|key|correct)\s*[:\s.]+\s*([a-dA-D])/i';
+    $reNextQ    = '/^(?:Q(?:uestion)?\s*)?\d+\s*[.):\s]/i';
 
     while ($i < $totalLines) {
         $line = $lines[$i];
 
-        // ── Detect question line ──
-        // Matches: "1." "1)" "Q1." "Q1)" "Question 1." "Question 1:"
-        // Followed by at least 5 characters of question text
-        if (!preg_match('/^(?:Q(?:uestion)?\s*)?(\d+)[.):\s]\s*(.{5,})/i', $line, $qMatch)) {
-            $i++;
-            continue;
-        }
+        if (!preg_match($reQuestion, $line, $qMatch)) { $i++; continue; }
 
-        $questionText = trim($qMatch[2]);
-        $options      = [];
+        $questionText  = trim($qMatch[2]);
+        $options       = [];
         $correctAnswer = null;
         $i++;
+        $unrecognised  = 0;
 
-        // ── Collect option lines ──
-        // Options are labeled: a) a. A) A. (a) [a]
-        // We collect up to 4 options (a–d or A–D)
         while ($i < $totalLines && count($options) < 4) {
             $optLine = $lines[$i];
 
-            // Check if it's an option line
-            if (preg_match('/^[\[(]?([a-dA-D])[\].):\s]\s*(.+)/', $optLine, $optMatch)) {
+            if (preg_match($reOption, $optLine, $optMatch)) {
                 $options[strtolower($optMatch[1])] = trim($optMatch[2]);
+                $unrecognised = 0;
                 $i++;
-            }
-            // Check if it's an answer line — stop collecting options
-            elseif (preg_match('/^(?:answer|ans|key|correct)[:\s.]+([a-dA-D])/i', $optLine, $ansMatch)) {
+            } elseif (preg_match($reAnswer, $optLine, $ansMatch)) {
                 $correctAnswer = strtolower($ansMatch[1]);
                 $i++;
                 break;
-            }
-            // Check if it looks like the next question — stop
-            elseif (preg_match('/^(?:Q(?:uestion)?\s*)?\d+[.):\s]/i', $optLine)) {
+            } elseif (preg_match($reNextQ, $optLine)) {
                 break;
-            }
-            // Blank-ish or unrecognised line — skip but keep looking
-            else {
+            } else {
                 $i++;
-                // If we already have some options and hit 2 unrecognised lines, stop
-                if (count($options) > 0) {
-                    break;
-                }
+                $unrecognised++;
+                if (count($options) >= 2 && $unrecognised >= 1) break;
+                if (count($options) === 0 && $unrecognised >= 3) break;
             }
         }
 
-        // ── Check for answer line immediately after options ──
         if ($correctAnswer === null && $i < $totalLines) {
-            if (preg_match('/^(?:answer|ans|key|correct)[:\s.]+([a-dA-D])/i', $lines[$i], $ansMatch)) {
+            if (preg_match($reAnswer, $lines[$i], $ansMatch)) {
                 $correctAnswer = strtolower($ansMatch[1]);
                 $i++;
             }
         }
 
-        // ── Only keep questions with at least 2 options ──
-        if (count($options) < 2) {
-            continue;
-        }
-
-        // ── Build ordered options array [a, b, c, d] ──
-        $orderedOptions = [
-            $options['a'] ?? '',
-            $options['b'] ?? '',
-            $options['c'] ?? '',
-            $options['d'] ?? '',
-        ];
+        if (count($options) < 2) continue;
 
         $questions[] = [
-            'id'            => $qIndex++,  // server-generated sequential ID
+            'id'            => $qIndex++,
             'text'          => $questionText,
-            'options'       => $orderedOptions,
-            'correctAnswer' => $correctAnswer, // null if not marked in doc
+            'options'       => [
+                $options['a'] ?? '',
+                $options['b'] ?? '',
+                $options['c'] ?? '',
+                $options['d'] ?? '',
+            ],
+            'correctAnswer' => $correctAnswer,
         ];
     }
 
