@@ -1,1277 +1,901 @@
 <?php
 /* ========================================
- * TEACHER DASHBOARD - FIXED VERSION
+ * TEACHER DASHBOARD
+ * File: teacher-dashboard.php
  * ======================================== */
 
-// Load configuration (session_start is already in config.php)
-require "config.php";
+require 'config.php';
+require_once 'db-guard.php';
 
-/* 🔒 SESSION GUARD - Fixed to check correct session variable */
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'teacher') {
-    header("Location: index.html");
-    exit;
+// ── Session guard ──
+$currentUser = validateSession($conn, 'teacher');
+$teacherId   = (int) $currentUser['user_id'];
+$userName    = htmlspecialchars($currentUser['full_name'] ?? 'Teacher');
+$userEmail   = htmlspecialchars($currentUser['email'] ?? '');
+$userInitials = strtoupper(substr($currentUser['full_name'] ?? 'T', 0, 2));
+
+// ============================================================
+// DATABASE QUERIES
+// Each query is wrapped in safePreparedQuery().
+// On failure we set a $dbError flag and show a safe message.
+// ============================================================
+
+$dbError = false;
+
+// ── 1. Stats: total assessments this teacher created ──
+$totalAssessments = 0;
+$newThisMonth     = 0;
+$r = safePreparedQuery($conn,
+    "SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN MONTH(created_at) = MONTH(CURDATE()) AND YEAR(created_at) = YEAR(CURDATE()) THEN 1 ELSE 0 END) AS new_this_month
+     FROM assessments
+     WHERE created_by = ?",
+    "i", [$teacherId]
+);
+if ($r['success'] && $r['result']) {
+    $row = $r['result']->fetch_assoc();
+    $totalAssessments = (int)($row['total'] ?? 0);
+    $newThisMonth     = (int)($row['new_this_month'] ?? 0);
+    $r['result']->free();
+} else {
+    $dbError = true;
 }
 
-/* Fetch user info from database - FIXED: Using correct column names */
-// BEFORE: SELECT name, email FROM users WHERE uid = ?
-// AFTER:  SELECT full_name, email FROM users WHERE user_id = ?
-$stmt = $conn->prepare("SELECT full_name, email FROM users WHERE user_id = ?");
-$stmt->bind_param("i", $_SESSION['user_id']); // Changed from uid to user_id
-$stmt->execute();
-$result = $stmt->get_result();
-$user = $result->fetch_assoc();
+// ── 2. Stats: distinct students who attempted this teacher's assessments ──
+$activeStudents  = 0;
+$newStudentsWeek = 0;
+$r2 = safePreparedQuery($conn,
+    "SELECT
+        COUNT(DISTINCT aa.user_id) AS total_students,
+        COUNT(DISTINCT CASE WHEN aa.created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) THEN aa.user_id END) AS new_this_week
+     FROM assessment_attempts aa
+     JOIN assessments a ON aa.assessment_id = a.assessment_id
+     WHERE a.created_by = ?
+       AND aa.user_id IS NOT NULL",
+    "i", [$teacherId]
+);
+if ($r2['success'] && $r2['result']) {
+    $row = $r2['result']->fetch_assoc();
+    $activeStudents  = (int)($row['total_students'] ?? 0);
+    $newStudentsWeek = (int)($row['new_this_week'] ?? 0);
+    $r2['result']->free();
+} else {
+    $dbError = true;
+}
 
-// Changed from 'name' to 'full_name'
-$userName = $user['full_name'] ?? 'Teacher';
-$userEmail = $user['email'] ?? '';
-$userInitials = strtoupper(substr($userName, 0, 2));
+// ── 3. Unread notifications count ──
+$unreadCount = 0;
+$r3 = safePreparedQuery($conn,
+    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
+    "i", [$teacherId]
+);
+if ($r3['success'] && $r3['result']) {
+    $row = $r3['result']->fetch_assoc();
+    $unreadCount = (int)($row['cnt'] ?? 0);
+    $r3['result']->free();
+}
+
+// ── 4. Assessments list with question count and attempt count ──
+// Ordered: active first, then draft, then scheduled, then archived/completed
+$assessments = [];
+$r4 = safePreparedQuery($conn,
+    "SELECT
+        a.assessment_id,
+        a.title,
+        a.category,
+        a.difficulty,
+        a.status,
+        a.duration_minutes,
+        a.total_marks,
+        a.passing_marks,
+        a.available_from,
+        a.available_until,
+        a.created_at,
+        a.updated_at,
+        COUNT(DISTINCT q.question_id)            AS question_count,
+        COUNT(DISTINCT aa.attempt_id)            AS attempt_count,
+        COUNT(DISTINCT aa.user_id)               AS student_count
+     FROM assessments a
+     LEFT JOIN questions q
+            ON q.assessment_id = a.assessment_id
+     LEFT JOIN assessment_attempts aa
+            ON aa.assessment_id = a.assessment_id
+           AND aa.status = 'completed'
+     WHERE a.created_by = ?
+     GROUP BY a.assessment_id
+     ORDER BY
+        FIELD(a.status, 'active', 'scheduled', 'draft', 'archived') ASC,
+        a.updated_at DESC",
+    "i", [$teacherId]
+);
+if ($r4['success'] && $r4['result']) {
+    while ($row = $r4['result']->fetch_assoc()) {
+        $assessments[] = $row;
+    }
+    $r4['result']->free();
+} else {
+    $dbError = true;
+}
+
+// ── 5. Recent unread notifications (up to 5) ──
+$notifications = [];
+$r5 = safePreparedQuery($conn,
+    "SELECT notification_id, title, message, notification_type, action_url, created_at
+     FROM notifications
+     WHERE user_id = ? AND is_read = 0
+     ORDER BY created_at DESC
+     LIMIT 5",
+    "i", [$teacherId]
+);
+if ($r5['success'] && $r5['result']) {
+    while ($row = $r5['result']->fetch_assoc()) {
+        $notifications[] = $row;
+    }
+    $r5['result']->free();
+}
+
+// ── Helper: format date for display ──
+function fmtDate(?string $dt): string {
+    if (!$dt) return '—';
+    return date('M j, Y', strtotime($dt));
+}
+
+// ── Helper: status label map ──
+function statusLabel(string $status): string {
+    return match($status) {
+        'active'   => 'Active',
+        'draft'    => 'Draft',
+        'archived' => 'Completed',
+        'scheduled'=> 'Scheduled',
+        default    => ucfirst($status),
+    };
+}
+
+// ── Helper: notification type icon ──
+function notifIcon(string $type): string {
+    return match($type) {
+        'success'    => '✅',
+        'warning'    => '⚠️',
+        'error'      => '❌',
+        'assessment' => '📝',
+        'result'     => '📊',
+        'material'   => '📚',
+        default      => 'ℹ️',
+    };
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Teacher Dashboard - Placement Portal">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Teacher Dashboard - Placement Portal</title>
     <style>
-        /* ============================================
-           CSS VARIABLES - Reusable values
-           ============================================ */
         :root {
             --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            --color-primary: #234C6A;
-            --color-primary-dark: #456882;
             --color-teacher-primary: #2E073F;
             --color-teacher-secondary: #AD49E1;
             --color-text: #2d3748;
             --color-text-light: #718096;
-            --color-text-lighter: #a0aec0;
-            --color-bg: #FFEDFA;
+            --color-bg: #D3DAD9;
             --color-bg-light: #f5f7fa;
             --color-white: #ffffff;
             --color-border: #e2e8f0;
             --color-success: #48bb78;
             --color-error: #f56565;
-            --color-warning: #ffc107;
-            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.1);
-            --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.08);
-            --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.15);
-            --border-radius: 10px;
-            --border-radius-lg: 20px;
+            --shadow-sm: 0 2px 10px rgba(0,0,0,0.08);
+            --shadow-md: 0 4px 20px rgba(0,0,0,0.08);
+            --shadow-lg: 0 8px 30px rgba(0,0,0,0.15);
+            --radius: 10px;
+            --radius-lg: 20px;
             --transition: all 0.3s ease;
         }
 
-        /* ============================================
-           GLOBAL RESET & BASE STYLES
-           ============================================ */
-        html {
-            margin: 0;
-            padding: 0;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             font-family: var(--font-family);
-            background: #D3DAD9;
+            background: var(--color-bg);
             min-height: 100vh;
             color: var(--color-text);
-            margin: 0;
-            padding: 0;
             padding-top: 71px;
             overflow-x: hidden;
         }
 
-        /* ============================================
-           NAVIGATION BAR
-           ============================================ */
+        /* ── NAVBAR ── */
         .navbar {
             background: var(--color-teacher-primary);
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
             padding: 12px 28px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 1000;
-            border-bottom: 3px solid var(--color-teacher-primary);
+            display: flex; align-items: center; justify-content: space-between;
+            position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.15);
         }
-
         .navbar-brand {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            font-size: 20px;
-            font-weight: 700;
-            color: white;
-            text-decoration: none;
+            display: flex; align-items: center; gap: 12px;
+            font-size: 20px; font-weight: 700; color: white; text-decoration: none;
         }
-
         .brand-logo {
-            width: 44px;
-            height: 44px;
-            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
+            width: 44px; height: 44px;
+            background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
             border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--color-white);
-            font-weight: 700;
-            font-size: 18px;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-weight: 700; font-size: 16px;
         }
-
-        /* Search bar in navigation */
         .nav-search {
-            flex: 1;
-            max-width: 500px;
-            margin: 0 30px;
-            position: relative;
+            flex: 1; max-width: 500px; margin: 0 30px; position: relative;
         }
-
         .search-input {
-            width: 100%;
-            padding: 10px 40px 10px 15px;
-            border: 2px solid #e2e8f0;
-            border-radius: 10px;
-            font-size: 14px;
-            transition: all 0.3s ease;
+            width: 100%; padding: 10px 40px 10px 15px;
+            border: 2px solid #e2e8f0; border-radius: 10px;
+            font-size: 14px; transition: var(--transition);
+            font-family: var(--font-family);
         }
-
-        .search-input:focus {
-            outline: none;
-            border-color: var(--color-primary);
-            box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1);
-        }
-
+        .search-input:focus { outline: none; border-color: var(--color-teacher-secondary); }
         .search-icon {
-            position: absolute;
-            right: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #a0aec0;
-            font-size: 18px;
+            position: absolute; right: 15px; top: 50%; transform: translateY(-50%);
+            color: #a0aec0; font-size: 16px;
         }
+        .nav-profile { display: flex; align-items: center; gap: 15px; }
 
-        /* User profile section in navbar */
-        .nav-profile {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .notification-icon {
-            position: relative;
-            width: 40px;
-            height: 40px;
-            background: #f7fafc;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .notification-icon:hover {
-            background: var(--color-teacher-primary);
-            color: var(--color-white);
-        }
-
-        .notification-badge {
-            position: absolute;
-            top: -5px;
-            right: -5px;
-            background: #ff6b6b;
+        /* Notification bell */
+        .notification-btn {
+            position: relative; width: 40px; height: 40px;
+            background: rgba(255,255,255,0.1); border: none; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: var(--transition); font-size: 18px;
             color: white;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            font-size: 11px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
+        }
+        .notification-btn:hover { background: rgba(255,255,255,0.2); }
+        .notif-badge {
+            position: absolute; top: -4px; right: -4px;
+            background: #ff6b6b; color: white;
+            width: 18px; height: 18px; border-radius: 50%;
+            font-size: 10px; font-weight: 700;
+            display: flex; align-items: center; justify-content: center;
         }
 
+        /* Profile button */
         .profile-button {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 8px 15px;
-            background: #f7fafc;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            position: relative;
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 14px; background: rgba(255,255,255,0.1);
+            border: none; border-radius: 10px; cursor: pointer;
+            transition: var(--transition); position: relative;
         }
-
-        .profile-button:hover {
-            background: #e2e8f0;
-        }
-
+        .profile-button:hover { background: rgba(255,255,255,0.2); }
         .profile-avatar {
-            width: 35px;
-            height: 35px;
-            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
+            width: 34px; height: 34px;
+            background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
+            border: 2px solid rgba(255,255,255,0.4);
             border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--color-white);
-            font-weight: bold;
-            font-size: 14px;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-weight: 700; font-size: 13px;
         }
+        .profile-name { font-weight: 600; font-size: 14px; color: white; }
+        .profile-caret { color: rgba(255,255,255,0.6); font-size: 10px; }
 
-        .profile-name {
-            font-weight: 600;
-            font-size: 14px;
-            color: var(--color-text);
-        }
-
-        /* Profile Dropdown */
+        /* Dropdown */
         .profile-dropdown {
-            position: absolute;
-            top: calc(100% + 10px);
-            right: 0;
-            background: var(--color-white);
-            border-radius: var(--border-radius);
-            box-shadow: var(--shadow-lg);
-            min-width: 220px;
-            opacity: 0;
-            visibility: hidden;
-            transform: translateY(-10px);
-            transition: var(--transition);
-            z-index: 1001;
+            position: absolute; top: calc(100% + 12px); right: 0;
+            background: white; border-radius: var(--radius);
+            box-shadow: var(--shadow-lg); min-width: 220px;
+            opacity: 0; visibility: hidden; transform: translateY(-8px);
+            transition: var(--transition); z-index: 1001;
         }
-
-        .profile-dropdown.active {
-            opacity: 1;
-            visibility: visible;
-            transform: translateY(0);
-        }
-
-        .profile-dropdown::before {
-            content: '';
-            position: absolute;
-            top: -8px;
-            right: 20px;
-            width: 16px;
-            height: 16px;
-            background: var(--color-white);
-            transform: rotate(45deg);
-            border-radius: 3px;
-        }
-
+        .profile-dropdown.open { opacity: 1; visibility: visible; transform: translateY(0); }
         .dropdown-header {
-            padding: 15px 20px;
-            border-bottom: 1px solid var(--color-border);
+            padding: 16px 20px; border-bottom: 1px solid var(--color-border);
         }
-
-        .dropdown-name {
-            font-weight: 600;
-            font-size: 14px;
-            color: var(--color-text);
-            margin-bottom: 4px;
+        .dropdown-name  { font-weight: 700; font-size: 14px; color: var(--color-text); }
+        .dropdown-email { font-size: 12px; color: var(--color-text-light); margin-top: 2px; }
+        .dropdown-role  {
+            display: inline-block; margin-top: 6px;
+            padding: 2px 10px;
+            background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
+            color: white; border-radius: 20px; font-size: 11px; font-weight: 600;
         }
-
-        .dropdown-email {
-            font-size: 13px;
-            color: var(--color-text-light);
-        }
-
-        .dropdown-menu {
-            padding: 8px 0;
-        }
-
+        .dropdown-menu { padding: 6px 0; }
         .dropdown-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px 20px;
-            color: var(--color-text);
-            text-decoration: none;
-            font-size: 14px;
+            display: flex; align-items: center; gap: 12px;
+            padding: 11px 20px; color: var(--color-text);
+            text-decoration: none; font-size: 14px; transition: var(--transition);
+            cursor: pointer; border: none; background: none; width: 100%; text-align: left;
+        }
+        .dropdown-item:hover { background: var(--color-bg-light); }
+        .dropdown-item.danger { color: var(--color-error); }
+        .dropdown-item.danger:hover { background: #fff5f5; }
+        .dropdown-divider { height: 1px; background: var(--color-border); margin: 4px 0; }
+
+        /* Notification panel */
+        .notif-panel {
+            position: absolute; top: calc(100% + 12px); right: 60px;
+            background: white; border-radius: var(--radius);
+            box-shadow: var(--shadow-lg); width: 340px;
+            opacity: 0; visibility: hidden; transform: translateY(-8px);
+            transition: var(--transition); z-index: 1001;
+        }
+        .notif-panel.open { opacity: 1; visibility: visible; transform: translateY(0); }
+        .notif-panel-header {
+            padding: 16px 20px; border-bottom: 1px solid var(--color-border);
+            font-weight: 700; font-size: 15px; display: flex; justify-content: space-between; align-items: center;
+        }
+        .notif-mark-all {
+            font-size: 12px; font-weight: 600; color: var(--color-teacher-secondary);
+            cursor: pointer; border: none; background: none;
+        }
+        .notif-item {
+            padding: 14px 20px; border-bottom: 1px solid var(--color-border);
+            display: flex; gap: 12px; align-items: flex-start;
+            text-decoration: none; color: var(--color-text);
             transition: var(--transition);
-            cursor: pointer;
+        }
+        .notif-item:hover { background: var(--color-bg-light); }
+        .notif-icon { font-size: 20px; flex-shrink: 0; margin-top: 2px; }
+        .notif-title { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+        .notif-msg   { font-size: 12px; color: var(--color-text-light); line-height: 1.4; }
+        .notif-time  { font-size: 11px; color: #a0aec0; margin-top: 4px; }
+        .notif-empty { padding: 30px 20px; text-align: center; color: var(--color-text-light); font-size: 14px; }
+
+        /* ── CONTAINER ── */
+        .container { max-width: 1400px; margin: 0 auto; padding: 30px 20px; }
+
+        /* ── DB ERROR BANNER ── */
+        .db-error-banner {
+            background: #fff5f5; border: 2px solid var(--color-error);
+            border-radius: var(--radius); padding: 16px 20px; margin-bottom: 24px;
+            display: flex; align-items: center; gap: 12px;
+            color: #c53030; font-weight: 600; font-size: 14px;
         }
 
-        .dropdown-item:hover {
-            background: var(--color-bg-light);
-        }
+        /* ── WELCOME ── */
+        .welcome-section { margin-bottom: 28px; }
+        .welcome-title { font-size: 28px; font-weight: 700; color: var(--color-text); margin-bottom: 6px; }
+        .welcome-subtitle { font-size: 15px; color: var(--color-text-light); }
 
-        .dropdown-item.danger {
-            color: var(--color-error);
-        }
-
-        .dropdown-item.danger:hover {
-            background: rgba(245, 101, 101, 0.1);
-        }
-
-        .dropdown-divider {
-            height: 1px;
-            background: var(--color-border);
-            margin: 8px 0;
-        }
-
-        /* ============================================
-           MAIN CONTAINER
-           ============================================ */
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 30px 20px;
-        }
-
-        /* ============================================
-           WELCOME HEADER
-           ============================================ */
-        .welcome-section {
-            margin-bottom: 30px;
-        }
-
-        .welcome-title {
-            font-size: 28px;
-            font-weight: 700;
-            color: var(--color-text);
-            margin-bottom: 8px;
-        }
-
-        .welcome-subtitle {
-            font-size: 15px;
-            color: var(--color-text-light);
-        }
-
-        /* ============================================
-           STATISTICS CARDS
-           ============================================ */
+        /* ── STATS ── */
         .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px; margin-bottom: 28px;
         }
-
         .stat-card {
-            background: var(--color-white);
-            border-radius: var(--border-radius);
-            padding: 24px;
-            box-shadow: var(--shadow-sm);
+            background: white; border-radius: var(--radius); padding: 24px;
+            box-shadow: var(--shadow-sm); border-left: 4px solid var(--color-teacher-secondary);
             transition: var(--transition);
-            border-left: 4px solid var(--color-teacher-secondary);
         }
-
-        .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: var(--shadow-md);
-        }
-
-        .stat-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 12px;
-        }
-
-        .stat-label {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--color-text-light);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
+        .stat-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
+        .stat-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .stat-label { font-size: 12px; font-weight: 600; color: var(--color-text-light); text-transform: uppercase; letter-spacing: 0.5px; }
         .stat-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
-            color: var(--color-white);
+            width: 38px; height: 38px; border-radius: 10px; font-size: 18px;
+            background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
+            display: flex; align-items: center; justify-content: center; color: white;
         }
+        .stat-value { font-size: 34px; font-weight: 700; color: var(--color-text); margin-bottom: 4px; }
+        .stat-change { font-size: 13px; color: var(--color-success); font-weight: 600; }
+        .stat-change.none { color: var(--color-text-light); font-weight: normal; }
 
-        .stat-value {
-            font-size: 32px;
-            font-weight: 700;
-            color: var(--color-text);
-            margin-bottom: 4px;
-        }
-
-        .stat-change {
-            font-size: 13px;
-            color: var(--color-success);
-            font-weight: 600;
-        }
-
-        .stat-change.negative {
-            color: var(--color-error);
-        }
-
-        /* ============================================
-           ASSESSMENTS SECTION
-           ============================================ */
+        /* ── SECTION HEADER ── */
         .section-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 20px;
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
         }
+        .section-title { font-size: 22px; font-weight: 700; color: var(--color-text); }
 
-        .section-title {
-            font-size: 22px;
-            font-weight: 700;
-            color: var(--color-text);
-        }
-
-        .filter-tabs {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-
+        /* Filter tabs */
+        .filter-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
         .filter-tab {
-            padding: 8px 16px;
-            background: var(--color-white);
-            border: 2px solid var(--color-border);
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--color-text-light);
-            cursor: pointer;
-            transition: var(--transition);
+            padding: 7px 16px; background: white; border: 2px solid var(--color-border);
+            border-radius: 8px; font-size: 13px; font-weight: 600;
+            color: var(--color-text-light); cursor: pointer; transition: var(--transition);
         }
-
-        .filter-tab:hover {
-            border-color: var(--color-teacher-secondary);
-            color: var(--color-teacher-secondary);
-        }
-
+        .filter-tab:hover { border-color: var(--color-teacher-secondary); color: var(--color-teacher-secondary); }
         .filter-tab.active {
-            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
-            border-color: var(--color-teacher-primary);
-            color: var(--color-white);
+            background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
+            border-color: transparent; color: white;
         }
 
-        /* ============================================
-           ASSESSMENTS GRID
-           ============================================ */
+        /* ── EMPTY STATE ── */
+        .empty-state {
+            background: white; border-radius: var(--radius-lg); padding: 60px 30px;
+            text-align: center; box-shadow: var(--shadow-sm);
+        }
+        .empty-icon { font-size: 64px; margin-bottom: 16px; opacity: 0.4; }
+        .empty-title { font-size: 20px; font-weight: 700; color: var(--color-text); margin-bottom: 8px; }
+        .empty-subtitle { font-size: 15px; color: var(--color-text-light); margin-bottom: 24px; }
+        .btn-create {
+            display: inline-block; padding: 12px 28px;
+            background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
+            color: white; border-radius: var(--radius); font-weight: 700;
+            text-decoration: none; transition: var(--transition);
+        }
+        .btn-create:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(46,7,63,0.3); }
+
+        /* ── ASSESSMENT CARDS GRID ── */
         .assessments-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-            gap: 24px;
-            margin-bottom: 30px;
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 24px; margin-bottom: 30px;
         }
-
         .assessment-card {
-            background: var(--color-white);
-            border-radius: var(--border-radius);
-            padding: 24px;
-            box-shadow: var(--shadow-sm);
-            transition: var(--transition);
-            position: relative;
-            overflow: hidden;
+            background: white; border-radius: var(--radius); padding: 24px;
+            box-shadow: var(--shadow-sm); transition: var(--transition);
+            position: relative; overflow: hidden;
         }
-
         .assessment-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+            background: linear-gradient(90deg, var(--color-teacher-primary), var(--color-teacher-secondary));
         }
-
-        .assessment-card:hover {
-            transform: translateY(-5px);
-            box-shadow: var(--shadow-md);
-        }
-
-        .assessment-card.hidden {
-            display: none;
-        }
-
-        .assessment-header {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            margin-bottom: 16px;
-        }
+        .assessment-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
+        .assessment-card.hidden { display: none; }
 
         .assessment-title {
-            font-size: 18px;
-            font-weight: 700;
-            color: var(--color-text);
-            margin-bottom: 8px;
+            font-size: 17px; font-weight: 700; color: var(--color-text);
+            margin-bottom: 8px; line-height: 1.3;
         }
-
         .assessment-category {
-            display: inline-block;
-            padding: 4px 12px;
-            background: #f0f9ff;
-            color: #0284c7;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 600;
+            display: inline-block; padding: 3px 10px;
+            background: #f0f9ff; color: #0284c7;
+            border-radius: 5px; font-size: 12px; font-weight: 600; margin-bottom: 14px;
         }
 
         .assessment-meta {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            margin-bottom: 16px;
-            padding: 12px;
-            background: var(--color-bg-light);
-            border-radius: 8px;
+            display: flex; flex-direction: column; gap: 8px;
+            margin-bottom: 14px; padding: 12px;
+            background: var(--color-bg-light); border-radius: 8px;
         }
-
         .meta-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 13px;
-            color: var(--color-text-light);
+            display: flex; align-items: center; gap: 8px;
+            font-size: 13px; color: var(--color-text-light);
         }
+        .meta-icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
 
-        .meta-icon {
-            font-size: 16px;
-        }
-
+        /* Status badges */
         .status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 600;
-            margin-bottom: 16px;
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 5px 12px; border-radius: 6px;
+            font-size: 12px; font-weight: 600; margin-bottom: 14px;
         }
+        .status-badge.active    { background: #d1fae5; color: #065f46; }
+        .status-badge.draft     { background: #fef3c7; color: #92400e; }
+        .status-badge.archived  { background: #dbeafe; color: #1e40af; }
+        .status-badge.scheduled { background: #e0e7ff; color: #3730a3; }
 
-        .status-badge.active {
-            background: #d1fae5;
-            color: #065f46;
-        }
-
-        .status-badge.draft {
-            background: #fef3c7;
-            color: #92400e;
-        }
-
-        .status-badge.completed {
-            background: #dbeafe;
-            color: #1e40af;
-        }
-
-        .status-badge.scheduled {
-            background: #e0e7ff;
-            color: #3730a3;
-        }
-
-        .assessment-actions {
-            display: flex;
-            gap: 8px;
-        }
-
+        /* Card action buttons */
+        .assessment-actions { display: flex; gap: 8px; }
         .btn {
-            padding: 10px 16px;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: var(--transition);
-            flex: 1;
-            text-align: center;
+            padding: 9px 14px; border: none; border-radius: 8px;
+            font-size: 13px; font-weight: 600; cursor: pointer;
+            transition: var(--transition); flex: 1; text-align: center;
+            text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
         }
-
         .btn-primary {
-            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
-            color: var(--color-white);
+            background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
+            color: white;
         }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(46,7,63,0.3); }
+        .btn-secondary { background: var(--color-bg-light); color: var(--color-text); }
+        .btn-secondary:hover { background: var(--color-border); }
+        .btn-danger { background: #fee2e2; color: #dc2626; }
+        .btn-danger:hover { background: #fecaca; }
 
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(46, 7, 63, 0.3);
-        }
-
-        .btn-secondary {
-            background: var(--color-bg-light);
-            color: var(--color-text);
-        }
-
-        .btn-secondary:hover {
-            background: var(--color-border);
-        }
-
-        .btn-danger {
-            background: #fee2e2;
-            color: #dc2626;
-        }
-
-        .btn-danger:hover {
-            background: #fecaca;
-        }
-
-        /* ============================================
-           FLOATING ACTION BUTTON
-           ============================================ */
-        .fab-container {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            z-index: 999;
-        }
-
+        /* ── FAB ── */
+        .fab-container { position: fixed; bottom: 30px; right: 30px; z-index: 999; }
         .fab-button {
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
-            color: var(--color-white);
-            border: none;
-            font-size: 24px;
-            cursor: pointer;
-            box-shadow: var(--shadow-lg);
+            width: 58px; height: 58px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
+            color: white; border: none; font-size: 26px;
+            cursor: pointer; box-shadow: var(--shadow-lg);
             transition: var(--transition);
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: flex; align-items: center; justify-content: center;
             text-decoration: none;
         }
+        .fab-button:hover { transform: scale(1.1) rotate(90deg); box-shadow: 0 8px 25px rgba(46,7,63,0.4); }
 
-        .fab-button:hover {
-            transform: scale(1.1) rotate(90deg);
-            box-shadow: 0 8px 25px rgba(46, 7, 63, 0.4);
+        /* ── DELETE CONFIRM MODAL ── */
+        .modal-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.5); z-index: 2000;
+            align-items: center; justify-content: center;
         }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: white; border-radius: var(--radius-lg); padding: 30px;
+            width: 90%; max-width: 440px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .modal-title { font-size: 20px; font-weight: 700; margin-bottom: 12px; color: var(--color-text); }
+        .modal-body  { font-size: 14px; color: var(--color-text-light); margin-bottom: 24px; line-height: 1.6; }
+        .modal-actions { display: flex; gap: 12px; justify-content: flex-end; }
+        .btn-cancel {
+            padding: 10px 22px; background: var(--color-bg-light); color: var(--color-text);
+            border: 2px solid var(--color-border); border-radius: var(--radius);
+            font-weight: 600; cursor: pointer; transition: var(--transition);
+        }
+        .btn-cancel:hover { border-color: var(--color-error); color: var(--color-error); }
+        .btn-confirm-delete {
+            padding: 10px 22px; background: var(--color-error); color: white;
+            border: none; border-radius: var(--radius);
+            font-weight: 700; cursor: pointer; transition: var(--transition);
+        }
+        .btn-confirm-delete:hover { background: #c53030; }
+        .btn-confirm-delete:disabled { opacity: 0.6; cursor: not-allowed; }
 
-        /* ============================================
-           RESPONSIVE DESIGN
-           ============================================ */
+        /* ── RESPONSIVE ── */
         @media (max-width: 768px) {
-            .container {
-                padding: 20px 15px;
-            }
-
-            .welcome-title {
-                font-size: 22px;
-            }
-
-            .stats-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .assessments-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .nav-search {
-                display: none;
-            }
-
-            .navbar {
-                padding: 10px 15px;
-            }
-
-            .filter-tabs {
-                overflow-x: auto;
-                -webkit-overflow-scrolling: touch;
-            }
-
-            .section-header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 15px;
-            }
+            .container { padding: 20px 15px; }
+            .nav-search { display: none; }
+            .navbar { padding: 10px 15px; }
+            .stats-grid { grid-template-columns: 1fr 1fr; }
+            .assessments-grid { grid-template-columns: 1fr; }
+            .section-header { flex-direction: column; align-items: flex-start; }
+            .notif-panel { right: 10px; width: calc(100vw - 20px); }
         }
-
         @media (max-width: 480px) {
-            .welcome-title {
-                font-size: 20px;
-            }
-
-            .stat-value {
-                font-size: 28px;
-            }
-
-            .assessment-title {
-                font-size: 16px;
-            }
-
-            .fab-button {
-                width: 50px;
-                height: 50px;
-                font-size: 20px;
-            }
-
-            .fab-container {
-                bottom: 20px;
-                right: 20px;
-            }
+            .stats-grid { grid-template-columns: 1fr; }
+            .welcome-title { font-size: 22px; }
         }
     </style>
 </head>
 <body>
-    <!-- Navigation Bar -->
-    <nav class="navbar">
-        <a href="teacher-dashboard.php" class="navbar-brand">
-            <div class="brand-logo">PT</div>
-            <span>Placement Portal</span>
-        </a>
 
-        <div class="nav-search">
-            <input type="text" class="search-input" id="searchInput" placeholder="Search assessments..." aria-label="Search assessments">
-            <span class="search-icon">🔍</span>
+<!-- ── NAVIGATION ── -->
+<nav class="navbar">
+    <a href="teacher-dashboard.php" class="navbar-brand">
+        <div class="brand-logo">PT</div>
+        <span>Placement Portal</span>
+    </a>
+
+    <div class="nav-search">
+        <input type="text" class="search-input" id="searchInput" placeholder="Search assessments..." autocomplete="off">
+        <span class="search-icon">🔍</span>
+    </div>
+
+    <div class="nav-profile" style="position:relative;">
+
+        <!-- Notification bell -->
+        <button class="notification-btn" id="notifBtn" title="Notifications">
+            🔔
+            <?php if ($unreadCount > 0): ?>
+                <span class="notif-badge"><?= $unreadCount > 9 ? '9+' : $unreadCount ?></span>
+            <?php endif; ?>
+        </button>
+
+        <!-- Notification panel -->
+        <div class="notif-panel" id="notifPanel">
+            <div class="notif-panel-header">
+                <span>Notifications</span>
+                <?php if (!empty($notifications)): ?>
+                    <button class="notif-mark-all" onclick="markAllRead()">Mark all read</button>
+                <?php endif; ?>
+            </div>
+            <?php if (empty($notifications)): ?>
+                <div class="notif-empty">🎉 You're all caught up!</div>
+            <?php else: ?>
+                <?php foreach ($notifications as $n): ?>
+                    <a class="notif-item"
+                       href="<?= htmlspecialchars($n['action_url'] ?? '#') ?>"
+                       data-notif-id="<?= (int)$n['notification_id'] ?>">
+                        <div class="notif-icon"><?= notifIcon($n['notification_type']) ?></div>
+                        <div>
+                            <div class="notif-title"><?= htmlspecialchars($n['title']) ?></div>
+                            <?php if ($n['message']): ?>
+                                <div class="notif-msg"><?= htmlspecialchars(mb_strimwidth($n['message'], 0, 80, '…')) ?></div>
+                            <?php endif; ?>
+                            <div class="notif-time"><?= fmtDate($n['created_at']) ?></div>
+                        </div>
+                    </a>
+                <?php endforeach; ?>
+            <?php endif; ?>
         </div>
 
-        <div class="nav-profile">
-            <div class="notification-icon" onclick="showNotifications()" aria-label="Notifications" title="Notifications">
-                🔔
-                <span class="notification-badge">5</span>
-            </div>
-
-            <button class="profile-button" onclick="toggleProfileDropdown()" aria-expanded="false" aria-haspopup="true">
-                <div class="profile-avatar"><?= htmlspecialchars($userInitials) ?></div>
-                <span class="profile-name"><?= htmlspecialchars($userName) ?></span>
-                <span style="color: #a0aec0;">▼</span>
-            </button>
+        <!-- Profile button + dropdown -->
+        <button class="profile-button" id="profileBtn">
+            <div class="profile-avatar"><?= $userInitials ?></div>
+            <span class="profile-name"><?= $userName ?></span>
+            <span class="profile-caret">▼</span>
 
             <div class="profile-dropdown" id="profileDropdown">
                 <div class="dropdown-header">
-                    <div class="dropdown-name"><?= htmlspecialchars($userName) ?></div>
-                    <div class="dropdown-email"><?= htmlspecialchars($userEmail) ?></div>
-                    <div style="margin-top:6px;">
-                        <span style="display:inline-block;padding:2px 10px;background:linear-gradient(135deg,var(--color-teacher-primary),var(--color-teacher-secondary));color:#fff;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:0.5px;">Teacher</span>
-                    </div>
+                    <div class="dropdown-name"><?= $userName ?></div>
+                    <div class="dropdown-email"><?= $userEmail ?></div>
+                    <span class="dropdown-role">Teacher</span>
                 </div>
                 <div class="dropdown-menu">
-                    <a href="teacher-profile.php" class="dropdown-item">
-                        <span>👤</span>
-                        <span>My Profile</span>
-                    </a>
-                    <a href="teacher-dashboard.php" class="dropdown-item">
-                        <span>📊</span>
-                        <span>Dashboard</span>
-                    </a>
-                    <a href="home.php" class="dropdown-item">
-                        <span class="dropdown-item-icon">📝</span>
-                        <span>Practice Tests</span>
-                    </a>
-                    <a href="help.html" target="_blank" rel="noopener noreferrer" class="dropdown-item">
-                        <span>❓</span>
-                        <span>Help & Support</span>
-                    </a>
+                    <a href="teacher-profile.php" class="dropdown-item">👤 My Profile</a>
+                    <a href="teacher-dashboard.php" class="dropdown-item">📊 Dashboard</a>
+                    <a href="help.html" target="_blank" rel="noopener" class="dropdown-item">❓ Help & Support</a>
                     <div class="dropdown-divider"></div>
-                    <a onclick="handleLogout()" class="dropdown-item danger">
-                        <span>🚪</span>
-                        <span>Logout</span>
-                    </a>
+                    <a onclick="handleLogout()" class="dropdown-item"> 🚪 Logout</a>
                 </div>
             </div>
-        </div>
-    </nav>
+        </button>
 
-    <!-- Main Container -->
-    <div class="container">
-        <!-- Welcome Section -->
-        <div class="welcome-section">
-            <h1 class="welcome-title">Welcome back, <?= htmlspecialchars($userName) ?>! 👋</h1>
-            <p class="welcome-subtitle">Here's what's happening with your assessments today</p>
-        </div>
+    </div>
+</nav>
 
-        <!-- Statistics Cards -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-header">
-                    <span class="stat-label">Total Assessments</span>
-                    <div class="stat-icon">📝</div>
-                </div>
-                <div class="stat-value">24</div>
-                <div class="stat-change">↑ 3 new this month</div>
+<!-- ── MAIN ── -->
+<div class="container">
+
+    <?php if ($dbError): ?>
+    <div class="db-error-banner">
+        ⚠️ Some data could not be loaded. Please report this to your administrator.
+    </div>
+    <?php endif; ?>
+
+    <!-- Welcome -->
+    <div class="welcome-section">
+        <h1 class="welcome-title">Welcome back, <?= $userName ?>! 👋</h1>
+        <p class="welcome-subtitle">Here's what's happening with your assessments today.</p>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-label">Total Assessments</span>
+                <div class="stat-icon">📝</div>
             </div>
-
-            <div class="stat-card">
-                <div class="stat-header">
-                    <span class="stat-label">Active Students</span>
-                    <div class="stat-icon">👥</div>
-                </div>
-                <div class="stat-value">156</div>
-                <div class="stat-change">↑ 12 this week</div>
-            </div>
-        </div>
-
-        <!-- Assessments Section -->
-        <div class="section-header">
-            <h2 class="section-title">My Assessments</h2>
-            <div class="filter-tabs" role="tablist">
-                <button class="filter-tab active" data-status="all" role="tab" aria-selected="true">All</button>
-                <button class="filter-tab" data-status="active" role="tab" aria-selected="false">Active</button>
-                <button class="filter-tab" data-status="draft" role="tab" aria-selected="false">Draft</button>
-                <button class="filter-tab" data-status="completed" role="tab" aria-selected="false">Completed</button>
-            </div>
+            <div class="stat-value"><?= $totalAssessments ?></div>
+            <?php if ($newThisMonth > 0): ?>
+                <div class="stat-change">↑ <?= $newThisMonth ?> new this month</div>
+            <?php else: ?>
+                <div class="stat-change none">No new assessments this month</div>
+            <?php endif; ?>
         </div>
 
-        <!-- Assessments Grid -->
-        <div class="assessments-grid">
-            <!-- Assessment Card 1 -->
-            <div class="assessment-card" data-status="active">
-                <div class="assessment-header">
-                    <div>
-                        <h3 class="assessment-title">Python Programming Basics</h3>
-                        <span class="assessment-category">Programming</span>
-                    </div>
-                </div>
-                
-                <div class="assessment-meta">
-                    <div class="meta-item">
-                        <span class="meta-icon">📅</span>
-                        <span>Due: Feb 15, 2026</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-icon">⏱️</span>
-                        <span>Duration: 60 minutes</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-icon">📝</span>
-                        <span>25 Questions</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-icon">👥</span>
-                        <span>42 Students Enrolled</span>
-                    </div>
-                </div>
-
-                <span class="status-badge active">
-                    <span>●</span>
-                    <span>Active</span>
-                </span>
-
-                <div class="assessment-actions">
-                    <button class="btn btn-primary btn-view" data-assessment-id="1">View Results</button>
-                    <button class="btn btn-secondary btn-edit" data-assessment-id="1">Edit</button>
-                </div>
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-label">Students Attempted</span>
+                <div class="stat-icon">👥</div>
             </div>
-
-            <!-- Assessment Card 2 -->
-            <div class="assessment-card" data-status="draft">
-                <div class="assessment-header">
-                    <div>
-                        <h3 class="assessment-title">Data Structures & Algorithms</h3>
-                        <span class="assessment-category">Computer Science</span>
-                    </div>
-                </div>
-                
-                <div class="assessment-meta">
-                    <div class="meta-item">
-                        <span class="meta-icon">📅</span>
-                        <span>Scheduled: Feb 20, 2026</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-icon">⏱️</span>
-                        <span>Duration: 90 minutes</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-icon">📝</span>
-                        <span>30 Questions</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-icon">👥</span>
-                        <span>0 Students Enrolled</span>
-                    </div>
-                </div>
-
-                <span class="status-badge draft">
-                    <span>●</span>
-                    <span>Draft</span>
-                </span>
-
-                <div class="assessment-actions">
-                    <button class="btn btn-primary btn-edit" data-assessment-id="2">Continue Editing</button>
-                    <button class="btn btn-danger btn-delete" data-assessment-id="2">Delete</button>
-                </div>
-            </div>
-
-            <!-- Assessment Card 3 -->
-            <div class="assessment-card" data-status="completed">
-                <div class="assessment-header">
-                    <div>
-                        <h3 class="assessment-title">Database Management Quiz</h3>
-                        <span class="assessment-category">Database</span>
-                    </div>
-                </div>
-                
-                <div class="assessment-meta">
-                    <div class="meta-item">
-                        <span class="meta-icon">📅</span>
-                        <span>Completed: Jan 28, 2026</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-icon">⏱️</span>
-                        <span>Duration: 45 minutes</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-icon">📝</span>
-                        <span>20 Questions</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-icon">👥</span>
-                        <span>38 Students Completed</span>
-                    </div>
-                </div>
-
-                <span class="status-badge completed">
-                    <span>●</span>
-                    <span>Completed</span>
-                </span>
-
-                <div class="assessment-actions">
-                    <button class="btn btn-primary btn-view" data-assessment-id="3">View Results</button>
-                    <button class="btn btn-secondary btn-edit" data-assessment-id="3">Review</button>
-                </div>
-            </div>
-
-            <!-- Assessment Card 4 -->
-            <div class="assessment-card" data-status="active">
-                <div class="assessment-header">
-                    <div>
-                        <h3 class="assessment-title">Web Development Fundamentals</h3>
-                        <span class="assessment-category">Web Development</span>
-                    </div>
-                </div>
-                
-                <div class="assessment-meta">
-                    <div class="meta-item">
-                        <span class="meta-icon">📅</span>
-                        <span>Due: Feb 18, 2026</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-icon">⏱️</span>
-                        <span>Duration: 75 minutes</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-icon">📝</span>
-                        <span>28 Questions</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-icon">👥</span>
-                        <span>51 Students Enrolled</span>
-                    </div>
-                </div>
-
-                <span class="status-badge active">
-                    <span>●</span>
-                    <span>Active</span>
-                </span>
-
-                <div class="assessment-actions">
-                    <button class="btn btn-primary btn-view" data-assessment-id="4">View Results</button>
-                    <button class="btn btn-secondary btn-edit" data-assessment-id="4">Edit</button>
-                </div>
-            </div>
-
-            <!-- Assessment Card 5 -->
-            <div class="assessment-card" data-status="scheduled">
-                <div class="assessment-header">
-                    <div>
-                        <h3 class="assessment-title">Machine Learning Basics</h3>
-                        <span class="assessment-category">AI & ML</span>
-                    </div>
-                </div>
-                
-                <div class="assessment-meta">
-                    <div class="meta-item">
-                        <span class="meta-icon">📅</span>
-                        <span>Scheduled: Feb 25, 2026</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-icon">⏱️</span>
-                        <span>Duration: 120 minutes</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-icon">📝</span>
-                        <span>35 Questions</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-icon">👥</span>
-                        <span>28 Students Enrolled</span>
-                    </div>
-                </div>
-
-                <span class="status-badge scheduled">
-                    <span>●</span>
-                    <span>Scheduled</span>
-                </span>
-
-                <div class="assessment-actions">
-                    <button class="btn btn-secondary btn-edit" data-assessment-id="5">Preview</button>
-                    <button class="btn btn-secondary btn-edit" data-assessment-id="5">Edit</button>
-                </div>
-            </div>
-
-            <!-- Assessment Card 6 -->
-            <div class="assessment-card" data-status="completed">
-                <div class="assessment-header">
-                    <div>
-                        <h3 class="assessment-title">Networking Essentials</h3>
-                        <span class="assessment-category">Networking</span>
-                    </div>
-                </div>
-                
-                <div class="assessment-meta">
-                    <div class="meta-item">
-                        <span class="meta-icon">📅</span>
-                        <span>Completed: Jan 15, 2026</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-icon">⏱️</span>
-                        <span>Duration: 50 minutes</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-icon">📝</span>
-                        <span>22 Questions</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-icon">👥</span>
-                        <span>45 Students Completed</span>
-                    </div>
-                </div>
-
-                <span class="status-badge completed">
-                    <span>●</span>
-                    <span>Completed</span>
-                </span>
-
-                <div class="assessment-actions">
-                    <button class="btn btn-primary btn-view" data-assessment-id="6">View Results</button>
-                    <button class="btn btn-secondary btn-edit" data-assessment-id="6">Archive</button>
-                </div>
-            </div>
+            <div class="stat-value"><?= $activeStudents ?></div>
+            <?php if ($newStudentsWeek > 0): ?>
+                <div class="stat-change">↑ <?= $newStudentsWeek ?> this week</div>
+            <?php else: ?>
+                <div class="stat-change none">No new attempts this week</div>
+            <?php endif; ?>
         </div>
     </div>
 
-    <!-- Floating Action Button -->
-    <div class="fab-container">
-        <a href="create-assessment.php" class="fab-button" aria-label="Create New Assessment" title="Create New Assessment">
-            ➕
-        </a>
+    <!-- Assessments section -->
+    <div class="section-header">
+        <h2 class="section-title">My Assessments</h2>
+        <div class="filter-tabs" role="tablist">
+            <button class="filter-tab active" data-filter="all"       role="tab">All</button>
+            <button class="filter-tab"         data-filter="active"    role="tab">Active</button>
+            <button class="filter-tab"         data-filter="draft"     role="tab">Draft</button>
+            <button class="filter-tab"         data-filter="scheduled" role="tab">Scheduled</button>
+            <button class="filter-tab"         data-filter="archived"  role="tab">Completed</button>
+        </div>
     </div>
 
-    <script>
-        /* ============================================
-           DEBOUNCE UTILITY
-           ============================================ */
-        function debounce(func, wait) {
-            let timeout;
-            return function executedFunction(...args) {
-                const later = () => {
-                    clearTimeout(timeout);
-                    func(...args);
-                };
-                clearTimeout(timeout);
-                timeout = setTimeout(later, wait);
-            };
-        }
+    <?php if (empty($assessments)): ?>
+        <!-- Empty state — no assessments yet -->
+        <div class="empty-state">
+            <div class="empty-icon">📋</div>
+            <div class="empty-title">No assessments yet</div>
+            <div class="empty-subtitle">Create your first assessment to get started.</div>
+            <a href="create-assessment.php" class="btn-create">+ Create Assessment</a>
+        </div>
 
-        /* ============================================
-           PROFILE DROPDOWN TOGGLE
-           ============================================ */
-        function toggleProfileDropdown() {
-            const dropdown = document.getElementById('profileDropdown');
-            const button = document.querySelector('.profile-button');
-            
-            dropdown.classList.toggle('active');
-            
-            const isExpanded = dropdown.classList.contains('active');
-            button.setAttribute('aria-expanded', isExpanded);
-        }
+    <?php else: ?>
+        <div class="assessments-grid" id="assessmentsGrid">
+            <?php foreach ($assessments as $a):
+                $aid      = (int)$a['assessment_id'];
+                $status   = $a['status'];
+                $qCount   = (int)$a['question_count'];
+                $attempts = (int)$a['attempt_count'];
+                $students = (int)$a['student_count'];
 
-        // Close dropdown when clicking outside
-        document.addEventListener('click', function(e) {
-            const profileButton = document.querySelector('.profile-button');
-            const dropdown = document.getElementById('profileDropdown');
-            
-            if (!profileButton.contains(e.target) && dropdown.classList.contains('active')) {
-                dropdown.classList.remove('active');
-                profileButton.setAttribute('aria-expanded', 'false');
-            }
-        });
-        
-        function handleLogout() {
-            if (confirm('Are you sure you want to logout?')) {
-                window.location.href = 'logout.php';
-            }
-        }
-
-        /* ============================================
-           ASSESSMENT FILTERING
-           ============================================ */
-        function filterAssessments(status, targetElement) {
-            const tabs = document.querySelectorAll('.filter-tab');
-            tabs.forEach(tab => tab.classList.remove('active'));
-            if (targetElement) {
-                targetElement.classList.add('active');
-            }
-
-            const cards = document.querySelectorAll('.assessment-card');
-            cards.forEach(card => {
-                if (status === 'all') {
-                    card.classList.remove('hidden');
+                // Date label depends on status
+                if ($status === 'active' && $a['available_until']) {
+                    $dateLabel = 'Due: ' . fmtDate($a['available_until']);
+                } elseif ($status === 'scheduled' && $a['available_from']) {
+                    $dateLabel = 'Starts: ' . fmtDate($a['available_from']);
+                } elseif ($status === 'archived') {
+                    $dateLabel = 'Completed: ' . fmtDate($a['updated_at']);
                 } else {
-                    const cardStatus = card.dataset.status;
-                    if (cardStatus === status) {
-                        card.classList.remove('hidden');
-                    } else {
-                        card.classList.add('hidden');
-                    }
+                    $dateLabel = 'Created: ' . fmtDate($a['created_at']);
                 }
+            ?>
+            <div class="assessment-card" data-status="<?= htmlspecialchars($status) ?>" data-id="<?= $aid ?>">
+
+                <h3 class="assessment-title"><?= htmlspecialchars($a['title']) ?></h3>
+                <span class="assessment-category"><?= htmlspecialchars(ucfirst($a['category'] ?? 'General')) ?></span>
+
+                <div class="assessment-meta">
+                    <div class="meta-item">
+                        <span class="meta-icon">📅</span>
+                        <span><?= $dateLabel ?></span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-icon">⏱️</span>
+                        <span><?= (int)$a['duration_minutes'] ?> minutes</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-icon">📝</span>
+                        <span><?= $qCount ?> question<?= $qCount !== 1 ? 's' : '' ?></span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-icon">👥</span>
+                        <?php if ($status === 'draft'): ?>
+                            <span>Not published yet</span>
+                        <?php elseif ($attempts === 0): ?>
+                            <span>No attempts yet</span>
+                        <?php else: ?>
+                            <span><?= $students ?> student<?= $students !== 1 ? 's' : '' ?> · <?= $attempts ?> attempt<?= $attempts !== 1 ? 's' : '' ?></span>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <span class="status-badge <?= $status ?>">
+                    ● <?= statusLabel($status) ?>
+                </span>
+
+                <div class="assessment-actions">
+                    <?php if ($status === 'draft'): ?>
+                        <a href="create-assessment.php?edit=<?= $aid ?>" class="btn btn-primary">Continue Editing</a>
+                        <button class="btn btn-danger" onclick="confirmDelete(<?= $aid ?>, '<?= htmlspecialchars(addslashes($a['title'])) ?>')">Delete</button>
+
+                    <?php elseif ($status === 'active' || $status === 'archived'): ?>
+                        <a href="assessment-results.php?id=<?= $aid ?>" class="btn btn-primary">View Results</a>
+                        <a href="create-assessment.php?edit=<?= $aid ?>" class="btn btn-secondary">Edit</a>
+
+                    <?php elseif ($status === 'scheduled'): ?>
+                        <a href="create-assessment.php?edit=<?= $aid ?>" class="btn btn-secondary">Edit</a>
+                        <button class="btn btn-danger" onclick="confirmDelete(<?= $aid ?>, '<?= htmlspecialchars(addslashes($a['title'])) ?>')">Delete</button>
+
+                    <?php else: ?>
+                        <a href="create-assessment.php?edit=<?= $aid ?>" class="btn btn-secondary">Edit</a>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <?php endforeach; ?>
+        </div>
+    <?php endif; ?>
+
+</div><!-- /container -->
+
+<!-- FAB -->
+<div class="fab-container">
+    <a href="create-assessment.php" class="fab-button" title="Create New Assessment">+</a>
+</div>
+
+<!-- Delete Confirm Modal -->
+<div class="modal-overlay" id="deleteModal">
+    <div class="modal">
+        <div class="modal-title">Delete Assessment?</div>
+        <div class="modal-body" id="deleteModalBody">
+            This will permanently delete the assessment and all associated questions and student attempts. This cannot be undone.
+        </div>
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeDeleteModal()">Cancel</button>
+            <button class="btn-confirm-delete" id="confirmDeleteBtn">Delete</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ── Panel toggles ──
+    const profileBtn    = document.getElementById('profileBtn');
+    const profileDrop   = document.getElementById('profileDropdown');
+    const notifBtn      = document.getElementById('notifBtn');
+    const notifPanel    = document.getElementById('notifPanel');
+
+    profileBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        profileDrop.classList.toggle('open');
+        notifPanel.classList.remove('open');
+    });
+    notifBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        notifPanel.classList.toggle('open');
+        profileDrop.classList.remove('open');
+    });
+    document.addEventListener('click', () => {
+        profileDrop.classList.remove('open');
+        notifPanel.classList.remove('open');
+    });
+
+    // ── Logout ──
+    function handleLogout() {
+        if (confirm('Are you sure you want to logout?')) {
+            window.location.href = 'logout.php';
+        }
+    }
+
+    // ── Filter tabs ──
+    document.querySelectorAll('.filter-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            const filter = tab.dataset.filter;
+            document.querySelectorAll('.assessment-card').forEach(card => {
+                const match = filter === 'all' || card.dataset.status === filter;
+                card.classList.toggle('hidden', !match);
             });
-        }
-
-        document.addEventListener('click', function(e) {
-            const filterTab = e.target.closest('.filter-tab');
-            if (filterTab) {
-                const status = filterTab.dataset.status;
-                if (status) {
-                    e.preventDefault();
-                    filterAssessments(status, filterTab);
-                    document.querySelectorAll('.filter-tab').forEach(tab => {
-                        tab.setAttribute('aria-selected', 'false');
-                    });
-                    filterTab.setAttribute('aria-selected', 'true');
-                }
-            }
         });
+    });
 
-        /* ============================================
-           VIEW RESULTS
-           ============================================ */
-        function viewResults(assessmentId) {
-            if (!assessmentId) return;
-            console.log('Viewing results for assessment:', assessmentId);
-            alert(`Opening results analytics for assessment ${assessmentId}...\n\nWill show:\n• Student scores\n• Question-wise analysis\n• Performance trends\n• Export options`);
-        }
-
-        /* ============================================
-           EDIT ASSESSMENT
-           ============================================ */
-        function editAssessment(assessmentId) {
-            if (!assessmentId) return;
-            console.log('Editing assessment:', assessmentId);
-            alert(`Opening editor for assessment ${assessmentId}...\n\nWill allow editing:\n• Questions\n• Settings\n• Difficulty levels\n• Time limits`);
-        }
-
-        /* ============================================
-           DELETE ASSESSMENT
-           ============================================ */
-        function deleteAssessment(assessmentId) {
-            if (!assessmentId) return;
-            if (confirm('Are you sure you want to delete this assessment?\n\nThis action cannot be undone. All student attempts and results will be permanently deleted.')) {
-                console.log('Deleting assessment:', assessmentId);
-                alert(`Assessment ${assessmentId} deleted successfully!`);
-            }
-        }
-
-        document.addEventListener('click', function(e) {
-            const assessmentId = e.target.dataset.assessmentId;
-            if (!assessmentId) return;
-            
-            if (e.target.classList.contains('btn-view')) {
-                viewResults(parseInt(assessmentId));
-            } else if (e.target.classList.contains('btn-edit')) {
-                editAssessment(parseInt(assessmentId));
-            } else if (e.target.classList.contains('btn-delete')) {
-                deleteAssessment(parseInt(assessmentId));
-            }
+    // ── Search ──
+    document.getElementById('searchInput')?.addEventListener('input', function() {
+        const q = this.value.toLowerCase().trim();
+        document.querySelectorAll('.assessment-card').forEach(card => {
+            const title    = card.querySelector('.assessment-title')?.textContent?.toLowerCase() ?? '';
+            const category = card.querySelector('.assessment-category')?.textContent?.toLowerCase() ?? '';
+            card.classList.toggle('hidden', q !== '' && !title.includes(q) && !category.includes(q));
         });
-
-        /* ============================================
-           SEARCH FUNCTIONALITY
-           ============================================ */
-        const searchInput = document.getElementById('searchInput');
-        if (searchInput) {
-            const performSearch = debounce(function(e) {
-                const searchTerm = e.target.value.toLowerCase().trim();
-                const cards = document.querySelectorAll('.assessment-card');
-                
-                cards.forEach(card => {
-                    const title = card.querySelector('.assessment-title')?.textContent?.toLowerCase() || '';
-                    const category = card.querySelector('.assessment-category')?.textContent?.toLowerCase() || '';
-                    
-                    if (!searchTerm || title.includes(searchTerm) || category.includes(searchTerm)) {
-                        card.classList.remove('hidden');
-                    } else {
-                        card.classList.add('hidden');
-                    }
-                });
-            }, 300);
-
-            searchInput.addEventListener('input', performSearch);
+        // Reset filter tabs when searching
+        if (q) {
+            document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
         }
+    });
 
-        /* ============================================
-           NOTIFICATION SYSTEM
-           ============================================ */
-        function showNotifications() {
-            alert('Notifications:\n\n1. 15 new submissions pending review\n2. Alice Johnson scored 100% on Python Test\n3. New student registered: Mike Brown\n4. Reminder: Review draft assessments\n5. System update scheduled for tonight');
-        }
+    // ── Delete modal ──
+    let deleteTargetId = null;
 
-        /* ============================================
-           PAGE LOAD ANIMATIONS
-           ============================================ */
-        window.addEventListener('load', function() {
-            console.log('Teacher Dashboard loaded successfully');
-            
-            const statCards = document.querySelectorAll('.stat-card');
-            statCards.forEach((card, index) => {
-                requestAnimationFrame(() => {
-                    setTimeout(() => {
-                        card.style.animation = 'fadeInUp 0.5s ease forwards';
-                    }, index * 100);
-                });
+    function confirmDelete(id, title) {
+        deleteTargetId = id;
+        document.getElementById('deleteModalBody').textContent =
+            `Are you sure you want to delete "${title}"? This will permanently remove all questions and student attempts. This cannot be undone.`;
+        document.getElementById('deleteModal').classList.add('open');
+    }
+
+    function closeDeleteModal() {
+        document.getElementById('deleteModal').classList.remove('open');
+        deleteTargetId = null;
+    }
+
+    document.getElementById('deleteModal').addEventListener('click', function(e) {
+        if (e.target === this) closeDeleteModal();
+    });
+
+    document.getElementById('confirmDeleteBtn').addEventListener('click', async function() {
+        if (!deleteTargetId) return;
+        this.disabled = true;
+        this.textContent = 'Deleting…';
+
+        try {
+            const res  = await fetch('api/assessment/delete.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ assessment_id: deleteTargetId })
             });
-        });
+            const data = await res.json();
 
-        /* ============================================
-           KEYBOARD SHORTCUTS
-           ============================================ */
-        document.addEventListener('keydown', function(e) {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
-                e.preventDefault();
-                window.location.href = 'create-assessment.php';
+            if (data.success) {
+                // Remove card from DOM
+                document.querySelector(`.assessment-card[data-id="${deleteTargetId}"]`)?.remove();
+                closeDeleteModal();
+                // If no cards left, reload to show empty state
+                if (!document.querySelector('.assessment-card')) location.reload();
+            } else {
+                alert(data.error || 'Delete failed. Please try again.');
+                this.disabled = false;
+                this.textContent = 'Delete';
             }
-            
-            if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
-                e.preventDefault();
-                window.location.href = 'reports.php';
-            }
-        });
+        } catch (err) {
+            alert('Network error. Please try again.');
+            this.disabled = false;
+            this.textContent = 'Delete';
+        }
+    });
 
-        /* ============================================
-           ADD ENTRANCE ANIMATIONS
-           ============================================ */
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes fadeInUp {
-                from {
-                    opacity: 0;
-                    transform: translateY(20px);
-                }
-                to {
-                    opacity: 1;
-                    transform: translateY(0);
-                }
-            }
-            
-            .stat-card {
-                opacity: 0;
-            }
-        `;
-        document.head.appendChild(style);
-    </script>
+    // ── Mark all notifications read ──
+    async function markAllRead() {
+        try {
+            await fetch('api/notifications/mark-read.php', { method: 'POST' });
+            document.getElementById('notifPanel').innerHTML =
+                '<div class="notif-panel-header"><span>Notifications</span></div><div class="notif-empty">🎉 You\'re all caught up!</div>';
+            document.querySelector('.notif-badge')?.remove();
+        } catch(e) { /* silent fail */ }
+    }
+
+    // ── Keyboard shortcuts ──
+    document.addEventListener('keydown', e => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+            e.preventDefault();
+            window.location.href = 'create-assessment.php';
+        }
+    });
+</script>
 </body>
 </html>
