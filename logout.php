@@ -1,20 +1,50 @@
 <?php
-session_start();
+/* ========================================
+   PTA LOGOUT HANDLER
+   File: logout.php
 
-// Optional: Log the logout event
-// $userId = $_SESSION['uid'];
-// logLogoutEvent($userId);
+   SECURITY CHANGE:
+   Remember-me token is deleted from the DB on logout
+   so the cookie cannot be replayed after sign-out.
+   ======================================== */
 
-// Destroy session
-session_unset();
-session_destroy();
-
-// Clear session cookie
-if (isset($_COOKIE[session_name()])) {
-    setcookie(session_name(), '', time()-3600, '/');
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
-// Redirect to login
+require_once "config.php";
+
+// ── Delete remember-me token from DB if one exists ──
+if (isset($_COOKIE['remember_me'])) {
+    $parts    = explode(':', $_COOKIE['remember_me'], 2);
+    $selector = $parts[0] ?? '';
+
+    if ($selector !== '' && preg_match('/^[0-9a-f]{24}$/', $selector)) {
+        $stmt = $conn->prepare("DELETE FROM remember_tokens WHERE selector = ?");
+        if ($stmt) {
+            $stmt->bind_param("s", $selector);
+            $stmt->execute();
+            $stmt->close();
+        }
+    }
+
+    // Expire the cookie on the client
+    $isSecure = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on');
+    setcookie('remember_me', '', [
+        'expires'  => time() - 3600,
+        'path'     => '/',
+        'secure'   => $isSecure,
+        'httponly' => true,
+        'samesite' => 'Strict',
+    ]);
+}
+
+// ── Destroy session ──
+$_SESSION = [];
+if (isset($_COOKIE[session_name()])) {
+    setcookie(session_name(), '', time() - 3600, '/');
+}
+session_destroy();
+
 header("Location: index.html");
 exit;
-?>

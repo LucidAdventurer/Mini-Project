@@ -713,3 +713,53 @@ CREATE INDEX idx_user_active_type ON users(is_active, user_type);
 CREATE INDEX idx_assessment_status_public ON assessments(status, is_public);
 CREATE INDEX idx_attempt_user_assessment ON assessment_attempts(user_id, assessment_id, created_at);
 CREATE INDEX idx_notification_user_unread ON notifications(user_id, is_read, created_at);
+
+-- === New Tables Not Yet Implemented TODO We Have To Implement It === --
+
+CREATE TABLE teacher_students (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    teacher_id INT NOT NULL,
+    student_id INT NOT NULL,
+    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (teacher_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_teacher_student (teacher_id, student_id),
+    INDEX idx_teacher (teacher_id),
+    INDEX idx_student (student_id)
+);
+
+CREATE TABLE teacher_groups (
+    group_id    INT(11) NOT NULL AUTO_INCREMENT,
+    teacher_id  INT(11) NOT NULL,
+    group_name  VARCHAR(100) NOT NULL,
+    description TEXT DEFAULT NULL,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (group_id),
+    FOREIGN KEY (teacher_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    INDEX idx_teacher (teacher_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE group_members (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    group_id INT NOT NULL,
+    student_id INT NOT NULL,
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (group_id) REFERENCES teacher_groups(group_id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_group_student (group_id, student_id),
+    INDEX idx_group (group_id),
+    INDEX idx_student (student_id)
+);
+
+
+CREATE TABLE assessment_groups (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    assessment_id INT NOT NULL,
+    group_id INT NOT NULL,
+    FOREIGN KEY (assessment_id) REFERENCES assessments(assessment_id) ON DELETE CASCADE,
+    FOREIGN KEY (group_id) REFERENCES teacher_groups(group_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_assessment_group (assessment_id, group_id),
+    INDEX idx_assessment (assessment_id),
+    INDEX idx_group (group_id)
+);

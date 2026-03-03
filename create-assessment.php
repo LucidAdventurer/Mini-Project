@@ -1,242 +1,123 @@
 <?php
-// ============================================================
-// DEPENDENCIES
-// config.php: establishes $conn (mysqli) + starts session
-// db-guard.php: provides safePreparedQuery(), validateSession()
-// ============================================================
-require_once 'config.php';
+/* ========================================
+ * CREATE / EDIT DRAFT ASSESSMENT
+ * File: create-assessment.php
+ *
+ * Modes:
+ *   ?            — new blank assessment
+ *   ?edit=<id>   — continue editing a draft (loads all data + questions)
+ *
+ * Access: Teachers only — ownership verified for edit mode
+ * ======================================== */
+
+require 'config.php';
 require_once 'db-guard.php';
 
-// ============================================================
-// SECURITY: Require teacher session
-// validateSession() checks $_SESSION['uid'] + $_SESSION['role'],
-// verifies the user is active in the DB, and redirects otherwise.
-// ============================================================
 $currentUser = validateSession($conn, 'teacher');
-$teacher_id  = (int) $currentUser['user_id'];
+$teacherId   = (int) $currentUser['user_id'];
+$userName    = htmlspecialchars($currentUser['full_name'] ?? 'Teacher');
+$userInitials = strtoupper(substr($currentUser['full_name'] ?? 'T', 0, 2));
 
-// ============================================================
-// HANDLE AJAX REQUESTS
-// The frontend posts JSON to this same file with ?action=...
-// We respond with JSON and exit before any HTML is sent.
-// ============================================================
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action'])) {
-    header('Content-Type: application/json');
+// ── Edit mode: load existing draft ──
+$editMode     = false;
+$assessmentId = 0;
+$assessment   = null;
+$questions    = [];
 
-    $action = $_GET['action'];
-    $body   = json_decode(file_get_contents('php://input'), true);
+if (isset($_GET['edit']) && (int)$_GET['edit'] > 0) {
+    $assessmentId = (int)$_GET['edit'];
 
-    if (!$body) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Invalid JSON body.']);
-        exit;
-    }
-
-    // ----------------------------------------------------------
-    // SHARED: save_draft OR publish
-    // Both write to assessments + questions tables.
-    // The only difference is the status column value.
-    // ----------------------------------------------------------
-    if ($action === 'save_draft' || $action === 'publish') {
-
-        $status = ($action === 'publish') ? 'active' : 'draft';
-
-        // ── Sanitise inputs ──
-        $title        = trim($body['title']        ?? '');
-        $description  = trim($body['description']  ?? '');
-        $category     = trim($body['category']     ?? '');
-        $difficulty   = in_array($body['difficulty'] ?? '', ['easy', 'medium', 'hard'])
-                        ? $body['difficulty'] : 'medium';
-        $duration     = max(1, (int)($body['duration']     ?? 0));
-        $totalMarks   = max(1, (int)($body['totalMarks']   ?? 0));
-        $passingMarks = max(1, (int)($body['passingMarks'] ?? 0));
-        $maxAttempts  = max(1, (int)($body['maxAttempts']  ?? 1));
-        $instructions = trim($body['instructions'] ?? '');
-
-        $availableFrom  = !empty($body['availableFrom'])
-                          ? date('Y-m-d H:i:s', strtotime($body['availableFrom'])) : null;
-        $availableUntil = !empty($body['availableUntil'])
-                          ? date('Y-m-d H:i:s', strtotime($body['availableUntil'])) : null;
-
-        $settings = $body['settings'] ?? [];
-        $showResultsImmediately = !empty($settings['showResultsImmediately']) ? 1 : 0;
-        $showCorrectAnswers     = !empty($settings['showCorrectAnswers'])     ? 1 : 0;
-        $randomizeQuestions     = !empty($settings['randomizeQuestions'])     ? 1 : 0;
-        $randomizeOptions       = !empty($settings['randomizeOptions'])       ? 1 : 0;
-
-        $questions      = $body['questions']      ?? [];
-        $correctAnswers = $body['correctAnswers'] ?? [];
-
-        // ── Server-side validation for publish ──
-        if ($action === 'publish') {
-            if (!$title) {
-                http_response_code(422);
-                echo json_encode(['success' => false, 'error' => 'Assessment title is required.']);
-                exit;
-            }
-            if (!$category) {
-                http_response_code(422);
-                echo json_encode(['success' => false, 'error' => 'Category is required.']);
-                exit;
-            }
-            if (empty($questions)) {
-                http_response_code(422);
-                echo json_encode(['success' => false, 'error' => 'At least one question is required.']);
-                exit;
-            }
-            if ($passingMarks > $totalMarks) {
-                http_response_code(422);
-                echo json_encode(['success' => false, 'error' => 'Passing marks cannot exceed total marks.']);
-                exit;
-            }
-            foreach ($questions as $q) {
-                $qid = $q['id'];
-                if (empty($correctAnswers[$qid])) {
-                    http_response_code(422);
-                    echo json_encode(['success' => false, 'error' => "Question {$qid} is missing a correct answer."]);
-                    exit;
-                }
-            }
-        }
-
-        // ── Begin transaction (mysqli) ──
-        $conn->begin_transaction();
-
-        // ── Insert into assessments ──
-        // Types: s=string, i=int
-        // Order must match the ? placeholders exactly.
-        $assessmentResult = safePreparedQuery(
-            $conn,
-            "INSERT INTO assessments (
-                title, description, created_by, category, difficulty,
-                duration_minutes, total_marks, passing_marks, max_attempts,
-                show_results_immediately, show_correct_answers,
-                randomize_questions, randomize_options,
+    $r = safePreparedQuery($conn,
+        "SELECT assessment_id, title, description, instructions, category, difficulty,
+                status, duration_minutes, total_marks, passing_marks, max_attempts,
                 available_from, available_until,
-                instructions, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            "ssisssiiiiiiiisss",
-            [
-                $title,
-                $description,
-                $teacher_id,
-                $category,
-                $difficulty,
-                $duration,
-                $totalMarks,
-                $passingMarks,
-                $maxAttempts,
-                $showResultsImmediately,
-                $showCorrectAnswers,
-                $randomizeQuestions,
-                $randomizeOptions,
-                $availableFrom,
-                $availableUntil,
-                $instructions,
-                $status,
-            ]
-        );
+                show_results_immediately, show_correct_answers,
+                randomize_questions, randomize_options, is_public, created_at
+         FROM assessments
+         WHERE assessment_id = ? AND created_by = ?",
+        "ii", [$assessmentId, $teacherId]
+    );
 
-        if (!$assessmentResult['success']) {
-            $conn->rollback();
-            error_log('create-assessment.php: assessment insert failed');
-            http_response_code(500);
-            echo json_encode(['success' => false, 'error' => 'Failed to save assessment. Please try again.']);
-            exit;
-        }
+    if ($r['success'] && $r['result']) {
+        $assessment = $r['result']->fetch_assoc();
+        $r['result']->free();
+    }
 
-        $assessmentId = (int) $assessmentResult['insert_id'];
-
-        // ── Insert questions one by one ──
-        foreach ($questions as $order => $q) {
-            $qid     = $q['id'];
-            $options = $q['options'] ?? ['', '', '', ''];
-            $correct = strtolower(trim($correctAnswers[$qid] ?? ''));
-            $marks   = max(1, (int)($q['marks'] ?? 1));
-
-            $qResult = safePreparedQuery(
-                $conn,
-                "INSERT INTO questions (
-                    assessment_id, question_type, question_text, marks,
-                    option_a, option_b, option_c, option_d,
-                    correct_answer, question_order
-                ) VALUES (?, 'mcq', ?, ?, ?, ?, ?, ?, ?, ?)",
-                "isisssssi",
-                [
-                    $assessmentId,
-                    trim($q['text'] ?? ''),
-                    $marks,
-                    trim($options[0] ?? ''),
-                    trim($options[1] ?? ''),
-                    trim($options[2] ?? ''),
-                    trim($options[3] ?? ''),
-                    $correct,
-                    $order + 1,
-                ]
-            );
-
-            if (!$qResult['success']) {
-                $conn->rollback();
-                error_log("create-assessment.php: question insert failed for order " . ($order + 1));
-                http_response_code(500);
-                echo json_encode(['success' => false, 'error' => 'Failed to save questions. Please try again.']);
-                exit;
-            }
-        }
-
-        // ── All good — commit ──
-        $conn->commit();
-
-        echo json_encode([
-            'success'       => true,
-            'assessment_id' => $assessmentId,
-            'status'        => $status,
-            'message'       => $action === 'publish'
-                               ? 'Assessment published successfully.'
-                               : 'Draft saved successfully.',
-        ]);
+    // If not found or not owned by this teacher, treat as new
+    if (!$assessment) {
+        header('Location: create-assessment.php');
         exit;
     }
 
-    // Unknown action
-    http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Unknown action.']);
-    exit;
+    // Only allow editing drafts (and scheduled — teacher may want to adjust before it goes live)
+    if (!in_array($assessment['status'], ['draft', 'scheduled'], true)) {
+        // Active/archived assessments go to edit-assessment.php instead
+        header('Location: edit-assessment.php?id=' . $assessmentId);
+        exit;
+    }
+
+    $editMode = true;
+
+    // Load existing questions
+    $rq = safePreparedQuery($conn,
+        "SELECT question_id, question_type, question_text, marks, negative_marks,
+                option_a, option_b, option_c, option_d,
+                correct_answer, explanation, topic, question_order
+         FROM questions
+         WHERE assessment_id = ?
+         ORDER BY question_order ASC, question_id ASC",
+        "i", [$assessmentId]
+    );
+    if ($rq['success'] && $rq['result']) {
+        while ($row = $rq['result']->fetch_assoc()) {
+            $questions[] = $row;
+        }
+        $rq['result']->free();
+    }
 }
 
-// ============================================================
-// PAGE RENDER STARTS HERE
-// Everything below is sent to the browser as HTML.
-// ============================================================
+// ── Helpers ──
+function toDatetimeLocal(?string $dt): string {
+    if (!$dt) return '';
+    return date('Y-m-d\TH:i', strtotime($dt));
+}
+function val(?array $a = null, string $key, string $default = ''): string {
+    if ($a === null) return $default;
+    return htmlspecialchars($a[$key] ?? $default, ENT_QUOTES, 'UTF-8');
+}
+function checked(?array $a = null, string $key, bool $defaultOn = false): string {
+    if ($a === null) return $defaultOn ? 'checked' : '';
+    return !empty($a[$key]) ? 'checked' : '';
+}
+function sel(?array $a = null, string $key, string $value, string $default = ''): string {
+    $current = $a[$key] ?? $default;
+    return $current === $value ? 'selected' : '';
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Create Assessment - Placement Portal</title>
-
-    <!-- No client-side parsing libraries needed.
-         File upload and question extraction is handled server-side
-         by api/assessment/parse-document.php -->
-
-
+    <title><?= $editMode ? 'Continue Editing Draft' : 'Create Assessment' ?> - Placement Portal</title>
     <style>
         :root {
             --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            --color-primary: #234C6A;
             --color-teacher-primary: #2E073F;
             --color-teacher-secondary: #AD49E1;
             --color-text: #2d3748;
             --color-text-light: #718096;
             --color-bg: #D3DAD9;
+            --color-bg-light: #f5f7fa;
             --color-white: #ffffff;
             --color-border: #e2e8f0;
             --color-success: #48bb78;
             --color-error: #f56565;
+            --shadow-sm: 0 2px 10px rgba(0,0,0,0.08);
             --shadow-md: 0 4px 20px rgba(0,0,0,0.08);
-            --border-radius: 10px;
-            --border-radius-lg: 20px;
+            --shadow-lg: 0 8px 30px rgba(0,0,0,0.15);
+            --radius: 10px;
+            --radius-lg: 20px;
             --transition: all 0.3s ease;
         }
 
@@ -248,1091 +129,1316 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action'])) {
             min-height: 100vh;
             color: var(--color-text);
             padding-top: 71px;
-            overflow-x: hidden;
         }
 
         /* ── NAVBAR ── */
         .navbar {
             background: var(--color-teacher-primary);
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
             padding: 12px 28px;
             display: flex; align-items: center; justify-content: space-between;
-            position: fixed; top: 0; left: 0; right: 0;
-            z-index: 1000;
-            border-bottom: 3px solid var(--color-teacher-primary);
+            position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.15);
         }
         .navbar-brand {
             display: flex; align-items: center; gap: 12px;
             font-size: 20px; font-weight: 700; color: white; text-decoration: none;
         }
         .brand-logo {
-            width: 45px; height: 45px;
-            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
+            width: 44px; height: 44px;
+            background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
             border-radius: 10px;
             display: flex; align-items: center; justify-content: center;
-            color: white; font-weight: bold; font-size: 20px;
+            color: white; font-weight: 700; font-size: 16px;
         }
+        .nav-right { display: flex; align-items: center; gap: 12px; }
         .btn-back {
-            padding: 10px 24px;
-            background: white; color: var(--color-teacher-primary);
-            border: 2px solid var(--color-teacher-primary);
-            border-radius: 10px; font-weight: 600; font-size: 14px;
-            cursor: pointer; transition: var(--transition);
+            padding: 9px 20px;
+            background: rgba(255,255,255,0.15);
+            color: white; border: 2px solid rgba(255,255,255,0.4);
+            border-radius: var(--radius); font-weight: 600; font-size: 14px;
             text-decoration: none; display: flex; align-items: center; gap: 8px;
+            transition: var(--transition);
         }
-        .btn-back:hover { background: var(--color-teacher-primary); color: white; transform: translateY(-2px); }
+        .btn-back:hover { background: rgba(255,255,255,0.25); }
 
-        /* ── LAYOUT ── */
-        .container { max-width: 1200px; margin: 0 auto; padding: 30px; }
+        /* ── CONTAINER ── */
+        .container { max-width: 960px; margin: 0 auto; padding: 30px 20px 60px; }
 
+        /* ── PAGE HEADER ── */
         .page-header {
-            background: white; border-radius: var(--border-radius-lg);
-            padding: 30px; margin-bottom: 30px; box-shadow: var(--shadow-md);
+            background: white; border-radius: var(--radius-lg); padding: 28px 30px;
+            margin-bottom: 24px; box-shadow: var(--shadow-sm);
         }
-        .page-title { font-size: 32px; font-weight: 700; color: var(--color-text); margin-bottom: 8px; }
-        .page-description { font-size: 16px; color: var(--color-text-light); }
+        .page-title { font-size: 26px; font-weight: 700; color: var(--color-text); margin-bottom: 6px; }
+        .page-subtitle { font-size: 14px; color: var(--color-text-light); }
+        .draft-badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            margin-top: 10px; padding: 5px 12px;
+            background: #fef3c7; color: #92400e;
+            border-radius: 7px; font-size: 12px; font-weight: 700;
+        }
 
-        .form-section {
-            background: white; border-radius: var(--border-radius-lg);
-            padding: 30px; margin-bottom: 20px; box-shadow: var(--shadow-md);
+        /* ── STEPS ── */
+        .steps-bar {
+            display: flex; gap: 0; margin-bottom: 24px;
+            background: white; border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm); overflow: hidden;
         }
-        .section-title {
-            font-size: 20px; font-weight: 700; color: var(--color-text);
-            margin-bottom: 20px; display: flex; align-items: center; gap: 10px;
+        .step {
+            flex: 1; padding: 16px 12px; text-align: center;
+            font-size: 13px; font-weight: 600; color: var(--color-text-light);
+            border-right: 1px solid var(--color-border); cursor: pointer;
+            transition: var(--transition); position: relative;
         }
-        .section-icon {
-            width: 40px; height: 40px;
-            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
-            border-radius: 10px;
+        .step:last-child { border-right: none; }
+        .step.active { color: var(--color-teacher-secondary); background: #faf5ff; }
+        .step.done   { color: var(--color-success); }
+        .step-num {
+            display: block; font-size: 20px; margin-bottom: 4px;
+        }
+        .step.done .step-num::after  { content: ' ✓'; font-size: 14px; }
+
+        /* ── SECTION PANELS ── */
+        .panel {
+            background: white; border-radius: var(--radius-lg); padding: 28px 30px;
+            margin-bottom: 20px; box-shadow: var(--shadow-sm);
+            display: none;
+        }
+        .panel.active { display: block; }
+
+        .panel-title {
+            font-size: 18px; font-weight: 700; color: var(--color-text);
+            margin-bottom: 22px; display: flex; align-items: center; gap: 10px;
+        }
+        .panel-icon {
+            width: 36px; height: 36px; border-radius: 9px;
+            background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
             display: flex; align-items: center; justify-content: center;
-            color: white; font-size: 20px;
+            color: white; font-size: 17px; flex-shrink: 0;
         }
 
         /* ── FORM ELEMENTS ── */
-        .form-group { margin-bottom: 20px; }
-        .form-label { display: block; font-size: 14px; font-weight: 600; color: var(--color-text); margin-bottom: 8px; }
-        .form-label .required { color: var(--color-error); margin-left: 4px; }
+        .form-group { margin-bottom: 18px; }
+        .form-label {
+            display: block; font-size: 13px; font-weight: 600;
+            color: var(--color-text); margin-bottom: 7px;
+        }
+        .form-label .req { color: var(--color-error); margin-left: 3px; }
         .form-input {
-            width: 100%; padding: 12px 16px;
-            border: 2px solid var(--color-border); border-radius: var(--border-radius);
-            font-size: 14px; transition: var(--transition); background: white;
-            font-family: var(--font-family);
+            width: 100%; padding: 11px 14px;
+            border: 2px solid var(--color-border); border-radius: var(--radius);
+            font-size: 14px; font-family: var(--font-family);
+            transition: var(--transition); background: white; color: var(--color-text);
         }
-        .form-input:focus { outline: none; border-color: var(--color-teacher-primary); box-shadow: 0 0 0 3px rgba(173,73,225,0.1); }
-        .form-textarea { min-height: 100px; resize: vertical; }
+        .form-input:focus {
+            outline: none; border-color: var(--color-teacher-secondary);
+            box-shadow: 0 0 0 3px rgba(173,73,225,0.1);
+        }
+        .form-textarea { min-height: 90px; resize: vertical; }
         .form-select {
-            width: 100%; padding: 12px 16px;
-            border: 2px solid var(--color-border); border-radius: var(--border-radius);
-            font-size: 14px; background: white; cursor: pointer; transition: var(--transition);
-            font-family: var(--font-family);
+            width: 100%; padding: 11px 14px;
+            border: 2px solid var(--color-border); border-radius: var(--radius);
+            font-size: 14px; background: white; cursor: pointer;
+            font-family: var(--font-family); color: var(--color-text);
+            transition: var(--transition);
         }
-        .form-select:focus { outline: none; border-color: var(--color-teacher-primary); }
-        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; }
+        .form-select:focus {
+            outline: none; border-color: var(--color-teacher-secondary);
+            box-shadow: 0 0 0 3px rgba(173,73,225,0.1);
+        }
+        .form-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 18px;
+        }
 
-        /* ── UPLOAD ── */
-        .upload-area {
-            border: 3px dashed var(--color-border); border-radius: 16px;
-            padding: 40px; text-align: center; transition: var(--transition);
-            cursor: pointer; background: #f7fafc;
+        /* Checkbox row */
+        .checkbox-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;
         }
-        .upload-area:hover  { border-color: var(--color-teacher-secondary); background: rgba(173,73,225,0.05); }
-        .upload-area.dragover { border-color: var(--color-teacher-secondary); background: rgba(173,73,225,0.1); transform: scale(1.02); }
-        .upload-icon  { font-size: 64px; margin-bottom: 20px; opacity: 0.5; }
-        .upload-text  { font-size: 18px; font-weight: 600; color: var(--color-text); margin-bottom: 8px; }
-        .upload-hint  { font-size: 14px; color: var(--color-text-light); margin-bottom: 20px; }
-        .upload-button {
-            display: inline-block; padding: 12px 30px;
-            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
-            color: white; border: none; border-radius: var(--border-radius);
+        .checkbox-label {
+            display: flex; align-items: center; gap: 9px; cursor: pointer;
+            padding: 10px 14px; background: var(--color-bg-light);
+            border-radius: var(--radius); border: 2px solid var(--color-border);
+            font-size: 13px; transition: var(--transition); user-select: none;
+        }
+        .checkbox-label:hover { border-color: var(--color-teacher-secondary); }
+        .checkbox-label input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--color-teacher-secondary); }
+
+        /* ── QUESTIONS LIST ── */
+        .q-header {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;
+        }
+        .q-count { font-size: 14px; color: var(--color-text-light); font-weight: 600; }
+
+        .q-list { display: flex; flex-direction: column; gap: 14px; }
+
+        .q-card {
+            border: 2px solid var(--color-border); border-radius: 12px;
+            background: var(--color-bg-light); overflow: hidden;
+            transition: var(--transition);
+        }
+        .q-card:hover { border-color: #c4b5fd; }
+
+        .q-card-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 14px 18px;
+            background: white; border-bottom: 1px solid var(--color-border);
+        }
+        .q-num-row { display: flex; align-items: center; gap: 8px; }
+        .q-num  { font-weight: 700; color: var(--color-teacher-secondary); font-size: 14px; }
+        .q-type-badge {
+            font-size: 11px; font-weight: 600; padding: 2px 8px;
+            background: #ede9fe; color: #5b21b6; border-radius: 4px;
+        }
+        .q-marks-badge {
+            font-size: 11px; font-weight: 600; padding: 2px 8px;
+            background: #d1fae5; color: #065f46; border-radius: 4px;
+        }
+        .q-card-actions { display: flex; gap: 7px; }
+
+        .q-card-body { padding: 14px 18px; }
+        .q-text { font-size: 14px; color: var(--color-text); line-height: 1.6; margin-bottom: 10px; }
+
+        .q-options { display: flex; flex-direction: column; gap: 6px; }
+        .q-option {
+            padding: 8px 12px; background: white; border-radius: 7px;
+            font-size: 13px; display: flex; align-items: center; gap: 8px;
+            border: 2px solid transparent;
+        }
+        .q-option.correct { border-color: var(--color-success); background: rgba(72,187,120,0.07); }
+        .q-opt-label { font-weight: 700; min-width: 22px; }
+        .q-correct-badge {
+            margin-left: auto; padding: 2px 8px;
+            background: #c6f6d5; color: #22543d;
+            border-radius: 4px; font-size: 11px; font-weight: 700;
+        }
+        .q-short-ans {
+            padding: 8px 12px; background: white; border-radius: 7px;
+            font-size: 13px; border: 2px solid var(--color-success);
+        }
+        .q-ans-label { font-size: 11px; font-weight: 600; color: var(--color-text-light); margin-bottom: 4px; }
+
+        .no-questions {
+            text-align: center; padding: 40px 20px;
+            color: var(--color-text-light); font-size: 15px;
+        }
+        .no-q-icon { font-size: 44px; margin-bottom: 10px; opacity: 0.4; }
+
+        /* ── ADD QUESTION AREA ── */
+        .add-q-section {
+            background: white; border-radius: var(--radius-lg); padding: 28px 30px;
+            margin-bottom: 20px; box-shadow: var(--shadow-sm);
+        }
+        .add-q-header {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;
+        }
+
+        /* Type tabs */
+        .type-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+        .type-tab {
+            padding: 7px 14px; background: var(--color-bg-light);
+            border: 2px solid var(--color-border); border-radius: 8px;
+            font-size: 12px; font-weight: 600; cursor: pointer; transition: var(--transition);
+            color: var(--color-text-light);
+        }
+        .type-tab.active {
+            background: var(--color-teacher-secondary);
+            border-color: var(--color-teacher-secondary); color: white;
+        }
+
+        /* Add form fields */
+        .add-form-group { margin-bottom: 14px; }
+        .add-form-label {
+            display: block; font-size: 12px; font-weight: 600;
+            color: var(--color-text); margin-bottom: 5px;
+        }
+        .add-form-input {
+            width: 100%; padding: 9px 12px;
+            border: 2px solid var(--color-border); border-radius: 8px;
+            font-size: 13px; font-family: var(--font-family);
+            transition: var(--transition); background: white;
+        }
+        .add-form-input:focus {
+            outline: none; border-color: var(--color-teacher-secondary);
+            box-shadow: 0 0 0 3px rgba(173,73,225,0.1);
+        }
+        .opts-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;
+        }
+        .add-form-row { display: flex; gap: 12px; }
+        .add-form-row .add-form-group { flex: 1; }
+
+        .ca-select {
+            width: 100%; padding: 9px 12px;
+            border: 2px solid var(--color-border); border-radius: 8px;
+            font-size: 13px; background: white; cursor: pointer; font-family: var(--font-family);
+        }
+        .ca-select:focus { outline: none; border-color: var(--color-success); }
+
+        /* Conditional field groups */
+        .fields-mcq, .fields-tf, .fields-short { display: none; }
+        .fields-mcq.show, .fields-tf.show, .fields-short.show { display: block; }
+
+        /* ── UPLOAD SECTION ── */
+        .upload-area {
+            border: 3px dashed var(--color-border); border-radius: var(--radius-lg);
+            padding: 40px 20px; text-align: center; cursor: pointer;
+            transition: var(--transition); background: var(--color-bg-light);
+            margin-bottom: 18px;
+        }
+        .upload-area:hover, .upload-area.drag { border-color: var(--color-teacher-secondary); background: #faf5ff; }
+        .upload-icon { font-size: 44px; margin-bottom: 12px; }
+        .upload-title { font-size: 17px; font-weight: 700; color: var(--color-text); margin-bottom: 6px; }
+        .upload-sub   { font-size: 13px; color: var(--color-text-light); }
+        .upload-input { display: none; }
+
+        .upload-result {
+            background: var(--color-bg-light); border-radius: var(--radius); padding: 14px 18px;
+            margin-bottom: 14px; font-size: 13px; color: var(--color-text); display: none;
+        }
+        .upload-result.show { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .upload-result-info { display: flex; flex-direction: column; gap: 3px; }
+        .upload-result-name { font-weight: 700; }
+        .upload-result-count { color: var(--color-text-light); }
+
+        .btn-import {
+            padding: 10px 22px;
+            background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
+            color: white; border: none; border-radius: var(--radius);
             font-weight: 700; font-size: 14px; cursor: pointer; transition: var(--transition);
         }
-        .upload-button:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(173,73,225,0.4); }
-        .upload-file-types { margin-top: 12px; font-size: 12px; color: var(--color-text-light); }
-        .upload-file-types span { display: inline-block; background: #edf2f7; padding: 3px 8px; border-radius: 4px; margin: 2px; font-weight: 600; }
-        #fileInput { display: none; }
+        .btn-import:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(46,7,63,0.3); }
+        .btn-import:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
-        /* ── UPLOADED FILE ── */
-        .uploaded-file {
-            display: none; padding: 20px; background: #f7fafc;
-            border-radius: 12px; margin-top: 20px; border: 2px solid var(--color-border);
+        /* ── BUTTONS ── */
+        .btn-sm {
+            padding: 7px 14px; border: none; border-radius: 7px;
+            font-size: 12px; font-weight: 600; cursor: pointer; transition: var(--transition);
         }
-        .uploaded-file.active { display: flex; align-items: center; justify-content: space-between; }
-        .file-info  { display: flex; align-items: center; gap: 12px; }
-        .file-icon  { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-size: 20px; }
-        .file-icon.pdf-icon  { background: #e53e3e; }
-        .file-icon.docx-icon { background: #3182ce; }
-        .file-details { flex: 1; }
-        .file-name  { font-size: 14px; font-weight: 600; color: var(--color-text); }
-        .file-size  { font-size: 12px; color: var(--color-text-light); }
-        .remove-file {
-            padding: 8px 16px; background: #fff; color: var(--color-error);
-            border: 2px solid var(--color-error); border-radius: 8px;
-            font-weight: 600; font-size: 12px; cursor: pointer; transition: var(--transition);
+        .btn-edit-q    { background: #e2e8f0; color: var(--color-text); }
+        .btn-edit-q:hover { background: #cbd5e0; }
+        .btn-delete-q  { background: #fed7d7; color: #742a2a; }
+        .btn-delete-q:hover { background: var(--color-error); color: white; }
+        .btn-add-q {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
+            color: white; border: none; border-radius: var(--radius);
+            font-weight: 700; font-size: 13px; cursor: pointer; transition: var(--transition);
+            display: flex; align-items: center; gap: 7px;
         }
-        .remove-file:hover { background: var(--color-error); color: white; }
+        .btn-add-q:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(46,7,63,0.3); }
+        .btn-add-q:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
-        /* ── PARSING STATUS ── */
-        .parsing-status {
-            display: none; padding: 24px;
-            background: linear-gradient(135deg, #f0f4ff 0%, #faf0ff 100%);
-            border-radius: 12px; margin-top: 20px; border: 2px solid #c3dafe; text-align: center;
+        /* ── BOTTOM ACTION BAR ── */
+        .action-bar {
+            background: white; border-radius: var(--radius-lg); padding: 20px 28px;
+            box-shadow: var(--shadow-sm); margin-bottom: 30px;
+            display: flex; justify-content: space-between; align-items: center; gap: 16px;
+            flex-wrap: wrap;
         }
-        .parsing-status.active { display: block; }
-        .parsing-steps { margin-top: 16px; text-align: left; display: inline-block; }
-        .parsing-step {
-            display: flex; align-items: center; gap: 10px;
-            padding: 8px 0; font-size: 14px; color: var(--color-text-light); transition: var(--transition);
-        }
-        .parsing-step.active { color: var(--color-teacher-primary); font-weight: 600; }
-        .parsing-step.done   { color: var(--color-success); }
-        .step-icon { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-        .spinner {
-            display: inline-block; width: 20px; height: 20px;
-            border: 3px solid #e2e8f0; border-top-color: var(--color-teacher-primary);
-            border-radius: 50%; animation: spin 0.8s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        .action-bar-info { font-size: 13px; color: var(--color-text-light); }
+        .action-bar-btns { display: flex; gap: 12px; flex-wrap: wrap; }
 
-        /* ── ERROR BANNER ── */
-        .error-banner {
-            display: none; padding: 16px 20px; background: #fff5f5;
-            border: 2px solid var(--color-error); border-radius: 12px;
-            margin-top: 20px; color: var(--color-error); font-weight: 600;
+        .btn-save-draft {
+            padding: 11px 24px; background: var(--color-bg-light);
+            color: var(--color-text); border: 2px solid var(--color-border);
+            border-radius: var(--radius); font-weight: 700; font-size: 14px;
+            cursor: pointer; transition: var(--transition);
         }
-        .error-banner.active { display: flex; align-items: flex-start; gap: 10px; }
-        .error-banner-detail { font-size: 13px; font-weight: normal; color: #c53030; margin-top: 4px; }
+        .btn-save-draft:hover { border-color: var(--color-teacher-secondary); }
+        .btn-save-draft:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .btn-publish {
+            padding: 11px 28px;
+            background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
+            color: white; border: none; border-radius: var(--radius);
+            font-weight: 700; font-size: 14px; cursor: pointer; transition: var(--transition);
+        }
+        .btn-publish:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(46,7,63,0.3); }
+        .btn-publish:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
         /* ── TOAST ── */
         .toast {
-            position: fixed; bottom: 30px; right: 30px; z-index: 9999;
-            padding: 16px 24px; border-radius: 12px; font-weight: 600; font-size: 14px;
-            color: white; box-shadow: 0 8px 30px rgba(0,0,0,0.2);
-            transform: translateY(100px); opacity: 0;
-            transition: transform 0.3s ease, opacity 0.3s ease;
-            max-width: 380px;
+            position: fixed; bottom: 30px; left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: #1a202c; color: white;
+            padding: 13px 26px; border-radius: var(--radius);
+            font-size: 14px; font-weight: 600; box-shadow: var(--shadow-lg);
+            z-index: 9999; transition: transform 0.3s, opacity 0.3s;
+            opacity: 0; pointer-events: none;
         }
-        .toast.show    { transform: translateY(0); opacity: 1; }
+        .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
         .toast.success { background: #276749; }
         .toast.error   { background: #c53030; }
-        .toast.info    { background: var(--color-teacher-primary); }
 
-        /* ── QUESTIONS PREVIEW ── */
-        .questions-preview { display: none; margin-top: 20px; }
-        .questions-preview.active { display: block; }
-        .preview-header {
-            padding: 20px; background: #c6f6d5; border-radius: 12px;
-            margin-bottom: 20px; border: 2px solid var(--color-success);
-            display: flex; align-items: center; justify-content: space-between;
-        }
-        .preview-title    { font-size: 18px; font-weight: 700; color: #22543d; }
-        .preview-subtitle { font-size: 14px; color: #276749; }
-        .btn-reparse {
-            padding: 8px 16px; background: white; color: #276749;
-            border: 2px solid #276749; border-radius: 8px;
-            font-size: 13px; font-weight: 600; cursor: pointer; transition: var(--transition);
-        }
-        .btn-reparse:hover { background: #276749; color: white; }
-
-        .question-card {
-            padding: 20px; background: white; border: 2px solid var(--color-border);
-            border-radius: 12px; margin-bottom: 15px; transition: var(--transition);
-        }
-        .question-card:hover { border-color: var(--color-teacher-secondary); box-shadow: 0 4px 12px rgba(173,73,225,0.15); }
-        .question-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
-        .question-number { font-size: 14px; font-weight: 700; color: var(--color-teacher-secondary); }
-        .question-actions { display: flex; gap: 8px; }
-        .btn-edit-q {
-            padding: 6px 14px; background: #ebf8ff; color: var(--color-primary);
-            border: 1px solid #bee3f8; border-radius: 6px;
-            font-size: 12px; font-weight: 600; cursor: pointer; transition: var(--transition);
-        }
-        .btn-edit-q:hover { background: var(--color-primary); color: white; }
-        .btn-delete-q {
-            padding: 6px 14px; background: #fff5f5; color: var(--color-error);
-            border: 1px solid #fed7d7; border-radius: 6px;
-            font-size: 12px; font-weight: 600; cursor: pointer; transition: var(--transition);
-        }
-        .btn-delete-q:hover { background: var(--color-error); color: white; }
-        .question-text { font-size: 15px; font-weight: 600; color: var(--color-text); margin-bottom: 12px; line-height: 1.5; }
-        .options-list  { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-        .option-item   {
-            display: flex; align-items: flex-start; gap: 8px;
-            padding: 8px 12px; background: #f7fafc; border-radius: 8px;
-            border: 1px solid var(--color-border); font-size: 14px;
-        }
-        .option-label { font-weight: 700; color: var(--color-teacher-secondary); min-width: 20px; }
-
-        /* ── CORRECT ANSWERS ── */
-        .correct-answers-section { display: none; margin-top: 24px; padding-top: 24px; border-top: 2px dashed var(--color-border); }
-        .correct-answers-section.active { display: block; }
-        .answer-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-top: 16px; }
-        .answer-input-card {
-            display: flex; align-items: center; gap: 12px;
-            padding: 14px 16px; background: #f7fafc; border: 2px solid var(--color-border);
-            border-radius: 10px; transition: var(--transition);
-        }
-        .answer-input-card:hover { border-color: var(--color-teacher-secondary); }
-        .answer-q-number { font-size: 13px; font-weight: 700; color: var(--color-teacher-secondary); white-space: nowrap; }
-        .answer-select {
-            flex: 1; padding: 8px 12px; border: 2px solid var(--color-border);
-            border-radius: 8px; font-size: 13px; background: white; cursor: pointer;
-            font-family: var(--font-family);
-        }
-        .answer-select:focus { outline: none; border-color: var(--color-teacher-secondary); }
-        .answer-select.answered { border-color: var(--color-success); background: #f0fff4; }
-
-        /* ── MANUAL ADD ── */
-        .manual-section { border-top: 2px dashed var(--color-border); margin-top: 24px; padding-top: 24px; }
-        .btn-add-manual {
-            display: flex; align-items: center; gap: 8px;
-            padding: 10px 20px; background: white;
-            border: 2px solid var(--color-teacher-primary); color: var(--color-teacher-primary);
-            border-radius: var(--border-radius); font-weight: 600; font-size: 14px;
-            cursor: pointer; transition: var(--transition);
-        }
-        .btn-add-manual:hover { background: var(--color-teacher-primary); color: white; }
-
-        /* ── MODAL ── */
-        .modal-overlay {
+        /* ── LOADING ── */
+        .loading-overlay {
             display: none; position: fixed; inset: 0;
-            background: rgba(0,0,0,0.5); z-index: 2000;
+            background: rgba(255,255,255,0.92); z-index: 3000;
             align-items: center; justify-content: center;
         }
-        .modal-overlay.active { display: flex; }
-        .modal {
-            background: white; border-radius: var(--border-radius-lg);
-            padding: 30px; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        .loading-overlay.active { display: flex; }
+        .spinner {
+            width: 46px; height: 46px;
+            border: 5px solid var(--color-border);
+            border-top-color: var(--color-teacher-secondary);
+            border-radius: 50%; animation: spin 0.8s linear infinite;
+            margin: 0 auto 14px;
         }
-        .modal-title { font-size: 20px; font-weight: 700; margin-bottom: 20px; color: var(--color-text); }
-        .modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; }
-        .btn-modal-cancel {
-            padding: 10px 20px; background: white; color: var(--color-text-light);
-            border: 2px solid var(--color-border); border-radius: var(--border-radius);
-            font-weight: 600; cursor: pointer; transition: var(--transition);
-        }
-        .btn-modal-cancel:hover { border-color: var(--color-error); color: var(--color-error); }
-        .btn-modal-save {
-            padding: 10px 24px;
-            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
-            color: white; border: none; border-radius: var(--border-radius);
-            font-weight: 700; cursor: pointer; transition: var(--transition);
-        }
-        .btn-modal-save:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(173,73,225,0.4); }
-        .modal-option-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
-        .option-prefix { width: 28px; font-weight: 700; color: var(--color-teacher-secondary); flex-shrink: 0; text-align: center; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text { font-size: 15px; font-weight: 600; color: var(--color-text); text-align: center; }
 
-        /* ── SETTINGS TOGGLES ── */
-        .toggle-row {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 12px 0; border-bottom: 1px solid var(--color-border);
+        /* ── INLINE EDIT FORM (in q-card) ── */
+        .q-edit-form { display: none; padding: 16px 18px; border-top: 1px solid var(--color-border); }
+        .q-edit-form.active { display: block; }
+        .q-edit-row { display: flex; gap: 10px; }
+        .q-edit-row .add-form-group { flex: 1; }
+        .btn-save-q {
+            background: linear-gradient(135deg, #48bb78, #38a169); color: white;
+            border: none; border-radius: 7px; padding: 8px 16px;
+            font-size: 12px; font-weight: 600; cursor: pointer; transition: var(--transition);
         }
-        .toggle-row:last-child { border-bottom: none; }
-        .toggle-label { font-size: 14px; font-weight: 600; color: var(--color-text); }
-        .toggle-desc  { font-size: 12px; color: var(--color-text-light); margin-top: 2px; }
-        .toggle-switch { position: relative; display: inline-block; width: 46px; height: 26px; }
-        .toggle-switch input { opacity: 0; width: 0; height: 0; }
-        .toggle-slider {
-            position: absolute; cursor: pointer; inset: 0;
-            background: #cbd5e0; border-radius: 26px; transition: var(--transition);
+        .btn-save-q:hover { transform: translateY(-1px); }
+        .btn-cancel-q {
+            background: white; color: var(--color-text-light);
+            border: 2px solid var(--color-border); border-radius: 7px;
+            padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
+            transition: var(--transition);
         }
-        .toggle-slider:before {
-            position: absolute; content: ''; height: 20px; width: 20px;
-            left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: var(--transition);
-        }
-        .toggle-switch input:checked + .toggle-slider { background: var(--color-teacher-secondary); }
-        .toggle-switch input:checked + .toggle-slider:before { transform: translateX(20px); }
-
-        /* ── ACTION BAR ── */
-        .action-section {
-            background: white; border-radius: var(--border-radius-lg);
-            padding: 24px 30px; margin-bottom: 20px; box-shadow: var(--shadow-md);
-            display: flex; align-items: center; justify-content: space-between;
-        }
-        .action-info { font-size: 14px; color: var(--color-text-light); }
-        .action-buttons { display: flex; gap: 12px; }
-        .btn-save-draft {
-            padding: 12px 30px; background: white; color: var(--color-text);
-            border: 2px solid var(--color-border); border-radius: var(--border-radius);
-            font-weight: 600; font-size: 14px; cursor: pointer; transition: var(--transition);
-        }
-        .btn-save-draft:hover { border-color: var(--color-teacher-secondary); color: var(--color-teacher-secondary); }
-        .btn-save-draft:disabled, .btn-publish:disabled { opacity: 0.6; cursor: not-allowed; transform: none !important; }
-        .btn-publish {
-            padding: 12px 30px;
-            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
-            color: white; border: none; border-radius: var(--border-radius);
-            font-weight: 700; font-size: 14px; cursor: pointer; transition: var(--transition);
-        }
-        .btn-publish:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(173,73,225,0.4); }
+        .btn-cancel-q:hover { border-color: var(--color-error); color: var(--color-error); }
 
         /* ── RESPONSIVE ── */
         @media (max-width: 768px) {
-            .navbar    { padding: 15px; }
-            .container { padding: 15px; }
-            .form-section { padding: 20px; }
-            .form-grid    { grid-template-columns: 1fr; }
-            .options-list { grid-template-columns: 1fr; }
-            .action-section { flex-direction: column; gap: 16px; }
-            .action-buttons { width: 100%; flex-direction: column; }
+            .container { padding: 16px; }
+            .steps-bar { display: none; }
+            .form-grid { grid-template-columns: 1fr; }
+            .opts-grid  { grid-template-columns: 1fr; }
+            .action-bar { flex-direction: column; }
+            .action-bar-btns { width: 100%; flex-direction: column; }
             .btn-save-draft, .btn-publish { width: 100%; }
-            .answer-grid { grid-template-columns: 1fr; }
-            .toast { right: 15px; left: 15px; bottom: 15px; }
         }
     </style>
 </head>
 <body>
 
-<!-- NAVIGATION -->
 <nav class="navbar">
     <a href="teacher-dashboard.php" class="navbar-brand">
-        <div class="brand-logo">P</div>
+        <div class="brand-logo">PT</div>
         <span>Placement Portal</span>
     </a>
-    <div>
-        <a href="teacher-dashboard.php" class="btn-back">← Back to Dashboard</a>
+    <div class="nav-right">
+        <a href="teacher-dashboard.php" class="btn-back">← Dashboard</a>
     </div>
 </nav>
 
-<!-- MAIN CONTENT -->
 <div class="container">
 
-    <!-- Page Header -->
+    <!-- Page header -->
     <div class="page-header">
-        <h1 class="page-title">Create New Assessment</h1>
-        <p class="page-description">Upload a PDF or Word document to automatically extract questions, or add them manually.</p>
+        <h1 class="page-title"><?= $editMode ? 'Continue Editing Draft' : 'Create New Assessment' ?></h1>
+        <p class="page-subtitle">
+            <?= $editMode
+                ? 'Pick up where you left off — all your saved data is loaded below.'
+                : 'Fill in the details, add questions, then publish or save as draft.' ?>
+        </p>
+        <?php if ($editMode): ?>
+            <div class="draft-badge">📝 Draft #<?= $assessmentId ?> · <?= count($questions) ?> question<?= count($questions) !== 1 ? 's' : '' ?> saved</div>
+        <?php endif; ?>
     </div>
 
-    <!-- Basic Information -->
-    <div class="form-section">
-        <h2 class="section-title"><div class="section-icon">📝</div> Basic Information</h2>
+    <!-- Step tabs -->
+    <div class="steps-bar">
+        <div class="step active" id="tab1" onclick="switchTab(1)"><span class="step-num">1</span>Basic Info</div>
+        <div class="step"        id="tab2" onclick="switchTab(2)"><span class="step-num">2</span>Settings</div>
+        <div class="step"        id="tab3" onclick="switchTab(3)"><span class="step-num">3</span>Questions</div>
+        <div class="step"        id="tab4" onclick="switchTab(4)"><span class="step-num">4</span>Upload Doc</div>
+    </div>
+
+    <!-- ── PANEL 1: Basic Info ── -->
+    <div class="panel active" id="panel1">
+        <h2 class="panel-title"><div class="panel-icon">📝</div> Basic Information</h2>
 
         <div class="form-group">
-            <label class="form-label">Assessment Title <span class="required">*</span></label>
-            <input type="text" class="form-input" id="assessmentTitle" placeholder="e.g., Quantitative Aptitude - Set 1" required>
+            <label class="form-label">Title <span class="req">*</span></label>
+            <input type="text" class="form-input" id="title"
+                   placeholder="e.g. Quantitative Aptitude - Set 1"
+                   maxlength="200"
+                   value="<?= val($assessment, 'title') ?>">
         </div>
 
         <div class="form-group">
             <label class="form-label">Description</label>
-            <textarea class="form-input form-textarea" id="assessmentDescription" placeholder="Brief description of this assessment..."></textarea>
+            <textarea class="form-input form-textarea" id="description"
+                      placeholder="Brief overview of this assessment..."><?= val($assessment, 'description') ?></textarea>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Instructions</label>
+            <textarea class="form-input form-textarea" id="instructions"
+                      placeholder="Instructions shown to students before they start..."><?= val($assessment, 'instructions') ?></textarea>
         </div>
 
         <div class="form-grid">
             <div class="form-group">
-                <label class="form-label">Category <span class="required">*</span></label>
-                <select class="form-select" id="assessmentCategory" required>
-                    <option value="">Select Category</option>
-                    <option value="aptitude">Aptitude</option>
-                    <option value="technical">Technical</option>
-                    <option value="coding">Coding</option>
-                    <option value="reasoning">Reasoning</option>
-                    <option value="english">English</option>
+                <label class="form-label">Category <span class="req">*</span></label>
+                <select class="form-select" id="category">
+                    <option value="">Select category</option>
+                    <option value="aptitude"  <?= sel($assessment, 'category', 'aptitude')  ?>>Aptitude</option>
+                    <option value="technical" <?= sel($assessment, 'category', 'technical') ?>>Technical</option>
+                    <option value="coding"    <?= sel($assessment, 'category', 'coding')    ?>>Coding</option>
+                    <option value="reasoning" <?= sel($assessment, 'category', 'reasoning') ?>>Reasoning</option>
+                    <option value="english"   <?= sel($assessment, 'category', 'english')   ?>>English</option>
+                    <option value="general"   <?= sel($assessment, 'category', 'general')   ?>>General</option>
                 </select>
             </div>
 
             <div class="form-group">
-                <label class="form-label">Difficulty Level <span class="required">*</span></label>
-                <select class="form-select" id="difficultyLevel" required>
-                    <option value="">Select Difficulty</option>
-                    <option value="easy">Easy</option>
-                    <option value="medium">Medium</option>
-                    <option value="hard">Hard</option>
+                <label class="form-label">Difficulty <span class="req">*</span></label>
+                <select class="form-select" id="difficulty">
+                    <option value="">Select difficulty</option>
+                    <option value="easy"   <?= sel($assessment, 'difficulty', 'easy',   'medium') ?>>Easy</option>
+                    <option value="medium" <?= sel($assessment, 'difficulty', 'medium', 'medium') ?>>Medium</option>
+                    <option value="hard"   <?= sel($assessment, 'difficulty', 'hard',   'medium') ?>>Hard</option>
                 </select>
             </div>
 
             <div class="form-group">
-                <label class="form-label">Duration (minutes) <span class="required">*</span></label>
-                <input type="number" class="form-input" id="duration" min="1" max="180" placeholder="45" required>
+                <label class="form-label">Duration (minutes) <span class="req">*</span></label>
+                <input type="number" class="form-input" id="duration"
+                       min="1" max="480" placeholder="e.g. 60"
+                       value="<?= val($assessment, 'duration_minutes') ?>">
             </div>
 
             <div class="form-group">
-                <label class="form-label">Total Marks <span class="required">*</span></label>
-                <input type="number" class="form-input" id="totalMarks" min="1" placeholder="100" required>
+                <label class="form-label">Total Marks <span class="req">*</span></label>
+                <input type="number" class="form-input" id="totalMarks"
+                       min="1" placeholder="e.g. 100"
+                       value="<?= val($assessment, 'total_marks') ?>">
             </div>
 
             <div class="form-group">
-                <label class="form-label">Passing Marks <span class="required">*</span></label>
-                <input type="number" class="form-input" id="passingMarks" min="1" placeholder="40" required>
+                <label class="form-label">Passing Marks <span class="req">*</span></label>
+                <input type="number" class="form-input" id="passingMarks"
+                       min="0" placeholder="e.g. 40"
+                       value="<?= val($assessment, 'passing_marks') ?>">
             </div>
 
             <div class="form-group">
                 <label class="form-label">Max Attempts</label>
-                <input type="number" class="form-input" id="maxAttempts" min="1" value="1" placeholder="1">
+                <input type="number" class="form-input" id="maxAttempts"
+                       min="1" value="<?= val($assessment, 'max_attempts', '1') ?>">
+            </div>
+        </div>
+
+        <div class="action-bar" style="margin-top:10px;">
+            <div class="action-bar-info">Step 1 of 4</div>
+            <div class="action-bar-btns">
+                <button class="btn-save-draft" onclick="saveDraft()">💾 Save Draft</button>
+                <button class="btn-publish" onclick="switchTab(2)">Next: Settings →</button>
             </div>
         </div>
     </div>
 
-    <!-- Assessment Settings -->
-    <div class="form-section">
-        <h2 class="section-title"><div class="section-icon">⚙️</div> Assessment Settings</h2>
+    <!-- ── PANEL 2: Settings ── -->
+    <div class="panel" id="panel2">
+        <h2 class="panel-title"><div class="panel-icon">⚙️</div> Settings</h2>
 
-        <div class="toggle-row">
-            <div>
-                <div class="toggle-label">Show Results Immediately</div>
-                <div class="toggle-desc">Students see their score right after submission</div>
-            </div>
-            <label class="toggle-switch">
-                <input type="checkbox" id="showResultsImmediately" checked>
-                <span class="toggle-slider"></span>
-            </label>
-        </div>
-
-        <div class="toggle-row">
-            <div>
-                <div class="toggle-label">Show Correct Answers</div>
-                <div class="toggle-desc">Reveal correct answers after submission</div>
-            </div>
-            <label class="toggle-switch">
-                <input type="checkbox" id="showCorrectAnswers" checked>
-                <span class="toggle-slider"></span>
-            </label>
-        </div>
-
-        <div class="toggle-row">
-            <div>
-                <div class="toggle-label">Randomize Questions</div>
-                <div class="toggle-desc">Shuffle question order for each attempt</div>
-            </div>
-            <label class="toggle-switch">
-                <input type="checkbox" id="randomizeQuestions">
-                <span class="toggle-slider"></span>
-            </label>
-        </div>
-
-        <div class="toggle-row">
-            <div>
-                <div class="toggle-label">Randomize Options</div>
-                <div class="toggle-desc">Shuffle answer options for each question</div>
-            </div>
-            <label class="toggle-switch">
-                <input type="checkbox" id="randomizeOptions">
-                <span class="toggle-slider"></span>
-            </label>
-        </div>
-
-        <div class="form-grid" style="margin-top:20px;">
+        <div class="form-grid">
             <div class="form-group">
                 <label class="form-label">Available From</label>
-                <input type="datetime-local" class="form-input" id="availableFrom">
+                <input type="datetime-local" class="form-input" id="availableFrom"
+                       value="<?= toDatetimeLocal($assessment['available_from'] ?? null) ?>">
             </div>
             <div class="form-group">
                 <label class="form-label">Available Until</label>
-                <input type="datetime-local" class="form-input" id="availableUntil">
+                <input type="datetime-local" class="form-input" id="availableUntil"
+                       value="<?= toDatetimeLocal($assessment['available_until'] ?? null) ?>">
             </div>
         </div>
 
         <div class="form-group">
-            <label class="form-label">Instructions for Students</label>
-            <textarea class="form-input form-textarea" id="instructions" placeholder="Any special instructions before students begin..."></textarea>
+            <label class="form-label">Options</label>
+            <div class="checkbox-grid">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="showResults" <?= checked($assessment, 'show_results_immediately', true) ?>>
+                    Show results immediately
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="showAnswers" <?= checked($assessment, 'show_correct_answers', true) ?>>
+                    Show correct answers
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="randQ" <?= checked($assessment, 'randomize_questions') ?>>
+                    Randomize questions
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="randO" <?= checked($assessment, 'randomize_options') ?>>
+                    Randomize options
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="isPublic" <?= checked($assessment, 'is_public') ?>>
+                    Public (allow guest access)
+                </label>
+            </div>
+        </div>
+
+        <div class="action-bar" style="margin-top:10px;">
+            <div class="action-bar-info">Step 2 of 4</div>
+            <div class="action-bar-btns">
+                <button class="btn-save-draft" onclick="saveDraft()">💾 Save Draft</button>
+                <button class="btn-save-draft" onclick="switchTab(1)">← Back</button>
+                <button class="btn-publish"    onclick="switchTab(3)">Next: Questions →</button>
+            </div>
         </div>
     </div>
 
-    <!-- Upload Document -->
-    <div class="form-section">
-        <h2 class="section-title"><div class="section-icon">📄</div> Upload Questions Document</h2>
+    <!-- ── PANEL 3: Questions ── -->
+    <div class="panel" id="panel3">
+        <h2 class="panel-title"><div class="panel-icon">❓</div> Questions</h2>
 
-        <div class="upload-area" id="uploadArea">
+        <!-- Saved questions list -->
+        <div class="q-header">
+            <span class="q-count" id="qCount">
+                <?= count($questions) ?> question<?= count($questions) !== 1 ? 's' : '' ?> saved
+            </span>
+        </div>
+
+        <div class="q-list" id="qList">
+            <?php if (empty($questions)): ?>
+                <div class="no-questions" id="noQMsg">
+                    <div class="no-q-icon">❓</div>
+                    <div>No questions yet. Add one below or upload a document.</div>
+                </div>
+            <?php else: ?>
+                <?php foreach ($questions as $i => $q):
+                    $qid   = (int)$q['question_id'];
+                    $qtype = $q['question_type'];
+                    $isMCQ = in_array($qtype, ['mcq','true_false','multiple_select']);
+                ?>
+                <div class="q-card" data-qid="<?= $qid ?>">
+                    <div class="q-card-header">
+                        <div class="q-num-row">
+                            <span class="q-num">Q<?= $i + 1 ?></span>
+                            <span class="q-type-badge"><?= htmlspecialchars(str_replace('_',' ', $qtype)) ?></span>
+                            <span class="q-marks-badge"><?= (int)$q['marks'] ?>m</span>
+                        </div>
+                        <div class="q-card-actions">
+                            <button class="btn-sm btn-edit-q" onclick="toggleEditCard(<?= $qid ?>)">✏️ Edit</button>
+                            <button class="btn-sm btn-delete-q" onclick="deleteExistingQ(<?= $qid ?>)">🗑️</button>
+                        </div>
+                    </div>
+                    <div class="q-card-body">
+                        <div class="q-text"><?= htmlspecialchars($q['question_text']) ?></div>
+                        <?php if ($isMCQ): ?>
+                            <div class="q-options">
+                                <?php foreach (['A'=>$q['option_a'],'B'=>$q['option_b'],'C'=>$q['option_c'],'D'=>$q['option_d']] as $letter => $opt):
+                                    if ($opt === null) continue;
+                                    $correct = in_array($letter, array_map('trim', explode(',', strtoupper($q['correct_answer']))));
+                                ?>
+                                <div class="q-option <?= $correct ? 'correct' : '' ?>">
+                                    <span class="q-opt-label"><?= $letter ?>)</span>
+                                    <span><?= htmlspecialchars($opt) ?></span>
+                                    <?php if ($correct): ?><span class="q-correct-badge">✓</span><?php endif; ?>
+                                </div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php else: ?>
+                            <div class="q-ans-label">Expected Answer:</div>
+                            <div class="q-short-ans"><?= htmlspecialchars($q['correct_answer']) ?></div>
+                        <?php endif; ?>
+                    </div>
+                    <!-- Inline edit form for saved questions -->
+                    <div class="q-edit-form" id="editForm<?= $qid ?>">
+                        <div class="add-form-group">
+                            <label class="add-form-label">Question Text</label>
+                            <textarea class="add-form-input" id="eqt<?= $qid ?>" rows="2"><?= htmlspecialchars($q['question_text']) ?></textarea>
+                        </div>
+                        <?php if ($isMCQ && $qtype !== 'true_false'): ?>
+                        <div class="opts-grid">
+                            <?php foreach (['a'=>$q['option_a'],'b'=>$q['option_b'],'c'=>$q['option_c'],'d'=>$q['option_d']] as $l => $o): ?>
+                            <div class="add-form-group">
+                                <label class="add-form-label">Option <?= strtoupper($l) ?></label>
+                                <input type="text" class="add-form-input" id="eo<?= $l . $qid ?>" value="<?= htmlspecialchars($o ?? '') ?>">
+                            </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <?php endif; ?>
+                        <div class="add-form-row">
+                            <div class="add-form-group">
+                                <label class="add-form-label">Correct Answer</label>
+                                <?php if ($qtype === 'multiple_select'): ?>
+                                    <input type="text" class="add-form-input" id="eca<?= $qid ?>"
+                                           value="<?= htmlspecialchars(strtoupper($q['correct_answer'])) ?>" placeholder="e.g. A,C">
+                                <?php elseif ($qtype === 'true_false'): ?>
+                                    <select class="ca-select" id="eca<?= $qid ?>">
+                                        <option value="A" <?= strtoupper($q['correct_answer']) === 'A' ? 'selected' : '' ?>>A — True</option>
+                                        <option value="B" <?= strtoupper($q['correct_answer']) === 'B' ? 'selected' : '' ?>>B — False</option>
+                                    </select>
+                                <?php elseif ($qtype === 'mcq'): ?>
+                                    <select class="ca-select" id="eca<?= $qid ?>">
+                                        <?php foreach (['A','B','C','D'] as $l): ?>
+                                            <option value="<?= $l ?>" <?= strtoupper($q['correct_answer']) === $l ? 'selected' : '' ?>><?= $l ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                <?php else: ?>
+                                    <textarea class="add-form-input" id="eca<?= $qid ?>" rows="2"><?= htmlspecialchars($q['correct_answer']) ?></textarea>
+                                <?php endif; ?>
+                            </div>
+                            <div class="add-form-group">
+                                <label class="add-form-label">Marks</label>
+                                <input type="number" class="add-form-input" id="emk<?= $qid ?>" min="1" value="<?= (int)$q['marks'] ?>">
+                            </div>
+                        </div>
+                        <div class="add-form-group">
+                            <label class="add-form-label">Explanation (optional)</label>
+                            <textarea class="add-form-input" id="eex<?= $qid ?>" rows="2"><?= htmlspecialchars($q['explanation'] ?? '') ?></textarea>
+                        </div>
+                        <div style="display:flex;gap:8px;margin-top:10px;">
+                            <button class="btn-save-q"   onclick="saveExistingQ(<?= $qid ?>, '<?= $qtype ?>')">💾 Save</button>
+                            <button class="btn-cancel-q" onclick="toggleEditCard(<?= $qid ?>)">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+
+        <!-- Add new question form -->
+        <div class="add-q-section" style="margin-top:20px;">
+            <div class="add-q-header">
+                <h3 style="font-size:16px;font-weight:700;color:var(--color-text);">Add a Question</h3>
+            </div>
+
+            <div class="type-tabs">
+                <button class="type-tab active" data-type="mcq"            onclick="switchQType('mcq',this)">MCQ</button>
+                <button class="type-tab"        data-type="true_false"     onclick="switchQType('true_false',this)">True/False</button>
+                <button class="type-tab"        data-type="short_answer"   onclick="switchQType('short_answer',this)">Short Answer</button>
+                <button class="type-tab"        data-type="fill_blank"     onclick="switchQType('fill_blank',this)">Fill Blank</button>
+                <button class="type-tab"        data-type="multiple_select" onclick="switchQType('multiple_select',this)">Multi-Select</button>
+            </div>
+            <input type="hidden" id="newQType" value="mcq">
+
+            <div class="add-form-group">
+                <label class="add-form-label">Question Text <span style="color:var(--color-error)">*</span></label>
+                <textarea class="add-form-input" id="newQt" rows="3" placeholder="Enter question text..."></textarea>
+            </div>
+
+            <!-- MCQ / Multiple Select options -->
+            <div class="fields-mcq show" id="fMcq">
+                <div class="opts-grid">
+                    <div class="add-form-group">
+                        <label class="add-form-label">Option A <span style="color:var(--color-error)">*</span></label>
+                        <input type="text" class="add-form-input" id="newOa" placeholder="Option A">
+                    </div>
+                    <div class="add-form-group">
+                        <label class="add-form-label">Option B <span style="color:var(--color-error)">*</span></label>
+                        <input type="text" class="add-form-input" id="newOb" placeholder="Option B">
+                    </div>
+                    <div class="add-form-group">
+                        <label class="add-form-label">Option C</label>
+                        <input type="text" class="add-form-input" id="newOc" placeholder="Option C">
+                    </div>
+                    <div class="add-form-group">
+                        <label class="add-form-label">Option D</label>
+                        <input type="text" class="add-form-input" id="newOd" placeholder="Option D">
+                    </div>
+                </div>
+                <div class="add-form-group" id="mcqCaWrap">
+                    <label class="add-form-label">Correct Answer <span style="color:var(--color-error)">*</span></label>
+                    <select class="ca-select" id="newCaMcq">
+                        <option value="">Select</option>
+                        <option value="A">A</option><option value="B">B</option>
+                        <option value="C">C</option><option value="D">D</option>
+                    </select>
+                </div>
+                <div class="add-form-group" id="msCaWrap" style="display:none;">
+                    <label class="add-form-label">Correct Answers (comma-separated) <span style="color:var(--color-error)">*</span></label>
+                    <input type="text" class="add-form-input" id="newCaMs" placeholder="e.g. A,C">
+                </div>
+            </div>
+
+            <!-- True/False -->
+            <div class="fields-tf" id="fTf">
+                <div class="add-form-group">
+                    <label class="add-form-label">Correct Answer <span style="color:var(--color-error)">*</span></label>
+                    <select class="ca-select" id="newCaTf">
+                        <option value="A">True</option>
+                        <option value="B">False</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Short / Fill -->
+            <div class="fields-short" id="fShort">
+                <div class="add-form-group">
+                    <label class="add-form-label">Expected Answer <span style="color:var(--color-error)">*</span></label>
+                    <textarea class="add-form-input" id="newCaShort" rows="2" placeholder="Expected answer..."></textarea>
+                </div>
+            </div>
+
+            <!-- Common -->
+            <div class="add-form-row">
+                <div class="add-form-group">
+                    <label class="add-form-label">Marks</label>
+                    <input type="number" class="add-form-input" id="newMarks" min="1" value="1">
+                </div>
+                <div class="add-form-group">
+                    <label class="add-form-label">Negative Marks</label>
+                    <input type="number" class="add-form-input" id="newNegMarks" min="0" step="0.25" value="0">
+                </div>
+                <div class="add-form-group">
+                    <label class="add-form-label">Topic</label>
+                    <input type="text" class="add-form-input" id="newTopic" placeholder="Optional">
+                </div>
+            </div>
+            <div class="add-form-group">
+                <label class="add-form-label">Explanation (optional)</label>
+                <textarea class="add-form-input" id="newExpl" rows="2" placeholder="Shown to students after submission..."></textarea>
+            </div>
+
+            <button class="btn-add-q" id="addQBtn" onclick="addQuestion()">➕ Add Question</button>
+        </div>
+
+        <div class="action-bar" style="margin-top:10px;">
+            <div class="action-bar-info">Step 3 of 4</div>
+            <div class="action-bar-btns">
+                <button class="btn-save-draft" onclick="saveDraft()">💾 Save Draft</button>
+                <button class="btn-save-draft" onclick="switchTab(2)">← Back</button>
+                <button class="btn-publish"    onclick="switchTab(4)">Next: Upload Doc →</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── PANEL 4: Upload Document ── -->
+    <div class="panel" id="panel4">
+        <h2 class="panel-title"><div class="panel-icon">📄</div> Import Questions from Document</h2>
+        <p style="font-size:13px;color:var(--color-text-light);margin-bottom:20px;">
+            Upload a PDF or DOCX with numbered MCQ questions. Questions are parsed and added automatically.
+            Format: <code>1. Question text</code> followed by <code>a) Option</code> lines.
+        </p>
+
+        <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()"
+             ondragover="event.preventDefault();this.classList.add('drag')"
+             ondragleave="this.classList.remove('drag')"
+             ondrop="handleDrop(event)">
             <div class="upload-icon">📤</div>
-            <div class="upload-text">Drag and drop your document here</div>
-            <div class="upload-hint">or click to browse (Max 10MB)</div>
-            <button class="upload-button" onclick="document.getElementById('fileInput').click()">Choose File</button>
-            <div class="upload-file-types">Supported formats: <span>PDF</span> <span>DOCX</span></div>
-            <input type="file" id="fileInput"
-                   accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                   onchange="handleFileSelect(event)">
+            <div class="upload-title">Click to upload or drag & drop</div>
+            <div class="upload-sub">PDF or DOCX · Max 10 MB</div>
         </div>
+        <input type="file" id="fileInput" class="upload-input" accept=".pdf,.docx" onchange="handleFile(this.files[0])">
 
-        <!-- Uploaded File Display -->
-        <div class="uploaded-file" id="uploadedFileDisplay">
-            <div class="file-info">
-                <div class="file-icon" id="fileTypeIcon">📄</div>
-                <div class="file-details">
-                    <div class="file-name" id="fileName"></div>
-                    <div class="file-size" id="fileSize"></div>
-                </div>
+        <div class="upload-result" id="uploadResult">
+            <div class="upload-result-info">
+                <span class="upload-result-name" id="uploadFileName"></span>
+                <span class="upload-result-count" id="uploadQCount"></span>
             </div>
-            <button class="remove-file" onclick="removeFile()">Remove</button>
+            <button class="btn-import" id="importBtn" onclick="importParsedQuestions()">⬇️ Import Questions</button>
         </div>
 
-        <!-- Parsing Status -->
-        <div class="parsing-status" id="parsingStatus">
-            <div style="display:flex;align-items:center;gap:10px;justify-content:center;">
-                <span class="spinner"></span>
-                <span style="font-size:16px;font-weight:600;color:#2d3748;">Processing document...</span>
+        <div class="action-bar" style="margin-top:20px;">
+            <div class="action-bar-info">Step 4 of 4</div>
+            <div class="action-bar-btns">
+                <button class="btn-save-draft" onclick="saveDraft()">💾 Save Draft</button>
+                <button class="btn-save-draft" onclick="switchTab(3)">← Back</button>
+                <button class="btn-publish" id="publishBtn" onclick="publish()">🚀 Publish Assessment</button>
             </div>
-            <div class="parsing-steps">
-                <div class="parsing-step" id="step1"><div class="step-icon">⬜</div> Uploading file to server</div>
-                <div class="parsing-step" id="step2"><div class="step-icon">⬜</div> Extracting text</div>
-                <div class="parsing-step" id="step3"><div class="step-icon">⬜</div> Parsing questions</div>
-                <div class="parsing-step" id="step4"><div class="step-icon">⬜</div> Preparing preview</div>
-            </div>
-        </div>
-
-        <!-- Error Banner -->
-        <div class="error-banner" id="errorBanner">
-            <span>⚠️</span>
-            <div>
-                <div id="errorMessage">Could not extract questions from the document.</div>
-                <div class="error-banner-detail" id="errorDetail"></div>
-            </div>
-        </div>
-
-        <!-- Questions Preview -->
-        <div class="questions-preview" id="questionsPreview">
-            <div class="preview-header">
-                <div>
-                    <div class="preview-title">✓ Questions Extracted Successfully!</div>
-                    <div class="preview-subtitle" id="questionCount"></div>
-                </div>
-                <button class="btn-reparse" onclick="removeFile()">Upload Different File</button>
-            </div>
-            <div id="questionsList"></div>
-        </div>
-
-        <!-- Correct Answers Section -->
-        <div class="correct-answers-section" id="correctAnswersSection">
-            <h3 class="section-title">
-                <div class="section-icon">✅</div>
-                Specify Correct Answers
-            </h3>
-            <p style="font-size:14px;color:var(--color-text-light);margin-bottom:16px;">
-                Select the correct answer for each question. Questions with pre-detected answers are pre-filled.
-            </p>
-            <div class="answer-grid" id="correctAnswersList"></div>
-        </div>
-
-        <!-- Manual Add -->
-        <div class="manual-section">
-            <button class="btn-add-manual" onclick="openAddQuestionModal()">
-                <span style="font-size:18px;">+</span> Add Question Manually
-            </button>
-        </div>
-    </div>
-
-    <!-- Action Bar -->
-    <div class="action-section">
-        <div class="action-info">
-            <strong>Note:</strong> Save a draft anytime and publish when you're ready.
-        </div>
-        <div class="action-buttons">
-            <button class="btn-save-draft" id="btnDraft"   onclick="submitAssessment('save_draft')">Save as Draft</button>
-            <button class="btn-publish"    id="btnPublish" onclick="submitAssessment('publish')">Publish Assessment</button>
         </div>
     </div>
 
 </div><!-- /container -->
 
-<!-- Edit / Add Question Modal -->
-<div class="modal-overlay" id="editModal">
-    <div class="modal">
-        <div class="modal-title" id="modalTitle">Edit Question</div>
-
-        <div class="form-group">
-            <label class="form-label">Question Text <span class="required">*</span></label>
-            <textarea class="form-input form-textarea" id="modalQuestionText"
-                      placeholder="Enter your question..." style="min-height:80px;"></textarea>
-        </div>
-
-        <div class="form-group">
-            <label class="form-label">Answer Options <span class="required">*</span></label>
-            <div class="modal-option-row"><span class="option-prefix">A</span><input type="text" class="form-input" id="modalOptionA" placeholder="Option A"></div>
-            <div class="modal-option-row"><span class="option-prefix">B</span><input type="text" class="form-input" id="modalOptionB" placeholder="Option B"></div>
-            <div class="modal-option-row"><span class="option-prefix">C</span><input type="text" class="form-input" id="modalOptionC" placeholder="Option C"></div>
-            <div class="modal-option-row"><span class="option-prefix">D</span><input type="text" class="form-input" id="modalOptionD" placeholder="Option D"></div>
-        </div>
-
-        <div class="form-group">
-            <label class="form-label">Correct Answer</label>
-            <select class="form-select" id="modalCorrectAnswer">
-                <option value="">Select correct answer</option>
-                <option value="a">A</option>
-                <option value="b">B</option>
-                <option value="c">C</option>
-                <option value="d">D</option>
-            </select>
-        </div>
-
-        <div class="form-group">
-            <label class="form-label">Marks for this question</label>
-            <input type="number" class="form-input" id="modalMarks" value="1" min="1">
-        </div>
-
-        <div class="modal-actions">
-            <button class="btn-modal-cancel" onclick="closeModal()">Cancel</button>
-            <button class="btn-modal-save"   onclick="saveModalQuestion()">Save Question</button>
-        </div>
+<!-- Loading -->
+<div class="loading-overlay" id="loading">
+    <div>
+        <div class="spinner"></div>
+        <div class="loading-text" id="loadingText">Please wait…</div>
     </div>
 </div>
 
-<!-- Toast notification -->
+<!-- Toast -->
 <div class="toast" id="toast"></div>
 
 <script>
-    // ── Global state ──
-    let assessmentData = {
-        title: '', description: '', category: '', difficulty: '',
-        duration: 0, totalMarks: 0, passingMarks: 0, maxAttempts: 1,
-        questions: [], correctAnswers: {},
-        settings: { showResultsImmediately: true, showCorrectAnswers: true, randomizeQuestions: false, randomizeOptions: false },
-        availableFrom: null, availableUntil: null, instructions: ''
+// =====================================================================
+// STATE
+// =====================================================================
+let assessmentId  = <?= $assessmentId ?>;   // 0 = brand-new, >0 = editing draft
+let parsedQs      = [];                      // from document upload, waiting to import
+let currentTab    = 1;
+
+// =====================================================================
+// TOAST / LOADING
+// =====================================================================
+function showToast(msg, type = 'success') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className   = 'toast ' + type;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3200);
+}
+function showLoading(msg = 'Please wait…') {
+    document.getElementById('loadingText').textContent = msg;
+    document.getElementById('loading').classList.add('active');
+}
+function hideLoading() {
+    document.getElementById('loading').classList.remove('active');
+}
+
+// =====================================================================
+// TABS
+// =====================================================================
+function switchTab(n) {
+    [1,2,3,4].forEach(i => {
+        document.getElementById('panel' + i).classList.toggle('active', i === n);
+        document.getElementById('tab'   + i).classList.remove('active');
+        if (i < n) document.getElementById('tab' + i).classList.add('done');
+    });
+    document.getElementById('tab' + n).classList.add('active');
+    currentTab = n;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// =====================================================================
+// COLLECT FORM DATA
+// =====================================================================
+function collectBasicData() {
+    return {
+        assessment_id           : assessmentId || undefined,
+        title                   : document.getElementById('title').value.trim(),
+        description             : document.getElementById('description').value.trim(),
+        instructions            : document.getElementById('instructions').value.trim(),
+        category                : document.getElementById('category').value,
+        difficulty              : document.getElementById('difficulty').value,
+        duration_minutes        : parseInt(document.getElementById('duration').value, 10) || 0,
+        total_marks             : parseInt(document.getElementById('totalMarks').value, 10) || 0,
+        passing_marks           : parseInt(document.getElementById('passingMarks').value, 10) || 0,
+        max_attempts            : parseInt(document.getElementById('maxAttempts').value, 10) || 1,
+        available_from          : document.getElementById('availableFrom').value || null,
+        available_until         : document.getElementById('availableUntil').value || null,
+        show_results_immediately: document.getElementById('showResults').checked ? 1 : 0,
+        show_correct_answers    : document.getElementById('showAnswers').checked ? 1 : 0,
+        randomize_questions     : document.getElementById('randQ').checked ? 1 : 0,
+        randomize_options       : document.getElementById('randO').checked ? 1 : 0,
+        is_public               : document.getElementById('isPublic').checked ? 1 : 0,
+        status                  : 'draft',
+    };
+}
+
+function validateBasic(data) {
+    if (!data.title)           { showToast('Title is required.', 'error'); switchTab(1); return false; }
+    if (!data.category)        { showToast('Category is required.', 'error'); switchTab(1); return false; }
+    if (!data.difficulty)      { showToast('Difficulty is required.', 'error'); switchTab(1); return false; }
+    if (data.duration_minutes < 1) { showToast('Duration must be at least 1 minute.', 'error'); switchTab(1); return false; }
+    if (data.total_marks < 1)  { showToast('Total marks must be at least 1.', 'error'); switchTab(1); return false; }
+    if (data.passing_marks < 0 || data.passing_marks > data.total_marks) {
+        showToast('Passing marks must be between 0 and total marks.', 'error'); switchTab(1); return false;
+    }
+    return true;
+}
+
+// =====================================================================
+// SAVE DRAFT  — creates assessment if new, updates if existing
+// =====================================================================
+async function saveDraft() {
+    const data = collectBasicData();
+    if (!validateBasic(data)) return;
+
+    showLoading('Saving draft…');
+
+    try {
+        // If we have an ID already, use update.php, otherwise use create endpoint
+        const url     = assessmentId > 0 ? 'api/assessment/update.php' : 'api/assessment/create.php';
+        const res     = await fetch(url, {
+            method : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body   : JSON.stringify(data),
+        });
+        const result  = await res.json();
+
+        if (result.success) {
+            if (!assessmentId && result.assessment_id) {
+                assessmentId = result.assessment_id;
+                // Update URL without reloading so refresh works correctly
+                history.replaceState(null, '', 'create-assessment.php?edit=' + assessmentId);
+                // Enable the add-question button now that we have an ID
+                document.getElementById('addQBtn').disabled = false;
+            }
+            showToast('✅ Draft saved!');
+        } else {
+            showToast(result.error || 'Save failed.', 'error');
+        }
+    } catch {
+        showToast('Network error. Please try again.', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// =====================================================================
+// PUBLISH
+// =====================================================================
+async function publish() {
+    const data = collectBasicData();
+    if (!validateBasic(data)) return;
+
+    const qCount = document.querySelectorAll('.q-card').length;
+    if (qCount === 0) {
+        showToast('Add at least one question before publishing.', 'error');
+        switchTab(3);
+        return;
+    }
+
+    data.status = 'active';
+
+    showLoading('Publishing…');
+
+    try {
+        const url    = assessmentId > 0 ? 'api/assessment/update.php' : 'api/assessment/create.php';
+        const res    = await fetch(url, {
+            method : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body   : JSON.stringify(data),
+        });
+        const result = await res.json();
+
+        if (result.success) {
+            showToast('🎉 Assessment published!');
+            setTimeout(() => { window.location.href = 'teacher-dashboard.php'; }, 1200);
+        } else {
+            showToast(result.error || 'Publish failed.', 'error');
+        }
+    } catch {
+        showToast('Network error. Please try again.', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// =====================================================================
+// QUESTION TYPE TABS
+// =====================================================================
+function switchQType(type, btn) {
+    document.getElementById('newQType').value = type;
+    document.querySelectorAll('.type-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+
+    document.getElementById('fMcq').classList.remove('show');
+    document.getElementById('fTf').classList.remove('show');
+    document.getElementById('fShort').classList.remove('show');
+    document.getElementById('mcqCaWrap').style.display = 'none';
+    document.getElementById('msCaWrap').style.display  = 'none';
+
+    if (type === 'mcq') {
+        document.getElementById('fMcq').classList.add('show');
+        document.getElementById('mcqCaWrap').style.display = 'block';
+    } else if (type === 'multiple_select') {
+        document.getElementById('fMcq').classList.add('show');
+        document.getElementById('msCaWrap').style.display  = 'block';
+    } else if (type === 'true_false') {
+        document.getElementById('fTf').classList.add('show');
+    } else {
+        document.getElementById('fShort').classList.add('show');
+    }
+}
+
+// =====================================================================
+// ADD QUESTION
+// =====================================================================
+async function addQuestion() {
+    // Must save draft first to get an assessment ID
+    if (!assessmentId) {
+        showToast('Save a draft first to get an assessment ID.', 'error');
+        await saveDraft();
+        if (!assessmentId) return;
+    }
+
+    const type = document.getElementById('newQType').value;
+    const qt   = document.getElementById('newQt').value.trim();
+    if (!qt) { showToast('Question text is required.', 'error'); return; }
+
+    const marks    = parseInt(document.getElementById('newMarks').value, 10) || 1;
+    const negMarks = parseFloat(document.getElementById('newNegMarks').value) || 0;
+
+    let correctAnswer, optA = null, optB = null, optC = null, optD = null;
+
+    if (type === 'mcq') {
+        optA = document.getElementById('newOa').value.trim();
+        optB = document.getElementById('newOb').value.trim();
+        optC = document.getElementById('newOc').value.trim() || null;
+        optD = document.getElementById('newOd').value.trim() || null;
+        correctAnswer = document.getElementById('newCaMcq').value.toUpperCase();
+        if (!optA || !optB) { showToast('Options A and B are required.', 'error'); return; }
+        if (!correctAnswer) { showToast('Select a correct answer.', 'error'); return; }
+    } else if (type === 'multiple_select') {
+        optA = document.getElementById('newOa').value.trim();
+        optB = document.getElementById('newOb').value.trim();
+        optC = document.getElementById('newOc').value.trim() || null;
+        optD = document.getElementById('newOd').value.trim() || null;
+        correctAnswer = document.getElementById('newCaMs').value.trim().toUpperCase();
+        if (!optA || !optB) { showToast('Options A and B are required.', 'error'); return; }
+        if (!correctAnswer) { showToast('Correct answers are required.', 'error'); return; }
+    } else if (type === 'true_false') {
+        optA = 'True'; optB = 'False';
+        correctAnswer = document.getElementById('newCaTf').value;
+    } else {
+        correctAnswer = document.getElementById('newCaShort').value.trim();
+        if (!correctAnswer) { showToast('Expected answer is required.', 'error'); return; }
+    }
+
+    const payload = {
+        assessment_id  : assessmentId,
+        question_type  : type,
+        question_text  : qt,
+        correct_answer : correctAnswer,
+        option_a: optA, option_b: optB, option_c: optC, option_d: optD,
+        marks,
+        negative_marks : negMarks,
+        topic          : document.getElementById('newTopic').value.trim(),
+        explanation    : document.getElementById('newExpl').value.trim(),
     };
 
-    let uploadedFile      = null;
-    let editingQuestionId = null;
+    const btn = document.getElementById('addQBtn');
+    btn.disabled = true;
+    showLoading('Adding question…');
 
-    // ── Toast ──
-    function showToast(message, type = 'info', duration = 4000) {
-        const toast = document.getElementById('toast');
-        toast.textContent = message;
-        toast.className = `toast ${type} show`;
-        setTimeout(() => toast.classList.remove('show'), duration);
-    }
-
-    // ── Drag & drop ──
-    const uploadArea = document.getElementById('uploadArea');
-    ['dragenter','dragover','dragleave','drop'].forEach(ev => {
-        uploadArea.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); });
-        document.body.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); });
-    });
-    ['dragenter','dragover'].forEach(ev => uploadArea.addEventListener(ev, () => uploadArea.classList.add('dragover')));
-    ['dragleave','drop'].forEach(ev =>     uploadArea.addEventListener(ev, () => uploadArea.classList.remove('dragover')));
-    uploadArea.addEventListener('drop', e => {
-        const files = e.dataTransfer.files;
-        if (files.length > 0) handleFile(files[0]);
-    });
-
-    function handleFileSelect(event) {
-        if (event.target.files[0]) handleFile(event.target.files[0]);
-    }
-
-    function handleFile(file) {
-        hideError();
-        const name   = file.name.toLowerCase();
-        const isPDF  = file.type === 'application/pdf' || name.endsWith('.pdf');
-        const isDOCX = file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || name.endsWith('.docx');
-
-        if (name.endsWith('.doc')) {
-            showError('Legacy .doc format not supported.', 'Save the file as .docx or export as PDF and re-upload.');
-            return;
-        }
-        if (!isPDF && !isDOCX) {
-            showError('Unsupported file type.', 'Please upload a PDF (.pdf) or Word document (.docx).');
-            return;
-        }
-        if (file.size > 10 * 1024 * 1024) {
-            showError('File too large.', 'Maximum file size is 10MB.');
-            return;
-        }
-
-        uploadedFile = file;
-        showFileInfo(file, isPDF ? 'pdf' : 'docx');
-        uploadAndParse(file);
-    }
-
-    function showFileInfo(file, type) {
-        document.getElementById('fileName').textContent = file.name;
-        document.getElementById('fileSize').textContent = formatFileSize(file.size);
-        const icon = document.getElementById('fileTypeIcon');
-        icon.textContent = type === 'pdf' ? '📕' : '📘';
-        icon.className   = 'file-icon ' + (type === 'pdf' ? 'pdf-icon' : 'docx-icon');
-        document.getElementById('uploadedFileDisplay').classList.add('active');
-        uploadArea.style.display = 'none';
-    }
-
-    function removeFile() {
-        uploadedFile = null;
-        document.getElementById('uploadedFileDisplay').classList.remove('active');
-        document.getElementById('questionsPreview').classList.remove('active');
-        document.getElementById('parsingStatus').classList.remove('active');
-        document.getElementById('correctAnswersSection').classList.remove('active');
-        uploadArea.style.display = 'block';
-        document.getElementById('fileInput').value = '';
-        hideError();
-        assessmentData.questions      = [];
-        assessmentData.correctAnswers = {};
-    }
-
-    // ── Step indicators ──
-    function setStep(n, state) {
-        const el   = document.getElementById('step' + n);
-        const icon = el.querySelector('.step-icon');
-        el.className     = 'parsing-step ' + state;
-        icon.textContent = state === 'active' ? '🔄' : state === 'done' ? '✅' : '⬜';
-    }
-    function resetSteps() { [1,2,3,4].forEach(i => setStep(i, '')); }
-    function showParsingStatus() {
-        resetSteps();
-        document.getElementById('parsingStatus').classList.add('active');
-        document.getElementById('questionsPreview').classList.remove('active');
-        document.getElementById('correctAnswersSection').classList.remove('active');
-    }
-    function hideParsingStatus() {
-        document.getElementById('parsingStatus').classList.remove('active');
-    }
-
-    // ── Upload file to PHP endpoint and get parsed questions back ──
-    async function uploadAndParse(file) {
-        showParsingStatus();
-        setStep(1, 'active');
-
-        try {
-            const formData = new FormData();
-            formData.append('document', file);
-
-            setStep(1, 'done');
-            setStep(2, 'active');
-
-            const response = await fetch('api/assessment/parse-document.php', {
-                method: 'POST',
-                body: formData
-                // No Content-Type header — browser sets it automatically with boundary for multipart
-            });
-
-            setStep(2, 'done');
-            setStep(3, 'active');
-
-            const result = await response.json();
-
-            if (!response.ok || !result.success) {
-                throw new Error(result.error || 'Server returned an error.');
-            }
-
-            const questions = result.questions;
-
-            if (!Array.isArray(questions) || questions.length === 0) {
-                throw new Error('No questions found. Check your document follows the expected format.');
-            }
-
-            setStep(3, 'done');
-            setStep(4, 'active');
-
-            // Store questions — IDs come from server, not client
-            assessmentData.questions      = questions;
-            assessmentData.correctAnswers = {};
-            questions.forEach(q => {
-                if (q.correctAnswer) assessmentData.correctAnswers[q.id] = q.correctAnswer;
-            });
-
-            displayQuestions(questions);
-            displayCorrectAnswersInputs(questions);
-
-            setStep(4, 'done');
-            hideParsingStatus();
-            showToast(`${questions.length} question${questions.length !== 1 ? 's' : ''} extracted successfully.`, 'success');
-
-        } catch (err) {
-            hideParsingStatus();
-            showError('Question extraction failed.', err.message);
-        }
-    }
-
-    // ── Render questions ──
-    function displayQuestions(questions) {
-        const list    = document.getElementById('questionsList');
-        const preview = document.getElementById('questionsPreview');
-        document.getElementById('questionCount').textContent =
-            `${questions.length} question${questions.length !== 1 ? 's' : ''} found`;
-        list.innerHTML = '';
-        const frag = document.createDocumentFragment();
-        questions.forEach((q, idx) => frag.appendChild(createQuestionCard(q, idx)));
-        list.appendChild(frag);
-        preview.classList.add('active');
-    }
-
-    function createQuestionCard(question, index) {
-        const card = document.createElement('div');
-        card.className = 'question-card';
-        card.dataset.questionId = question.id;
-
-        const header = document.createElement('div');
-        header.className = 'question-header';
-
-        const num = document.createElement('span');
-        num.className   = 'question-number';
-        num.textContent = `Question ${index + 1}`;
-
-        const actions = document.createElement('div');
-        actions.className = 'question-actions';
-
-        const editBtn = document.createElement('button');
-        editBtn.className = 'btn-edit-q';
-        editBtn.textContent = 'Edit';
-        editBtn.dataset.questionId = question.id;
-
-        const delBtn = document.createElement('button');
-        delBtn.className = 'btn-delete-q';
-        delBtn.textContent = 'Delete';
-        delBtn.dataset.questionId = question.id;
-
-        actions.append(editBtn, delBtn);
-        header.append(num, actions);
-
-        const text = document.createElement('div');
-        text.className   = 'question-text';
-        text.textContent = question.text;
-
-        const optsList = document.createElement('div');
-        optsList.className = 'options-list';
-        question.options.forEach((opt, i) => {
-            if (!opt) return;
-            const item = document.createElement('div');
-            item.className = 'option-item';
-            const lbl = document.createElement('span');
-            lbl.className   = 'option-label';
-            lbl.textContent = String.fromCharCode(65 + i) + ')';
-            item.append(lbl, document.createTextNode(' ' + opt));
-            optsList.appendChild(item);
+    try {
+        const res    = await fetch('api/assessment/add-question.php', {
+            method : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body   : JSON.stringify(payload),
         });
+        const result = await res.json();
 
-        card.append(header, text, optsList);
-        return card;
-    }
-
-    document.addEventListener('click', function(e) {
-        const qId = e.target.dataset.questionId;
-        if (!qId) return;
-        if (e.target.classList.contains('btn-edit-q'))   openEditModal(parseInt(qId));
-        if (e.target.classList.contains('btn-delete-q')) deleteQuestion(parseInt(qId));
-    });
-
-    function displayCorrectAnswersInputs(questions) {
-        const list    = document.getElementById('correctAnswersList');
-        const section = document.getElementById('correctAnswersSection');
-        list.innerHTML = '';
-
-        questions.forEach((q, idx) => {
-            const card = document.createElement('div');
-            card.className = 'answer-input-card';
-            card.id = `answer-card-${q.id}`;
-
-            const label = document.createElement('span');
-            label.className   = 'answer-q-number';
-            label.textContent = `Q${idx + 1}`;
-
-            const select = document.createElement('select');
-            select.className = 'answer-select';
-            select.id = `answer-${q.id}`;
-
-            [
-                { value: '',  text: 'Select answer' },
-                { value: 'a', text: `A) ${q.options[0] || ''}` },
-                { value: 'b', text: `B) ${q.options[1] || ''}` },
-                { value: 'c', text: `C) ${q.options[2] || ''}` },
-                { value: 'd', text: `D) ${q.options[3] || ''}` },
-            ].forEach(o => {
-                const opt = document.createElement('option');
-                opt.value = o.value; opt.textContent = o.text;
-                select.appendChild(opt);
-            });
-
-            if (assessmentData.correctAnswers[q.id]) {
-                select.value = assessmentData.correctAnswers[q.id];
-                select.classList.add('answered');
-            }
-
-            select.addEventListener('change', () => {
-                assessmentData.correctAnswers[q.id] = select.value;
-                select.classList.toggle('answered', !!select.value);
-            });
-
-            card.append(label, select);
-            list.appendChild(card);
-        });
-
-        section.classList.add('active');
-    }
-
-    function deleteQuestion(questionId) {
-        if (!confirm('Delete this question?')) return;
-        assessmentData.questions = assessmentData.questions.filter(q => q.id !== questionId);
-        delete assessmentData.correctAnswers[questionId];
-        document.querySelector(`[data-question-id="${questionId}"]`)?.remove();
-        document.getElementById(`answer-card-${questionId}`)?.remove();
-        const n = assessmentData.questions.length;
-        document.getElementById('questionCount').textContent = `${n} question${n !== 1 ? 's' : ''} found`;
-        document.querySelectorAll('.question-card').forEach((card, idx) => {
-            card.querySelector('.question-number').textContent = `Question ${idx + 1}`;
-        });
-    }
-
-    // ── Modal ──
-    function openEditModal(questionId) {
-        editingQuestionId = questionId;
-        const q = assessmentData.questions.find(q => q.id === questionId);
-        if (!q) return;
-        document.getElementById('modalTitle').textContent          = 'Edit Question';
-        document.getElementById('modalQuestionText').value         = q.text;
-        document.getElementById('modalOptionA').value              = q.options[0] || '';
-        document.getElementById('modalOptionB').value              = q.options[1] || '';
-        document.getElementById('modalOptionC').value              = q.options[2] || '';
-        document.getElementById('modalOptionD').value              = q.options[3] || '';
-        document.getElementById('modalCorrectAnswer').value        = assessmentData.correctAnswers[questionId] || '';
-        document.getElementById('modalMarks').value                = q.marks || 1;
-        document.getElementById('editModal').classList.add('active');
-    }
-
-    function openAddQuestionModal() {
-        editingQuestionId = null;
-        document.getElementById('modalTitle').textContent   = 'Add New Question';
-        document.getElementById('modalQuestionText').value  = '';
-        document.getElementById('modalOptionA').value       = '';
-        document.getElementById('modalOptionB').value       = '';
-        document.getElementById('modalOptionC').value       = '';
-        document.getElementById('modalOptionD').value       = '';
-        document.getElementById('modalCorrectAnswer').value = '';
-        document.getElementById('modalMarks').value         = 1;
-        document.getElementById('editModal').classList.add('active');
-    }
-
-    function closeModal() { document.getElementById('editModal').classList.remove('active'); }
-
-    document.getElementById('editModal').addEventListener('click', function(e) {
-        if (e.target === this) closeModal();
-    });
-
-    function saveModalQuestion() {
-        const text    = document.getElementById('modalQuestionText').value.trim();
-        const optA    = document.getElementById('modalOptionA').value.trim();
-        const optB    = document.getElementById('modalOptionB').value.trim();
-        const optC    = document.getElementById('modalOptionC').value.trim();
-        const optD    = document.getElementById('modalOptionD').value.trim();
-        const correct = document.getElementById('modalCorrectAnswer').value;
-        const marks   = parseInt(document.getElementById('modalMarks').value) || 1;
-
-        if (!text || !optA || !optB) {
-            alert('Please fill in the question text and at least two options.');
-            return;
-        }
-
-        if (editingQuestionId !== null) {
-            const q = assessmentData.questions.find(q => q.id === editingQuestionId);
-            if (q) {
-                q.text = text; q.options = [optA, optB, optC, optD]; q.marks = marks;
-                if (correct) assessmentData.correctAnswers[q.id] = correct;
-            }
+        if (result.success) {
+            showToast('✅ Question added!');
+            // Reload page to show fresh question list with correct IDs
+            setTimeout(() => location.reload(), 500);
         } else {
-            const newId = assessmentData.questions.length > 0
-                ? Math.max(...assessmentData.questions.map(q => q.id)) + 1 : 1;
-            assessmentData.questions.push({ id: newId, text, options: [optA, optB, optC, optD], marks });
-            if (correct) assessmentData.correctAnswers[newId] = correct;
+            showToast(result.error || 'Failed to add question.', 'error');
         }
+    } catch {
+        showToast('Network error. Please try again.', 'error');
+    } finally {
+        hideLoading();
+        btn.disabled = false;
+    }
+}
 
-        displayQuestions(assessmentData.questions);
-        displayCorrectAnswersInputs(assessmentData.questions);
-        document.getElementById('questionsPreview').classList.add('active');
-        document.getElementById('correctAnswersSection').classList.add('active');
-        closeModal();
+// =====================================================================
+// INLINE EDIT (saved questions)
+// =====================================================================
+function toggleEditCard(qid) {
+    const form = document.getElementById('editForm' + qid);
+    form.classList.toggle('active');
+}
+
+async function saveExistingQ(qid, qtype) {
+    const qt = document.getElementById('eqt' + qid).value.trim();
+    if (!qt) { showToast('Question text is required.', 'error'); return; }
+
+    const caEl = document.getElementById('eca' + qid);
+    const ca   = caEl ? caEl.value.trim().toUpperCase() : '';
+    if (!ca)   { showToast('Correct answer is required.', 'error'); return; }
+
+    const isMCQ = ['mcq','true_false','multiple_select'].includes(qtype);
+    const payload = {
+        question_id   : qid,
+        assessment_id : assessmentId,
+        question_text : qt,
+        correct_answer: ca,
+        marks         : parseInt(document.getElementById('emk' + qid).value, 10) || 1,
+        explanation   : (document.getElementById('eex' + qid)?.value ?? '').trim(),
+    };
+
+    if (isMCQ && qtype !== 'true_false') {
+        payload.option_a = (document.getElementById('eoa' + qid)?.value ?? '').trim();
+        payload.option_b = (document.getElementById('eob' + qid)?.value ?? '').trim();
+        payload.option_c = (document.getElementById('eoc' + qid)?.value ?? '').trim() || null;
+        payload.option_d = (document.getElementById('eod' + qid)?.value ?? '').trim() || null;
     }
 
-    // ── Collect all form data ──
-    function collectFormData() {
-        assessmentData.title          = document.getElementById('assessmentTitle').value.trim();
-        assessmentData.description    = document.getElementById('assessmentDescription').value.trim();
-        assessmentData.category       = document.getElementById('assessmentCategory').value;
-        assessmentData.difficulty     = document.getElementById('difficultyLevel').value;
-        assessmentData.duration       = parseInt(document.getElementById('duration').value);
-        assessmentData.totalMarks     = parseInt(document.getElementById('totalMarks').value);
-        assessmentData.passingMarks   = parseInt(document.getElementById('passingMarks').value);
-        assessmentData.maxAttempts    = parseInt(document.getElementById('maxAttempts').value) || 1;
-        assessmentData.instructions   = document.getElementById('instructions').value.trim();
-        assessmentData.availableFrom  = document.getElementById('availableFrom').value;
-        assessmentData.availableUntil = document.getElementById('availableUntil').value;
-        assessmentData.settings = {
-            showResultsImmediately: document.getElementById('showResultsImmediately').checked,
-            showCorrectAnswers:     document.getElementById('showCorrectAnswers').checked,
-            randomizeQuestions:     document.getElementById('randomizeQuestions').checked,
-            randomizeOptions:       document.getElementById('randomizeOptions').checked,
+    showLoading('Saving…');
+    try {
+        const res    = await fetch('api/assessment/update-question.php', {
+            method : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body   : JSON.stringify(payload),
+        });
+        const result = await res.json();
+        if (result.success) {
+            showToast('✅ Question saved!');
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showToast(result.error || 'Save failed.', 'error');
+        }
+    } catch {
+        showToast('Network error.', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// =====================================================================
+// DELETE QUESTION (saved)
+// =====================================================================
+async function deleteExistingQ(qid) {
+    if (!confirm('Delete this question? This cannot be undone.')) return;
+    showLoading('Deleting…');
+    try {
+        const res    = await fetch('api/assessment/delete-question.php', {
+            method : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body   : JSON.stringify({ question_id: qid, assessment_id: assessmentId }),
+        });
+        const result = await res.json();
+        if (result.success) {
+            const card = document.querySelector('[data-qid="' + qid + '"]');
+            card?.remove();
+            updateQCount();
+            showToast('Question deleted.');
+        } else {
+            showToast(result.error || 'Delete failed.', 'error');
+        }
+    } catch {
+        showToast('Network error.', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+function updateQCount() {
+    const n = document.querySelectorAll('.q-card').length;
+    document.getElementById('qCount').textContent = n + ' question' + (n !== 1 ? 's' : '') + ' saved';
+    const noMsg = document.getElementById('noQMsg');
+    if (noMsg) noMsg.style.display = n === 0 ? 'block' : 'none';
+}
+
+// =====================================================================
+// DOCUMENT UPLOAD & PARSE
+// =====================================================================
+function handleDrop(e) {
+    e.preventDefault();
+    document.getElementById('uploadArea').classList.remove('drag');
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+}
+
+async function handleFile(file) {
+    if (!file) return;
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!['pdf','docx'].includes(ext)) {
+        showToast('Only PDF or DOCX files are supported.', 'error');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('document', file);
+
+    showLoading('Parsing document…');
+
+    try {
+        const res    = await fetch('api/assessment/parse-document.php', {
+            method: 'POST',
+            body  : formData,
+        });
+        const result = await res.json();
+
+        if (result.success && result.questions?.length > 0) {
+            parsedQs = result.questions;
+            document.getElementById('uploadFileName').textContent = file.name;
+            document.getElementById('uploadQCount').textContent   =
+                result.count + ' question' + (result.count !== 1 ? 's' : '') + ' found';
+            document.getElementById('uploadResult').classList.add('show');
+            showToast('✅ Parsed ' + result.count + ' question' + (result.count !== 1 ? 's' : '') + '!');
+        } else {
+            showToast(result.error || 'No questions found in document.', 'error');
+        }
+    } catch {
+        showToast('Parse failed. Please try again.', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function importParsedQuestions() {
+    if (!parsedQs.length) return;
+
+    // Must have an assessment to attach to
+    if (!assessmentId) {
+        showToast('Save a draft first before importing.', 'error');
+        await saveDraft();
+        if (!assessmentId) return;
+    }
+
+    const btn = document.getElementById('importBtn');
+    btn.disabled = true;
+
+    showLoading('Importing ' + parsedQs.length + ' questions…');
+
+    let imported = 0;
+    for (const q of parsedQs) {
+        // Map parsed question shape → API shape
+        const payload = {
+            assessment_id  : assessmentId,
+            question_type  : 'mcq',
+            question_text  : q.text,
+            option_a       : q.options[0] || null,
+            option_b       : q.options[1] || null,
+            option_c       : q.options[2] || null,
+            option_d       : q.options[3] || null,
+            correct_answer : q.correctAnswer ? q.correctAnswer.toUpperCase() : 'A',
+            marks          : 1,
+            negative_marks : 0,
         };
-        return assessmentData;
-    }
-
-    // ── Client-side validation ──
-    function validateForm(action) {
-        const title    = document.getElementById('assessmentTitle').value.trim();
-        const category = document.getElementById('assessmentCategory').value;
-        const diff     = document.getElementById('difficultyLevel').value;
-        const duration = parseInt(document.getElementById('duration').value);
-        const total    = parseInt(document.getElementById('totalMarks').value);
-        const passing  = parseInt(document.getElementById('passingMarks').value);
-
-        if (!title)    { alert('Please enter an assessment title.');    return false; }
-        if (!category) { alert('Please select a category.');            return false; }
-        if (!diff)     { alert('Please select a difficulty level.');    return false; }
-        if (!duration || duration <= 0) { alert('Please enter a valid duration.'); return false; }
-        if (!total    || total    <= 0) { alert('Please enter valid total marks.'); return false; }
-        if (!passing  || passing  <= 0) { alert('Please enter valid passing marks.'); return false; }
-        if (passing > total) { alert('Passing marks cannot exceed total marks.'); return false; }
-
-        if (action === 'publish') {
-            if (assessmentData.questions.length === 0) {
-                alert('Please upload a document or add at least one question manually.');
-                return false;
-            }
-            const missing = assessmentData.questions.filter(q => !assessmentData.correctAnswers[q.id]);
-            if (missing.length > 0) {
-                alert(`${missing.length} question(s) are missing correct answers.`);
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    // ── POST to PHP backend (same file) ──
-    async function submitAssessment(action) {
-        if (!validateForm(action)) return;
-
-        const data       = collectFormData();
-        const btnDraft   = document.getElementById('btnDraft');
-        const btnPublish = document.getElementById('btnPublish');
-
-        btnDraft.disabled = btnPublish.disabled = true;
-        btnDraft.textContent   = action === 'save_draft' ? 'Saving...'    : 'Save as Draft';
-        btnPublish.textContent = action === 'publish'    ? 'Publishing...' : 'Publish Assessment';
 
         try {
-            const response = await fetch(`create-assessment.php?action=${action}`, {
-                method: 'POST',
+            const res = await fetch('api/assessment/add-question.php', {
+                method : 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
+                body   : JSON.stringify(payload),
             });
-
-            const result = await response.json();
-
-            if (result.success) {
-                showToast(result.message, 'success', 5000);
-                if (action === 'publish') {
-                    setTimeout(() => { window.location.href = 'teacher-dashboard.php'; }, 2000);
-                }
-            } else {
-                showToast(result.error || 'Something went wrong.', 'error');
-            }
-
-        } catch (err) {
-            showToast('Network error. Please check your connection and try again.', 'error');
-        } finally {
-            btnDraft.disabled = btnPublish.disabled = false;
-            btnDraft.textContent   = 'Save as Draft';
-            btnPublish.textContent = 'Publish Assessment';
-        }
+            const r = await res.json();
+            if (r.success) imported++;
+        } catch { /* continue on individual failure */ }
     }
 
-    // ── Error helpers ──
-    function showError(msg, detail) {
-        document.getElementById('errorMessage').textContent = msg;
-        document.getElementById('errorDetail').textContent  = detail || '';
-        document.getElementById('errorBanner').classList.add('active');
-    }
-    function hideError() {
-        document.getElementById('errorBanner').classList.remove('active');
-    }
+    hideLoading();
 
-    function formatFileSize(bytes) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024, sizes = ['Bytes', 'KB', 'MB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    if (imported > 0) {
+        showToast('✅ Imported ' + imported + ' of ' + parsedQs.length + ' questions!');
+        parsedQs = [];
+        document.getElementById('uploadResult').classList.remove('show');
+        setTimeout(() => location.reload(), 800);
+    } else {
+        showToast('Import failed. Please try again.', 'error');
+        btn.disabled = false;
     }
+}
+
+// =====================================================================
+// KEYBOARD SHORTCUTS
+// =====================================================================
+document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveDraft();
+    }
+});
+
+// =====================================================================
+// INIT
+// =====================================================================
+// If editing a draft, jump to questions tab so teacher sees saved questions right away
+<?php if ($editMode && count($questions) > 0): ?>
+switchTab(3);
+<?php elseif ($editMode): ?>
+switchTab(1);
+<?php endif; ?>
+
+// Disable add-question button if no assessment ID yet (new, unsaved)
+<?php if (!$editMode): ?>
+document.getElementById('addQBtn').disabled = true;
+document.getElementById('addQBtn').title = 'Save a draft first to enable adding questions';
+<?php endif; ?>
 </script>
 </body>
 </html>

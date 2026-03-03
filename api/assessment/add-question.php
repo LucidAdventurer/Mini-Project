@@ -2,17 +2,9 @@
 // ============================================================
 // api/assessment/add-question.php
 //
-// Adds a new question to an existing assessment.
-// Verifies the logged-in teacher owns the assessment.
-// Auto-assigns question_order as (current max + 1).
-//
-// POST JSON {
-//   assessment_id, question_type,
-//   question_text, correct_answer,
-//   option_a?, option_b?, option_c?, option_d?,
-//   marks, negative_marks?, topic?, explanation?
-// }
-// Returns { success: bool, question_id?: int, error?: string }
+// FIXES:
+// - Race condition on question_order fixed with transaction +
+//   SELECT MAX ... FOR UPDATE, then retry on duplicate key.
 // ============================================================
 
 require_once __DIR__ . '/../../config.php';
@@ -67,7 +59,7 @@ if (!in_array($questionType, $allowedTypes, true)) {
 }
 
 // ── Numeric fields ──
-$marks    = max(1, (int)($body['marks']          ?? 1));
+$marks    = max(1, (int)($body['marks']            ?? 1));
 $negMarks = max(0, (float)($body['negative_marks'] ?? 0));
 $negMarks = round($negMarks, 2);
 
@@ -101,7 +93,6 @@ if (in_array($questionType, $mcqTypes, true)) {
         }
         $correctAnswer = implode(',', array_unique($valid));
     } elseif ($questionType === 'true_false') {
-        // For True/False, force option values and constrain correct answer to A or B
         $optionA = $optionA ?? 'True';
         $optionB = $optionB ?? 'False';
         if (!in_array($correctAnswer, ['A', 'B'], true)) {
@@ -110,7 +101,6 @@ if (in_array($questionType, $mcqTypes, true)) {
             exit;
         }
     } else {
-        // mcq
         if (!in_array($correctAnswer, ['A', 'B', 'C', 'D'], true)) {
             http_response_code(400);
             echo json_encode(['success' => false, 'error' => 'Correct answer must be A, B, C, or D.']);
@@ -119,7 +109,7 @@ if (in_array($questionType, $mcqTypes, true)) {
     }
 }
 
-// ── Verify ownership of the assessment ──
+// ── Verify ownership ──
 $check = safePreparedQuery($conn,
     "SELECT assessment_id FROM assessments WHERE assessment_id = ? AND created_by = ?",
     "ii", [$assessmentId, $teacherId]
@@ -132,43 +122,80 @@ if (!$check['success'] || !$check['result'] || $check['result']->num_rows === 0)
 }
 $check['result']->free();
 
-// ── Determine next question_order ──
-$orderResult = safePreparedQuery($conn,
-    "SELECT COALESCE(MAX(question_order), 0) + 1 AS next_order FROM questions WHERE assessment_id = ?",
-    "i", [$assessmentId]
-);
-$nextOrder = 1;
-if ($orderResult['success'] && $orderResult['result']) {
-    $row       = $orderResult['result']->fetch_assoc();
-    $nextOrder = (int)($row['next_order'] ?? 1);
-    $orderResult['result']->free();
-}
+// ── Insert inside transaction with FOR UPDATE lock ──
+// SELECT MAX ... FOR UPDATE locks the assessment's question rows,
+// preventing two simultaneous requests from reading the same MAX
+// and producing a duplicate question_order.
+// The UNIQUE KEY unique_assessment_order is a safety net that will
+// cause the INSERT to fail (errno 1062) if a race still somehow occurs.
 
-// ── Insert the new question ──
-$insert = safePreparedQuery($conn,
-    "INSERT INTO questions
-        (assessment_id, question_type, question_text, marks, negative_marks,
-         option_a, option_b, option_c, option_d,
-         correct_answer, topic, explanation, question_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    "issidsssssssi",
-    [
+$conn->begin_transaction();
+
+try {
+    // Lock all question rows for this assessment while we read MAX
+    $stmt = $conn->prepare(
+        "SELECT COALESCE(MAX(question_order), 0) + 1 AS next_order
+         FROM questions
+         WHERE assessment_id = ?
+         FOR UPDATE"
+    );
+    if (!$stmt) {
+        throw new Exception("Prepare failed: " . $conn->error);
+    }
+    $stmt->bind_param("i", $assessmentId);
+    $stmt->execute();
+    $result    = $stmt->get_result();
+    $row       = $result->fetch_assoc();
+    $nextOrder = (int)($row['next_order'] ?? 1);
+    $stmt->close();
+
+    // Insert
+    $stmt = $conn->prepare(
+        "INSERT INTO questions
+            (assessment_id, question_type, question_text, marks, negative_marks,
+             option_a, option_b, option_c, option_d,
+             correct_answer, topic, explanation, question_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    );
+    if (!$stmt) {
+        throw new Exception("Prepare failed: " . $conn->error);
+    }
+    $stmt->bind_param(
+        "issidsssssssi",
         $assessmentId, $questionType, $questionText,
         $marks, $negMarks,
         $optionA, $optionB, $optionC, $optionD,
         $correctAnswer, $topic, $explanation,
-        $nextOrder,
-    ]
-);
-
-if ($insert['success'] && $insert['insert_id'] > 0) {
-    // Touch assessment updated_at
-    safePreparedQuery($conn,
-        "UPDATE assessments SET updated_at = NOW() WHERE assessment_id = ? AND created_by = ?",
-        "ii", [$assessmentId, $teacherId]
+        $nextOrder
     );
-    echo json_encode(['success' => true, 'question_id' => $insert['insert_id']]);
-} else {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Failed to add question. Please try again.']);
+    $stmt->execute();
+    $newQuestionId = $stmt->insert_id;
+    $stmt->close();
+
+    // Touch assessment updated_at
+    $stmt = $conn->prepare(
+        "UPDATE assessments SET updated_at = NOW() WHERE assessment_id = ? AND created_by = ?"
+    );
+    if ($stmt) {
+        $stmt->bind_param("ii", $assessmentId, $teacherId);
+        $stmt->execute();
+        $stmt->close();
+    }
+
+    $conn->commit();
+
+    echo json_encode(['success' => true, 'question_id' => $newQuestionId]);
+
+} catch (Exception $e) {
+    $conn->rollback();
+
+    // Duplicate question_order = two requests raced; ask client to retry
+    if ($conn->errno === 1062 || str_contains($e->getMessage(), '1062')) {
+        http_response_code(409);
+        echo json_encode(['success' => false, 'error' => 'Conflict adding question. Please try again.']);
+    } else {
+        error_log("add-question transaction failed: " . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Failed to add question. Please try again.']);
+    }
 }

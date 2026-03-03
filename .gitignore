@@ -61,3 +61,6 @@ yarn-error.log*
 
 # SASS cache
 .sass-cache/
+
+env.php
+/logs/
