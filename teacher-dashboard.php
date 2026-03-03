@@ -16,8 +16,6 @@ $userInitials = strtoupper(substr($currentUser['full_name'] ?? 'T', 0, 2));
 
 // ============================================================
 // DATABASE QUERIES
-// Each query is wrapped in safePreparedQuery().
-// On failure we set a $dbError flag and show a safe message.
 // ============================================================
 
 $dbError = false;
@@ -77,7 +75,6 @@ if ($r3['success'] && $r3['result']) {
 }
 
 // ── 4. Assessments list with question count and attempt count ──
-// Ordered: active first, then draft, then scheduled, then archived/completed
 $assessments = [];
 $r4 = safePreparedQuery($conn,
     "SELECT
@@ -238,7 +235,6 @@ function notifIcon(string $type): string {
         }
         .nav-profile { display: flex; align-items: center; gap: 15px; }
 
-        /* Notification bell */
         .notification-btn {
             position: relative; width: 40px; height: 40px;
             background: rgba(255,255,255,0.1); border: none; border-radius: 10px;
@@ -255,7 +251,6 @@ function notifIcon(string $type): string {
             display: flex; align-items: center; justify-content: center;
         }
 
-        /* Profile button */
         .profile-button {
             display: flex; align-items: center; gap: 10px;
             padding: 8px 14px; background: rgba(255,255,255,0.1);
@@ -274,7 +269,6 @@ function notifIcon(string $type): string {
         .profile-name { font-weight: 600; font-size: 14px; color: white; }
         .profile-caret { color: rgba(255,255,255,0.6); font-size: 10px; }
 
-        /* Dropdown */
         .profile-dropdown {
             position: absolute; top: calc(100% + 12px); right: 0;
             background: white; border-radius: var(--radius);
@@ -306,7 +300,6 @@ function notifIcon(string $type): string {
         .dropdown-item.danger:hover { background: #fff5f5; }
         .dropdown-divider { height: 1px; background: var(--color-border); margin: 4px 0; }
 
-        /* Notification panel */
         .notif-panel {
             position: absolute; top: calc(100% + 12px); right: 60px;
             background: white; border-radius: var(--radius);
@@ -381,7 +374,6 @@ function notifIcon(string $type): string {
         }
         .section-title { font-size: 22px; font-weight: 700; color: var(--color-text); }
 
-        /* Filter tabs */
         .filter-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
         .filter-tab {
             padding: 7px 16px; background: white; border: 2px solid var(--color-border);
@@ -448,7 +440,6 @@ function notifIcon(string $type): string {
         }
         .meta-icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
 
-        /* Status badges */
         .status-badge {
             display: inline-flex; align-items: center; gap: 5px;
             padding: 5px 12px; border-radius: 6px;
@@ -459,7 +450,6 @@ function notifIcon(string $type): string {
         .status-badge.archived  { background: #dbeafe; color: #1e40af; }
         .status-badge.scheduled { background: #e0e7ff; color: #3730a3; }
 
-        /* Card action buttons */
         .assessment-actions { display: flex; gap: 8px; }
         .btn {
             padding: 9px 14px; border: none; border-radius: 8px;
@@ -668,7 +658,6 @@ function notifIcon(string $type): string {
     </div>
 
     <?php if (empty($assessments)): ?>
-        <!-- Empty state — no assessments yet -->
         <div class="empty-state">
             <div class="empty-icon">📋</div>
             <div class="empty-title">No assessments yet</div>
@@ -685,7 +674,6 @@ function notifIcon(string $type): string {
                 $attempts = (int)$a['attempt_count'];
                 $students = (int)$a['student_count'];
 
-                // Date label depends on status
                 if ($status === 'active' && $a['available_until']) {
                     $dateLabel = 'Due: ' . fmtDate($a['available_until']);
                 } elseif ($status === 'scheduled' && $a['available_from']) {
@@ -737,14 +725,15 @@ function notifIcon(string $type): string {
 
                     <?php elseif ($status === 'active' || $status === 'archived'): ?>
                         <a href="assessment-results.php?id=<?= $aid ?>" class="btn btn-primary">View Results</a>
-                        <a href="create-assessment.php?edit=<?= $aid ?>" class="btn btn-secondary">Edit</a>
+                        <!-- FIXED: was edit-assessment.php=<?= $aid ?> (broken) -->
+                        <a href="edit-assessment.php?id=<?= $aid ?>" class="btn btn-secondary">Edit</a>
 
                     <?php elseif ($status === 'scheduled'): ?>
-                        <a href="create-assessment.php?edit=<?= $aid ?>" class="btn btn-secondary">Edit</a>
+                        <a href="edit-assessment.php?id=<?= $aid ?>" class="btn btn-secondary">Edit</a>
                         <button class="btn btn-danger" onclick="confirmDelete(<?= $aid ?>, '<?= htmlspecialchars(addslashes($a['title'])) ?>')">Delete</button>
 
                     <?php else: ?>
-                        <a href="create-assessment.php?edit=<?= $aid ?>" class="btn btn-secondary">Edit</a>
+                        <a href="edit-assessment.php?id=<?= $aid ?>" class="btn btn-secondary">Edit</a>
                     <?php endif; ?>
                 </div>
             </div>
@@ -823,7 +812,6 @@ function notifIcon(string $type): string {
             const category = card.querySelector('.assessment-category')?.textContent?.toLowerCase() ?? '';
             card.classList.toggle('hidden', q !== '' && !title.includes(q) && !category.includes(q));
         });
-        // Reset filter tabs when searching
         if (q) {
             document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
         }
@@ -862,10 +850,8 @@ function notifIcon(string $type): string {
             const data = await res.json();
 
             if (data.success) {
-                // Remove card from DOM
                 document.querySelector(`.assessment-card[data-id="${deleteTargetId}"]`)?.remove();
                 closeDeleteModal();
-                // If no cards left, reload to show empty state
                 if (!document.querySelector('.assessment-card')) location.reload();
             } else {
                 alert(data.error || 'Delete failed. Please try again.');
