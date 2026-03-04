@@ -50,7 +50,7 @@ $tmpPath  = $file['tmp_name'];
 
 if ($file['size'] > 10 * 1024 * 1024) {
     http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'File too large. Maximum is 10MB.']);
+    echo json_encode(['success' => false, 'error' => 'Your PDF is too large to process. Try converting your questions to a DOCX file instead — it handles large documents much better.']);
     exit;
 }
 
@@ -269,8 +269,15 @@ function buildToUnicodeCMap(array $rawStreams): array {
 // Handles zlib (FlateDecode) compressed PDF streams.
 // Google Docs always compresses with zlib — magic bytes 0x78 0x9C.
 // Returns decompressed string, plain-text stream, or null for binary.
+//
+// CHANGE: Aborts if decompressed output exceeds 5MB.
+// This prevents zip-bomb style PDFs from spiking CPU/memory.
+// The 10MB raw upload limit is enforced before this is ever called.
 // ============================================================
 function tryDecompress(string $stream): ?string {
+    // 5MB decompressed cap — generous for any text-based MCQ PDF
+    define('MAX_UPLOAD_BYTES',       2 * 1024 * 1024);  // 2MB raw file
+    define('MAX_DECOMPRESSED_BYTES', 5 * 1024 * 1024);  // 5MB per stream
     if (strlen($stream) === 0) return null;
 
     $b0 = ord($stream[0]);
@@ -278,11 +285,29 @@ function tryDecompress(string $stream): ?string {
 
     if ($b0 === 0x78 && in_array($b1, [0x01, 0x5E, 0x9C, 0xDA], true)) {
         $d = @gzuncompress($stream);
-        if ($d !== false) return $d;
+        if ($d !== false) {
+            if (strlen($d) > MAX_DECOMPRESSED_BYTES) {
+                error_log("parse-document: stream decompressed to " . strlen($d) . " bytes — aborted (zip-bomb guard)");
+                return null;
+            }
+            return $d;
+        }
         $d = @gzinflate($stream);
-        if ($d !== false) return $d;
+        if ($d !== false) {
+            if (strlen($d) > MAX_DECOMPRESSED_BYTES) {
+                error_log("parse-document: stream decompressed to " . strlen($d) . " bytes — aborted (zip-bomb guard)");
+                return null;
+            }
+            return $d;
+        }
         $d = @gzinflate(substr($stream, 2));
-        if ($d !== false) return $d;
+        if ($d !== false) {
+            if (strlen($d) > MAX_DECOMPRESSED_BYTES) {
+                error_log("parse-document: stream decompressed to " . strlen($d) . " bytes — aborted (zip-bomb guard)");
+                return null;
+            }
+            return $d;
+        }
         return null;
     }
 

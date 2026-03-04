@@ -3,731 +3,411 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Welcome - Placement & Training Portal</title>
+    <title>Placement & Training Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
         :root {
-            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            --color-primary: #6366f1;
-            --color-primary-dark: #4f46e5;
-            --color-primary-light: #818cf8;
-            --color-accent: #f59e0b;
-            --color-text: #1f2937;
-            --color-text-light: #6b7280;
-            --color-text-lighter: #9ca3af;
-            --color-bg: #f9fafb;
-            --color-bg-light: #ffffff;
-            --color-border: #e5e7eb;
-            --color-success: #10b981;
-            --color-error: #ef4444;
-            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.08);
-            --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.1);
-            --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.12);
-            --border-radius: 12px;
-            --border-radius-lg: 20px;
-            --transition: all 0.3s ease;
+            --ink:        #18181b;
+            --ink-muted:  #52525b;
+            --ink-faint:  #a1a1aa;
+            --surface:    #ffffff;
+            --surface-2:  #fafafa;
+            --surface-3:  #f4f4f5;
+            --line:       #e4e4e7;
+            --accent-bg:  #eff6ff;
+            --serif: 'Instrument Serif', Georgia, serif;
+            --sans:  'DM Sans', system-ui, sans-serif;
+            --r: 10px;
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        html { scroll-behavior: smooth; }
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
-            color: #1f2937;
-            overflow-x: hidden;
-            margin: 0;
-            padding: 0;
-            padding-top: 71px;
+            font-family: var(--sans); background: var(--surface);
+            color: var(--ink); font-size: 15px; line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
         }
 
+        /* Navbar */
         .navbar {
-            background: white;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-            padding: 12px 28px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 1000;
+            position: sticky; top: 0; z-index: 100;
+            background: rgba(255,255,255,0.92); backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--line); padding: 0 28px;
+            display: flex; align-items: center; justify-content: space-between; height: 58px;
         }
-
-        .navbar-brand {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            font-size: 20px;
-            font-weight: 700;
-            color: #1f2937;
-            text-decoration: none;
+        .brand {
+            display: flex; align-items: center; gap: 10px;
+            text-decoration: none; color: var(--ink);
+            font-weight: 600; font-size: 15px; letter-spacing: -0.01em;
         }
-
-        .brand-logo {
-            width: 44px;
-            height: 44px;
-            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: 700;
-            font-size: 18px;
-            transition: transform 0.3s ease;
+        .brand-mark {
+            width: 32px; height: 32px; background: var(--ink); border-radius: 8px;
+            display: grid; place-items: center; color: #fff;
+            font-size: 13px; font-weight: 700; font-family: var(--serif); font-style: italic;
         }
-
-        .nav-actions {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .brand-logo:hover {
-            transform: scale(1.1) rotate(5deg);
-        }
-
-        .nav-menu {
-            display: flex;
-            gap: 30px;
-            align-items: center;
-        }
-
+        .nav-links { display: flex; align-items: center; gap: 6px; }
         .nav-link {
-            text-decoration: none;
-            color: #4b5563;
-            font-weight: 600;
-            font-size: 15px;
-            transition: color 0.3s ease;
-            position: relative;
+            padding: 7px 14px; border-radius: 8px; font-size: 14px; font-weight: 500;
+            color: var(--ink-muted); text-decoration: none; transition: 0.15s;
         }
-
-        .nav-link::after {
-            content: '';
-            position: absolute;
-            bottom: -5px;
-            left: 0;
-            width: 0;
-            height: 2px;
-            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
-            transition: width 0.3s ease;
+        .nav-link:hover { background: var(--surface-3); color: var(--ink); }
+        .nav-btn {
+            padding: 7px 16px; border-radius: 8px; font-size: 14px; font-weight: 600;
+            text-decoration: none; transition: 0.15s; font-family: var(--sans);
         }
-
-        .nav-link:hover {
-            color: var(--color-primary);
+        .nav-btn.outline { border: 1px solid var(--line); color: var(--ink); background: var(--surface); }
+        .nav-btn.outline:hover { background: var(--surface-3); }
+        .nav-btn.solid { background: var(--ink); color: #fff; border: 1px solid var(--ink); }
+        .nav-btn.solid:hover { background: #27272a; }
+        .hamburger {
+            display: none; flex-direction: column; gap: 4px;
+            background: none; border: none; cursor: pointer; padding: 6px;
         }
+        .hamburger span { width: 20px; height: 2px; background: var(--ink); border-radius: 2px; display: block; }
 
-        .nav-link:hover::after {
-            width: 100%;
+        /* Mobile nav */
+        .mobile-nav {
+            display: none; flex-direction: column; gap: 4px;
+            padding: 10px 20px 14px; border-bottom: 1px solid var(--line); background: var(--surface);
         }
+        .mobile-nav.open { display: flex; }
+        .mobile-nav .nav-link { display: block; padding: 10px 14px; }
+        .mobile-nav-actions { display: flex; gap: 8px; padding: 8px 14px 0; }
 
-        .btn-login {
-            padding: 10px 24px;
-            background: white;
-            color: var(--color-primary);
-            border: 2px solid var(--color-primary);
-            border-radius: 10px;
-            font-weight: 600;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
+        /* Hero */
+        .hero { padding: 96px 28px 80px; max-width: 680px; margin: 0 auto; text-align: center; }
+        .hero-badge {
+            display: inline-flex; align-items: center; gap: 7px; padding: 5px 13px;
+            border-radius: 99px; background: var(--surface-3); border: 1px solid var(--line);
+            font-size: 13px; font-weight: 500; color: var(--ink-muted); margin-bottom: 28px;
+            animation: fadeUp 0.5s ease both;
         }
-
-        .btn-login:hover {
-            background: var(--color-primary);
-            color: white;
-            transform: translateY(-2px);
+        .hero-badge::before {
+            content: ''; width: 6px; height: 6px; border-radius: 50%; background: #22c55e; flex-shrink: 0;
         }
-
-        .btn-signup {
-            padding: 10px 24px;
-            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-weight: 600;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-        }
-
-        .btn-signup:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
-        }
-
-        .mobile-menu-toggle {
-            display: none;
-            width: 35px;
-            height: 35px;
-            background: #f7fafc;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .menu-bar {
-            width: 20px;
-            height: 2px;
-            background: #1f2937;
-            transition: all 0.3s ease;
-        }
-
-        .hero-section {
-            margin-top: 70px;
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-            padding: 100px 30px 80px;
-            text-align: center;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .hero-section::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            right: -20%;
-            width: 600px;
-            height: 600px;
-            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
-            border-radius: 50%;
-            animation: float 20s ease-in-out infinite;
-        }
-
-        .hero-section::after {
-            content: '';
-            position: absolute;
-            bottom: -30%;
-            left: -10%;
-            width: 400px;
-            height: 400px;
-            background: radial-gradient(circle, rgba(255, 255, 255, 0.08) 0%, transparent 70%);
-            border-radius: 50%;
-            animation: float 15s ease-in-out infinite reverse;
-        }
-
-        @keyframes float {
-            0%, 100% { transform: translateY(0px) translateX(0px); }
-            50% { transform: translateY(-30px) translateX(20px); }
-        }
-
-        .hero-content {
-            position: relative;
-            z-index: 2;
-            max-width: 800px;
-            margin: 0 auto;
-        }
-
         .hero-title {
-            font-size: 52px;
-            font-weight: 800;
-            color: white;
-            margin-bottom: 20px;
-            line-height: 1.2;
-            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            font-family: var(--serif); font-size: clamp(38px, 7vw, 56px);
+            font-weight: 400; line-height: 1.1; letter-spacing: -0.02em; color: var(--ink);
+            margin-bottom: 20px; animation: fadeUp 0.5s 0.07s ease both;
+        }
+        .hero-title em { font-style: italic; color: var(--ink-muted); }
+        .hero-sub {
+            font-size: 17px; color: var(--ink-muted); max-width: 460px;
+            margin: 0 auto 36px; line-height: 1.65; animation: fadeUp 0.5s 0.14s ease both;
+        }
+        .hero-actions {
+            display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;
+            animation: fadeUp 0.5s 0.2s ease both;
         }
 
-        .hero-subtitle {
-            font-size: 20px;
-            color: rgba(255, 255, 255, 0.95);
-            margin-bottom: 40px;
-            line-height: 1.6;
+        /* Buttons */
+        .btn-primary {
+            display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px;
+            border-radius: var(--r); background: var(--ink); color: #fff;
+            font-size: 14px; font-weight: 600; text-decoration: none; transition: 0.15s; font-family: var(--sans);
         }
-
-        .hero-cta {
-            display: inline-flex;
-            align-items: center;
-            gap: 12px;
-            padding: 18px 40px;
-            background: white;
-            color: var(--color-primary);
-            font-size: 18px;
-            font-weight: 700;
-            border: none;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+        .btn-primary:hover { background: #27272a; transform: translateY(-1px); }
+        .btn-secondary {
+            display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px;
+            border-radius: var(--r); background: var(--surface); color: var(--ink);
+            border: 1px solid var(--line); font-size: 14px; font-weight: 600;
+            text-decoration: none; transition: 0.15s; font-family: var(--sans);
         }
+        .btn-secondary:hover { background: var(--surface-3); }
 
-        .hero-cta:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+        /* Stats */
+        .stats-strip {
+            border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+            padding: 36px 28px; display: flex; justify-content: center;
         }
-
-        .hero-cta svg {
-            width: 20px;
-            height: 20px;
-            transition: transform 0.3s ease;
+        .stat { text-align: center; padding: 0 52px; position: relative; }
+        .stat + .stat::before {
+            content: ''; position: absolute; left: 0; top: 10%; height: 80%; width: 1px; background: var(--line);
         }
+        .stat-num { font-family: var(--serif); font-size: 34px; line-height: 1; color: var(--ink); margin-bottom: 4px; }
+        .stat-label { font-size: 13px; color: var(--ink-muted); }
 
-        .hero-cta:hover svg {
-            transform: translateX(5px);
+        /* Notice */
+        .notice-wrap { padding: 48px 28px 0; max-width: 1080px; margin: 0 auto; }
+        .notice {
+            background: var(--accent-bg); border: 1px solid #bfdbfe; border-radius: var(--r);
+            padding: 14px 18px; display: flex; align-items: start; gap: 12px;
+            font-size: 14px; color: #1e40af; line-height: 1.5;
         }
+        .notice-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+        .notice a { color: #1e40af; font-weight: 600; }
 
-        .features-section {
-            padding: 80px 30px;
-            max-width: 1200px;
-            margin: 0 auto;
+        /* Sections */
+        .section { padding: 76px 28px; max-width: 1080px; margin: 0 auto; }
+        .section-label {
+            font-size: 12px; font-weight: 600; letter-spacing: 0.08em;
+            text-transform: uppercase; color: var(--ink-faint); margin-bottom: 12px;
         }
-
-        .section-header {
-            text-align: center;
-            margin-bottom: 60px;
-        }
-
         .section-title {
-            font-size: 38px;
-            font-weight: 800;
-            color: #1f2937;
-            margin-bottom: 15px;
+            font-family: var(--serif); font-size: clamp(26px, 4vw, 36px);
+            font-weight: 400; line-height: 1.2; letter-spacing: -0.015em; margin-bottom: 10px;
         }
+        .section-sub { font-size: 15px; color: var(--ink-muted); max-width: 500px; margin-bottom: 48px; line-height: 1.6; }
 
-        .section-subtitle {
-            font-size: 18px;
-            color: #6b7280;
-            max-width: 600px;
-            margin: 0 auto;
+        /* Features */
+        .features-list {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1px; border: 1px solid var(--line); border-radius: 14px;
+            overflow: hidden; background: var(--line);
         }
-
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 30px;
-        }
-
-        .feature-card {
-            background: white;
-            padding: 35px;
-            border-radius: 16px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
-            transition: all 0.3s ease;
-            border: 1px solid #f3f4f6;
-        }
-
-        .feature-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
-        }
-
+        .feature-item { background: var(--surface); padding: 28px 30px; transition: background 0.15s; }
+        .feature-item:hover { background: var(--surface-2); }
         .feature-icon {
-            width: 60px;
-            height: 60px;
-            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 20px;
+            width: 36px; height: 36px; border-radius: 8px; background: var(--surface-3);
+            border: 1px solid var(--line); display: grid; place-items: center;
+            font-size: 17px; margin-bottom: 14px;
+        }
+        .feature-name { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+        .feature-desc { font-size: 13.5px; color: var(--ink-muted); line-height: 1.55; }
+
+        /* Categories */
+        .categories { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+        .category-card {
+            border: 1px solid var(--line); border-radius: var(--r);
+            padding: 24px 22px 44px; text-decoration: none; color: var(--ink);
+            transition: 0.15s; position: relative; overflow: hidden;
+        }
+        .category-card:hover { border-color: var(--ink); transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.07); }
+        .cat-label { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 8px; }
+        .cat-name { font-family: var(--serif); font-size: 21px; font-weight: 400; margin-bottom: 6px; }
+        .cat-count { font-size: 13px; color: var(--ink-muted); }
+        .cat-arrow { position: absolute; bottom: 18px; right: 18px; font-size: 18px; color: var(--ink-faint); transition: transform 0.2s; }
+        .category-card:hover .cat-arrow { transform: translate(3px, -3px); }
+        .cat-aptitude  .cat-label { color: #1d4ed8; }
+        .cat-verbal    .cat-label { color: #be185d; }
+        .cat-logical   .cat-label { color: #15803d; }
+        .cat-technical .cat-label { color: #b45309; }
+
+        /* Divider */
+        .divider { height: 1px; background: var(--line); max-width: 1080px; margin: 0 auto; }
+
+        /* CTA */
+        .cta-wrap { padding: 0 28px 80px; max-width: 1080px; margin: 0 auto; }
+        .cta-block { border: 1px solid var(--line); border-radius: 16px; padding: 52px 48px; text-align: center; background: var(--surface-2); }
+        .cta-title { font-family: var(--serif); font-size: clamp(24px, 3.5vw, 34px); font-weight: 400; margin-bottom: 12px; }
+        .cta-sub { font-size: 15px; color: var(--ink-muted); margin-bottom: 28px; max-width: 400px; margin-left: auto; margin-right: auto; line-height: 1.6; }
+        .cta-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+        /* Footer */
+        .footer-outer { border-top: 1px solid var(--line); }
+        footer { padding: 28px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; max-width: 1080px; margin: 0 auto; }
+        .footer-brand { font-size: 14px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 8px; text-decoration: none; }
+        .footer-bm { width: 22px; height: 22px; background: var(--ink); border-radius: 5px; display:grid; place-items:center; color:#fff; font-size:9px; font-family: var(--serif); font-style:italic; }
+        .footer-links { display: flex; gap: 20px; flex-wrap: wrap; }
+        .footer-link { font-size: 13px; color: var(--ink-muted); text-decoration: none; transition: color 0.15s; }
+        .footer-link:hover { color: var(--ink); }
+        .footer-copy { font-size: 13px; color: var(--ink-faint); width: 100%; }
+
+        /* Reveal */
+        .reveal { opacity: 0; transform: translateY(16px); transition: opacity 0.45s ease, transform 0.45s ease; }
+        .reveal.visible { opacity: 1; transform: none; }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(14px); }
+            to   { opacity: 1; transform: translateY(0); }
         }
 
-        .feature-icon svg {
-            width: 28px;
-            height: 28px;
-            color: white;
-        }
-
-        .feature-title {
-            font-size: 22px;
-            font-weight: 700;
-            color: #1f2937;
-            margin-bottom: 12px;
-        }
-
-        .feature-description {
-            font-size: 15px;
-            color: #6b7280;
-            line-height: 1.6;
-        }
-
-        .stats-section {
-            padding: 60px 30px;
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-            color: white;
-            text-align: center;
-        }
-
-        .stats-container {
-            max-width: 1000px;
-            margin: 0 auto;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 40px;
-        }
-
-        .stat-item {
-            padding: 20px;
-        }
-
-        .stat-number {
-            font-size: 48px;
-            font-weight: 800;
-            margin-bottom: 10px;
-            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-
-        .stat-label {
-            font-size: 16px;
-            color: rgba(255, 255, 255, 0.9);
-            font-weight: 500;
-        }
-
-        .cta-section {
-            padding: 80px 30px;
-            text-align: center;
-            background: linear-gradient(135deg, #f9fafb 0%, #ffffff 100%);
-        }
-
-        .cta-container {
-            max-width: 700px;
-            margin: 0 auto;
-            background: white;
-            padding: 50px;
-            border-radius: 20px;
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
-        }
-
-        .cta-title {
-            font-size: 36px;
-            font-weight: 800;
-            color: #1f2937;
-            margin-bottom: 20px;
-        }
-
-        .cta-description {
-            font-size: 18px;
-            color: #6b7280;
-            margin-bottom: 35px;
-            line-height: 1.6;
-        }
-
-        .cta-button {
-            display: inline-flex;
-            align-items: center;
-            gap: 12px;
-            padding: 18px 45px;
-            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
-            color: white;
-            font-size: 18px;
-            font-weight: 700;
-            border: none;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            box-shadow: 0 8px 20px rgba(99, 102, 241, 0.3);
-        }
-
-        .cta-button:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 12px 28px rgba(99, 102, 241, 0.4);
-        }
-
-        .cta-button svg {
-            width: 20px;
-            height: 20px;
-            transition: transform 0.3s ease;
-        }
-
-        .cta-button:hover svg {
-            transform: translateX(5px);
-        }
-
-        footer {
-            background: #1f2937;
-            color: #9ca3af;
-            padding: 40px 30px 25px;
-            text-align: center;
-        }
-
-        .footer-content {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .footer-links {
-            display: flex;
-            justify-content: center;
-            gap: 30px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-
-        .footer-link {
-            color: #9ca3af;
-            text-decoration: none;
-            font-size: 14px;
-            transition: color 0.3s ease;
-        }
-
-        .footer-link:hover {
-            color: white;
-        }
-
-        .footer-text {
-            font-size: 14px;
-            color: #6b7280;
-            margin-top: 20px;
-        }
-
-        @media (max-width: 768px) {
-            .nav-menu {
-                display: none;
-                position: absolute;
-                top: 70px;
-                left: 0;
-                right: 0;
-                background: white;
-                flex-direction: column;
-                padding: 0;
-                box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-            }
-
-            .nav-menu.active {
-                display: flex;
-                padding: 20px;
-            }
-
-            .mobile-menu-toggle {
-                display: flex;
-            }
-
-            .hero-title {
-                font-size: 36px;
-            }
-
-            .hero-subtitle {
-                font-size: 16px;
-            }
-
-            .section-title {
-                font-size: 28px;
-            }
-
-            .cta-title {
-                font-size: 28px;
-            }
-
-            .features-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .stats-container {
-                grid-template-columns: 1fr;
-                gap: 30px;
-            }
-
-            .cta-container {
-                padding: 35px 25px;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .hero-title {
-                font-size: 28px;
-            }
-
-            .hero-cta {
-                padding: 14px 28px;
-                font-size: 16px;
-            }
-
-            .stat-number {
-                font-size: 36px;
-            }
+        @media (max-width: 640px) {
+            .desktop-links { display: none; }
+            .hamburger { display: flex; }
+            .stats-strip { flex-direction: column; gap: 24px; align-items: center; }
+            .stat + .stat::before { display: none; }
+            .stat { padding: 0; }
+            .cta-block { padding: 36px 24px; }
+            footer { flex-direction: column; align-items: flex-start; }
         }
     </style>
 </head>
 <body>
-    <nav class="navbar">
-        <a href="#" class="navbar-brand">
-            <div class="brand-logo">PT</div>
-            <span>Placement & Training</span>
+
+<nav class="navbar">
+    <a href="#" class="brand">
+        <div class="brand-mark">PT</div>
+        Placement & Training
+    </a>
+    <div class="nav-links desktop-links">
+        <a href="#features" class="nav-link">Features</a>
+        <a href="#tests" class="nav-link">Tests</a>
+        <a href="#about" class="nav-link">About</a>
+    </div>
+    <div class="nav-links desktop-links">
+        <a href="index.html" class="nav-btn outline">Log in</a>
+        <a href="register.html" class="nav-btn solid">Sign up</a>
+    </div>
+    <button class="hamburger" onclick="toggleMenu()" aria-label="Menu">
+        <span></span><span></span><span></span>
+    </button>
+</nav>
+
+<div class="mobile-nav" id="mobileNav">
+    <a href="#features" class="nav-link" onclick="toggleMenu()">Features</a>
+    <a href="#tests" class="nav-link" onclick="toggleMenu()">Tests</a>
+    <a href="#about" class="nav-link" onclick="toggleMenu()">About</a>
+    <div class="mobile-nav-actions">
+        <a href="index.html" class="nav-btn outline" style="flex:1;text-align:center">Log in</a>
+        <a href="register.html" class="nav-btn solid" style="flex:1;text-align:center">Sign up</a>
+    </div>
+</div>
+
+<section class="hero">
+    <div class="hero-badge">A small tool for placement prep</div>
+    <h1 class="hero-title">Practice tests for <em>placement</em> training</h1>
+    <p class="hero-sub">A straightforward portal for students to take practice assessments and track their preparation. Built to be simple and useful.</p>
+    <div class="hero-actions">
+        <a href="home.php" class="btn-primary">
+            Browse Tests
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
         </a>
+        <a href="register.html" class="btn-secondary">Create account</a>
+    </div>
+</section>
 
-        <div class="nav-menu" id="navMenu">
-            <a href="#features" class="nav-link">Features</a>
-            <a href="#about" class="nav-link">About</a>
-            <a href="#contact" class="nav-link">Contact</a>
+<div class="stats-strip reveal">
+    <div class="stat"><div class="stat-num">150+</div><div class="stat-label">Practice questions</div></div>
+    <div class="stat"><div class="stat-num">4</div><div class="stat-label">Test categories</div></div>
+    <div class="stat"><div class="stat-num">Free</div><div class="stat-label">No fees, no paywalls</div></div>
+</div>
+
+<div class="notice-wrap">
+    <div class="notice reveal">
+        <span class="notice-icon">ℹ️</span>
+        <span>Guests can browse and take all public tests. <a href="register.html">Create a free account</a> to have your results saved and track your progress over time.</span>
+    </div>
+</div>
+
+<section class="section" id="features">
+    <p class="section-label reveal">What's here</p>
+    <h2 class="section-title reveal">Simple, no-frills features</h2>
+    <p class="section-sub reveal">Nothing fancy — just the things that help you prepare.</p>
+    <div class="features-list reveal">
+        <div class="feature-item">
+            <div class="feature-icon">⏱️</div>
+            <div class="feature-name">Timed assessments</div>
+            <div class="feature-desc">Tests with real time limits so you can practise under pressure and work on your pacing.</div>
         </div>
-
-        <div class="nav-actions">
-            <a href="index.html" class="btn-login">Login</a>
-            <a href="register.html" class="btn-signup">Sign Up</a>
+        <div class="feature-item">
+            <div class="feature-icon">✅</div>
+            <div class="feature-name">Instant results</div>
+            <div class="feature-desc">See your score right after you submit. Explanations are shown where available.</div>
         </div>
-
-        <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
-            <span class="menu-bar"></span>
-            <span class="menu-bar"></span>
-            <span class="menu-bar"></span>
-        </button>
-    </nav>
-
-    <section class="hero-section">
-        <div class="hero-content">
-            <h1 class="hero-title">Master Your Skills, Ace Your Placement</h1>
-            <p class="hero-subtitle">Practice with real placement tests, track your progress, and prepare for success with our placement and training portal.</p>
-            <a href="home.php" class="hero-cta">
-                Take Test Now
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
-                </svg>
-            </a>
+        <div class="feature-item">
+            <div class="feature-icon">📚</div>
+            <div class="feature-name">Study materials</div>
+            <div class="feature-desc">Supplementary resources to help you understand the concepts behind the questions.</div>
         </div>
-    </section>
-
-    <section class="features-section" id="features">
-        <div class="section-header">
-            <h2 class="section-title">Why Choose Our Platform?</h2>
-            <p class="section-subtitle">Everything you need to prepare for your placement tests and succeed in your career.</p>
+        <div class="feature-item">
+            <div class="feature-icon">📈</div>
+            <div class="feature-name">Progress tracking</div>
+            <div class="feature-desc">Logged-in users get their attempt history saved so you can see how you're improving.</div>
         </div>
-
-        <div class="features-grid">
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
-                    </svg>
-                </div>
-                <h3 class="feature-title">Practice Tests</h3>
-                <p class="feature-description">Access real placement test questions and simulate the actual testing environment to build confidence.</p>
-            </div>
-
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-                    </svg>
-                </div>
-                <h3 class="feature-title">Performance Analytics</h3>
-                <p class="feature-description">Track your progress with detailed analytics and insights to identify your strengths and areas for improvement.</p>
-            </div>
-
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                </div>
-                <h3 class="feature-title">Timed Practice</h3>
-                <p class="feature-description">Improve your time management skills with timed tests that mirror actual placement test conditions.</p>
-            </div>
-
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
-                    </svg>
-                </div>
-                <h3 class="feature-title">Expert Tips</h3>
-                <p class="feature-description">Learn from experts with detailed explanations and tips for every question type.</p>
-            </div>
-
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
-                    </svg>
-                </div>
-                <h3 class="feature-title">Study Materials</h3>
-                <p class="feature-description">Access resources and study materials to strengthen your knowledge base.</p>
-            </div>
-
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
-                    </svg>
-                </div>
-                <h3 class="feature-title">Secure Platform</h3>
-                <p class="feature-description">Your data and progress are safe with us. Focus on learning without worries.</p>
-            </div>
+        <div class="feature-item">
+            <div class="feature-icon">🔀</div>
+            <div class="feature-name">Randomized questions</div>
+            <div class="feature-desc">Questions and options are shuffled on each attempt so it stays fresh.</div>
         </div>
-    </section>
-
-    <section class="stats-section">
-        <div class="stats-container">
-            <div class="stat-item">
-                <div class="stat-number">5000+</div>
-                <div class="stat-label">Practice Questions</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-number">10,000+</div>
-                <div class="stat-label">Students Trained</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-number">95%</div>
-                <div class="stat-label">Success Rate</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-number">50+</div>
-                <div class="stat-label">Partner Companies</div>
-            </div>
+        <div class="feature-item">
+            <div class="feature-icon">🔒</div>
+            <div class="feature-name">Straightforward privacy</div>
+            <div class="feature-desc">We only store what's needed to run the portal. Nothing sold, nothing shared.</div>
         </div>
-    </section>
+    </div>
+</section>
 
-    <section class="cta-section">
-        <div class="cta-container">
-            <h2 class="cta-title">Ready to Start Your Journey?</h2>
-            <p class="cta-description">Join thousands of successful candidates who prepared with us. Start practicing today and take the first step towards your dream placement.</p>
-            <a href="home.php" class="cta-button">
-                Begin Test Preparation
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
-                </svg>
-            </a>
+<div class="divider"></div>
+
+<section class="section" id="tests">
+    <p class="section-label reveal">Test categories</p>
+    <h2 class="section-title reveal">What you can practise</h2>
+    <p class="section-sub reveal">Tests are grouped into four areas commonly covered in placement rounds.</p>
+    <div class="categories reveal">
+        <a href="home.php?category=aptitude" class="category-card cat-aptitude">
+            <div class="cat-label">Aptitude</div>
+            <div class="cat-name">Quantitative</div>
+            <div class="cat-count">Arithmetic, percentages, ratios, algebra</div>
+            <span class="cat-arrow">↗</span>
+        </a>
+        <a href="home.php?category=verbal" class="category-card cat-verbal">
+            <div class="cat-label">Verbal</div>
+            <div class="cat-name">English</div>
+            <div class="cat-count">Grammar, comprehension, vocabulary</div>
+            <span class="cat-arrow">↗</span>
+        </a>
+        <a href="home.php?category=logical" class="category-card cat-logical">
+            <div class="cat-label">Logical</div>
+            <div class="cat-name">Reasoning</div>
+            <div class="cat-count">Patterns, sequences, puzzles</div>
+            <span class="cat-arrow">↗</span>
+        </a>
+        <a href="home.php?category=technical" class="category-card cat-technical">
+            <div class="cat-label">Technical</div>
+            <div class="cat-name">CS Fundamentals</div>
+            <div class="cat-count">Data structures, algorithms, basics</div>
+            <span class="cat-arrow">↗</span>
+        </a>
+    </div>
+</section>
+
+<div class="divider"></div>
+
+<section class="section" id="about">
+    <p class="section-label reveal">About</p>
+    <h2 class="section-title reveal">A small project</h2>
+    <p class="section-sub reveal" style="max-width:600px">
+        This is a student placement training portal built to make practice tests more accessible.
+        It's a modest tool — not a full-blown learning platform — but it covers the essentials:
+        timed tests, instant results, and basic progress tracking. If it helps you prep, that's the goal.
+    </p>
+    <div style="margin-top:32px" class="reveal">
+        <a href="register.html" class="btn-primary">Get started — it's free</a>
+    </div>
+</section>
+
+<div class="cta-wrap">
+    <div class="cta-block reveal">
+        <h2 class="cta-title">Ready to start practising?</h2>
+        <p class="cta-sub">Sign up to save your results, or browse the tests right now as a guest.</p>
+        <div class="cta-actions">
+            <a href="register.html" class="btn-primary">Create a free account</a>
+            <a href="home.php" class="btn-secondary">Continue as guest</a>
         </div>
-    </section>
+    </div>
+</div>
 
+<div class="footer-outer">
     <footer>
-        <div class="footer-content">
-            <div class="footer-links">
-                <a href="#" class="footer-link">Privacy Policy</a>
-                <a href="#" class="footer-link">Terms of Service</a>
-                <a href="#" class="footer-link">Help Center</a>
-                <a href="#" class="footer-link">Contact Us</a>
-            </div>
-            <p class="footer-text">2025 Placement & Training Portal. All rights reserved.</p>
+        <a href="#" class="footer-brand">
+            <div class="footer-bm">PT</div>
+            Placement & Training
+        </a>
+        <div class="footer-links">
+            <a href="#" class="footer-link">Privacy</a>
+            <a href="#" class="footer-link">Terms</a>
+            <a href="#" class="footer-link">Help</a>
+            <a href="#" class="footer-link">Contact</a>
         </div>
+        <p class="footer-copy">© 2025 Placement & Training Portal.</p>
     </footer>
+</div>
 
-    <script>
-        function toggleMobileMenu() {
-            const navMenu = document.getElementById('navMenu');
-            const menuToggle = document.querySelector('.mobile-menu-toggle');
-            
-            if (navMenu.style.display === 'flex') {
-                navMenu.style.display = 'none';
-                menuToggle.classList.remove('active');
-            } else {
-                navMenu.style.display = 'flex';
-                navMenu.style.padding = '20px';
-                navMenu.style.boxShadow = '0 4px 10px rgba(0, 0, 0, 0.1)';
-                menuToggle.classList.add('active');
-            }
-        }
-
-        window.addEventListener('load', function() {
-            console.log('Guest home page loaded');
-            
-            const urlParams = new URLSearchParams(window.location.search);
-            const source = urlParams.get('source');
-            if (source) {
-                console.log('Traffic source:', source);
-            }
-        });
-    </script>
+<script>
+    function toggleMenu() {
+        document.getElementById('mobileNav').classList.toggle('open');
+    }
+    document.addEventListener('click', e => {
+        const nav = document.getElementById('mobileNav');
+        if (!nav.contains(e.target) && !e.target.closest('.hamburger')) nav.classList.remove('open');
+    });
+    const io = new IntersectionObserver(entries => {
+        entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); } });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+</script>
 </body>
 </html>
