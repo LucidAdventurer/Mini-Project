@@ -13,13 +13,10 @@
       all subsequent API calls can be validated.
    ======================================== */
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
+// config.php handles session_start() and session_regenerate_id().
+// Do NOT call session_start() here — it would run before config sets
+// cookie params, causing headers-already-sent or session corruption.
 require_once "config.php";
-
-session_regenerate_id(true);
 
 // ────────────────────────────────────────
 // HELPERS
@@ -255,6 +252,10 @@ if (password_needs_rehash($user['password_hash'], PASSWORD_DEFAULT)) {
     }
 }
 
+// ── Success: regenerate session ID to prevent fixation ──
+// Done HERE — after auth is confirmed, not at the top of the file.
+session_regenerate_id(true);
+
 // ── Success: build session ──
 error_log("Login successful — user_id: {$user['user_id']}, Role: {$user['user_type']}");
 logLoginActivity($conn, $user['user_id'], $email, true, null);
@@ -262,22 +263,24 @@ updateLastLogin($conn, $user['user_id']);
 
 $_SESSION = [];
 
-$_SESSION['uid']          = $user['user_id'];   // legacy key used by dashboards
-$_SESSION['user_id']      = $user['user_id'];
-$_SESSION['name']         = $user['full_name'];  // legacy key
-$_SESSION['full_name']    = $user['full_name'];
-$_SESSION['email']        = $user['email'];
-$_SESSION['role']         = $user['user_type'];  // legacy key
-$_SESSION['user_type']    = $user['user_type'];
-$_SESSION['department']   = $user['department']   ?? '';
-$_SESSION['profile_image']= $user['profile_image'] ?? '';
-$_SESSION['login_time']   = time();
-$_SESSION['ip_address']   = $_SERVER['REMOTE_ADDR'];
-$_SESSION['is_verified']  = $user['is_verified'];
-$_SESSION['is_active']    = $user['is_active'];
+$_SESSION['authenticated'] = true;
+$_SESSION['uid']           = $user['user_id'];   // legacy key used by dashboards
+$_SESSION['user_id']       = $user['user_id'];
+$_SESSION['name']          = $user['full_name'];  // legacy key
+$_SESSION['full_name']     = $user['full_name'];
+$_SESSION['email']         = $user['email'];
+$_SESSION['role']          = $user['user_type'];  // legacy key
+$_SESSION['user_type']     = $user['user_type'];
+$_SESSION['department']    = $user['department']    ?? '';
+$_SESSION['profile_image'] = $user['profile_image'] ?? '';
+$_SESSION['login_time']    = time();
+$_SESSION['ip_address']    = $_SERVER['REMOTE_ADDR'];
+$_SESSION['is_verified']   = $user['is_verified'];
+$_SESSION['is_active']     = $user['is_active'];
 
-// CSRF token is already seeded by config.php when the session was started.
-// It is now available to all subsequent API calls via $_SESSION['csrf_token'].
+// Regenerating the session ID above cleared the old CSRF token.
+// Seed a fresh one for all subsequent API calls.
+$_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 
 // ── Remember-me ──
 if ($remember) {

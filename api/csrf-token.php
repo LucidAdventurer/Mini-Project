@@ -12,10 +12,7 @@
      headers: { 'X-CSRF-Token': token, 'Content-Type': 'application/json' }
    ======================================== */
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
+// config.php owns session_start() — do NOT call it here.
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../db-guard.php';
 
