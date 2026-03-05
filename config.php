@@ -83,12 +83,28 @@ define('DB_PASS', $env['DB_PASS']);
 define('DB_NAME', $env['DB_NAME']);
 define('DB_PORT', (int) $env['DB_PORT']);
 
+// ========================================
+// SMTP CONSTANTS
+// ========================================
+define('SMTP_HOST',      $env['SMTP_HOST']      ?? '');
+define('SMTP_PORT',      (int) ($env['SMTP_PORT'] ?? 587));
+define('SMTP_USER',      $env['SMTP_USER']      ?? '');
+define('SMTP_PASS',      $env['SMTP_PASS']      ?? '');
+define('SMTP_FROM',      $env['SMTP_FROM']      ?? '');
+define('SMTP_FROM_NAME', $env['SMTP_FROM_NAME'] ?? 'PTA Platform');
+
 unset($env); // Don't leave credentials in memory longer than needed
 
-define('DB_CONNECT_TIMEOUT', 10);
+// ========================================
+// CONNECTION SETTINGS
+// Fast-fail values: timeout quickly and only retry once.
+// A remote DB either accepts the connection or it doesn't —
+// retrying 5 times with backoff just hangs the page for 75s.
+// ========================================
+define('DB_CONNECT_TIMEOUT', 5);   // was 10 — cut in half
 define('DB_READ_TIMEOUT',    30);
 define('DB_WRITE_TIMEOUT',   30);
-define('DB_MAX_RETRIES',      5);
+define('DB_MAX_RETRIES',      1);  // was 5 — no backoff loop for remote DB
 define('DB_TYPE', 'MariaDB');
 
 // Set mysqli strict mode once, outside the retry loop
