@@ -594,6 +594,7 @@ let timeLeft             = TIME_REMAINING;
 let timerInterval        = null;
 let autoSaveInterval     = null;
 let isSubmitting         = false;
+let csrfToken            = '';
 
 /* Pre-populate saved answers from PHP */
 <?php if (!empty($savedAnswers)): ?>
@@ -611,7 +612,16 @@ questionData.forEach(q => {
 /* ============================================================
    INIT
    ============================================================ */
-window.addEventListener('load', function () {
+window.addEventListener('load', async function () {
+    /* Fetch CSRF token before anything that needs to POST */
+    try {
+        const res  = await fetch('api/csrf-token.php');
+        const data = await res.json();
+        if (data.success && data.token) csrfToken = data.token;
+    } catch (e) {
+        console.warn('Could not fetch CSRF token:', e);
+    }
+
     generateQuestionPalette();
     loadQuestion(0);
     startTimer();
@@ -820,7 +830,7 @@ async function autoSave() {
     try {
         await fetch('api/assessment/autosave.php', {
             method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
             body:    JSON.stringify({
                 attempt_id:   ATTEMPT_ID,
                 answers:      answersToSend,
@@ -865,7 +875,7 @@ async function submitTest(autoSubmit = false) {
     try {
         const res  = await fetch('api/assessment/submit.php', {
             method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
             body:    JSON.stringify({
                 attempt_id:    ATTEMPT_ID,
                 answers:       answersToSend,

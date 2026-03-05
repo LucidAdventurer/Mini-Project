@@ -13,8 +13,8 @@
 // }
 // ============================================================
 
-require_once rtrim($_SERVER['DOCUMENT_ROOT'], '/') . '/config.php';
-require_once rtrim($_SERVER['DOCUMENT_ROOT'], '/') . '/db-guard.php';
+require_once __DIR__ . '/../../config.php';
+require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 

@@ -946,7 +946,7 @@ function timeAgo(string $datetime): string {
 
         function startAssessment(id) {
             if (confirm('Are you ready to start this assessment?')) {
-                window.location.href = 'take-test.php?id=' + id;
+                window.location.href = 'test-preview.php?id=' + id;
             }
         }
 

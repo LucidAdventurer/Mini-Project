@@ -729,6 +729,21 @@ function fmtDt(?string $dt): string {
 <script>
     const ASSESSMENT_ID = <?= $assessmentId ?>;
 
+    /* ── Fetch CSRF token once on page load ── */
+    let csrfToken = '';
+    (async function loadCsrfToken() {
+        try {
+            const base = window.location.pathname.replace(/\/[^\/]*$/, '');
+            const res  = await fetch(base + '/api/csrf-token.php');
+            const data = await res.json();
+            if (data.success && data.token) {
+                csrfToken = data.token;
+            }
+        } catch (e) {
+            console.warn('Could not fetch CSRF token:', e);
+        }
+    })();
+
     function showInstructions() {
         document.getElementById('instructionsModal').classList.add('active');
     }
@@ -759,7 +774,10 @@ function fmtDt(?string $dt): string {
         try {
             const res = await fetch(apiUrl, {
                 method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                },
                 body:    JSON.stringify({ assessment_id: ASSESSMENT_ID })
             });
 
