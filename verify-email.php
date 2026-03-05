@@ -2,6 +2,9 @@
 /* ========================================
    EMAIL VERIFICATION HANDLER
    Validates token → marks user as verified → redirects
+
+   FIX: Incoming raw token is SHA-256 hashed before DB lookup
+        because register.php stores hash('sha256', $rawToken).
    ======================================== */
 
 ini_set('display_errors', 0);
@@ -29,14 +32,17 @@ if (!ensureDatabaseConnection($conn)) {
    PROCESS TOKEN
    ======================================== */
 $rawToken = $_GET['token'] ?? '';
-$token    = trim($rawToken);
+$rawToken = trim($rawToken);
 
-if (empty($token) || strlen($token) > 200) {
+if (empty($rawToken) || strlen($rawToken) > 200) {
     die(renderPage('error', 'Invalid verification link.'));
 }
 
+// register.php stores hash('sha256', $rawToken) — hash it before querying
+$tokenHash = hash('sha256', $rawToken);
+
 try {
-    // 1. Look up the token
+    // 1. Look up the hashed token
     $stmt = $conn->prepare(
         "SELECT t.token_id, t.user_id, t.expires_at, t.is_used,
                 u.full_name, u.email, u.is_verified
@@ -48,7 +54,7 @@ try {
     if (!$stmt) {
         throw new Exception("DB prepare failed: " . $conn->error);
     }
-    $stmt->bind_param("s", $token);
+    $stmt->bind_param("s", $tokenHash);
     $stmt->execute();
     $result = $stmt->get_result();
 
@@ -102,8 +108,8 @@ try {
     die(renderPage('success', 'Your email has been verified successfully! You can now log in.', $row['full_name']));
 
 } catch (Exception $e) {
-    if (isset($conn) && ($conn->inTransaction ?? false)) {
-        $conn->rollback();
+    if (isset($conn)) {
+        $conn->rollback(); // safe to call even if no transaction is active
     }
     error_log("Verification error: " . $e->getMessage());
     die(renderPage('error', 'Something went wrong. Please try again or contact support.'));
@@ -135,17 +141,19 @@ function renderPage($status, $message, $name = '', $email = '') {
         'error'            => '#dc2626',
     ];
 
-    $title   = $titles[$status]  ?? 'Verification';
-    $icon    = $icons[$status]   ?? '❓';
-    $color   = $colors[$status]  ?? '#374151';
-    $msgHtml = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
-    $nameHtml = $name  ? '<p style="margin:0 0 12px;font-size:15px;color:#374151;">Hi <strong>' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '</strong>,</p>' : '';
+    $title    = $titles[$status]  ?? 'Verification';
+    $icon     = $icons[$status]   ?? '❓';
+    $color    = $colors[$status]  ?? '#374151';
+    $msgHtml  = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
+    $nameHtml = $name
+        ? '<p style="margin:0 0 12px;font-size:15px;color:#374151;">Hi <strong>'
+          . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '</strong>,</p>'
+        : '';
 
-    // Re-send link (only shown when expired)
     $resendHtml = '';
     if ($status === 'expired' && !empty($email)) {
-        $enc = urlencode($email);
-        $resendHtml = '<a href="resend-verification.php?email=' . $enc . '" 
+        $enc        = urlencode($email);
+        $resendHtml = '<a href="resend-verification.php?email=' . $enc . '"
                           style="display:inline-block;margin-top:16px;padding:10px 28px;
                                  background:#1a56db;color:#fff;text-decoration:none;
                                  border-radius:6px;font-size:14px;font-weight:600;">
@@ -153,7 +161,7 @@ function renderPage($status, $message, $name = '', $email = '') {
                        </a>';
     }
 
-    $loginLink = '<a href="index.html" 
+    $loginLink = '<a href="index.html"
                      style="display:inline-block;margin-top:16px;padding:10px 28px;
                             background:#1a56db;color:#fff;text-decoration:none;
                             border-radius:6px;font-size:14px;font-weight:600;">
