@@ -1386,6 +1386,25 @@ async function importParsedQuestions() {
     let imported = 0;
     const token = await getCsrfToken();
 
+    // Helper: add one question with up to 3 retries on 409 conflict
+    async function addOne(payload) {
+        for (let attempt = 0; attempt < 3; attempt++) {
+            if (attempt > 0) await new Promise(r => setTimeout(r, 150 * attempt));
+            try {
+                const res = await fetch('api/assessment/add-question.php', {
+                    method:      'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+                    body:    JSON.stringify(payload),
+                });
+                const r = await res.json();
+                if (r.success) return true;
+                if (res.status !== 409) return false; // non-retryable error
+            } catch { return false; }
+        }
+        return false;
+    }
+
     for (const q of parsedQs) {
         const payload = {
             assessment_id : assessmentId,
@@ -1399,16 +1418,9 @@ async function importParsedQuestions() {
             marks         : 1,
             negative_marks: 0,
         };
-        try {
-            const res = await fetch('api/assessment/add-question.php', {
-                method:      'POST',
-                credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
-                body:    JSON.stringify(payload),
-            });
-            const r = await res.json();
-            if (r.success) imported++;
-        } catch { /* continue on individual failure */ }
+        if (await addOne(payload)) imported++;
+        // Small delay between questions to avoid transaction contention
+        await new Promise(r => setTimeout(r, 80));
     }
 
     hideLoading();
