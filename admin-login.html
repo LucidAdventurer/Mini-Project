@@ -714,7 +714,7 @@
     </div>
 
     <script>
-        // Toggle password visibility
+        // ── Toggle password visibility ──
         document.getElementById('togglePwd').addEventListener('click', function () {
             const pwd = document.getElementById('password');
             const icon = document.getElementById('eyeIcon');
@@ -727,7 +727,7 @@
             }
         });
 
-        // Ripple effect
+        // ── Ripple effect ──
         document.getElementById('loginBtn').addEventListener('click', function (e) {
             const btn = this;
             const ripple = document.createElement('span');
@@ -739,23 +739,119 @@
             setTimeout(() => ripple.remove(), 600);
         });
 
-        // Form submit
-        document.getElementById('adminLoginForm').addEventListener('submit', function (e) {
+        // ── Inline error banner ──
+        function showError(msg) {
+            let el = document.getElementById('loginError');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'loginError';
+                el.style.cssText = [
+                    'margin-top:14px', 'padding:11px 14px',
+                    'background:rgba(220,38,38,0.10)',
+                    'border-left:3px solid #dc2626',
+                    'border-radius:6px', 'font-size:13px',
+                    'color:#fca5a5', 'line-height:1.5'
+                ].join(';');
+                document.querySelector('.security-note').before(el);
+            }
+            el.textContent = msg;
+            el.style.display = 'block';
+        }
+
+        function clearError() {
+            const el = document.getElementById('loginError');
+            if (el) el.style.display = 'none';
+        }
+
+        function resetBtn(btn) {
+            btn.classList.remove('loading');
+            btn.textContent = 'Access System';
+            btn.disabled = false;
+        }
+
+        // ── Validate username client-side ──
+        // FIX: allow both email addresses and plain usernames (the old check
+        // only allowed [a-zA-Z0-9_] which silently blocked all email logins).
+        function isValidUsername(val) {
+            // email format
+            if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) return true;
+            // plain username / registration number
+            if (/^[a-zA-Z0-9_.\-]{3,50}$/.test(val)) return true;
+            return false;
+        }
+
+        // ── Form submit → POST to api/auth/admin-login.php ──
+        document.getElementById('adminLoginForm').addEventListener('submit', async function (e) {
             e.preventDefault();
+            clearError();
+
             const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value;
+            const remember = document.querySelector('input[name="remember"]').checked;
             const btn = document.getElementById('loginBtn');
 
-            if (!username || !password) { alert('⚠️ Please fill in all fields'); return; }
-            if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) { alert('⚠️ Invalid username format'); return; }
-            if (password.length < 8) { alert('⚠️ Password must be at least 8 characters'); return; }
+            // Client-side guards
+            if (!username || !password) { showError('Please fill in all fields.'); return; }
+            if (!isValidUsername(username)) { showError('Enter a valid email address or username.'); return; }
+            if (password.length < 8) { showError('Password must be at least 8 characters.'); return; }
 
             btn.classList.add('loading');
             btn.textContent = 'Authenticating';
+            btn.disabled = true;
 
-            setTimeout(() => {
-                window.location.href = 'admin-dashboard.html';
-            }, 1500);
+            try {
+                // FIX: use a root-relative URL so the request works regardless
+                // of where admin-login.html is served from in the directory tree.
+                const res = await fetch('/pta/Mini-Project/login.php', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password, remember }),
+                });
+
+                const text = await res.text();
+                let data;
+                try { data = JSON.parse(text); }
+                catch (e) {
+                    showError('PHP error: ' + text.replace(/<[^>]+>/g, '').trim().substring(0, 300));
+                    resetBtn(btn); return;
+                }
+
+                if (data.success) {
+                    if (data.csrf_token) sessionStorage.setItem('csrf_token', data.csrf_token);
+                    btn.textContent = '✓ Redirecting…';
+                    window.location.href = data.redirect || 'admin-dashboard.html';
+                    return;
+                }
+
+                // ── Handle error responses ──
+                let msg = data.error || ('No error message. Raw success=' + data.success + ' status=' + res.status);
+
+                if (res.status === 429 || res.status === 423) {
+                    // Locked out — disable the form
+                    document.getElementById('username').disabled = true;
+                    document.getElementById('password').disabled = true;
+                    btn.disabled = true;
+                    btn.classList.remove('loading');
+                    btn.textContent = 'Access System';
+                    if (data.lockout_until) {
+                        const until = new Date(data.lockout_until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        msg += ` Unlocks at ${until}.`;
+                    }
+                } else {
+                    if (typeof data.remaining_attempts === 'number' && data.remaining_attempts > 0) {
+                        msg += ` (${data.remaining_attempts} attempt${data.remaining_attempts === 1 ? '' : 's'} remaining)`;
+                    }
+                    resetBtn(btn);
+                }
+
+                showError(msg);
+
+            } catch (err) {
+                console.error('Login request failed:', err);
+                showError('Network error. Please check your connection and try again.');
+                resetBtn(btn);
+            }
         });
 
         function handleForgotPassword(e) {

@@ -3,250 +3,318 @@
    PTA LOGIN HANDLER
    File: login.php
 
-   SECURITY CHANGES:
-   1. Plain-text password fallback removed entirely.
-      Any account with an unhashed password must go through
-      password-reset before it can log in.
-   2. Remember-me token is now stored (hashed) in the DB.
-      Cookie contains selector + token; server verifies both.
-   3. CSRF token seeded into session on successful login so
-      all subsequent API calls can be validated.
+   ① FORM POST  (application/x-www-form-urlencoded)
+      Used by: index.html — student / teacher
+      On error  → redirect index.html?error=<code>
+      On success → redirect <role>-dashboard.php
+
+   ② JSON POST  (application/json)
+      Used by: admin-login.html — admin only
+      On error  → { success:false, error, remaining_attempts?, lockout_until? }
+      On success → { success:true, csrf_token, redirect, user }
    ======================================== */
+
+// ── Output buffer: catches any stray echo/warning from included files
+// so they never corrupt the JSON response or trigger "headers already sent".
+ob_start();
 
 // config.php handles session_start() and session_regenerate_id().
 // Do NOT call session_start() here — it would run before config sets
 // cookie params, causing headers-already-sent or session corruption.
 require_once "config.php";
 
-// ────────────────────────────────────────
-// HELPERS
-// ────────────────────────────────────────
+// Discard anything config.php / system-settings.php may have printed
+// (error_log goes to the log file, but a misconfigured server might
+//  print notices to output — ob_clean() ensures a clean slate).
+ob_clean();
 
-function redirectWithError(string $error): never {
-    error_log("Login failed: $error");
-    header("Location: index.html?error=" . urlencode($error));
+
+// ════════════════════════════════════════
+// DETECT REQUEST MODE
+// ════════════════════════════════════════
+
+$contentType = trim($_SERVER['CONTENT_TYPE'] ?? '');
+$isJson      = (stripos($contentType, 'application/json') !== false);
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    ob_end_clean();
+    if ($isJson) {
+        http_response_code(405);
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'error' => 'Method not allowed.']);
+    } else {
+        header('Location: index.html?error=invalid_request');
+    }
     exit;
 }
 
-function logLoginActivity(
-    mysqli $conn,
-    ?int   $userId,
-    string $email,
-    bool   $success,
-    ?string $failureReason = null
+
+// ════════════════════════════════════════
+// PARSE INPUT
+// ════════════════════════════════════════
+
+if ($isJson) {
+    $rawBody = file_get_contents('php://input');
+    $body    = json_decode($rawBody, true);
+    if (!is_array($body)) {
+        ob_end_clean();
+        http_response_code(400);
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'error' => 'Invalid JSON body.']);
+        exit;
+    }
+    $identifier = trim($body['username'] ?? '');
+    $password   = $body['password'] ?? '';
+    $role       = 'admin';
+    $remember   = !empty($body['remember']);
+} else {
+    $identifier = trim($_POST['email']    ?? '');
+    $password   = $_POST['password']      ?? '';
+    $role       = trim($_POST['role']     ?? '');
+    $remember   = isset($_POST['remember']);
+}
+
+
+// ════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════
+
+function failLogin(
+    bool   $isJson,
+    string $code,
+    string $message = '',
+    int    $status  = 401,
+    array  $extra   = []
+): never {
+    error_log("Login failed: $code");
+    ob_end_clean();
+    if ($isJson) {
+        http_response_code($status);
+        header('Content-Type: application/json');
+        echo json_encode(array_merge(['success' => false, 'error' => $message], $extra));
+    } else {
+        header('Location: index.html?error=' . urlencode($code));
+    }
+    exit;
+}
+
+function logLoginAttempt(
+    mysqli  $conn,
+    ?int    $userId,
+    string  $ip,
+    string  $ua,
+    bool    $success,
+    ?string $reason
 ): void {
-    if ($userId === null) {
-        return; // Don't log attempts for non-existent users
-    }
-
-    $ipAddress = $_SERVER['REMOTE_ADDR'] ?? null;
-    $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? null;
-
-    if (!tableExists($conn, 'login_activity')) {
-        return;
-    }
-
+    if ($userId === null) return;
+    if (!tableExists($conn, 'login_activity')) return;
     $stmt = $conn->prepare(
-        "INSERT INTO login_activity
-            (user_id, ip_address, user_agent, is_success, failure_reason)
+        "INSERT INTO login_activity (user_id, ip_address, user_agent, is_success, failure_reason)
          VALUES (?, ?, ?, ?, ?)"
     );
-
-    if ($stmt) {
-        $isSuccessInt = $success ? 1 : 0;
-        $stmt->bind_param("issis", $userId, $ipAddress, $userAgent, $isSuccessInt, $failureReason);
-        if (!$stmt->execute()) {
-            error_log("Failed to log login activity: " . $stmt->error);
-        }
-        $stmt->close();
-    }
+    if (!$stmt) return;
+    $ok = (int) $success;
+    $stmt->bind_param("issis", $userId, $ip, $ua, $ok, $reason);
+    $stmt->execute();
+    $stmt->close();
 }
 
 function updateLastLogin(mysqli $conn, int $userId): void {
     $stmt = $conn->prepare("UPDATE users SET last_login = NOW() WHERE user_id = ?");
-    if ($stmt) {
-        $stmt->bind_param("i", $userId);
-        $stmt->execute();
-        $stmt->close();
-    }
+    if (!$stmt) return;
+    $stmt->bind_param("i", $userId);
+    $stmt->execute();
+    $stmt->close();
 }
 
-function isAccountLocked(mysqli $conn, string $email): bool {
+function recentFailCount(mysqli $conn, int $userId, int $windowMinutes): array {
     if (!tableExists($conn, 'login_activity')) {
-        return false;
+        return ['count' => 0, 'last_fail' => null];
     }
-
-    // Look up user_id from email first
-    $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ? LIMIT 1");
-    if (!$stmt) {
-        return false;
-    }
-    $stmt->bind_param("s", $email);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    if ($result->num_rows === 0) {
-        $stmt->close();
-        return false; // Unknown user — not locked
-    }
-    $row    = $result->fetch_assoc();
-    $userId = (int) $row['user_id'];
-    $stmt->close();
-
-    $maxAttempts     = 5;
-    $lockoutDuration = 15; // minutes
-
     $stmt = $conn->prepare(
-        "SELECT COUNT(*) AS failed_count
+        "SELECT COUNT(*) AS cnt, MAX(created_at) AS last_fail
          FROM login_activity
-         WHERE user_id   = ?
-           AND is_success = 0
-           AND created_at > DATE_SUB(NOW(), INTERVAL ? MINUTE)"
+         WHERE user_id = ? AND is_success = 0
+           AND created_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)"
     );
-    if (!$stmt) {
-        return false;
-    }
-    $stmt->bind_param("ii", $userId, $lockoutDuration);
+    if (!$stmt) return ['count' => 0, 'last_fail' => null];
+    $stmt->bind_param("ii", $userId, $windowMinutes);
     $stmt->execute();
-    $result   = $stmt->get_result();
-    $row      = $result->fetch_assoc();
+    $row = $stmt->get_result()->fetch_assoc();
     $stmt->close();
-
-    $isLocked = ($row['failed_count'] >= $maxAttempts);
-    if ($isLocked) {
-        error_log("Account locked for email: $email (attempts: {$row['failed_count']})");
-    }
-    return $isLocked;
+    return ['count' => (int)($row['cnt'] ?? 0), 'last_fail' => $row['last_fail'] ?? null];
 }
 
-/**
- * Store a remember-me token in the database.
- * Returns the raw "selector:token" string to put in the cookie,
- * or null on failure.
- */
 function storeRememberToken(mysqli $conn, int $userId): ?string {
-    // selector  = 12 random bytes → 24 hex chars (used to look up the row quickly)
-    // token     = 32 random bytes → 64 hex chars (the secret; stored hashed)
     $selector  = bin2hex(random_bytes(12));
     $token     = bin2hex(random_bytes(32));
     $tokenHash = hash('sha256', $token);
     $expiresAt = date('Y-m-d H:i:s', time() + 30 * 24 * 3600);
-
     $stmt = $conn->prepare(
-        "INSERT INTO remember_tokens (user_id, selector, token_hash, expires_at)
-         VALUES (?, ?, ?, ?)"
+        "INSERT INTO remember_tokens (user_id, selector, token_hash, expires_at) VALUES (?, ?, ?, ?)"
     );
-    if (!$stmt) {
-        error_log("Failed to prepare remember_tokens insert: " . $conn->error);
-        return null;
-    }
-
+    if (!$stmt) return null;
     $stmt->bind_param("isss", $userId, $selector, $tokenHash, $expiresAt);
-    if (!$stmt->execute()) {
-        error_log("Failed to insert remember token: " . $stmt->error);
-        $stmt->close();
-        return null;
-    }
+    if (!$stmt->execute()) { $stmt->close(); return null; }
     $stmt->close();
-
     return $selector . ':' . $token;
 }
 
-// ────────────────────────────────────────
-// MAIN LOGIN LOGIC
-// ────────────────────────────────────────
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    redirectWithError('invalid_request');
-}
+// ════════════════════════════════════════
+// INPUT VALIDATION
+// ════════════════════════════════════════
 
-$email    = trim($_POST['email']    ?? '');
-$password = $_POST['password']      ?? '';
-$role     = trim($_POST['role']     ?? '');
-$remember = isset($_POST['remember']);
-
-error_log("Login attempt — Email: $email, Role: $role");
-
-if (empty($email) || empty($password) || empty($role)) {
-    redirectWithError('missing_fields');
-}
-if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-    redirectWithError('invalid_email');
+if (empty($identifier) || empty($password) || empty($role)) {
+    failLogin($isJson, 'missing_fields', 'Username and password are required.', 400);
 }
 if (!in_array($role, ['student', 'teacher', 'admin'], true)) {
-    redirectWithError('invalid_role');
+    failLogin($isJson, 'invalid_role', 'Invalid role.', 400);
 }
-if (isAccountLocked($conn, $email)) {
-    redirectWithError('account_locked');
+// Block admin via the form — must use admin-login.html (JSON path)
+if (!$isJson && $role === 'admin') {
+    failLogin($isJson, 'invalid_role', 'Invalid role.', 400);
 }
-
-// ── Fetch user ──
-$stmt = $conn->prepare(
-    "SELECT user_id, full_name, email, password_hash,
-            user_type, department, is_verified, is_active, profile_image
-     FROM users
-     WHERE email = ? AND user_type = ?"
-);
-
-if (!$stmt) {
-    error_log("DB prepare error: " . $conn->error);
-    redirectWithError('database_error');
+if (!$isJson && !filter_var($identifier, FILTER_VALIDATE_EMAIL)) {
+    failLogin($isJson, 'invalid_email', 'Invalid email address.', 400);
 }
 
-$stmt->bind_param("ss", $email, $role);
+$clientIp  = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+$userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+
+$maxAttempts    = (int) $settings->get('max_login_attempts',       5);
+$lockoutMinutes = (int) $settings->get('lockout_duration_minutes', 30);
+
+
+// ════════════════════════════════════════
+// LOOK UP USER
+// ════════════════════════════════════════
+
+if ($isJson) {
+    $stmt = $conn->prepare(
+        "SELECT user_id, full_name, email, password_hash,
+                user_type, department, registration_number,
+                is_verified, is_active, profile_image
+         FROM users
+         WHERE (email = ? OR registration_number = ?) AND user_type = 'admin'
+         LIMIT 1"
+    );
+    if (!$stmt) failLogin($isJson, 'database_error', 'Database error.', 500);
+    $stmt->bind_param("ss", $identifier, $identifier);
+} else {
+    $stmt = $conn->prepare(
+        "SELECT user_id, full_name, email, password_hash,
+                user_type, department, registration_number,
+                is_verified, is_active, profile_image
+         FROM users
+         WHERE email = ? AND user_type = ?
+         LIMIT 1"
+    );
+    if (!$stmt) failLogin($isJson, 'database_error', 'Database error.', 500);
+    $stmt->bind_param("ss", $identifier, $role);
+}
 
 if (!$stmt->execute()) {
-    error_log("DB execute error: " . $stmt->error);
-    redirectWithError('database_error');
-}
-
-$result = $stmt->get_result();
-
-if ($result->num_rows !== 1) {
-    logLoginActivity($conn, null, $email, false, 'user_not_found_or_role_mismatch');
+    error_log("Login query execute failed: " . $stmt->error);
     $stmt->close();
-    redirectWithError('invalid_credentials');
+    failLogin($isJson, 'database_error', 'Database error.', 500);
 }
 
-$user = $result->fetch_assoc();
+$user = $stmt->get_result()->fetch_assoc() ?: null;
 $stmt->close();
 
-// ── Account status ──
+
+// ════════════════════════════════════════
+// LOCKOUT CHECK
+// ════════════════════════════════════════
+
+if ($user) {
+    $fail = recentFailCount($conn, (int) $user['user_id'], $lockoutMinutes);
+    if ($fail['count'] >= $maxAttempts) {
+        logLoginAttempt($conn, (int) $user['user_id'], $clientIp, $userAgent, false, 'account_locked');
+        if ($isJson) {
+            $until = $fail['last_fail']
+                ? date('Y-m-d H:i:s', strtotime($fail['last_fail']) + ($lockoutMinutes * 60))
+                : null;
+            failLogin($isJson, 'account_locked',
+                'Account temporarily locked due to too many failed attempts.',
+                423, $until ? ['lockout_until' => $until] : []);
+        }
+        failLogin($isJson, 'account_locked', '');
+    }
+}
+
+
+// ════════════════════════════════════════
+// CREDENTIAL VERIFICATION
+// ════════════════════════════════════════
+
+$passwordValid = $user && password_verify($password, $user['password_hash'] ?? '');
+
+if (!$user || !$passwordValid) {
+    $userId = $user ? (int) $user['user_id'] : null;
+    $reason = !$user ? 'user_not_found' : 'wrong_password';
+
+    if (!$user && !$isJson) {
+        $probe = $conn->prepare("SELECT user_type FROM users WHERE email = ? LIMIT 1");
+        if ($probe) {
+            $probe->bind_param("s", $identifier);
+            $probe->execute();
+            if ($probe->get_result()->fetch_assoc()) $reason = 'role_mismatch';
+            $probe->close();
+        }
+    }
+
+    logLoginAttempt($conn, $userId, $clientIp, $userAgent, false, $reason);
+
+    if ($isJson && $userId !== null) {
+        $fail      = recentFailCount($conn, $userId, $lockoutMinutes);
+        $remaining = max(0, $maxAttempts - $fail['count']);
+        failLogin($isJson, 'invalid_credentials', 'Invalid credentials.',
+            401, ['remaining_attempts' => $remaining]);
+    }
+    failLogin($isJson, ($reason === 'role_mismatch') ? 'role_mismatch' : 'invalid_credentials',
+        'Invalid credentials.');
+}
+
+
+// ════════════════════════════════════════
+// ACCOUNT STATUS
+// ════════════════════════════════════════
+
 if (!$user['is_active']) {
-    logLoginActivity($conn, $user['user_id'], $email, false, 'account_inactive');
-    redirectWithError('account_inactive');
+    logLoginAttempt($conn, (int) $user['user_id'], $clientIp, $userAgent, false, 'account_inactive');
+    failLogin($isJson, 'account_inactive',
+        'This account has been deactivated. Contact the system administrator.', 403);
 }
+
 if (!$user['is_verified']) {
-    logLoginActivity($conn, $user['user_id'], $email, false, 'email_not_verified');
-    redirectWithError('email_not_verified');
+    logLoginAttempt($conn, (int) $user['user_id'], $clientIp, $userAgent, false, 'email_not_verified');
+    failLogin($isJson, 'email_not_verified',
+        $isJson ? 'Account email is not verified. Contact the system administrator.' : '', 403);
 }
 
-// ── Password verification ──
-// We only support bcrypt hashes ($2y$). Any account with a non-hashed
-// password must reset it. There is no plain-text fallback.
-$isHashedPassword = (
-    str_starts_with($user['password_hash'], '$2y$') ||
-    str_starts_with($user['password_hash'], '$2a$') ||
-    str_starts_with($user['password_hash'], '$2b$')
-);
+$isHashed = str_starts_with($user['password_hash'], '$2y$')
+         || str_starts_with($user['password_hash'], '$2a$')
+         || str_starts_with($user['password_hash'], '$2b$');
 
-if (!$isHashedPassword) {
-    // The stored value is not a bcrypt hash — force a password reset.
-    error_log("SECURITY: Unhashed password detected for user_id {$user['user_id']}. Login denied. User must reset password.");
-    logLoginActivity($conn, $user['user_id'], $email, false, 'password_not_hashed');
-    redirectWithError('password_reset_required');
+if (!$isHashed) {
+    error_log("SECURITY: Unhashed password for user_id {$user['user_id']}.");
+    logLoginAttempt($conn, (int) $user['user_id'], $clientIp, $userAgent, false, 'password_not_hashed');
+    failLogin($isJson, 'password_reset_required',
+        'Your password needs to be reset. Contact the administrator.', 403);
 }
 
-if (!password_verify($password, $user['password_hash'])) {
-    logLoginActivity($conn, $user['user_id'], $email, false, 'wrong_password');
-    redirectWithError('invalid_credentials');
-}
 
-// ── Rehash if cost factor is outdated ──
+// ════════════════════════════════════════
+// REHASH IF OUTDATED
+// ════════════════════════════════════════
+
 if (password_needs_rehash($user['password_hash'], PASSWORD_DEFAULT)) {
     $newHash = password_hash($password, PASSWORD_DEFAULT);
     $rehash  = $conn->prepare("UPDATE users SET password_hash = ? WHERE user_id = ?");
     if ($rehash) {
-        $rehash->bind_param("si", $newHash, $user['user_id']);
+        $rehash->bind_param("si", $newHash, (int) $user['user_id']);
         $rehash->execute();
         $rehash->close();
     }
@@ -261,59 +329,73 @@ error_log("Login successful — user_id: {$user['user_id']}, Role: {$user['user_
 logLoginActivity($conn, $user['user_id'], $email, true, null);
 updateLastLogin($conn, $user['user_id']);
 
-$_SESSION = [];
+session_regenerate_id(true);
 
-$_SESSION['authenticated'] = true;
-$_SESSION['uid']           = $user['user_id'];   // legacy key used by dashboards
-$_SESSION['user_id']       = $user['user_id'];
-$_SESSION['name']          = $user['full_name'];  // legacy key
+$_SESSION['uid']           = (int) $user['user_id'];
+$_SESSION['user_id']       = (int) $user['user_id'];
+$_SESSION['name']          = $user['full_name'];
 $_SESSION['full_name']     = $user['full_name'];
 $_SESSION['email']         = $user['email'];
-$_SESSION['role']          = $user['user_type'];  // legacy key
+$_SESSION['role']          = $user['user_type'];
 $_SESSION['user_type']     = $user['user_type'];
 $_SESSION['department']    = $user['department']    ?? '';
 $_SESSION['profile_image'] = $user['profile_image'] ?? '';
 $_SESSION['login_time']    = time();
-$_SESSION['ip_address']    = $_SERVER['REMOTE_ADDR'];
-$_SESSION['is_verified']   = $user['is_verified'];
-$_SESSION['is_active']     = $user['is_active'];
+$_SESSION['ip_address']    = $clientIp;
+$_SESSION['is_verified']   = (bool) $user['is_verified'];
+$_SESSION['is_active']     = (bool) $user['is_active'];
+$_SESSION['csrf_token']    = bin2hex(random_bytes(32));
 
-// Regenerating the session ID above cleared the old CSRF token.
-// Seed a fresh one for all subsequent API calls.
-$_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 
-// ── Remember-me ──
+// ════════════════════════════════════════
+// REMEMBER-ME
+// ════════════════════════════════════════
+
 if ($remember) {
-    $cookieValue = storeRememberToken($conn, $user['user_id']);
+    $cookieValue = storeRememberToken($conn, (int) $user['user_id']);
     if ($cookieValue !== null) {
-        $isSecure = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on');
-        setcookie(
-            'remember_me',
-            $cookieValue,
-            [
-                'expires'  => time() + 30 * 24 * 3600,
-                'path'     => '/',
-                'secure'   => $isSecure,
-                'httponly' => true,
-                'samesite' => 'Strict',
-            ]
-        );
-        error_log("Remember-me cookie set for user_id: {$user['user_id']}");
+        $isSecure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on';
+        setcookie('remember_me', $cookieValue, [
+            'expires'  => time() + 30 * 24 * 3600,
+            'path'     => '/',
+            'secure'   => $isSecure,
+            'httponly' => true,
+            'samesite' => 'Strict',
+        ]);
     }
 }
 
-// ── Redirect ──
-$redirectUrl = match ($user['user_type']) {
+
+// ════════════════════════════════════════
+// RESPOND
+// ════════════════════════════════════════
+
+$redirectMap = [
     'student' => 'student-dashboard.php',
     'teacher' => 'teacher-dashboard.php',
-    'admin'   => 'admin-dashboard.php',
-    default   => null,
-};
+    'admin'   => 'admin-dashboard.html',
+];
+$redirectUrl = $redirectMap[$user['user_type']] ?? null;
 
 if ($redirectUrl === null) {
-    logLoginActivity($conn, $user['user_id'], $email, false, 'invalid_user_type');
-    redirectWithError('invalid_role');
+    failLogin($isJson, 'invalid_role', 'Invalid role.', 403);
 }
 
-header("Location: $redirectUrl");
+ob_end_clean();
+
+if ($isJson) {
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success'    => true,
+        'csrf_token' => $_SESSION['csrf_token'],
+        'redirect'   => $redirectUrl,
+        'user'       => [
+            'user_id'   => (int) $user['user_id'],
+            'full_name' => $user['full_name'],
+            'email'     => $user['email'],
+        ],
+    ]);
+} else {
+    header('Location: ' . $redirectUrl);
+}
 exit;
