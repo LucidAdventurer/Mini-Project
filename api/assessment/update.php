@@ -103,13 +103,17 @@ $availableFrom  = null;
 $availableUntil = null;
 
 if (!empty($body['available_from'])) {
-    $dt = DateTime::createFromFormat('Y-m-d\TH:i', $body['available_from']);
+    $dt = DateTime::createFromFormat('Y-m-d\TH:i:s', $body['available_from']);
+    if (!$dt) $dt = DateTime::createFromFormat('Y-m-d\TH:i', $body['available_from']);
     if (!$dt) $dt = DateTime::createFromFormat('Y-m-d H:i:s', $body['available_from']);
+    if (!$dt) $dt = DateTime::createFromFormat('Y-m-d H:i', $body['available_from']);
     if ($dt) $availableFrom = $dt->format('Y-m-d H:i:s');
 }
 if (!empty($body['available_until'])) {
-    $dt = DateTime::createFromFormat('Y-m-d\TH:i', $body['available_until']);
+    $dt = DateTime::createFromFormat('Y-m-d\TH:i:s', $body['available_until']);
+    if (!$dt) $dt = DateTime::createFromFormat('Y-m-d\TH:i', $body['available_until']);
     if (!$dt) $dt = DateTime::createFromFormat('Y-m-d H:i:s', $body['available_until']);
+    if (!$dt) $dt = DateTime::createFromFormat('Y-m-d H:i', $body['available_until']);
     if ($dt) $availableUntil = $dt->format('Y-m-d H:i:s');
 }
 

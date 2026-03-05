@@ -95,13 +95,17 @@ $availableFrom  = null;
 $availableUntil = null;
 
 if (!empty($body['available_from'])) {
-    $dt = DateTime::createFromFormat('Y-m-d\TH:i', $body['available_from']);
+    $dt = DateTime::createFromFormat('Y-m-d\TH:i:s', $body['available_from']);
+    if (!$dt) $dt = DateTime::createFromFormat('Y-m-d\TH:i', $body['available_from']);
     if (!$dt) $dt = DateTime::createFromFormat('Y-m-d H:i:s', $body['available_from']);
+    if (!$dt) $dt = DateTime::createFromFormat('Y-m-d H:i', $body['available_from']);
     if ($dt) $availableFrom = $dt->format('Y-m-d H:i:s');
 }
 if (!empty($body['available_until'])) {
-    $dt = DateTime::createFromFormat('Y-m-d\TH:i', $body['available_until']);
+    $dt = DateTime::createFromFormat('Y-m-d\TH:i:s', $body['available_until']);
+    if (!$dt) $dt = DateTime::createFromFormat('Y-m-d\TH:i', $body['available_until']);
     if (!$dt) $dt = DateTime::createFromFormat('Y-m-d H:i:s', $body['available_until']);
+    if (!$dt) $dt = DateTime::createFromFormat('Y-m-d H:i', $body['available_until']);
     if ($dt) $availableUntil = $dt->format('Y-m-d H:i:s');
 }
 
@@ -125,23 +129,35 @@ if (!in_array($status, ['draft', 'active'], true)) {
 }
 
 // ── Insert ──
+// Param order: title(s) description(s) instructions(s) category(s) difficulty(s)
+//              duration(i) totalMarks(i) passingMarks(i) maxAttempts(i)
+//              availableFrom(s) availableUntil(s)
+//              showResults(i) showCorrect(i) randQ(i) randO(i) isPublic(i)
+//              status(s) teacherId(i)
+// Type string: s s s s s  i i i i  s s  i i i i i  s i  = 18 chars
 $result = safePreparedQuery($conn,
     "INSERT INTO assessments
-        (title, description, created_by, category, difficulty,
-         duration_minutes, total_marks, passing_marks,
-         available_from, available_until, max_attempts,
+        (title, description, instructions, category, difficulty,
+         duration_minutes, total_marks, passing_marks, max_attempts,
+         available_from, available_until,
          show_results_immediately, show_correct_answers,
          randomize_questions, randomize_options, is_public,
-         status, instructions)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    "ssissiiissiiiiiiss",
+         status, created_by, created_at, updated_at)
+     VALUES
+        (?, ?, ?, ?, ?,
+         ?, ?, ?, ?,
+         ?, ?,
+         ?, ?,
+         ?, ?, ?,
+         ?, ?, NOW(), NOW())",
+    "sssssiiiissiiiiisi",
     [
-        $title, $description, $teacherId, $category, $difficulty,
-        $duration, $totalMarks, $passingMarks,
-        $availableFrom, $availableUntil, $maxAttempts,
+        $title, $description, $instructions, $category, $difficulty,
+        $duration, $totalMarks, $passingMarks, $maxAttempts,
+        $availableFrom, $availableUntil,
         $showResultsImmediately, $showCorrectAnswers,
         $randomizeQuestions, $randomizeOptions, $isPublic,
-        $status, $instructions,
+        $status, $teacherId,
     ]
 );
 
