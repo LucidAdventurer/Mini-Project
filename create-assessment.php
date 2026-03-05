@@ -965,6 +965,16 @@ let assessmentId  = <?= $assessmentId ?>;   // 0 = brand-new, >0 = editing draft
 let parsedQs      = [];                      // from document upload, waiting to import
 let currentTab    = 1;
 
+let csrfToken = null;
+async function getCsrfToken() {
+    if (csrfToken) return csrfToken;
+    const res  = await fetch('api/csrf-token.php', { credentials: 'same-origin' });
+    const data = await res.json();
+    if (!data.success) throw new Error('Could not fetch CSRF token.');
+    csrfToken = data.token;
+    return csrfToken;
+}
+
 // =====================================================================
 // TOAST / LOADING
 // =====================================================================
@@ -1043,23 +1053,21 @@ async function saveDraft() {
     if (!validateBasic(data)) return;
 
     showLoading('Saving draft…');
-
     try {
-        // If we have an ID already, use update.php, otherwise use create endpoint
-        const url     = assessmentId > 0 ? 'api/assessment/update.php' : 'api/assessment/create.php';
-        const res     = await fetch(url, {
-            method : 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body   : JSON.stringify(data),
+        const token = await getCsrfToken();
+        const url   = assessmentId > 0 ? 'api/assessment/update.php' : 'api/assessment/create.php';
+        const res   = await fetch(url, {
+            method:      'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+            body:    JSON.stringify(data),
         });
-        const result  = await res.json();
+        const result = await res.json();
 
         if (result.success) {
             if (!assessmentId && result.assessment_id) {
                 assessmentId = result.assessment_id;
-                // Update URL without reloading so refresh works correctly
                 history.replaceState(null, '', 'create-assessment.php?edit=' + assessmentId);
-                // Enable the add-question button now that we have an ID
                 document.getElementById('addQBtn').disabled = false;
             }
             showToast('✅ Draft saved!');
@@ -1088,15 +1096,15 @@ async function publish() {
     }
 
     data.status = 'active';
-
     showLoading('Publishing…');
-
     try {
-        const url    = assessmentId > 0 ? 'api/assessment/update.php' : 'api/assessment/create.php';
-        const res    = await fetch(url, {
-            method : 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body   : JSON.stringify(data),
+        const token = await getCsrfToken();
+        const url   = assessmentId > 0 ? 'api/assessment/update.php' : 'api/assessment/create.php';
+        const res   = await fetch(url, {
+            method:      'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+            body:    JSON.stringify(data),
         });
         const result = await res.json();
 
@@ -1201,21 +1209,21 @@ async function addQuestion() {
     showLoading('Adding question…');
 
     try {
-        const res    = await fetch('api/assessment/add-question.php', {
-            method : 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body   : JSON.stringify(payload),
+        const token = await getCsrfToken();
+        const res   = await fetch('api/assessment/add-question.php', {
+            method:      'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+            body:    JSON.stringify(payload),
         });
         const result = await res.json();
-
         if (result.success) {
             showToast('✅ Question added!');
-            // Reload page to show fresh question list with correct IDs
             setTimeout(() => location.reload(), 500);
         } else {
             showToast(result.error || 'Failed to add question.', 'error');
         }
-    } catch {
+    } catch (err) {
         showToast('Network error. Please try again.', 'error');
     } finally {
         hideLoading();
@@ -1257,11 +1265,14 @@ async function saveExistingQ(qid, qtype) {
     }
 
     showLoading('Saving…');
+    showLoading('Saving…');
     try {
-        const res    = await fetch('api/assessment/update-question.php', {
-            method : 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body   : JSON.stringify(payload),
+        const token = await getCsrfToken();
+        const res   = await fetch('api/assessment/update-question.php', {
+            method:      'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+            body:    JSON.stringify(payload),
         });
         const result = await res.json();
         if (result.success) {
@@ -1284,10 +1295,12 @@ async function deleteExistingQ(qid) {
     if (!confirm('Delete this question? This cannot be undone.')) return;
     showLoading('Deleting…');
     try {
-        const res    = await fetch('api/assessment/delete-question.php', {
-            method : 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body   : JSON.stringify({ question_id: qid, assessment_id: assessmentId }),
+        const token = await getCsrfToken();
+        const res   = await fetch('api/assessment/delete-question.php', {
+            method:      'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+            body:    JSON.stringify({ question_id: qid, assessment_id: assessmentId }),
         });
         const result = await res.json();
         if (result.success) {
@@ -1304,7 +1317,6 @@ async function deleteExistingQ(qid) {
         hideLoading();
     }
 }
-
 function updateQCount() {
     const n = document.querySelectorAll('.q-card').length;
     document.getElementById('qCount').textContent = n + ' question' + (n !== 1 ? 's' : '') + ' saved';
@@ -1329,19 +1341,18 @@ async function handleFile(file) {
         showToast('Only PDF or DOCX files are supported.', 'error');
         return;
     }
-
     const formData = new FormData();
     formData.append('document', file);
-
     showLoading('Parsing document…');
-
     try {
-        const res    = await fetch('api/assessment/parse-document.php', {
-            method: 'POST',
-            body  : formData,
+        const token = await getCsrfToken();
+        const res   = await fetch('api/assessment/parse-document.php', {
+            method:      'POST',
+            credentials: 'same-origin',
+            headers:     { 'X-CSRF-Token': token },
+            body:        formData,
         });
         const result = await res.json();
-
         if (result.success && result.questions?.length > 0) {
             parsedQs = result.questions;
             document.getElementById('uploadFileName').textContent = file.name;
@@ -1362,7 +1373,6 @@ async function handleFile(file) {
 async function importParsedQuestions() {
     if (!parsedQs.length) return;
 
-    // Must have an assessment to attach to
     if (!assessmentId) {
         showToast('Save a draft first before importing.', 'error');
         await saveDraft();
@@ -1371,34 +1381,46 @@ async function importParsedQuestions() {
 
     const btn = document.getElementById('importBtn');
     btn.disabled = true;
-
     showLoading('Importing ' + parsedQs.length + ' questions…');
 
     let imported = 0;
-    for (const q of parsedQs) {
-        // Map parsed question shape → API shape
-        const payload = {
-            assessment_id  : assessmentId,
-            question_type  : 'mcq',
-            question_text  : q.text,
-            option_a       : q.options[0] || null,
-            option_b       : q.options[1] || null,
-            option_c       : q.options[2] || null,
-            option_d       : q.options[3] || null,
-            correct_answer : q.correctAnswer ? q.correctAnswer.toUpperCase() : 'A',
-            marks          : 1,
-            negative_marks : 0,
-        };
+    const token = await getCsrfToken();
 
-        try {
-            const res = await fetch('api/assessment/add-question.php', {
-                method : 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body   : JSON.stringify(payload),
-            });
-            const r = await res.json();
-            if (r.success) imported++;
-        } catch { /* continue on individual failure */ }
+    // Helper: add one question with up to 3 retries on 409 conflict
+    async function addOne(payload) {
+        for (let attempt = 0; attempt < 3; attempt++) {
+            if (attempt > 0) await new Promise(r => setTimeout(r, 150 * attempt));
+            try {
+                const res = await fetch('api/assessment/add-question.php', {
+                    method:      'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+                    body:    JSON.stringify(payload),
+                });
+                const r = await res.json();
+                if (r.success) return true;
+                if (res.status !== 409) return false; // non-retryable error
+            } catch { return false; }
+        }
+        return false;
+    }
+
+    for (const q of parsedQs) {
+        const payload = {
+            assessment_id : assessmentId,
+            question_type : 'mcq',
+            question_text : q.text,
+            option_a      : q.options[0] || null,
+            option_b      : q.options[1] || null,
+            option_c      : q.options[2] || null,
+            option_d      : q.options[3] || null,
+            correct_answer: q.correctAnswer ? q.correctAnswer.toUpperCase() : 'A',
+            marks         : 1,
+            negative_marks: 0,
+        };
+        if (await addOne(payload)) imported++;
+        // Small delay between questions to avoid transaction contention
+        await new Promise(r => setTimeout(r, 80));
     }
 
     hideLoading();

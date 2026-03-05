@@ -1133,6 +1133,17 @@ const ASSESSMENT_ID = <?= $assessmentId ?>;
 let editingSet      = new Set();   // question IDs currently in edit mode
 let confirmCallback = null;        // function to call on confirm modal confirm
 
+// ── CSRF TOKEN — fetched once, reused for all POST requests ──
+let csrfToken = null;
+async function getCsrfToken() {
+    if (csrfToken) return csrfToken;
+    const res  = await fetch('api/csrf-token.php', { credentials: 'same-origin' });
+    const data = await res.json();
+    if (!data.success) throw new Error('Could not fetch CSRF token.');
+    csrfToken = data.token;
+    return csrfToken;
+}
+
 // =====================================================================
 // TOAST
 // =====================================================================
@@ -1199,10 +1210,12 @@ function toggleStatus() {
             closeConfirmModal();
             showLoading('Updating status…');
             try {
-                const res  = await fetch('api/assessment/update-status.php', {
-                    method : 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body   : JSON.stringify({ assessment_id: ASSESSMENT_ID, status: newStatus })
+                const token = await getCsrfToken();
+                const res   = await fetch('api/assessment/update-status.php', {
+                    method:      'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+                    body:    JSON.stringify({ assessment_id: ASSESSMENT_ID, status: newStatus })
                 });
                 const data = await res.json();
                 if (data.success) {
@@ -1272,10 +1285,12 @@ async function saveAll() {
     };
 
     try {
-        const res  = await fetch('api/assessment/update.php', {
-            method : 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body   : JSON.stringify(payload)
+        const token = await getCsrfToken();
+        const res   = await fetch('api/assessment/update.php', {
+            method:      'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+            body:    JSON.stringify(payload)
         });
         const data = await res.json();
         if (data.success) {
@@ -1351,10 +1366,12 @@ async function saveQ(id, qtype) {
     showLoading('Saving question…');
 
     try {
-        const res  = await fetch('api/assessment/update-question.php', {
-            method : 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body   : JSON.stringify(payload)
+        const token = await getCsrfToken();
+        const res   = await fetch('api/assessment/update-question.php', {
+            method:      'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+            body:    JSON.stringify(payload)
         });
         const data = await res.json();
         if (data.success) {
@@ -1383,10 +1400,12 @@ function deleteQ(id, num) {
             closeConfirmModal();
             showLoading('Deleting question…');
             try {
-                const res  = await fetch('api/assessment/delete-question.php', {
-                    method : 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body   : JSON.stringify({ question_id: id, assessment_id: ASSESSMENT_ID })
+                const token = await getCsrfToken();
+                const res   = await fetch('api/assessment/delete-question.php', {
+                    method:      'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+                    body:    JSON.stringify({ question_id: id, assessment_id: ASSESSMENT_ID })
                 });
                 const data = await res.json();
                 if (data.success) {
@@ -1538,10 +1557,12 @@ async function addNewQ() {
     showLoading('Adding question…');
 
     try {
-        const res  = await fetch('api/assessment/add-question.php', {
-            method : 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body   : JSON.stringify(payload)
+        const token = await getCsrfToken();
+        const res   = await fetch('api/assessment/add-question.php', {
+            method:      'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+            body:    JSON.stringify(payload)
         });
         const data = await res.json();
         if (data.success) {
@@ -1578,10 +1599,12 @@ function confirmDeleteAssessment() {
 async function doDeleteAssessment() {
     showLoading('Deleting assessment…');
     try {
-        const res  = await fetch('api/assessment/delete.php', {
-            method : 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body   : JSON.stringify({ assessment_id: ASSESSMENT_ID })
+        const token = await getCsrfToken();
+        const res   = await fetch('api/assessment/delete.php', {
+            method:      'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+            body:    JSON.stringify({ assessment_id: ASSESSMENT_ID })
         });
         const data = await res.json();
         if (data.success) {

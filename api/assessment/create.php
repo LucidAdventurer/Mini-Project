@@ -1,20 +1,18 @@
 <?php
 // ============================================================
-// api/assessment/update.php
+// api/assessment/create.php
 //
-// Saves all basic information edits for an assessment.
-// Verifies the logged-in teacher owns the assessment before
-// writing any changes.
+// Creates a new assessment (draft or active) for the logged-in teacher.
 //
 // POST JSON {
-//   assessment_id, title, description, instructions,
+//   title, description, instructions,
 //   category, difficulty, duration_minutes, total_marks,
 //   passing_marks, max_attempts, available_from,
 //   available_until, show_results_immediately,
 //   show_correct_answers, randomize_questions,
 //   randomize_options, is_public, status
 // }
-// Returns { success: bool, error?: string }
+// Returns { success: bool, assessment_id?: int, error?: string }
 // ============================================================
 
 require_once __DIR__ . '/../../config.php';
@@ -40,7 +38,6 @@ if (!is_array($body)) {
 }
 
 // ── Required fields ──
-$assessmentId = (int)($body['assessment_id'] ?? 0);
 $title        = trim($body['title']      ?? '');
 $category     = trim($body['category']   ?? '');
 $difficulty   = trim($body['difficulty'] ?? '');
@@ -48,11 +45,6 @@ $duration     = (int)($body['duration_minutes'] ?? 0);
 $totalMarks   = (int)($body['total_marks']      ?? 0);
 $passingMarks = (int)($body['passing_marks']    ?? 0);
 
-if ($assessmentId <= 0) {
-    http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Invalid assessment ID.']);
-    exit;
-}
 if ($title === '') {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => 'Title is required.']);
@@ -130,71 +122,49 @@ $randomizeQuestions     = !empty($body['randomize_questions'])      ? 1 : 0;
 $randomizeOptions       = !empty($body['randomize_options'])        ? 1 : 0;
 $isPublic               = !empty($body['is_public'])                ? 1 : 0;
 
-// Status — only allow valid enum values
+// Status — only allow draft or active
 $status = trim($body['status'] ?? 'draft');
-if (!in_array($status, ['draft', 'active', 'archived', 'scheduled'], true)) {
+if (!in_array($status, ['draft', 'active'], true)) {
     $status = 'draft';
 }
 
-// ── Verify ownership ──
-$check = safePreparedQuery($conn,
-    "SELECT assessment_id FROM assessments WHERE assessment_id = ? AND created_by = ?",
-    "ii", [$assessmentId, $teacherId]
-);
-
-if (!$check['success'] || !$check['result'] || $check['result']->num_rows === 0) {
-    http_response_code(403);
-    echo json_encode(['success' => false, 'error' => 'Assessment not found or access denied.']);
-    exit;
-}
-$check['result']->free();
-
-// ── Update ──
-// 19 params: s s s s s i i i i s s i i i i i s i i
-// title description instructions category difficulty
-// duration totalMarks passingMarks maxAttempts
-// availableFrom availableUntil
-// showResults showCorrect randQ randO isPublic
-// status
-// assessmentId teacherId
+// ── Insert ──
+// Param order: title(s) description(s) instructions(s) category(s) difficulty(s)
+//              duration(i) totalMarks(i) passingMarks(i) maxAttempts(i)
+//              availableFrom(s) availableUntil(s)
+//              showResults(i) showCorrect(i) randQ(i) randO(i) isPublic(i)
+//              status(s) teacherId(i)
+// Type string: s s s s s  i i i i  s s  i i i i i  s i  = 18 chars
 $result = safePreparedQuery($conn,
-    "UPDATE assessments SET
-        title                    = ?,
-        description              = ?,
-        instructions             = ?,
-        category                 = ?,
-        difficulty               = ?,
-        duration_minutes         = ?,
-        total_marks              = ?,
-        passing_marks            = ?,
-        max_attempts             = ?,
-        available_from           = ?,
-        available_until          = ?,
-        show_results_immediately = ?,
-        show_correct_answers     = ?,
-        randomize_questions      = ?,
-        randomize_options        = ?,
-        is_public                = ?,
-        status                   = ?,
-        updated_at               = NOW()
-     WHERE assessment_id = ? AND created_by = ?",
-    "sssssiiiissiiiiisii",
+    "INSERT INTO assessments
+        (title, description, instructions, category, difficulty,
+         duration_minutes, total_marks, passing_marks, max_attempts,
+         available_from, available_until,
+         show_results_immediately, show_correct_answers,
+         randomize_questions, randomize_options, is_public,
+         status, created_by, created_at, updated_at)
+     VALUES
+        (?, ?, ?, ?, ?,
+         ?, ?, ?, ?,
+         ?, ?,
+         ?, ?,
+         ?, ?, ?,
+         ?, ?, NOW(), NOW())",
+    "sssssiiiissiiiiisi",
     [
-        $title, $description, $instructions,
-        $category, $difficulty,
+        $title, $description, $instructions, $category, $difficulty,
         $duration, $totalMarks, $passingMarks, $maxAttempts,
         $availableFrom, $availableUntil,
         $showResultsImmediately, $showCorrectAnswers,
         $randomizeQuestions, $randomizeOptions, $isPublic,
-        $status,
-        $assessmentId, $teacherId,
+        $status, $teacherId,
     ]
 );
 
-if ($result['success'] && $result['affected_rows'] >= 0) {
-    echo json_encode(['success' => true]);
+if ($result['success'] && $result['insert_id'] > 0) {
+    echo json_encode(['success' => true, 'assessment_id' => $result['insert_id']]);
 } else {
-    error_log("update assessment failed for assessment_id=$assessmentId teacher_id=$teacherId");
+    error_log("create assessment failed for teacher_id=$teacherId: " . ($result['error'] ?? 'unknown'));
     http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Update failed. Please try again.']);
+    echo json_encode(['success' => false, 'error' => 'Failed to create assessment. Please try again.']);
 }

@@ -2,20 +2,10 @@
 // ============================================================
 // api/assessment/get-assessments.php
 //
-// Returns all assessments created by the logged-in teacher,
-// with question count, attempt count, and student count.
-//
-// GET ?status=active|draft|archived|scheduled  (optional)
-//     ?search=keyword                           (optional)
-//     ?page=1&limit=20                          (optional)
-//
-// Returns {
-//   success: bool,
-//   assessments: [...],
-//   total: int,
-//   page: int,
-//   pages: int
-// }
+// CHANGE: Replaced LEFT JOIN questions + LEFT JOIN attempts
+// (which caused row multiplication requiring DISTINCT + GROUP BY)
+// with correlated subqueries. Each subquery hits one table with
+// a targeted index lookup — no row explosion, no heavy aggregation.
 // ============================================================
 
 require_once __DIR__ . '/../../config.php';
@@ -40,7 +30,7 @@ $conditions = ["a.created_by = ?"];
 $params     = [$teacherId];
 $types      = "i";
 
-if ($status && in_array($status, $allowedStatuses, true)) {
+if ($status !== '' && in_array($status, $allowedStatuses, true)) {
     $conditions[] = "a.status = ?";
     $params[]     = $status;
     $types       .= "s";
@@ -68,7 +58,9 @@ if ($rc['success'] && $rc['result']) {
     $rc['result']->free();
 }
 
-// ── Fetch page ──
+// ── Fetch page using correlated subqueries ──
+// Each subquery does a single indexed lookup per row.
+// No row multiplication, no GROUP BY, no DISTINCT needed.
 $listTypes  = $types . "ii";
 $listParams = array_merge($params, [$limit, $offset]);
 
@@ -87,18 +79,24 @@ $r = safePreparedQuery($conn,
         a.available_until,
         a.created_at,
         a.updated_at,
-        COUNT(DISTINCT q.question_id)   AS question_count,
-        COUNT(DISTINCT aa.attempt_id)   AS attempt_count,
-        COUNT(DISTINCT aa.user_id)      AS student_count,
-        ROUND(AVG(aa.percentage), 1)    AS avg_score
+        (SELECT COUNT(*)
+         FROM questions q
+         WHERE q.assessment_id = a.assessment_id)                              AS question_count,
+        (SELECT COUNT(*)
+         FROM assessment_attempts aa
+         WHERE aa.assessment_id = a.assessment_id
+           AND aa.status = 'completed')                                        AS attempt_count,
+        (SELECT COUNT(DISTINCT aa2.user_id)
+         FROM assessment_attempts aa2
+         WHERE aa2.assessment_id = a.assessment_id
+           AND aa2.status = 'completed'
+           AND aa2.user_id IS NOT NULL)                                        AS student_count,
+        (SELECT ROUND(AVG(aa3.percentage), 1)
+         FROM assessment_attempts aa3
+         WHERE aa3.assessment_id = a.assessment_id
+           AND aa3.status = 'completed')                                       AS avg_score
      FROM assessments a
-     LEFT JOIN questions q
-            ON q.assessment_id = a.assessment_id
-     LEFT JOIN assessment_attempts aa
-            ON aa.assessment_id = a.assessment_id
-           AND aa.status = 'completed'
      WHERE $where
-     GROUP BY a.assessment_id
      ORDER BY FIELD(a.status,'active','scheduled','draft','archived'), a.updated_at DESC
      LIMIT ? OFFSET ?",
     $listTypes, $listParams
@@ -135,5 +133,5 @@ echo json_encode([
     'assessments' => $assessments,
     'total'       => $total,
     'page'        => $page,
-    'pages'       => (int)ceil($total / $limit),
+    'pages'       => (int) ceil($total / $limit),
 ]);

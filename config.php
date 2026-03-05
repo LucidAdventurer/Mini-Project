@@ -4,12 +4,11 @@
  * PTA GLOBAL CONFIGURATION
  * File: config.php
  *
- * SECURITY CHANGES:
+ * SECURITY:
  * 1. DB credentials loaded from env.php (outside web root), NOT hardcoded here.
- * 2. CSRF token generated once per session.
+ * 2. CSRF token generated once per session with 1-hour expiry rotation.
  * ======================================== */
 
-set_time_limit(120);
 ini_set('max_execution_time', '120');
 
 // ========================================
@@ -45,6 +44,12 @@ foreach ($requiredKeys as $_key) {
 }
 unset($_key);
 
+if (!is_numeric($env['DB_PORT'])) {
+    error_log("Invalid DB_PORT value: " . $env['DB_PORT']);
+    http_response_code(500);
+    die("Server configuration error. Contact the administrator.");
+}
+
 // ========================================
 // ENVIRONMENT
 // ========================================
@@ -54,14 +59,19 @@ if (APP_ENVIRONMENT === 'development') {
     error_reporting(E_ALL);
     ini_set('display_errors', 1);
 } else {
-    error_reporting(E_ALL);
+    // Suppress notices/deprecations in production to prevent log flooding
+    error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
     ini_set('display_errors', 0);
     ini_set('log_errors', 1);
+    ini_set('log_errors_max_len', 0);
     $logDir = __DIR__ . '/logs';
     if (!is_dir($logDir)) {
-        mkdir($logDir, 0755, true);
+        @mkdir($logDir, 0755, true);
     }
-    ini_set('error_log', $logDir . '/php_errors.log');
+    if (is_dir($logDir) && is_writable($logDir)) {
+        ini_set('error_log', $logDir . '/php_errors.log');
+    }
+    unset($logDir);
 }
 
 // ========================================
@@ -81,6 +91,9 @@ define('DB_WRITE_TIMEOUT',   30);
 define('DB_MAX_RETRIES',      5);
 define('DB_TYPE', 'MariaDB');
 
+// Set mysqli strict mode once, outside the retry loop
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+
 /**
  * Establish a database connection with retry + exponential backoff.
  */
@@ -90,11 +103,9 @@ function createDatabaseConnection(): ?mysqli {
 
     while ($retryCount < DB_MAX_RETRIES) {
         try {
-            mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
-
             $conn = mysqli_init();
             if (!$conn) {
-                throw new Exception("mysqli_init failed");
+                throw new \RuntimeException("mysqli_init failed");
             }
 
             $conn->options(MYSQLI_OPT_CONNECT_TIMEOUT, DB_CONNECT_TIMEOUT);
@@ -105,35 +116,33 @@ function createDatabaseConnection(): ?mysqli {
             if (defined('MYSQLI_OPT_WRITE_TIMEOUT')) {
                 $conn->options(MYSQLI_OPT_WRITE_TIMEOUT, DB_WRITE_TIMEOUT);
             }
-            if (defined('MYSQLI_OPT_RECONNECT')) {
-                $conn->options(MYSQLI_OPT_RECONNECT, 1);
-            }
 
             if (!$conn->real_connect(DB_HOST, DB_USER, DB_PASS, DB_NAME, DB_PORT)) {
                 throw new mysqli_sql_exception("Connection failed: " . $conn->connect_error);
             }
 
-            $conn->query("SELECT 1");
             $conn->set_charset("utf8mb4");
             $conn->query("SET SESSION sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO'");
-            $conn->query("SET SESSION wait_timeout = 300");
-            $conn->query("SET SESSION interactive_timeout = 300");
             $conn->query("SET SESSION net_read_timeout = 60");
             $conn->query("SET SESSION net_write_timeout = 60");
 
-            error_log("✓ DB connected on attempt " . ($retryCount + 1));
+            if (APP_ENVIRONMENT === 'development') {
+                error_log("✓ DB connected on attempt " . ($retryCount + 1));
+            }
+
             return $conn;
 
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             $retryCount++;
-            error_log("✗ DB connection attempt $retryCount failed: " . $e->getMessage());
 
             if ($retryCount < DB_MAX_RETRIES) {
-                error_log("→ Retrying in {$retryDelay}s...");
+                if (APP_ENVIRONMENT === 'development') {
+                    error_log("✗ DB connection attempt $retryCount failed: " . $e->getMessage() . " — retrying in {$retryDelay}s");
+                }
                 sleep($retryDelay);
                 $retryDelay = min($retryDelay * 2, 10);
             } else {
-                error_log("✗ All DB connection attempts failed");
+                error_log("✗ All DB connection attempts failed: " . $e->getMessage());
                 return null;
             }
         }
@@ -146,12 +155,26 @@ $conn = createDatabaseConnection();
 
 if ($conn === null) {
     error_log("Database connection failed after all retries.");
-    $isApiEndpoint = str_starts_with($_SERVER['REQUEST_URI'] ?? '', '/api/');
-    if ($isApiEndpoint || in_array(basename($_SERVER['PHP_SELF']), ['register.php', 'login.php', 'verify-email.php'])) {
-        header('Content-Type: application/json');
-        echo json_encode(['success' => false, 'message' => 'Unable to connect to database. Please try again in a few moments.']);
+    $currentScript = basename($_SERVER['SCRIPT_NAME'] ?? '');
+    $path = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?? '';
+    $isApiEndpoint = str_contains($path, '/api/');
+
+    // login.php and verify-email.php are redirect-based, not AJAX — send them
+    // to the error page instead of returning JSON which the browser cannot handle.
+    if ($isApiEndpoint || in_array($currentScript, ['register.php'], true)) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(
+            ['success' => false, 'message' => 'Unable to connect to database. Please try again in a few moments.'],
+            JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
+        );
         exit;
     }
+
+    if (in_array($currentScript, ['login.php', 'verify-email.php'], true)) {
+        header("Location: index.html?error=" . urlencode('database_error'));
+        exit;
+    }
+
     http_response_code(503);
     die("Service temporarily unavailable. Please try again later.");
 }
@@ -160,33 +183,75 @@ if ($conn === null) {
 // SESSION MANAGEMENT
 // ========================================
 if (session_status() === PHP_SESSION_NONE) {
-    $isSecure = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on');
-    ini_set('session.cookie_httponly', 1);
-    ini_set('session.cookie_secure',   $isSecure ? 1 : 0);
+    // Robust HTTPS detection — handles reverse proxies and port 443
+    $isSecure =
+        (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || ($_SERVER['SERVER_PORT'] ?? 80) == 443;
+
+    ini_set('session.gc_maxlifetime', 3600);
+    ini_set('session.gc_probability', 1);
+    ini_set('session.gc_divisor', 100);
+    session_set_cookie_params([
+        'lifetime' => 3600,
+        'path'     => '/',
+        'httponly' => true,
+        'secure'   => $isSecure,
+        'samesite' => 'Strict',
+    ]);
     ini_set('session.use_only_cookies', 1);
     session_start();
+
+    // Prevent session fixation: force a new ID on first use
+    if (!isset($_SESSION['initiated'])) {
+        session_regenerate_id(true);
+        $_SESSION['initiated'] = true;
+    }
 }
 
-// CSRF token: generate once per session
+// CSRF token: generate once per session.
+// Rotation happens after successful POST validation, not here,
+// to prevent breaking long-running form submissions.
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
 // ========================================
 // SYSTEM SETTINGS
+// Wrapped in try/catch — if the system_settings table doesn't exist yet
+// or the DB hiccups during SystemSettings init, we log the error and
+// continue with a null $settings rather than throwing an uncaught exception
+// that would cause a 500 on every page load.
 // ========================================
 require_once __DIR__ . '/system-settings.php';
-$settings = SystemSettings::getInstance();
+
+$settings = null;
+try {
+    $settings = SystemSettings::getInstance();
+} catch (Throwable $e) {
+    error_log("SystemSettings init failed: " . $e->getMessage());
+    // $settings stays null — maintenance mode check below is skipped safely.
+}
 
 // ========================================
 // MAINTENANCE MODE
 // ========================================
-if ($settings->get('maintenance_mode', false)) {
+if ($settings !== null && $settings->get('maintenance_mode', false)) {
     $allowedIPs = $settings->get('maintenance_mode_allowed_ips', '127.0.0.1,::1');
     $allowedIPs = array_map('trim', explode(',', $allowedIPs));
-    if (!in_array($_SERVER['REMOTE_ADDR'], $allowedIPs)) {
+
+    // Only trust CF-Connecting-IP (set by Cloudflare) or fall back to REMOTE_ADDR.
+    // X-Forwarded-For is client-controllable and not used — an attacker could
+    // spoof it to bypass maintenance restrictions (e.g. X-Forwarded-For: 127.0.0.1).
+    if (!empty($_SERVER['HTTP_CF_CONNECTING_IP'])) {
+        $clientIP = trim($_SERVER['HTTP_CF_CONNECTING_IP']);
+    } else {
+        $clientIP = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    }
+
+    if (!in_array($clientIP, $allowedIPs, true)) {
         http_response_code(503);
-        echo "<h1>Service Unavailable</h1><p>The site is currently down for maintenance.</p>";
+        header('Content-Type: text/plain; charset=utf-8');
+        echo 'Service temporarily unavailable. Please try again later.';
         exit;
     }
 }
@@ -195,14 +260,23 @@ if ($settings->get('maintenance_mode', false)) {
 // DATABASE HELPERS
 // ========================================
 
+/**
+ * Execute a prepared statement and return results or affected rows.
+ */
 function executeQuery(mysqli_stmt $stmt): mixed {
-    if (!$stmt->execute()) {
-        error_log("Statement execution failed: " . $stmt->error);
+    // With MYSQLI_REPORT_STRICT enabled, execute() throws instead of returning false.
+    try {
+        $stmt->execute();
+    } catch (Throwable $e) {
+        error_log("Statement execution failed: " . $e->getMessage());
         return false;
     }
-    if ($stmt->result_metadata()) {
-        return $stmt->get_result();
+
+    $result = $stmt->get_result();
+    if ($result instanceof mysqli_result) {
+        return $result;
     }
+
     return $stmt->affected_rows;
 }
 
@@ -211,26 +285,35 @@ function tableExists(mysqli $conn, string $table): bool {
         error_log("Invalid table name format: $table");
         return false;
     }
-    $result = $conn->query("SHOW TABLES LIKE '$table'");
-    if ($result === false) {
-        error_log("tableExists() failed: " . $conn->error);
+    // Use information_schema — avoids SHOW TABLES LIKE ESCAPE quoting issues
+    // that behave inconsistently across MariaDB versions.
+    // Table name is already validated as alphanumeric+underscore so safe to bind directly.
+    $stmt = $conn->prepare(
+        "SELECT COUNT(*) FROM information_schema.TABLES
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?"
+    );
+    if (!$stmt) {
+        error_log("tableExists() prepare failed: " . $conn->error);
         return false;
     }
-    $exists = $result->num_rows > 0;
-    $result->free();
-    return $exists;
+    $stmt->bind_param("s", $table);
+    $stmt->execute();
+    $stmt->bind_result($count);
+    $stmt->fetch();
+    $stmt->close();
+    return $count > 0;
 }
 
 function ensureDatabaseConnection(?mysqli &$conn): bool {
     if ($conn) {
         try {
             $r = $conn->query("SELECT 1");
-            if ($r) {
+            if ($r instanceof mysqli_result) {
                 $r->free();
                 return true;
             }
-        } catch (Exception $e) {
-            // fall through
+        } catch (Throwable $e) {
+            // fall through to reconnect
         }
     }
     error_log("Database connection lost — attempting reconnect");
@@ -240,6 +323,7 @@ function ensureDatabaseConnection(?mysqli &$conn): bool {
 
 // ========================================
 // SHUTDOWN HANDLER
+// PHP closes connections automatically; this is an explicit safety net.
 // ========================================
 register_shutdown_function(function () use ($conn) {
     if ($conn && $conn->thread_id) {

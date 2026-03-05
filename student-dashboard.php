@@ -1,59 +1,147 @@
 <?php
 /* ========================================
- * STUDENT DASHBOARD - CONNECTION PROTECTED
+ * STUDENT DASHBOARD
  * ======================================== */
 
-// Load configuration and database guard
 require_once "config.php";
 require_once "db-guard.php";
 
-// Validate session and get user data with automatic retry
-$user = validateSession($conn, 'student');
-
-// Extract user information
-$userName = $user['full_name'] ?? 'Student';
-$userEmail = $user['email'] ?? '';
+$user         = validateSession($conn, 'student');
+$userName     = $user['full_name'] ?? 'Student';
+$userEmail    = $user['email']     ?? '';
+$userDept     = $user['department'] ?? null;
 $userInitials = strtoupper(substr($userName, 0, 2));
-$userId = $user['user_id'];
+$userId       = (int) $user['user_id'];
 
-// Get student statistics with safe query
-$statsQuery = "
-    SELECT 
-        COUNT(DISTINCT a.attempt_id) as tests_completed,
-        COALESCE(AVG(a.score_percentage), 0) as avg_score
-    FROM assessment_attempts a
-    WHERE a.user_id = ? AND a.status = 'completed'
-";
+// ── Student statistics ──
+$statsResult = safePreparedQuery($conn,
+    "SELECT
+        COUNT(DISTINCT attempt_id)   AS tests_completed,
+        COALESCE(AVG(percentage), 0) AS avg_score
+     FROM assessment_attempts
+     WHERE user_id = ? AND status = 'completed'",
+    "i", [$userId]
+);
 
-$statsResult = safePreparedQuery($conn, $statsQuery, "i", [$userId]);
-
-// Default statistics
 $testsCompleted = 0;
-$avgScore = 0;
+$avgScore       = 0;
 
 if ($statsResult['success'] && $statsResult['result']) {
-    $stats = $statsResult['result']->fetch_assoc();
-    $testsCompleted = $stats['tests_completed'] ?? 0;
-    $avgScore = round($stats['avg_score'] ?? 0);
+    $stats          = $statsResult['result']->fetch_assoc();
+    $testsCompleted = (int)   ($stats['tests_completed'] ?? 0);
+    $avgScore       = round((float)($stats['avg_score']      ?? 0));
     $statsResult['result']->free();
 }
 
-// Get available assessments count with safe query
-$availableQuery = "
-    SELECT COUNT(*) as count 
-    FROM assessments 
-    WHERE is_active = 1 
-    AND (publish_date IS NULL OR publish_date <= NOW())
-    AND (end_date IS NULL OR end_date >= NOW())
-";
+// ── Available assessments (active, within date window, accessible to this student) ──
+// Accessible = public OR explicitly allowed for this user/department
+$availCountResult = safePreparedQuery($conn,
+    "SELECT COUNT(DISTINCT a.assessment_id) AS cnt
+     FROM assessments a
+     WHERE a.status = 'active'
+       AND (a.available_from  IS NULL OR a.available_from  <= NOW())
+       AND (a.available_until IS NULL OR a.available_until >= NOW())
+       AND (
+           a.is_public = 1
+           OR EXISTS (
+               SELECT 1 FROM assessment_access ac
+               WHERE ac.assessment_id = a.assessment_id
+                 AND ac.access_type   = 'allow'
+                 AND (ac.user_id = ? OR ac.department = ?)
+           )
+       )",
+    "is", [$userId, $userDept]
+);
 
-$availableResult = safeQuery($conn, $availableQuery);
 $availableTests = 0;
+if ($availCountResult['success'] && $availCountResult['result']) {
+    $row            = $availCountResult['result']->fetch_assoc();
+    $availableTests = (int)($row['cnt'] ?? 0);
+    $availCountResult['result']->free();
+}
 
-if ($availableResult) {
-    $row = $availableResult->fetch_assoc();
-    $availableTests = $row['count'] ?? 0;
-    $availableResult->free();
+// ── Fetch assessments for the dashboard list (latest 20) ──
+// Excludes assessments the student has already exhausted max_attempts on.
+$assessmentsResult = safePreparedQuery($conn,
+    "SELECT
+        a.assessment_id,
+        a.title,
+        a.description,
+        a.category,
+        a.difficulty,
+        a.duration_minutes,
+        a.total_marks,
+        a.passing_marks,
+        a.max_attempts,
+        a.available_until,
+        (SELECT COUNT(*) FROM questions q WHERE q.assessment_id = a.assessment_id) AS question_count,
+        (SELECT COUNT(*) FROM assessment_attempts aa
+          WHERE aa.assessment_id = a.assessment_id
+            AND aa.user_id = ?
+            AND aa.status  = 'completed') AS attempts_used
+     FROM assessments a
+     WHERE a.status = 'active'
+       AND (a.available_from  IS NULL OR a.available_from  <= NOW())
+       AND (a.available_until IS NULL OR a.available_until >= NOW())
+       AND (
+           a.is_public = 1
+           OR EXISTS (
+               SELECT 1 FROM assessment_access ac
+               WHERE ac.assessment_id = a.assessment_id
+                 AND ac.access_type   = 'allow'
+                 AND (ac.user_id = ? OR ac.department = ?)
+           )
+       )
+     ORDER BY a.created_at DESC
+     LIMIT 20",
+    "iis", [$userId, $userId, $userDept]
+);
+
+$assessments      = [];
+$assessmentError  = false;
+
+if ($assessmentsResult['success'] && $assessmentsResult['result']) {
+    while ($row = $assessmentsResult['result']->fetch_assoc()) {
+        $assessments[] = $row;
+    }
+    $assessmentsResult['result']->free();
+} elseif (!$assessmentsResult['success']) {
+    $assessmentError = true;
+}
+
+// ── Recent activity (last 5 completed attempts) ──
+$activityResult = safePreparedQuery($conn,
+    "SELECT aa.attempt_id, aa.percentage, aa.submitted_at,
+            a.title
+     FROM assessment_attempts aa
+     JOIN assessments a ON a.assessment_id = aa.assessment_id
+     WHERE aa.user_id = ? AND aa.status = 'completed'
+     ORDER BY aa.submitted_at DESC
+     LIMIT 5",
+    "i", [$userId]
+);
+
+$recentActivity = [];
+if ($activityResult['success'] && $activityResult['result']) {
+    while ($row = $activityResult['result']->fetch_assoc()) {
+        $recentActivity[] = $row;
+    }
+    $activityResult['result']->free();
+}
+
+// ── Overall completion % (attempts used vs available) ──
+$completionPct = ($availableTests > 0)
+    ? min(100, round(($testsCompleted / $availableTests) * 100))
+    : 0;
+
+/* Helper: human-readable time-ago */
+function timeAgo(string $datetime): string {
+    $diff = time() - strtotime($datetime);
+    if ($diff < 60)     return 'Just now';
+    if ($diff < 3600)   return floor($diff / 60)   . ' min ago';
+    if ($diff < 86400)  return floor($diff / 3600)  . ' hr ago';
+    if ($diff < 604800) return floor($diff / 86400) . ' day ago';
+    return date('d M Y', strtotime($datetime));
 }
 ?>
 <!DOCTYPE html>
@@ -591,6 +679,28 @@ if ($availableResult) {
             transform: scale(1.1);
             box-shadow: 0 8px 30px rgba(79,172,254,0.6);
         }
+        .assessment-card.exhausted {
+            opacity: 0.7;
+        }
+        .assessment-card.exhausted:hover {
+            border-color: #e2e8f0;
+            box-shadow: none;
+        }
+        .state-message {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 48px 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        .state-message .state-icon { font-size: 40px; }
+        .state-message p { font-size: 15px; color: #718096; }
+        .state-empty { background: #f7fafc; }
+        .state-error { background: #fff5f5; }
+        .state-error p { color: #c53030; }
         @media (max-width: 1024px) {
             .main-content { grid-template-columns: 1fr; }
             .nav-search { display: none; }
@@ -699,27 +809,67 @@ if ($availableResult) {
                     <button class="filter-tab" data-category="aptitude">Aptitude</button>
                     <button class="filter-tab" data-category="technical">Technical</button>
                     <button class="filter-tab" data-category="coding">Coding</button>
+                    <button class="filter-tab" data-category="reasoning">Reasoning</button>
+                    <button class="filter-tab" data-category="english">English</button>
                 </div>
                 <div class="assessment-list">
-                    <!-- Assessment cards will be loaded here via AJAX in production -->
-                    <div class="assessment-card" data-category="aptitude">
-                        <div class="assessment-header">
-                            <div>
-                                <div class="assessment-title">Quantitative Aptitude - Set 1</div>
-                                <div class="assessment-category">Aptitude • Mathematics</div>
+                    <?php if ($assessmentError): ?>
+                        <div class="state-message state-error">
+                            <span class="state-icon">⚠️</span>
+                            <p>Could not load assessments. Please contact your administrator.</p>
+                        </div>
+                    <?php elseif (empty($assessments)): ?>
+                        <div class="state-message state-empty">
+                            <span class="state-icon">📋</span>
+                            <p>No assessments available at the moment. Check back later.</p>
+                        </div>
+                    <?php else: ?>
+                        <?php foreach ($assessments as $a):
+                            $id           = (int) $a['assessment_id'];
+                            $attemptsLeft = (int)$a['max_attempts'] - (int)$a['attempts_used'];
+                            $exhausted    = $attemptsLeft <= 0;
+                            $catClass     = htmlspecialchars(strtolower($a['category']));
+                            $diff         = strtolower($a['difficulty']);
+                            $diffLabel    = ucfirst($diff);
+                            $deadline     = $a['available_until']
+                                            ? date('d M Y, g:i A', strtotime($a['available_until']))
+                                            : null;
+                        ?>
+                        <div class="assessment-card <?= $exhausted ? 'exhausted' : '' ?>" data-category="<?= $catClass ?>">
+                            <div class="assessment-header">
+                                <div>
+                                    <div class="assessment-title"><?= htmlspecialchars($a['title']) ?></div>
+                                    <div class="assessment-category">
+                                        <?= htmlspecialchars(ucfirst($a['category'])) ?>
+                                        <?php if ($deadline): ?> • Due <?= $deadline ?><?php endif ?>
+                                    </div>
+                                </div>
+                                <span class="difficulty-badge <?= $diff ?>"><?= $diffLabel ?></span>
                             </div>
-                            <span class="difficulty-badge easy">Easy</span>
+                            <div class="assessment-meta">
+                                <div class="meta-item"><span>❓</span><span><?= (int)$a['question_count'] ?> Questions</span></div>
+                                <div class="meta-item"><span>⏱️</span><span><?= (int)$a['duration_minutes'] ?> Minutes</span></div>
+                                <div class="meta-item"><span>🏆</span><span><?= (int)$a['total_marks'] ?> Points</span></div>
+                                <?php if ((int)$a['max_attempts'] > 1): ?>
+                                <div class="meta-item">
+                                    <span>🔄</span>
+                                    <span><?= $exhausted ? 'No attempts left' : "$attemptsLeft attempt(s) left" ?></span>
+                                </div>
+                                <?php endif ?>
+                            </div>
+                            <?php if (!$exhausted): ?>
+                            <div class="assessment-actions">
+                                <button class="btn-start" onclick="startAssessment(<?= $id ?>)">Start Test</button>
+                                <button class="btn-details" onclick="viewDetails(<?= $id ?>)">View Details</button>
+                            </div>
+                            <?php else: ?>
+                            <div class="assessment-actions">
+                                <button class="btn-details" onclick="viewDetails(<?= $id ?>)">View Results</button>
+                            </div>
+                            <?php endif ?>
                         </div>
-                        <div class="assessment-meta">
-                            <div class="meta-item"><span>❓</span><span>30 Questions</span></div>
-                            <div class="meta-item"><span>⏱️</span><span>45 Minutes</span></div>
-                            <div class="meta-item"><span>🏆</span><span>100 Points</span></div>
-                        </div>
-                        <div class="assessment-actions">
-                            <button class="btn-start" onclick="startAssessment(1)">Start Test</button>
-                            <button class="btn-details" onclick="viewDetails(1)">View Details</button>
-                        </div>
-                    </div>
+                        <?php endforeach ?>
+                    <?php endif ?>
                 </div>
             </div>
 
@@ -727,20 +877,23 @@ if ($availableResult) {
                 <div class="sidebar-card">
                     <h3 class="sidebar-card-title">Recent Activity</h3>
                     <div class="activity-list">
-                        <div class="activity-item">
-                            <div class="activity-icon">✅</div>
-                            <div class="activity-content">
-                                <div class="activity-title">Completed: SQL Basics Test</div>
-                                <div class="activity-time">2 hours ago • Score: 85%</div>
+                        <?php if (empty($recentActivity)): ?>
+                            <p style="color:#a0aec0;font-size:14px;text-align:center;padding:10px 0">
+                                No completed tests yet.
+                            </p>
+                        <?php else: ?>
+                            <?php foreach ($recentActivity as $act): ?>
+                            <div class="activity-item">
+                                <div class="activity-icon">✅</div>
+                                <div class="activity-content">
+                                    <div class="activity-title">Completed: <?= htmlspecialchars($act['title']) ?></div>
+                                    <div class="activity-time">
+                                        <?= timeAgo($act['submitted_at']) ?> • Score: <?= round((float)$act['percentage']) ?>%
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                        <div class="activity-item">
-                            <div class="activity-icon">⭐</div>
-                            <div class="activity-content">
-                                <div class="activity-title">Achieved: Perfect Score Badge</div>
-                                <div class="activity-time">Yesterday</div>
-                            </div>
-                        </div>
+                            <?php endforeach ?>
+                        <?php endif ?>
                     </div>
                 </div>
 
@@ -753,10 +906,10 @@ if ($availableResult) {
                     <div class="overall-progress">
                         <div class="progress-label">
                             <span style="font-weight:600">Overall Completion</span>
-                            <span style="color:#4facfe;font-weight:700">60%</span>
+                            <span style="color:#4facfe;font-weight:700"><?= $completionPct ?>%</span>
                         </div>
                         <div class="progress-bar-container">
-                            <div class="progress-bar-fill" style="width:60%"></div>
+                            <div class="progress-bar-fill" style="width:<?= $completionPct ?>%"></div>
                         </div>
                     </div>
                 </div>
@@ -793,12 +946,12 @@ if ($availableResult) {
 
         function startAssessment(id) {
             if (confirm('Are you ready to start this assessment?')) {
-                window.location.href = 'take-test.php?id=' + id;
+                window.location.href = 'test-preview.php?id=' + id;
             }
         }
 
         function viewDetails(id) {
-            window.location.href = 'assessment-details.php?id=' + id;
+            window.location.href = 'test-preview.php?id=' + id;
         }
 
         function showQuickActions() {

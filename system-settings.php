@@ -1,675 +1,670 @@
 <?php
 /* ========================================
- * PTA SYSTEM SETTINGS MANAGER - REMOTE DATABASE OPTIMIZED v2.0
+ * PTA SYSTEM SETTINGS MANAGER
  * File: system-settings.php
  *
- * Purpose: Centralized system settings with multi-tier architecture
+ * CHANGE: APCu cross-request cache added.
+ * - First request per server process: loads from DB, stores in APCu.
+ * - Subsequent requests within TTL: reads from APCu — zero DB queries.
+ * - Falls back to DB-only cache if APCu is not available.
+ * - Cache is invalidated immediately when set() is called.
  *
- * OPTIMIZATIONS FOR REMOTE DATABASE:
- * 1. Conditional initialization - only runs when needed
- * 2. Batch inserts for better performance
- * 3. Check if settings exist before initialization
- * 4. Reduced database queries
- * 5. Better error handling for timeouts
+ * SECURITY FIXES (round 1):
+ * 1. set() requires a valid admin userId — rejects unauthorized callers.
+ * 2. validate() enforces per-key range/type rules instead of always returning true.
+ * 3. cache_expiry_seconds is clamped (30–3600) when loaded from DB.
+ * 4. initializeSettings() uses a DB advisory lock to prevent race conditions.
+ * 5. getAllowedFileTypes() whitelists safe extensions only.
+ * 6. Constructor validates that $conn is a live mysqli instance.
+ * 7. APCu key is namespaced with a versioned prefix to prevent cross-app collisions.
  *
+ * SECURITY FIXES (round 2):
+ * 8.  set() no longer accepts userId as a parameter — admin identity is resolved
+ *     from the validated session internally, blocking privilege escalation.
+ * 9.  loadFromApcu() validates APCu payload structure before trusting it.
+ * 10. max_file_size_mb validation is bound to ABSOLUTE_MAX_FILE_SIZE constant.
+ * 11. maintenance_mode_allowed_ips validates each entry as a real IP address.
+ * 12. set() rejects setting keys longer than 100 characters.
  * ======================================== */
 
 class SystemSettings {
-  private static $instance = null;
-  private $cache = [];
-  private $cacheExpiry = 300; // 5 minutes cache
-  private $cacheTimestamp = null;
-  private $conn = null;
-  private $initialized = false; // Track if initialization has been checked
+    private static ?self $instance = null;
 
-  /* ========================================
-   *     TIER 1: IMMUTABLE CORE CONSTANTS
-   *     These are security-critical and should NOT be changed at runtime
-   *     Defined as PHP constants for maximum performance and security
-   *     ======================================== */
+    private array   $cache          = [];
+    private int     $cacheExpiry    = 300;   // seconds — also stored as a setting
+    private ?int    $cacheTimestamp = null;
+    private ?mysqli $conn           = null;
+    private bool    $initialized    = false;
 
-  const IMMUTABLE_SETTINGS = [
-    // Security Settings (DO NOT change via admin panel)
-    'PASSWORD_HASH_ALGO' => PASSWORD_DEFAULT,
-    'PASSWORD_MIN_LENGTH' => 8,
-    'PASSWORD_REQUIRE_UPPERCASE' => true,
-    'PASSWORD_REQUIRE_LOWERCASE' => true,
-    'PASSWORD_REQUIRE_NUMBER' => true,
-    'PASSWORD_REQUIRE_SPECIAL' => false,
+    // FIX 7: versioned prefix prevents cross-app APCu collisions
+    private string $apcu_key;
 
-    // Database Settings (handled by config.php)
-    'DB_CHARSET' => 'utf8mb4',
-    'DB_COLLATION' => 'utf8mb4_unicode_ci',
-
-    // File Upload Core Limits (system limits)
-    'ABSOLUTE_MAX_FILE_SIZE' => 50 * 1024 * 1024, // 50 MB absolute maximum
-    'UPLOAD_BASE_DIR' => 'uploads/',
-
-    // Pagination Core Limits
-    'ABSOLUTE_MAX_ITEMS_PER_PAGE' => 500, // Prevent memory overflow
-
-    // Token Security
-    'TOKEN_MIN_LENGTH' => 32,
-    'CSRF_TOKEN_LENGTH' => 64,
-  ];
-
-  /* ========================================
-   *     TIER 2: DEFAULT CONFIGURABLE SETTINGS
-   *     These can be overridden via database (system_settings table)
-   *     Admins can change these through the admin panel
-   *     ======================================== */
-
-  const DEFAULT_CONFIGURABLE_SETTINGS = [
-    // Authentication & Session
-    'session_timeout_minutes' => 60,
-    'max_login_attempts' => 5,
-    'lockout_duration_minutes' => 30,
-    'remember_me_duration_days' => 30,
-    'force_password_change_days' => 90,
-
-    // OTP & Verification
-    'otp_expiry_minutes' => 15,
-    'otp_length' => 6,
-    'email_verification_expiry_hours' => 24,
-    'resend_otp_cooldown_seconds' => 60,
-
-    // Assessment Settings
-    'allow_guest_tests' => true,
-    'max_assessment_duration_minutes' => 180, // 3 hours max
-    'auto_submit_on_timeout' => true,
-    'show_results_immediately' => true,
-    'allow_review_after_submission' => true,
-
-    // Proctoring
-    'enable_proctoring' => false,
-    'proctoring_tab_switch_limit' => 3,
-    'proctoring_strict_mode' => false,
-
-    // File Upload Settings (configurable within core limits)
-    'max_file_size_mb' => 10,
-    'allowed_file_types' => 'pdf,jpg,jpeg,png,doc,docx',
-    'enable_file_virus_scan' => false,
-
-    // Pagination
-    'items_per_page' => 20,
-    'max_items_per_page' => 100,
-
-    // Notifications
-    'enable_email_notifications' => true,
-    'enable_push_notifications' => false,
-    'notification_retention_days' => 30,
-
-    // Data Retention
-    'results_retention_days' => 365,
-    'login_activity_retention_days' => 90,
-    'audit_log_retention_days' => 730, // 2 years
-
-    // System Behavior
-    'maintenance_mode' => false,
-    'allow_registration' => true,
-    'require_email_verification' => true,
-    'default_user_timezone' => 'Asia/Kolkata',
-
-    // SMTP Configuration Status
-    'smtp_configured' => false,
-    'smtp_from_email' => 'noreply@pta-platform.local',
-    'smtp_from_name' => 'PTA Platform',
-
-    // Performance
-    'enable_query_cache' => true,
-    'cache_expiry_seconds' => 300,
-    'enable_compression' => true,
-
-    // Analytics
-    'track_user_activity' => true,
-    'enable_advanced_analytics' => true,
-    'analytics_retention_days' => 365,
-  ];
-
-  /* ========================================
-   *     SINGLETON PATTERN
-   *     ======================================== */
-
-  private function __construct() {
-    global $conn;
-    $this->conn = $conn;
-    
-    // Verify database connection is still alive (PHP 8.4 compatible)
-    if ($this->conn) {
-      try {
-        $result = $this->conn->query("SELECT 1");
-        if (!$result) {
-          error_log("Database connection test failed in SystemSettings");
-        } else {
-          $result->free();
-        }
-      } catch (Exception $e) {
-        error_log("Database connection lost in SystemSettings: " . $e->getMessage());
-      }
-    }
-    
-    // Load cache first (faster than database check)
-    $this->loadCache();
-    
-    // Only initialize if cache is empty (first run or cache expired)
-    if (empty($this->cache)) {
-      $this->initializeSettings();
-    }
-  }
-
-  public static function getInstance() {
-    if (self::$instance === null) {
-      self::$instance = new self();
-    }
-    return self::$instance;
-  }
-
-  /* ========================================
-   *     DATABASE INITIALIZATION - OPTIMIZED
-   *     Only runs when necessary
-   *     ======================================== */
-
-  /**
-   * Check if settings table needs initialization
-   * @return bool True if initialization is needed
-   */
-  private function needsInitialization() {
-    try {
-      // Quick count query to check if settings exist
-      $result = $this->conn->query("SELECT COUNT(*) as count FROM system_settings");
-      
-      if ($result) {
-        $row = $result->fetch_assoc();
-        $count = (int)$row['count'];
-        $result->free();
-        
-        // If we have fewer settings than defaults, we need initialization
-        return $count < count(self::DEFAULT_CONFIGURABLE_SETTINGS);
-      }
-      
-      return true; // If query fails, assume we need initialization
-      
-    } catch (Exception $e) {
-      error_log("Error checking initialization status: " . $e->getMessage());
-      return false; // Don't initialize on error
-    }
-  }
-
-  /**
-   * Initialize system_settings table with default values - OPTIMIZED
-   * Uses batch insert for better performance with remote databases
-   */
-  private function initializeSettings() {
-    // Skip if already initialized in this instance
-    if ($this->initialized) {
-      return;
-    }
-    
-    // Check if initialization is actually needed
-    if (!$this->needsInitialization()) {
-      error_log("System settings already initialized, skipping");
-      $this->initialized = true;
-      return;
-    }
-    
-    error_log("Initializing missing system settings...");
-    
-    try {
-      // Use batch insert for better performance
-      $values = [];
-      $types = "";
-      $params = [];
-      
-      foreach (self::DEFAULT_CONFIGURABLE_SETTINGS as $key => $value) {
-        $type = $this->determineType($value);
-        $valueStr = $this->convertToString($value, $type);
-        $description = $this->getSettingDescription($key);
-        
-        // Add to batch arrays
-        array_push($params, $key, $valueStr, $type, $description);
-        $types .= "ssss";
-        $values[] = "(?, ?, ?, ?, 1)";
-      }
-      
-      // Execute batch insert
-      if (!empty($values)) {
-        $sql = "INSERT IGNORE INTO system_settings 
-                (setting_key, setting_value, setting_type, description, is_editable) 
-                VALUES " . implode(', ', $values);
-        
-        $stmt = $this->conn->prepare($sql);
-        
-        if ($stmt) {
-          // Bind all parameters at once
-          $stmt->bind_param($types, ...$params);
-          
-          if ($stmt->execute()) {
-            error_log("Successfully initialized " . $stmt->affected_rows . " settings");
-          } else {
-            error_log("Failed to execute batch insert: " . $stmt->error);
-          }
-          
-          $stmt->close();
-        } else {
-          error_log("Failed to prepare batch insert statement: " . $this->conn->error);
-        }
-      }
-      
-      $this->initialized = true;
-      
-    } catch (Exception $e) {
-      error_log("Settings initialization error: " . $e->getMessage());
-    }
-  }
-
-  /**
-   * Get human-readable description for a setting
-   */
-  private function getSettingDescription($key) {
-    $descriptions = [
-      'session_timeout_minutes' => 'Session timeout in minutes',
-      'max_login_attempts' => 'Maximum failed login attempts before lockout',
-      'lockout_duration_minutes' => 'Account lockout duration in minutes',
-      'otp_expiry_minutes' => 'OTP expiration time in minutes',
-      'allow_guest_tests' => 'Allow guest users to take public tests',
-      'max_file_size_mb' => 'Maximum file upload size in MB',
-      'results_retention_days' => 'How long to keep assessment results',
-      'enable_proctoring' => 'Enable proctoring features',
-      'smtp_configured' => 'Is SMTP email configured',
-      'maintenance_mode' => 'Enable maintenance mode',
-      'items_per_page' => 'Default items per page in lists',
-      'enable_email_notifications' => 'Enable email notifications',
-      'allow_registration' => 'Allow new user registration',
-      'require_email_verification' => 'Require email verification for new accounts',
+    const IMMUTABLE_SETTINGS = [
+        'PASSWORD_HASH_ALGO'          => PASSWORD_DEFAULT,
+        'PASSWORD_MIN_LENGTH'         => 8,
+        'PASSWORD_REQUIRE_UPPERCASE'  => true,
+        'PASSWORD_REQUIRE_LOWERCASE'  => true,
+        'PASSWORD_REQUIRE_NUMBER'     => true,
+        'PASSWORD_REQUIRE_SPECIAL'    => false,
+        'DB_CHARSET'                  => 'utf8mb4',
+        'DB_COLLATION'                => 'utf8mb4_unicode_ci',
+        'ABSOLUTE_MAX_FILE_SIZE'      => 50 * 1024 * 1024,
+        'UPLOAD_BASE_DIR'             => 'uploads/',
+        'ABSOLUTE_MAX_ITEMS_PER_PAGE' => 500,
+        'TOKEN_MIN_LENGTH'            => 32,
+        'CSRF_TOKEN_LENGTH'           => 64,
     ];
-    
-    return $descriptions[$key] ?? ucwords(str_replace('_', ' ', $key));
-  }
 
-  /* ========================================
-   *     CACHE MANAGEMENT
-   *     ======================================== */
+    const DEFAULT_CONFIGURABLE_SETTINGS = [
+        'session_timeout_minutes'      => 60,
+        'max_login_attempts'           => 5,
+        'lockout_duration_minutes'     => 15,
+        'otp_expiry_minutes'           => 10,
+        'allow_guest_tests'            => false,
+        'max_file_size_mb'             => 10,
+        'results_retention_days'       => 365,
+        'enable_proctoring'            => false,
+        'smtp_configured'              => false,
+        'maintenance_mode'             => false,
+        'maintenance_mode_allowed_ips' => '127.0.0.1,::1',
+        'items_per_page'               => 20,
+        'enable_email_notifications'   => true,
+        'allow_registration'           => true,
+        'require_email_verification'   => true,
+        'cache_expiry_seconds'         => 300,
+    ];
 
-  /**
-   * Load all settings from database into memory cache
-   */
-  private function loadCache() {
-    // Check if cache is still valid
-    if ($this->cacheTimestamp && (time() - $this->cacheTimestamp) < $this->cacheExpiry) {
-      return; // Cache still valid
-    }
+    // Whitelist of safe file extensions for getAllowedFileTypes()
+    private const SAFE_FILE_EXTENSIONS = ['pdf', 'docx', 'doc', 'xlsx', 'xls', 'csv', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'txt'];
 
-    try {
-      // Load from database with timeout protection
-      $result = $this->conn->query("SELECT setting_key, setting_value, setting_type FROM system_settings");
+    // Maximum allowed IP entries in maintenance_mode_allowed_ips
+    private const MAX_ALLOWED_IPS = 50;
 
-      if ($result) {
-        $this->cache = [];
-        while ($row = $result->fetch_assoc()) {
-          $this->cache[$row['setting_key']] = [
-            'value' => $this->convertValue($row['setting_value'], $row['setting_type']),
-            'type' => $row['setting_type']
-          ];
+    // Maximum length for a setting key
+    private const MAX_KEY_LENGTH = 100;
+
+    // ────────────────────────────────────────
+    // CONSTRUCTOR
+    // ────────────────────────────────────────
+
+    private function __construct() {
+        global $conn;
+
+        // FIX 6: validate DB connection before use
+        if (!$conn instanceof mysqli) {
+            throw new RuntimeException("SystemSettings: database connection not initialized or invalid");
         }
-        $this->cacheTimestamp = time();
-        
-        // Update cache expiry from settings if available
-        if (isset($this->cache['cache_expiry_seconds'])) {
-          $this->cacheExpiry = (int)$this->cache['cache_expiry_seconds']['value'];
+        $this->conn = $conn;
+
+        // FIX 7: versioned, hashed APCu key prevents cross-app collisions
+        $this->apcu_key = 'pta_v1_settings_' . hash('sha256', DB_NAME);
+
+        // Try APCu first — avoids any DB query on cache hit
+        if ($this->loadFromApcu()) {
+            return;
         }
-        
-        $result->free();
-        error_log("Loaded " . count($this->cache) . " settings into cache");
-      } else {
-        error_log("Failed to load system settings: " . $this->conn->error);
-      }
-      
-    } catch (Exception $e) {
-      error_log("Cache load error: " . $e->getMessage());
-    }
-  }
 
-  /**
-   * Force cache refresh
-   */
-  public function refreshCache() {
-    $this->cacheTimestamp = null;
-    $this->loadCache();
-  }
+        // APCu miss (or unavailable) — load from DB
+        $this->loadCache();
 
-  /**
-   * Clear cache (forces reload on next get)
-   */
-  public function clearCache() {
-    $this->cache = [];
-    $this->cacheTimestamp = null;
-  }
-
-  /* ========================================
-   *     GET SETTING
-   *     ======================================== */
-
-  /**
-   * Get a setting value
-   * @param string $key Setting key
-   * @param mixed $default Default value if not found
-   * @return mixed Setting value
-   */
-  public function get($key, $default = null) {
-    // First check immutable settings
-    if (array_key_exists($key, self::IMMUTABLE_SETTINGS)) {
-      return self::IMMUTABLE_SETTINGS[$key];
-    }
-
-    // Refresh cache if expired
-    $this->loadCache();
-
-    // Check cache
-    if (isset($this->cache[$key])) {
-      return $this->cache[$key]['value'];
-    }
-
-    // Check default configurable settings
-    if (array_key_exists($key, self::DEFAULT_CONFIGURABLE_SETTINGS)) {
-      return self::DEFAULT_CONFIGURABLE_SETTINGS[$key];
-    }
-
-    // Return provided default
-    return $default;
-  }
-
-  /**
-   * Get multiple settings at once
-   * @param array $keys Array of setting keys
-   * @return array Associative array of key => value
-   */
-  public function getMultiple(array $keys) {
-    $result = [];
-    foreach ($keys as $key) {
-      $result[$key] = $this->get($key);
-    }
-    return $result;
-  }
-
-  /**
-   * Get all settings
-   * @return array All settings
-   */
-  public function getAll() {
-    $this->loadCache();
-
-    $all = [];
-
-    // Add immutable settings
-    foreach (self::IMMUTABLE_SETTINGS as $key => $value) {
-        $all[$key] = [
-            'value' => $value,
-            'type' => $this->determineType($value),
-            'immutable' => true
-        ];
-    }
-
-    // Add cached settings from database
-    foreach ($this->cache as $key => $data) {
-        $all[$key] = [
-            'value' => $data['value'],
-            'type' => $data['type'],
-            'immutable' => false
-        ];
-    }
-
-    // Add defaults not in database
-    foreach (self::DEFAULT_CONFIGURABLE_SETTINGS as $key => $value) {
-        if (!isset($all[$key])) {
-            $all[$key] = [
-                'value' => $value,
-                'type' => $this->determineType($value),
-                'immutable' => false,
-                'is_default' => true
-            ];
+        if (empty($this->cache)) {
+            $this->initializeSettings();
         }
     }
 
-    return $all;
-  }
-
-  /* ========================================
-   *     SET SETTING
-   *     ======================================== */
-
-  /**
-   * Update a setting (only configurable settings)
-   * @param string $key Setting key
-   * @param mixed $value New value
-   * @param int $userId User making the change
-   * @return bool Success status
-   */
-  public function set($key, $value, $userId = null) {
-    // Prevent changing immutable settings
-    if ($this->isImmutable($key)) {
-      error_log("Attempted to modify immutable setting: $key");
-      return false;
+    public static function getInstance(): self {
+        if (self::$instance === null) {
+            self::$instance = new self();
+        }
+        return self::$instance;
     }
 
-    // Validate before setting
-    if (!$this->validate($key, $value)) {
-      error_log("Validation failed for setting: $key");
-      return false;
+    // ────────────────────────────────────────
+    // APCU CACHE
+    // ────────────────────────────────────────
+
+    /**
+     * Try to populate $this->cache from APCu.
+     * Returns true on hit, false on miss or APCu unavailable.
+     *
+     * FIX 9: validates payload structure before trusting any field.
+     */
+    private function loadFromApcu(): bool {
+        if (!function_exists('apcu_fetch')) {
+            return false;
+        }
+
+        $success = false;
+        $data    = apcu_fetch($this->apcu_key, $success);
+
+        // FIX 9: require all expected keys and correct types before using the payload
+        if (
+            $success &&
+            is_array($data) &&
+            isset($data['cache'], $data['timestamp'], $data['expiry']) &&
+            is_array($data['cache']) &&
+            is_int($data['timestamp']) &&
+            is_int($data['expiry'])
+        ) {
+            $this->cache          = $data['cache'];
+            $this->cacheTimestamp = $data['timestamp'];
+            $this->cacheExpiry    = max(30, min(3600, $data['expiry'])); // FIX: clamp to same safe range as DB-loaded values
+            return true;
+        }
+
+        return false;
     }
 
-    // Determine type
-    $type = $this->determineType($value);
-    $valueStr = $this->convertToString($value, $type);
+    /**
+     * Write the current in-memory cache to APCu.
+     * TTL matches $this->cacheExpiry so APCu auto-expires the entry.
+     */
+    private function saveToApcu(): void {
+        if (!function_exists('apcu_store')) {
+            return;
+        }
 
-    try {
-      // Check if setting exists and is editable
-      $stmt = $this->conn->prepare("SELECT is_editable FROM system_settings WHERE setting_key = ?");
-      $stmt->bind_param("s", $key);
-      $stmt->execute();
-      $result = $stmt->get_result();
-      $setting = $result->fetch_assoc();
-      $stmt->close();
-
-      if ($setting) {
-          if (!$setting['is_editable']) {
-              error_log("Attempted to modify non-editable setting: $key");
-              return false;
-          }
-          // Update existing
-          $stmt = $this->conn->prepare(
-              "UPDATE system_settings SET setting_value = ?, setting_type = ?, updated_by = ?, updated_at = NOW() WHERE setting_key = ?"
-          );
-          $stmt->bind_param("ssis", $valueStr, $type, $userId, $key);
-      } else {
-        // Insert new
-        $description = $this->getSettingDescription($key);
-        $stmt = $this->conn->prepare(
-          "INSERT INTO system_settings
-          (setting_key, setting_value, setting_type, description, updated_by)
-        VALUES (?, ?, ?, ?, ?)"
-        );
-        $stmt->bind_param("ssssi", $key, $valueStr, $type, $description, $userId);
-      }
-
-      $success = $stmt->execute();
-      $stmt->close();
-
-      if ($success) {
-        // Update cache
-        $this->cache[$key] = [
-          'value' => $value,
-          'type' => $type
-        ];
-      }
-
-      return $success;
-      
-    } catch (Exception $e) {
-      error_log("Error setting value: " . $e->getMessage());
-      return false;
+        apcu_store($this->apcu_key, [
+            'cache'     => $this->cache,
+            'timestamp' => $this->cacheTimestamp,
+            'expiry'    => $this->cacheExpiry,
+        ], $this->cacheExpiry);
     }
-  }
 
-  /**
-   * Batch update multiple settings
-   * @param array $settings Associative array of key => value
-   * @param int $userId User making the changes
-   * @return bool Success status
-   */
-  public function setMultiple(array $settings, $userId = null) {
-    $this->conn->begin_transaction();
-    try {
-        foreach ($settings as $key => $value) {
-            if (!$this->set($key, $value, $userId)) {
-                throw new Exception("Failed to set setting: $key");
+    /**
+     * Invalidate the APCu entry immediately (call after set()).
+     */
+    private function invalidateApcu(): void {
+        if (function_exists('apcu_delete')) {
+            apcu_delete($this->apcu_key);
+        }
+    }
+
+    // ────────────────────────────────────────
+    // DB CACHE
+    // ────────────────────────────────────────
+
+    private function loadCache(): void {
+        if ($this->cacheTimestamp && (time() - $this->cacheTimestamp) < $this->cacheExpiry) {
+            return; // In-process cache still valid
+        }
+
+        try {
+            $result = $this->conn->query(
+                "SELECT setting_key, setting_value, setting_type FROM system_settings"
+            );
+
+            if ($result) {
+                $this->cache = [];
+                while ($row = $result->fetch_assoc()) {
+                    $this->cache[$row['setting_key']] = [
+                        'value' => $this->convertValue($row['setting_value'], $row['setting_type']),
+                        'type'  => $row['setting_type'],
+                    ];
+                }
+                $this->cacheTimestamp = time();
+                $result->free();
+
+                // FIX 3: clamp cache_expiry_seconds to a safe range (30–3600 s)
+                if (isset($this->cache['cache_expiry_seconds'])) {
+                    $this->cacheExpiry = max(30, min(3600, (int) $this->cache['cache_expiry_seconds']['value']));
+                    $this->cache['cache_expiry_seconds']['value'] = $this->cacheExpiry;
+                }
+
+                // Persist to APCu so the next request skips this DB query
+                $this->saveToApcu();
+
+                error_log("SystemSettings: loaded " . count($this->cache) . " settings from DB");
+            } else {
+                error_log("SystemSettings: failed to load — " . $this->conn->error);
+            }
+        } catch (Exception $e) {
+            error_log("SystemSettings loadCache error: " . $e->getMessage());
+        }
+    }
+
+    public function refreshCache(): void {
+        $this->cacheTimestamp = null;
+        $this->invalidateApcu();
+        $this->loadCache();
+    }
+
+    public function clearCache(): void {
+        $this->cache          = [];
+        $this->cacheTimestamp = null;
+        $this->invalidateApcu();
+    }
+
+    // ────────────────────────────────────────
+    // GET / SET
+    // ────────────────────────────────────────
+
+    public function get(string $key, mixed $default = null): mixed {
+        if (array_key_exists($key, self::IMMUTABLE_SETTINGS)) {
+            return self::IMMUTABLE_SETTINGS[$key];
+        }
+
+        $this->loadCache(); // No-op if in-process cache is fresh
+
+        if (isset($this->cache[$key])) {
+            return $this->cache[$key]['value'];
+        }
+
+        if (array_key_exists($key, self::DEFAULT_CONFIGURABLE_SETTINGS)) {
+            return self::DEFAULT_CONFIGURABLE_SETTINGS[$key];
+        }
+
+        return $default;
+    }
+
+    public function getMultiple(array $keys): array {
+        $result = [];
+        foreach ($keys as $key) {
+            $result[$key] = $this->get($key);
+        }
+        return $result;
+    }
+
+    public function getAll(): array {
+        $this->loadCache();
+        $all = [];
+
+        foreach (self::IMMUTABLE_SETTINGS as $k => $v) {
+            $all[$k] = ['value' => $v, 'type' => $this->determineType($v), 'immutable' => true];
+        }
+
+        foreach ($this->cache as $k => $entry) {
+            if (!isset($all[$k])) {
+                $all[$k] = ['value' => $entry['value'], 'type' => $entry['type'], 'immutable' => false];
             }
         }
-        $this->conn->commit();
+
+        foreach (self::DEFAULT_CONFIGURABLE_SETTINGS as $k => $v) {
+            if (!isset($all[$k])) {
+                $all[$k] = ['value' => $v, 'type' => $this->determineType($v), 'immutable' => false, 'is_default' => true];
+            }
+        }
+
+        return $all;
+    }
+
+    /**
+     * FIX 8:  userId is no longer a caller-supplied parameter — admin identity
+     *         is resolved from the validated session internally.
+     * FIX 12: keys longer than MAX_KEY_LENGTH are rejected before any DB write.
+     */
+    public function set(string $key, mixed $value): bool {
+        // FIX 12: reject oversized keys before any DB interaction
+        if (strlen($key) > self::MAX_KEY_LENGTH) {
+            error_log("SystemSettings: rejected oversized key (" . strlen($key) . " chars)");
+            return false;
+        }
+
+        // FIX 8: resolve admin identity from session — never trust caller input
+        $userId = $this->getSessionAdminId();
+
+        if ($userId === null) {
+            error_log("SystemSettings: set() rejected — no authenticated admin session for key: $key");
+            return false;
+        }
+
+        if ($this->isImmutable($key)) {
+            error_log("SystemSettings: attempted to modify immutable setting: $key");
+            return false;
+        }
+
+        if (!$this->validate($key, $value)) {
+            error_log("SystemSettings: validation failed for: $key");
+            return false;
+        }
+
+        $type     = $this->determineType($value);
+        $valueStr = $this->convertToString($value, $type);
+
+        try {
+            $stmt = $this->conn->prepare(
+                "SELECT is_editable FROM system_settings WHERE setting_key = ?"
+            );
+            $stmt->bind_param("s", $key);
+            $stmt->execute();
+            $result  = $stmt->get_result();
+            $setting = $result->fetch_assoc();
+            $stmt->close();
+
+            if ($setting) {
+                if (!$setting['is_editable']) {
+                    error_log("SystemSettings: attempted to modify non-editable setting: $key");
+                    return false;
+                }
+                $stmt = $this->conn->prepare(
+                    "UPDATE system_settings
+                     SET setting_value = ?, setting_type = ?, updated_by = ?, updated_at = NOW()
+                     WHERE setting_key = ?"
+                );
+                $stmt->bind_param("ssis", $valueStr, $type, $userId, $key);
+            } else {
+                $description = $this->getSettingDescription($key);
+                $stmt = $this->conn->prepare(
+                    "INSERT INTO system_settings
+                        (setting_key, setting_value, setting_type, description, updated_by)
+                     VALUES (?, ?, ?, ?, ?)"
+                );
+                $stmt->bind_param("ssssi", $key, $valueStr, $type, $description, $userId);
+            }
+
+            $ok = $stmt->execute();
+            $stmt->close();
+
+            if ($ok) {
+                // Update in-process cache immediately
+                $this->cache[$key] = ['value' => $value, 'type' => $type];
+                // Bust APCu so other workers pick up the change on next request
+                $this->invalidateApcu();
+            }
+
+            return $ok;
+
+        } catch (Exception $e) {
+            error_log("SystemSettings set() error: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    // ────────────────────────────────────────
+    // INITIALISATION
+    // ────────────────────────────────────────
+
+    private function needsInitialization(): bool {
+        try {
+            $result = $this->conn->query("SELECT COUNT(*) AS count FROM system_settings");
+            if ($result) {
+                $row   = $result->fetch_assoc();
+                $count = (int) $row['count'];
+                $result->free();
+                return $count < count(self::DEFAULT_CONFIGURABLE_SETTINGS);
+            }
+            return true;
+        } catch (Exception $e) {
+            error_log("SystemSettings needsInitialization error: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * FIX 4: use a MySQL advisory lock to prevent concurrent initialization
+     * across multiple PHP workers starting simultaneously.
+     */
+    private function initializeSettings(): void {
+        if ($this->initialized) {
+            return;
+        }
+        if (!$this->needsInitialization()) {
+            $this->initialized = true;
+            return;
+        }
+
+        // Acquire advisory lock (wait up to 5 seconds)
+        $lockResult = $this->conn->query("SELECT GET_LOCK('pta_settings_init', 5) AS acquired");
+        $lockRow    = $lockResult ? $lockResult->fetch_assoc() : null;
+        $lockResult && $lockResult->free();
+
+        if (!$lockRow || (int) $lockRow['acquired'] !== 1) {
+            error_log("SystemSettings: could not acquire init lock — skipping initialization");
+            return;
+        }
+
+        // Re-check after acquiring lock; another worker may have already initialized
+        if (!$this->needsInitialization()) {
+            $this->conn->query("SELECT RELEASE_LOCK('pta_settings_init')");
+            $this->initialized = true;
+            return;
+        }
+
+        error_log("SystemSettings: initializing missing default settings...");
+
+        try {
+            $values = [];
+            $types  = "";
+            $params = [];
+
+            foreach (self::DEFAULT_CONFIGURABLE_SETTINGS as $key => $value) {
+                $type        = $this->determineType($value);
+                $valueStr    = $this->convertToString($value, $type);
+                $description = $this->getSettingDescription($key);
+
+                $params[]  = $key;
+                $params[]  = $valueStr;
+                $params[]  = $type;
+                $params[]  = $description;
+                $types    .= "ssss";
+                $values[]  = "(?, ?, ?, ?, 1)";
+            }
+
+            if (!empty($values)) {
+                $sql  = "INSERT IGNORE INTO system_settings
+                            (setting_key, setting_value, setting_type, description, is_editable)
+                         VALUES " . implode(', ', $values);
+                $stmt = $this->conn->prepare($sql);
+                if ($stmt) {
+                    $stmt->bind_param($types, ...$params);
+                    $stmt->execute();
+                    error_log("SystemSettings: initialized {$stmt->affected_rows} settings");
+                    $stmt->close();
+                }
+            }
+
+            $this->initialized = true;
+
+        } catch (Exception $e) {
+            error_log("SystemSettings initializeSettings error: " . $e->getMessage());
+        } finally {
+            $this->conn->query("SELECT RELEASE_LOCK('pta_settings_init')");
+        }
+    }
+
+    // ────────────────────────────────────────
+    // HELPERS
+    // ────────────────────────────────────────
+
+    public function isImmutable(string $key): bool {
+        return array_key_exists($key, self::IMMUTABLE_SETTINGS);
+    }
+
+    /**
+     * FIX 2:  enforce per-key validation rules.
+     * FIX 10: max_file_size_mb bound to ABSOLUTE_MAX_FILE_SIZE constant.
+     * FIX 11: maintenance_mode_allowed_ips validates each entry as a real IP.
+     */
+    public function validate(string $key, mixed $value): bool {
+        return match ($key) {
+            'session_timeout_minutes'  => is_int($value) && $value >= 5  && $value <= 1440,
+            'max_login_attempts'       => is_int($value) && $value >= 3  && $value <= 20,
+            'lockout_duration_minutes' => is_int($value) && $value >= 1  && $value <= 1440,
+            'otp_expiry_minutes'       => is_int($value) && $value >= 1  && $value <= 60,
+
+            // FIX 10: upper bound derived from immutable constant, not a magic number
+            'max_file_size_mb' =>
+                is_int($value) &&
+                $value >= 1 &&
+                ($value * 1024 * 1024) <= self::IMMUTABLE_SETTINGS['ABSOLUTE_MAX_FILE_SIZE'],
+
+            'items_per_page'       => is_int($value) && $value >= 1  && $value <= self::IMMUTABLE_SETTINGS['ABSOLUTE_MAX_ITEMS_PER_PAGE'],
+            'cache_expiry_seconds' => is_int($value) && $value >= 30 && $value <= 3600,
+            'results_retention_days' => is_int($value) && $value >= 1 && $value <= 3650,
+
+            'allow_guest_tests',
+            'enable_proctoring',
+            'smtp_configured',
+            'maintenance_mode',
+            'enable_email_notifications',
+            'allow_registration',
+            'require_email_verification' => is_bool($value),
+
+            // FIX 11: each comma-separated entry must be a valid IP address
+            'maintenance_mode_allowed_ips' => $this->validateIpList($value),
+
+            default => true,
+        };
+    }
+
+    /**
+     * FIX 11: validates a comma-separated IP list.
+     * Rejects wildcards, CIDR ranges, and malformed entries.
+     * Caps the list at MAX_ALLOWED_IPS entries.
+     */
+    private function validateIpList(mixed $value): bool {
+        if (!is_string($value) || strlen($value) > 1000) {
+            return false;
+        }
+
+        $ips = array_map('trim', explode(',', $value));
+
+        if (count($ips) > self::MAX_ALLOWED_IPS) {
+            return false;
+        }
+
+        foreach ($ips as $ip) {
+            if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+                return false;
+            }
+        }
+
         return true;
-    } catch (Exception $e) {
-        $this->conn->rollback();
-        error_log("Transaction failed in setMultiple: " . $e->getMessage());
-        return false;
     }
-  }
 
-  /* ========================================
-   *     TYPE CONVERSION HELPERS
-   *     ======================================== */
-
-  private function determineType($value) {
-    if (is_bool($value) || in_array($value, ['true', 'false', '1', '0'], true)) return 'boolean';
-    if (is_numeric($value)) return 'number';
-    if (is_array($value)) return 'json';
-    return 'string';
-  }
-
-  private function convertToString($value, $type) {
-    switch ($type) {
-      case 'boolean':
-        return $value ? 'true' : 'false';
-      case 'json':
-        return json_encode($value);
-      default:
-        return (string)$value;
+    private function determineType(mixed $value): string {
+        return match (true) {
+            is_bool($value)  => 'boolean',
+            is_int($value)   => 'integer',
+            is_float($value) => 'float',
+            default          => 'string',
+        };
     }
-  }
 
-  private function convertValue($value, $type) {
-    switch ($type) {
-      case 'boolean':
-        return filter_var($value, FILTER_VALIDATE_BOOLEAN);
-      case 'number':
-        return is_numeric($value) ? (strpos($value, '.') !== false ? (float)$value : (int)$value) : 0;
-      case 'json':
-        return json_decode($value, true);
-      default:
-        return $value;
+    private function convertValue(string $value, string $type): mixed {
+        return match ($type) {
+            'boolean' => in_array(strtolower($value), ['1', 'true', 'yes'], true),
+            'integer' => (int) $value,
+            'float'   => (float) $value,
+            default   => $value,
+        };
     }
-  }
 
-  /* ========================================
-   *     VALIDATION & SECURITY
-   *     ======================================== */
-
-  /**
-   * Check if a setting is immutable
-   * @param string $key Setting key
-   * @return bool
-   */
-  public function isImmutable($key) {
-    return array_key_exists($key, self::IMMUTABLE_SETTINGS);
-  }
-
-  /**
-   * Validate setting value before saving
-   * @param string $key Setting key
-   * @param mixed $value Value to validate
-   * @return bool Valid or not
-   */
-  public function validate($key, $value) {
-    if ($this->isImmutable($key)) {
-        return false;
+    private function convertToString(mixed $value, string $type): string {
+        return match ($type) {
+            'boolean' => $value ? '1' : '0',
+            default   => (string) $value,
+        };
     }
-    
-    switch ($key) {
-      case 'max_login_attempts':
-        return is_numeric($value) && $value >= 1 && $value <= 20;
 
-      case 'session_timeout_minutes':
-        return is_numeric($value) && $value >= 5 && $value <= 1440;
-
-      case 'lockout_duration_minutes':
-        return is_numeric($value) && $value >= 1 && $value <= 1440;
-
-      case 'otp_expiry_minutes':
-        return is_numeric($value) && $value >= 5 && $value <= 60;
-
-      case 'max_file_size_mb':
-        $absoluteMax = self::IMMUTABLE_SETTINGS['ABSOLUTE_MAX_FILE_SIZE'] / (1024 * 1024);
-        return is_numeric($value) && $value >= 1 && $value <= $absoluteMax;
-
-      case 'items_per_page':
-        return is_numeric($value) && $value >= 5 && $value <= $this->get('max_items_per_page', 100);
-
-      default:
-        return true;
+    private function getSettingDescription(string $key): string {
+        $descriptions = [
+            'session_timeout_minutes'      => 'Session timeout in minutes',
+            'max_login_attempts'           => 'Maximum failed login attempts before lockout',
+            'lockout_duration_minutes'     => 'Account lockout duration in minutes',
+            'otp_expiry_minutes'           => 'OTP expiration time in minutes',
+            'allow_guest_tests'            => 'Allow guest users to take public tests',
+            'max_file_size_mb'             => 'Maximum file upload size in MB',
+            'results_retention_days'       => 'How long to keep assessment results',
+            'enable_proctoring'            => 'Enable proctoring features',
+            'smtp_configured'              => 'Is SMTP email configured',
+            'maintenance_mode'             => 'Enable maintenance mode',
+            'maintenance_mode_allowed_ips' => 'IPs allowed during maintenance',
+            'items_per_page'               => 'Default items per page in lists',
+            'enable_email_notifications'   => 'Enable email notifications',
+            'allow_registration'           => 'Allow new user registration',
+            'require_email_verification'   => 'Require email verification for new accounts',
+            'cache_expiry_seconds'         => 'Settings cache TTL in seconds',
+        ];
+        return $descriptions[$key] ?? ucwords(str_replace('_', ' ', $key));
     }
-  }
 
-  /* ========================================
-   *     CONVENIENCE METHODS
-   *     ======================================== */
-
-  public function isMaintenanceMode() {
-    return $this->get('maintenance_mode', false);
-  }
-
-  public function isSmtpConfigured() {
-    return $this->get('smtp_configured', false);
-  }
-
-  public function getSessionTimeout() {
-    return $this->get('session_timeout_minutes', 60) * 60;
-  }
-
-  public function getMaxFileSize() {
-    return $this->get('max_file_size_mb', 10) * 1024 * 1024;
-  }
-
-  public function getAllowedFileTypes() {
-    $typesStr = $this->get('allowed_file_types', '');
-    if (empty($typesStr)) {
-      return [];
+    public function getMaxFileSize(): int {
+        return (int) $this->get('max_file_size_mb', 10) * 1024 * 1024;
     }
-    return array_map('trim', explode(',', $typesStr));
-  }
 
-  /* ========================================
-   *     PREVENT CLONING & SERIALIZATION
-   *     ======================================== */
+    /**
+     * FIX 5: whitelist safe extensions — DB value cannot introduce dangerous types.
+     */
+    public function getAllowedFileTypes(): array {
+        $typesStr = $this->get('allowed_file_types', '');
+        if (empty($typesStr)) {
+            return [];
+        }
 
-  private function __clone() {}
+        $requested = array_map('trim', explode(',', strtolower($typesStr)));
 
-  public function __wakeup() {
-    throw new Exception("Cannot unserialize singleton");
-  }
+        return array_values(array_intersect($requested, self::SAFE_FILE_EXTENSIONS));
+    }
+
+    /**
+     * FIX 8: resolve the current admin user ID from the active session.
+     * Returns the user_id integer if the session holds a verified active admin,
+     * or null if there is no session or the user is not an admin.
+     */
+    private function getSessionAdminId(): ?int {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            return null;
+        }
+
+        // FIX: verify session was explicitly authenticated by the login flow,
+        // not just that a user_id key happens to exist in the session.
+        if (empty($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
+            return null;
+        }
+
+        $userId = $_SESSION['user_id'] ?? null;
+
+        if (!is_int($userId) && !ctype_digit((string) $userId)) {
+            return null;
+        }
+
+        $userId = (int) $userId;
+
+        return $this->userIsAdmin($userId) ? $userId : null;
+    }
+
+    /**
+     * Verify that a user ID belongs to an active admin account.
+     * Queries the DB directly — no trust in caller-supplied flags.
+     */
+    private function userIsAdmin(int $userId): bool {
+        try {
+            $stmt = $this->conn->prepare(
+                "SELECT user_type FROM users WHERE user_id = ? AND is_active = 1 LIMIT 1"
+            );
+            if (!$stmt) {
+                return false;
+            }
+            $stmt->bind_param("i", $userId);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $row    = $result->fetch_assoc();
+            $stmt->close();
+
+            return isset($row['user_type']) && $row['user_type'] === 'admin';
+        } catch (Exception $e) {
+            error_log("SystemSettings userIsAdmin error: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    private function __clone() {}
+
+    public function __wakeup() {
+        throw new Exception("Cannot unserialize singleton");
+    }
 }
 
-/* ========================================
- * GLOBAL HELPER FUNCTIONS
- * ======================================== */
+// ── Global helper functions ──
 
-function getSystemSetting($key, $default = null) {
-  return SystemSettings::getInstance()->get($key, $default);
+function getSystemSetting(string $key, mixed $default = null): mixed {
+    return SystemSettings::getInstance()->get($key, $default);
 }
 
-function updateSystemSetting($key, $value, $userId = null) {
-  $settings = SystemSettings::getInstance();
-  if (!$settings->validate($key, $value)) {
-    error_log("Setting validation failed for $key");
-    return false;
-  }
-  return $settings->set($key, $value, $userId);
+/**
+ * FIX 8: userId parameter removed — admin identity is resolved from session internally.
+ */
+function updateSystemSetting(string $key, mixed $value): bool {
+    return SystemSettings::getInstance()->set($key, $value);
 }
-?>

@@ -18,10 +18,9 @@
 // so they never corrupt the JSON response or trigger "headers already sent".
 ob_start();
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
+// config.php handles session_start() and session_regenerate_id().
+// Do NOT call session_start() here — it would run before config sets
+// cookie params, causing headers-already-sent or session corruption.
 require_once "config.php";
 
 // Discard anything config.php / system-settings.php may have printed
@@ -321,14 +320,14 @@ if (password_needs_rehash($user['password_hash'], PASSWORD_DEFAULT)) {
     }
 }
 
+// ── Success: regenerate session ID to prevent fixation ──
+// Done HERE — after auth is confirmed, not at the top of the file.
+session_regenerate_id(true);
 
-// ════════════════════════════════════════
-// SUCCESS — SESSION
-// ════════════════════════════════════════
-
-error_log("Login success — user_id: {$user['user_id']}, role: {$user['user_type']}");
-logLoginAttempt($conn, (int) $user['user_id'], $clientIp, $userAgent, true, null);
-updateLastLogin($conn, (int) $user['user_id']);
+// ── Success: build session ──
+error_log("Login successful — user_id: {$user['user_id']}, Role: {$user['user_type']}");
+logLoginActivity($conn, $user['user_id'], $email, true, null);
+updateLastLogin($conn, $user['user_id']);
 
 session_regenerate_id(true);
 
