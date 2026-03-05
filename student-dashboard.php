@@ -951,7 +951,7 @@ function timeAgo(string $datetime): string {
         }
 
         function viewDetails(id) {
-            window.location.href = 'test-preview.php?id=' + id;
+            window.location.href = 'test-results.php?id=' + id;
         }
 
         function showQuickActions() {

@@ -17,7 +17,9 @@ require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
-validateSession($conn, 'admin');
+// validateSession enforces role, session existence, and CSRF on POST automatically
+$adminUser = validateSession($conn, 'admin');
+$adminId   = (int) $adminUser['user_id'];
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -110,20 +112,21 @@ $result = safePreparedQuery($conn,
 );
 
 if ($result['success'] && $result['insert_id'] > 0) {
-    // Audit log
+    $newUserId = $result['insert_id'];
+
     safePreparedQuery($conn,
         "INSERT INTO audit_logs (user_id, action, entity_type, entity_id, new_values, ip_address)
          VALUES (?, 'create_user', 'user', ?, ?, ?)",
         "iiss",
         [
-            (int)$_SESSION['uid'],
-            $result['insert_id'],
+            $adminId,
+            $newUserId,
             json_encode(['email' => $email, 'user_type' => $userType]),
             $_SERVER['REMOTE_ADDR'] ?? '',
         ]
     );
 
-    echo json_encode(['success' => true, 'user_id' => $result['insert_id']]);
+    echo json_encode(['success' => true, 'user_id' => $newUserId]);
 } else {
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'Failed to create user. Please try again.']);

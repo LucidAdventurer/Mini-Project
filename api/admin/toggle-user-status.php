@@ -14,7 +14,9 @@ require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
+// validateSession enforces role, session existence, and CSRF on POST automatically
 $adminUser = validateSession($conn, 'admin');
+$adminId   = (int) $adminUser['user_id'];
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -22,7 +24,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-$body   = json_decode(file_get_contents('php://input'), true);
+$body = json_decode(file_get_contents('php://input'), true);
+if (!is_array($body)) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'error' => 'Invalid JSON.']);
+    exit;
+}
+
 $userId = (int)($body['user_id'] ?? 0);
 $action = trim($body['action']   ?? '');
 
@@ -32,18 +40,19 @@ if ($userId <= 0 || !in_array($action, ['block', 'activate'], true)) {
     exit;
 }
 
-if ($userId === (int)$adminUser['user_id']) {
+if ($userId === $adminId) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'You cannot block your own account.']);
     exit;
 }
 
-// Verify user exists
+// ── Verify user exists ──
 $check = safePreparedQuery($conn,
     "SELECT user_id, is_active, full_name FROM users WHERE user_id = ?",
     "i", [$userId]
 );
 if (!$check['success'] || !$check['result'] || $check['result']->num_rows === 0) {
+    if ($check['result']) $check['result']->free();
     http_response_code(404);
     echo json_encode(['success' => false, 'error' => 'User not found.']);
     exit;
@@ -59,16 +68,15 @@ $result = safePreparedQuery($conn,
 );
 
 if ($result['success']) {
-    // Audit log
     safePreparedQuery($conn,
         "INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values, new_values, ip_address)
          VALUES (?, ?, 'user', ?, ?, ?, ?)",
         "isiiss",
         [
-            (int)$_SESSION['uid'],
+            $adminId,
             $action . '_user',
             $userId,
-            json_encode(['is_active' => $user['is_active']]),
+            json_encode(['is_active' => (int)$user['is_active']]),
             json_encode(['is_active' => $newActive]),
             $_SERVER['REMOTE_ADDR'] ?? '',
         ]

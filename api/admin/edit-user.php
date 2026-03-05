@@ -19,7 +19,9 @@ require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
+// validateSession enforces role, session existence, and CSRF on POST automatically
 $adminUser = validateSession($conn, 'admin');
+$adminId   = (int) $adminUser['user_id'];
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -58,13 +60,11 @@ if (!in_array($userType, $allowedTypes, true)) {
     exit;
 }
 
-// Prevent admin from demoting or deactivating themselves
-if ($userId === (int)$adminUser['user_id']) {
-    if ($userType !== 'admin') {
-        http_response_code(403);
-        echo json_encode(['success' => false, 'error' => 'You cannot change your own role.']);
-        exit;
-    }
+// Prevent admin from demoting themselves
+if ($userId === $adminId && $userType !== 'admin') {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'You cannot change your own role.']);
+    exit;
 }
 
 // ── Fetch old values for audit ──
@@ -101,7 +101,7 @@ $isVerified         = isset($body['is_verified']) ? (int)(bool)$body['is_verifie
 $isActive           = isset($body['is_active'])   ? (int)(bool)$body['is_active']   : (int)$oldData['is_active'];
 
 // Prevent admin from deactivating themselves
-if ($userId === (int)$adminUser['user_id'] && !$isActive) {
+if ($userId === $adminId && !$isActive) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'You cannot deactivate your own account.']);
     exit;
@@ -145,13 +145,12 @@ $result = safePreparedQuery($conn,
 );
 
 if ($result['success'] && $result['affected_rows'] >= 0) {
-    // Audit log
     safePreparedQuery($conn,
         "INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values, new_values, ip_address)
          VALUES (?, 'edit_user', 'user', ?, ?, ?, ?)",
         "iisss",
         [
-            (int)$_SESSION['uid'],
+            $adminId,
             $userId,
             json_encode($oldData),
             json_encode(array_diff_assoc($setClauses, $oldData)),

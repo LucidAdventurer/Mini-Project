@@ -14,15 +14,20 @@ require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
+// validateSession enforces role, session existence, and CSRF on POST automatically
 $adminUser = validateSession($conn, 'admin');
-$adminId   = (int)$adminUser['user_id'];
+$adminId   = (int) $adminUser['user_id'];
+
+// Guard: $settings may be null if SystemSettings failed to load
+if ($settings === null) {
+    http_response_code(503);
+    echo json_encode(['success' => false, 'error' => 'Settings service unavailable.']);
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
-    // Return all configurable settings
-    $all = $settings->getAll();
-
-    // Filter to only send editable, non-immutable settings to the frontend
+    $all      = $settings->getAll();
     $response = [];
     foreach ($all as $key => $data) {
         if (!($data['immutable'] ?? false)) {
@@ -41,7 +46,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         exit;
     }
 
-    // Keys the frontend is allowed to update
     $allowedKeys = [
         'otp_expiry_minutes',
         'max_login_attempts',
@@ -63,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             continue;
         }
 
-        if (!$settings->set($key, $value, $adminId)) {
+        if (!$settings->set($key, $value)) {
             $failed[] = $key;
         }
     }
@@ -74,7 +78,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             'error'   => 'Failed to save: ' . implode(', ', $failed),
         ]);
     } else {
-        // Audit log
         safePreparedQuery($conn,
             "INSERT INTO audit_logs (user_id, action, entity_type, new_values, ip_address)
              VALUES (?, 'update_settings', 'system_settings', ?, ?)",
