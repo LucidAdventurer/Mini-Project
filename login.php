@@ -393,7 +393,7 @@ if ($remember) {
 $redirectMap = [
     'student' => 'student-dashboard.php',
     'teacher' => 'teacher-dashboard.php',
-    'admin'   => 'admin-dashboard.php',
+    'admin'   => 'admin-dashboard.html',
 ];
 $redirectUrl = $redirectMap[$user['user_type']] ?? null;
 
