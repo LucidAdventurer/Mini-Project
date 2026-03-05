@@ -752,32 +752,67 @@ function fmtDt(?string $dt): string {
         cancelBtn.disabled   = true;
         if (startBtn) startBtn.disabled = true;
 
+        /* Build an absolute URL so this works regardless of subdirectory depth */
+        const base    = window.location.pathname.replace(/\/[^\/]*$/, '');
+        const apiUrl  = base + '/api/assessment/start.php';
+
         try {
-            const res  = await fetch('api/assessment/start.php', {
+            const res = await fetch(apiUrl, {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body:    JSON.stringify({ assessment_id: ASSESSMENT_ID })
             });
-            const data = await res.json();
+
+            /* Read body as text first so we can show it if JSON parse fails */
+            const text = await res.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                /* Server returned non-JSON — likely a PHP error or 404 page */
+                console.error('start.php raw response:', text);
+                throw new Error(
+                    res.status === 404
+                        ? 'start.php not found (404). Check your file is at api/assessment/start.php'
+                        : 'Server returned unexpected response (HTTP ' + res.status + '). Check PHP error logs.'
+                );
+            }
 
             if (data.success && data.attempt_id) {
-                window.location.href = 'take-test.php?attempt_id=' + data.attempt_id;
+                window.location.href = base + '/take-test.php?attempt_id=' + data.attempt_id;
             } else {
-                alert('Could not start test: ' + (data.error || 'Unknown error. Please try again.'));
-                beginBtn.textContent = 'Yes, Begin!';
-                beginBtn.disabled    = false;
-                cancelBtn.disabled   = false;
-                if (startBtn) startBtn.disabled = false;
+                resetButtons(beginBtn, cancelBtn, startBtn);
                 closeConfirm();
+                showError(data.error || 'Could not start test. Please try again.');
             }
         } catch (err) {
-            alert('Network error. Please check your connection and try again.');
-            beginBtn.textContent = 'Yes, Begin!';
-            beginBtn.disabled    = false;
-            cancelBtn.disabled   = false;
-            if (startBtn) startBtn.disabled = false;
+            console.error('beginTest error:', err);
+            resetButtons(beginBtn, cancelBtn, startBtn);
             closeConfirm();
+            showError(err.message || 'Could not reach the server. Please check your connection.');
         }
+    }
+
+    function resetButtons(beginBtn, cancelBtn, startBtn) {
+        beginBtn.textContent = 'Yes, Begin!';
+        beginBtn.disabled    = false;
+        cancelBtn.disabled   = false;
+        if (startBtn) startBtn.disabled = false;
+    }
+
+    function showError(msg) {
+        /* Show a styled error below the Start button instead of a plain alert */
+        let errEl = document.getElementById('startError');
+        if (!errEl) {
+            errEl = document.createElement('div');
+            errEl.id = 'startError';
+            errEl.style.cssText =
+                'margin-top:16px;padding:12px 20px;background:#fed7d7;color:#742a2a;' +
+                'border-radius:10px;font-size:14px;font-weight:600;max-width:500px;margin-inline:auto;';
+            document.querySelector('.action-section').appendChild(errEl);
+        }
+        errEl.textContent = '⚠️ ' + msg;
+        errEl.style.display = 'block';
     }
 
     document.addEventListener('keydown', function(e) {
