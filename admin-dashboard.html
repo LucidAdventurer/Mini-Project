@@ -1809,24 +1809,28 @@
                 <div class="section-header">
                     <div>
                         <h2>Test Management</h2>
-                        <p>Create, schedule, and manage assessments</p>
+                        <p>View, publish, archive, and delete assessments</p>
                     </div>
-                    <button class="btn btn-primary">
-                        <svg viewBox="0 0 24 24">
-                            <line x1="12" y1="5" x2="12" y2="19" />
-                            <line x1="5" y1="12" x2="19" y2="12" />
-                        </svg>
-                        New Assessment
-                    </button>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn btn-ghost" onclick="exportTests()">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="7 10 12 15 17 10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                            Export
+                        </button>
+                    </div>
                 </div>
 
+                <!-- Live stat cards -->
                 <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;">
                     <div class="stat-card blue">
                         <div class="stat-icon"><svg viewBox="0 0 24 24">
                                 <path d="M9 11l3 3L22 4" />
                                 <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
                             </svg></div>
-                        <div class="stat-value">148</div>
+                        <div class="stat-value" id="tStatTotal">—</div>
                         <div class="stat-label">Total Assessments</div>
                     </div>
                     <div class="stat-card green">
@@ -1834,7 +1838,7 @@
                                 <circle cx="12" cy="12" r="10" />
                                 <polyline points="12 6 12 12 16 14" />
                             </svg></div>
-                        <div class="stat-value">34</div>
+                        <div class="stat-value" id="tStatActive">—</div>
                         <div class="stat-label">Active / Live</div>
                     </div>
                     <div class="stat-card yellow">
@@ -1844,7 +1848,7 @@
                                 <line x1="8" y1="2" x2="8" y2="6" />
                                 <line x1="3" y1="10" x2="21" y2="10" />
                             </svg></div>
-                        <div class="stat-value">12</div>
+                        <div class="stat-value" id="tStatDraft">—</div>
                         <div class="stat-label">Drafts</div>
                     </div>
                     <div class="stat-card red">
@@ -1852,17 +1856,40 @@
                                 <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
                                 <polyline points="17 6 23 6 23 12" />
                             </svg></div>
-                        <div class="stat-value">74.3%</div>
+                        <div class="stat-value" id="tStatPassRate">—</div>
                         <div class="stat-label">Avg Pass Rate</div>
                     </div>
                 </div>
 
-                <div class="search-bar">
-                    <svg viewBox="0 0 24 24">
-                        <circle cx="11" cy="11" r="8" />
-                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    </svg>
-                    <input placeholder="Search assessments by title, category, difficulty..." />
+                <!-- Status filter tabs -->
+                <div class="tabs">
+                    <button class="tab active" onclick="filterByStatus('all',this)">All</button>
+                    <button class="tab" onclick="filterByStatus('active',this)">Active</button>
+                    <button class="tab" onclick="filterByStatus('draft',this)">Draft</button>
+                    <button class="tab" onclick="filterByStatus('scheduled',this)">Scheduled</button>
+                    <button class="tab" onclick="filterByStatus('archived',this)">Archived</button>
+                </div>
+
+                <!-- Search + category filter -->
+                <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;">
+                    <div class="search-bar" style="flex:1;margin-bottom:0;">
+                        <svg viewBox="0 0 24 24">
+                            <circle cx="11" cy="11" r="8" />
+                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                        <input id="testSearchInput" placeholder="Search by title, category, or teacher name…" />
+                    </div>
+                    <select id="testCategoryFilter" class="form-input"
+                        style="width:180px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;"
+                        onchange="testCategory=this.value;testPage=1;loadTests()">
+                        <option value="">All Categories</option>
+                        <option value="aptitude">Aptitude</option>
+                        <option value="technical">Technical</option>
+                        <option value="coding">Coding</option>
+                        <option value="reasoning">Reasoning</option>
+                        <option value="english">English</option>
+                        <option value="general">General</option>
+                    </select>
                 </div>
 
                 <div class="card">
@@ -1874,95 +1901,24 @@
                                     <th>Category</th>
                                     <th>Difficulty</th>
                                     <th>Duration</th>
-                                    <th>Total Marks</th>
-                                    <th>Pass Marks</th>
-                                    <th>Max Attempts</th>
+                                    <th>Marks</th>
+                                    <th>Questions</th>
+                                    <th>Attempts</th>
+                                    <th>Pass Rate</th>
+                                    <th>Created By</th>
                                     <th>Status</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody id="testsTableBody">
                                 <tr>
-                                    <td><b>Aptitude Test – Batch A</b></td>
-                                    <td>Aptitude</td>
-                                    <td><span class="badge easy">Easy</span></td>
-                                    <td>45 min</td>
-                                    <td>100</td>
-                                    <td>40</td>
-                                    <td>2</td>
-                                    <td><span class="badge published">Active</span></td>
-                                    <td>
-                                        <div style="display:flex;gap:6px;"><button
-                                                class="btn btn-ghost btn-sm">Edit</button><button
-                                                class="btn btn-ghost btn-sm">Questions</button><button
-                                                class="btn btn-danger btn-sm">Archive</button></div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td><b>Data Structures Mock 3</b></td>
-                                    <td>Technical</td>
-                                    <td><span class="badge hard">Hard</span></td>
-                                    <td>90 min</td>
-                                    <td>150</td>
-                                    <td>75</td>
-                                    <td>1</td>
-                                    <td><span class="badge published">Active</span></td>
-                                    <td>
-                                        <div style="display:flex;gap:6px;"><button
-                                                class="btn btn-ghost btn-sm">Edit</button><button
-                                                class="btn btn-ghost btn-sm">Questions</button><button
-                                                class="btn btn-danger btn-sm">Archive</button></div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td><b>Verbal Reasoning – Round 1</b></td>
-                                    <td>Communication</td>
-                                    <td><span class="badge medium">Medium</span></td>
-                                    <td>30 min</td>
-                                    <td>50</td>
-                                    <td>25</td>
-                                    <td>1</td>
-                                    <td><span class="badge published">Active</span></td>
-                                    <td>
-                                        <div style="display:flex;gap:6px;"><button
-                                                class="btn btn-ghost btn-sm">Edit</button><button
-                                                class="btn btn-ghost btn-sm">Questions</button><button
-                                                class="btn btn-danger btn-sm">Archive</button></div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td><b>OS Concepts Quiz</b></td>
-                                    <td>Technical</td>
-                                    <td><span class="badge medium">Medium</span></td>
-                                    <td>60 min</td>
-                                    <td>100</td>
-                                    <td>50</td>
-                                    <td>1</td>
-                                    <td><span class="badge draft">Draft</span></td>
-                                    <td>
-                                        <div style="display:flex;gap:6px;"><button
-                                                class="btn btn-ghost btn-sm">Edit</button><button
-                                                class="btn btn-primary btn-sm">Publish</button></div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td><b>HR Interview Prep</b></td>
-                                    <td>Soft Skills</td>
-                                    <td><span class="badge easy">Easy</span></td>
-                                    <td>20 min</td>
-                                    <td>50</td>
-                                    <td>20</td>
-                                    <td>3</td>
-                                    <td><span class="badge archived">Archived</span></td>
-                                    <td>
-                                        <div style="display:flex;gap:6px;"><button
-                                                class="btn btn-ghost btn-sm">Restore</button><button
-                                                class="btn btn-danger btn-sm">Delete</button></div>
-                                    </td>
+                                    <td colspan="11" style="text-align:center;padding:32px;color:var(--muted);">Loading
+                                        assessments…</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
+                    <div id="testPagination"></div>
                 </div>
             </div>
 
@@ -2410,6 +2366,21 @@
         </div>
     </div>
 
+    <!-- QUESTIONS MODAL (view-only) -->
+    <div class="modal-overlay" id="modalQuestions">
+        <div class="modal" style="max-width:760px;width:95%;">
+            <button class="modal-close" onclick="closeModal('modalQuestions')">&#x2715;</button>
+            <h3 id="modalQTitle">Assessment Questions</h3>
+            <p id="modalQMeta" style="font-size:12px;color:var(--muted);margin-bottom:16px;"></p>
+            <div id="modalQBody" style="max-height:520px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;">
+                <div style="text-align:center;padding:32px;color:var(--muted);">Loading&hellip;</div>
+            </div>
+            <div class="form-actions" style="margin-top:16px;">
+                <button class="btn btn-ghost" onclick="closeModal('modalQuestions')">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- TOAST -->
     <div class="toast" id="toast"></div>
 
@@ -2424,6 +2395,11 @@
         let logType = 'login';
         let logPage = 1;
         let searchTimer = null;
+        let testPage = 1;
+        let testStatus = 'all';
+        let testSearch = '';
+        let testCategory = '';
+        let testSearchTimer = null;
 
         // Auto-detect base path from current URL
         // e.g. /pta/Mini-Project/admin-dashboard.html -> /pta/Mini-Project/
@@ -2438,6 +2414,10 @@
             toggleStatus: _base + 'api/admin/toggle-user-status.php',
             getLogs: _base + 'api/admin/get-logs.php',
             settings: _base + 'api/admin/settings.php',
+            getTests: _base + 'api/admin/get-tests.php',
+            updateTestStatus: _base + 'api/admin/update-test-status.php',
+            deleteTest: _base + 'api/admin/delete-test.php',
+            getTestQuestions: _base + 'api/admin/get-test-questions.php',
         };
 
         // ════════════════════════════════════════
@@ -2448,6 +2428,7 @@
             loadOverview();
             wireUserSearch();
             wireLogTabs();
+            wireTestSearch();
             wireSettingsSave();
         });
 
@@ -2506,6 +2487,7 @@
             document.getElementById('topbarTitle').innerHTML = titles[id] || id;
 
             if (id === 'users') loadUsers();
+            if (id === 'tests') loadTests();
             if (id === 'logs') loadLogs();
             if (id === 'settings') loadSettings();
         }
@@ -2839,6 +2821,239 @@
                 a.click();
                 showToast('Export ready.', 'success');
             } catch (e) { showToast('Export failed.', 'error'); }
+        }
+
+
+        // ════════════════════════════════════════
+        // TEST MANAGEMENT
+        // ════════════════════════════════════════
+        function filterByStatus(status, tabEl) {
+            document.querySelectorAll('#page-tests .tab').forEach(t => t.classList.remove('active'));
+            if (tabEl) tabEl.classList.add('active');
+            testStatus = status;
+            testPage = 1;
+            loadTests();
+        }
+
+        function wireTestSearch() {
+            const inp = document.getElementById('testSearchInput');
+            if (!inp) return;
+            inp.addEventListener('input', () => {
+                clearTimeout(testSearchTimer);
+                testSearchTimer = setTimeout(() => {
+                    testSearch = inp.value.trim();
+                    testPage = 1;
+                    loadTests();
+                }, 350);
+            });
+        }
+
+        async function loadTests() {
+            const tbody = document.getElementById('testsTableBody');
+            if (!tbody) return;
+            tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--muted);">Loading&hellip;</td></tr>`;
+
+            try {
+                const d = await apiGet(API.getTests, {
+                    status: testStatus, search: testSearch,
+                    category: testCategory, page: testPage, limit: 20,
+                });
+
+                if (!d.success) {
+                    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--red);padding:24px;">${esc(d.error || 'Failed to load')}</td></tr>`;
+                    return;
+                }
+
+                // Stat cards
+                if (d.stats) {
+                    setEl('tStatTotal', fmtNum(d.stats.total_assessments));
+                    setEl('tStatActive', fmtNum(d.stats.active));
+                    setEl('tStatDraft', fmtNum(d.stats.draft));
+                    setEl('tStatPassRate', (d.stats.avg_pass_rate || 0) + '%');
+                }
+
+                // Tab counts
+                const tabs = document.querySelectorAll('#page-tests .tab');
+                const sKeys = ['all', 'active', 'draft', 'scheduled', 'archived'];
+                const sLabel = ['All', 'Active', 'Draft', 'Scheduled', 'Archived'];
+                tabs.forEach((tab, i) => {
+                    const cnt = d.counts[sKeys[i]];
+                    tab.textContent = sLabel[i] + (cnt ? ` (${fmtNum(cnt)})` : '');
+                });
+
+                if (!d.assessments.length) {
+                    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--muted);">No assessments found.</td></tr>`;
+                } else {
+                    tbody.innerHTML = d.assessments.map(t => renderTestRow(t)).join('');
+                }
+
+                renderTestPagination(d.page, d.pages, d.total);
+
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--red);padding:24px;">Network error.</td></tr>`;
+                console.error(e);
+            }
+        }
+
+        function renderTestRow(t) {
+            const diffBadge = `<span class="badge ${t.difficulty}">${esc(t.difficulty)}</span>`;
+            const statusClass = t.status === 'active' ? 'published' : t.status;
+            const statusBadge = `<span class="badge ${statusClass}">${esc(t.status)}</span>`;
+            const passRate = t.pass_rate !== null ? t.pass_rate + '%' : '—';
+            const avgScore = t.avg_score ? t.avg_score + '%' : '—';
+
+            // Action buttons change based on status
+            let actions = `<button class="btn btn-ghost btn-sm" onclick="viewQuestions(${t.assessment_id})">Questions</button>`;
+
+            if (t.status === 'draft') {
+                actions += ` <button class="btn btn-primary btn-sm" onclick="changeTestStatus(${t.assessment_id},'active')">Publish</button>`;
+                actions += ` <button class="btn btn-danger btn-sm" onclick="deleteTest(${t.assessment_id},'${esc(t.title)}')">Delete</button>`;
+            } else if (t.status === 'active') {
+                actions += ` <button class="btn btn-ghost btn-sm" onclick="changeTestStatus(${t.assessment_id},'draft')">Unpublish</button>`;
+                actions += ` <button class="btn btn-danger btn-sm" onclick="changeTestStatus(${t.assessment_id},'archived')">Archive</button>`;
+            } else if (t.status === 'archived') {
+                actions += ` <button class="btn btn-primary btn-sm" onclick="changeTestStatus(${t.assessment_id},'active')">Restore</button>`;
+                actions += ` <button class="btn btn-danger btn-sm" onclick="deleteTest(${t.assessment_id},'${esc(t.title)}')">Delete</button>`;
+            } else if (t.status === 'scheduled') {
+                actions += ` <button class="btn btn-ghost btn-sm" onclick="changeTestStatus(${t.assessment_id},'draft')">Unschedule</button>`;
+                actions += ` <button class="btn btn-danger btn-sm" onclick="changeTestStatus(${t.assessment_id},'archived')">Archive</button>`;
+            }
+
+            return `<tr>
+    <td>
+      <div><b>${esc(t.title)}</b></div>
+      <div style="font-size:11px;color:var(--muted);">${fmtNum(t.student_count)} students &middot; max ${t.max_attempts} attempt${t.max_attempts !== 1 ? 's' : ''}</div>
+    </td>
+    <td>${esc(t.category || '—')}</td>
+    <td>${diffBadge}</td>
+    <td>${t.duration_minutes} min</td>
+    <td>${fmtNum(t.total_marks)} / ${fmtNum(t.passing_marks)}</td>
+    <td>${fmtNum(t.question_count)}</td>
+    <td>${fmtNum(t.attempt_count)}</td>
+    <td>${passRate}</td>
+    <td><span style="font-size:12px;">${esc(t.creator_name)}</span></td>
+    <td>${statusBadge}</td>
+    <td><div style="display:flex;gap:5px;flex-wrap:wrap;">${actions}</div></td>
+  </tr>`;
+        }
+
+        async function changeTestStatus(assessmentId, newStatus) {
+            const label = { active: 'Publish', draft: 'Unpublish', archived: 'Archive', scheduled: 'Schedule' }[newStatus] || newStatus;
+            if (!confirm(`${label} this assessment?`)) return;
+            try {
+                const d = await apiPost(API.updateTestStatus, { assessment_id: assessmentId, status: newStatus });
+                if (d.success) {
+                    showToast(`Assessment ${label.toLowerCase()}d.`, 'success');
+                    loadTests();
+                    loadOverview(); // refresh overview stats too
+                } else {
+                    showToast(d.error || 'Action failed.', 'error');
+                }
+            } catch (e) { showToast('Network error.', 'error'); }
+        }
+
+        async function deleteTest(assessmentId, title) {
+            if (!confirm(`Permanently delete "${title}"?\n\nThis will also delete all questions and attempt records. This cannot be undone.`)) return;
+            try {
+                const d = await apiPost(API.deleteTest, { assessment_id: assessmentId });
+                if (d.success) {
+                    showToast('Assessment deleted.', 'success');
+                    loadTests();
+                    loadOverview();
+                } else {
+                    showToast(d.error || 'Delete failed.', 'error');
+                }
+            } catch (e) { showToast('Network error.', 'error'); }
+        }
+
+        async function viewQuestions(assessmentId) {
+            document.getElementById('modalQTitle').textContent = 'Loading…';
+            document.getElementById('modalQMeta').textContent = '';
+            document.getElementById('modalQBody').innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted);">Loading questions…</div>';
+            openModal('modalQuestions');
+
+            try {
+                const d = await apiGet(API.getTestQuestions, { assessment_id: assessmentId });
+                if (!d.success) {
+                    document.getElementById('modalQBody').innerHTML = `<div style="color:var(--red);padding:16px;">${esc(d.error)}</div>`;
+                    return;
+                }
+                const a = d.assessment;
+                document.getElementById('modalQTitle').textContent = a.title;
+                document.getElementById('modalQMeta').textContent =
+                    `${a.category || ''} · ${a.difficulty} · ${a.total_marks} marks · ${a.duration_minutes} min · by ${a.creator_name} · ${d.questions.length} question${d.questions.length !== 1 ? 's' : ''}`;
+
+                if (!d.questions.length) {
+                    document.getElementById('modalQBody').innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted);">No questions added yet.</div>';
+                    return;
+                }
+
+                document.getElementById('modalQBody').innerHTML = d.questions.map((q, i) => {
+                    const optLabels = ['A', 'B', 'C', 'D'];
+                    const opts = [q.option_a, q.option_b, q.option_c, q.option_d]
+                        .map((o, j) => o ? `<div style="padding:4px 8px;border-radius:4px;margin-top:4px;font-size:13px;${q.correct_answer?.toUpperCase().includes(optLabels[j]) ? 'background:rgba(34,197,94,.15);color:var(--green);font-weight:600;' : ''}">
+                            <b>${optLabels[j]}.</b> ${esc(o)}
+                        </div>` : '')
+                        .join('');
+                    const typeBadge = `<span class="badge info" style="font-size:10px;">${esc(q.question_type?.replace(/_/g, ' '))}</span>`;
+                    return `<div style="border:1px solid var(--border);border-radius:8px;padding:14px;">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+                            <div style="font-size:13px;font-weight:600;">${i + 1}. ${esc(q.question_text)}</div>
+                            <div style="display:flex;gap:6px;flex-shrink:0;">${typeBadge}
+                                <span class="badge ${q.difficulty || 'medium'}" style="font-size:10px;">${esc(q.difficulty || 'medium')}</span>
+                                <span style="font-size:11px;color:var(--muted);">${q.marks} mark${q.marks !== 1 ? 's' : ''}</span>
+                            </div>
+                        </div>
+                        ${opts ? `<div style="margin-top:8px;">${opts}</div>` : ''}
+                        ${q.explanation ? `<div style="margin-top:8px;font-size:12px;color:var(--muted);border-top:1px solid var(--border);padding-top:6px;"><b>Explanation:</b> ${esc(q.explanation)}</div>` : ''}
+                    </div>`;
+                }).join('');
+
+            } catch (e) {
+                document.getElementById('modalQBody').innerHTML = `<div style="color:var(--red);padding:16px;">Network error loading questions.</div>`;
+            }
+        }
+
+        async function exportTests() {
+            try {
+                const d = await apiGet(API.getTests, { status: testStatus, search: testSearch, category: testCategory, limit: 1000, page: 1 });
+                if (!d.success || !d.assessments.length) return showToast('No assessments to export.', 'error');
+
+                const header = ['ID', 'Title', 'Category', 'Difficulty', 'Status', 'Duration(min)', 'Total Marks', 'Pass Marks', 'Questions', 'Attempts', 'Pass Rate(%)', 'Created By', 'Created At'];
+                const rows = d.assessments.map(t => [
+                    t.assessment_id, t.title, t.category, t.difficulty, t.status,
+                    t.duration_minutes, t.total_marks, t.passing_marks,
+                    t.question_count, t.attempt_count,
+                    t.pass_rate ?? '', t.creator_name, t.created_at
+                ]);
+                const csv = [header, ...rows].map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `assessments_${new Date().toISOString().slice(0, 10)}.csv`;
+                a.click();
+                showToast('Export ready.', 'success');
+            } catch (e) { showToast('Export failed.', 'error'); }
+        }
+
+        function renderTestPagination(page, pages, total) {
+            let el = document.getElementById('testPagination');
+            if (!el) return;
+            if (pages <= 1) { el.innerHTML = ''; return; }
+
+            const start = (page - 1) * 20 + 1;
+            const end = Math.min(page * 20, total);
+            const nums = [];
+            for (let p = Math.max(1, page - 2); p <= Math.min(pages, page + 2); p++) nums.push(p);
+
+            el.className = 'pagination';
+            el.innerHTML = `
+    <span>Showing ${fmtNum(start)}&ndash;${fmtNum(end)} of ${fmtNum(total)} assessments</span>
+    <div class="pagination-btns">
+      <button ${page <= 1 ? 'disabled' : ''} onclick="testPage=${page - 1};loadTests()">&#8249; Prev</button>
+      ${nums.map(p => `<button class="${p === page ? 'current' : ''}" onclick="testPage=${p};loadTests()">${p}</button>`).join('')}
+      <button ${page >= pages ? 'disabled' : ''} onclick="testPage=${page + 1};loadTests()">Next &#8250;</button>
+    </div>`;
         }
 
         // ════════════════════════════════════════
