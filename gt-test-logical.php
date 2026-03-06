@@ -1,8 +1,11 @@
 <?php
 /* ============================================================
- * LOGICAL TEST PAGE  (guest-accessible)
+ * Logical Reasoning Test PAGE  (guest-accessible)
  * Fetches MCQ questions from the `questions` + `assessments`
- * tables where category = 'logical' and is_public = 1.
+ * tables where category = 'reasoning' and is_public = 1.
+ *
+ * SECURITY: correct_answer is NOT sent to the browser.
+ * Grading is done server-side via api/guest/grade-test.php.
  * ============================================================ */
 
 require_once "config.php";
@@ -37,14 +40,14 @@ if (!empty($_SESSION['user_id']) && !empty($_SESSION['user_type'])) {
     }
 }
 
-// ── Fetch active public aptitude assessments ─────────────────
+// ── Fetch active public reasoning assessments ─────────────────
 $assessments = [];
 $aRes = safePreparedQuery(
     $conn,
     "SELECT assessment_id, title, description, duration_minutes,
             total_marks, passing_marks, difficulty, instructions
      FROM assessments
-     WHERE category = 'logical'
+     WHERE category = 'reasoning'
        AND is_public = 1
        AND status    = 'active'
      ORDER BY created_at DESC",
@@ -68,9 +71,10 @@ if ($aid > 0) {
         $conn,
         "SELECT assessment_id, title, description, duration_minutes,
                 total_marks, passing_marks, difficulty, instructions,
-                randomize_questions, randomize_options, questions_per_attempt
+                randomize_questions, randomize_options, questions_per_attempt,
+                show_correct_answers
          FROM assessments
-         WHERE assessment_id = ? AND category = 'logical'
+         WHERE assessment_id = ? AND category = 'reasoning'
            AND is_public = 1 AND status = 'active'",
         "i", [$aid]
     );
@@ -81,11 +85,13 @@ if ($aid > 0) {
 
     if ($activeAssmt) {
         $order = $activeAssmt['randomize_questions'] ? 'RAND()' : 'question_order ASC, question_id ASC';
+        // NOTE: correct_answer is fetched here for option-shuffle remapping only.
+        // It is stripped from the array before the HTML template runs — never sent to the browser.
         $qRes  = safePreparedQuery(
             $conn,
             "SELECT question_id, question_text, question_type, marks,
                     negative_marks, option_a, option_b, option_c, option_d,
-                    correct_answer, explanation, topic, difficulty
+                    correct_answer, explanation, topic
              FROM questions
              WHERE assessment_id = ? AND question_type IN ('mcq','true_false')
              ORDER BY $order",
@@ -93,7 +99,7 @@ if ($aid > 0) {
         );
         if ($qRes['success'] && $qRes['result']) {
             while ($q = $qRes['result']->fetch_assoc()) {
-                // Optionally shuffle options
+                // Optionally shuffle options and remap correct_answer server-side
                 if ($activeAssmt['randomize_options'] && $q['question_type'] === 'mcq') {
                     $opts    = ['A'=>$q['option_a'],'B'=>$q['option_b'],'C'=>$q['option_c'],'D'=>$q['option_d']];
                     $correct = $q['correct_answer'];
@@ -101,16 +107,22 @@ if ($aid > 0) {
                     shuffle($vals);
                     $keys    = ['A','B','C','D'];
                     $newOpts = array_combine($keys, $vals);
-                    // Remap correct answer
                     foreach ($newOpts as $k => $v) {
                         if ($v === $opts[$correct]) { $q['correct_answer'] = $k; break; }
                     }
                     $q['option_a'] = $newOpts['A']; $q['option_b'] = $newOpts['B'];
                     $q['option_c'] = $newOpts['C']; $q['option_d'] = $newOpts['D'];
                 }
+                // Stash the (possibly remapped) correct answer in session so
+                // grade-test.php can grade against the shuffled key if needed.
+                // Session key format: ca_{assessmentId}_{questionId}
+                $_SESSION['ca_' . $aid . '_' . $q['question_id']] = $q['correct_answer'];
+                // Strip correct_answer from the array — it must not reach the HTML
+                unset($q['correct_answer']);
                 $questions[] = $q;
             }
             $qRes['result']->free();
+
             // Limit questions per attempt if set
             if ($activeAssmt['questions_per_attempt'] && count($questions) > $activeAssmt['questions_per_attempt']) {
                 $questions = array_slice($questions, 0, (int)$activeAssmt['questions_per_attempt']);
@@ -124,7 +136,7 @@ if ($aid > 0) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Logical Test – Placement & Training Portal</title>
+<title>Logical Reasoning Test – Placement &amp; Training Portal</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -133,15 +145,13 @@ if ($aid > 0) {
     --ink:       #18181b; --ink-muted: #52525b; --ink-faint: #a1a1aa;
     --surface:   #ffffff; --surface-2: #fafafa; --surface-3: #f4f4f5;
     --line:      #e4e4e7; --r: 10px;
-    --accent:    #15803d; --accent-bg: #f0fdf4; --accent-line: #bbf7d0;
+    --accent:    #1d4ed8; --accent-bg: #eff6ff; --accent-line: #bfdbfe;
     --serif: 'Instrument Serif', Georgia, serif;
     --sans:  'DM Sans', system-ui, sans-serif;
 }
 html { scroll-behavior: smooth; }
 body { font-family: var(--sans); background: var(--surface); color: var(--ink);
        font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
-
-/* ── Navbar ── */
 .navbar {
     position: sticky; top: 0; z-index: 100;
     background: rgba(255,255,255,0.92); backdrop-filter: blur(12px);
@@ -160,8 +170,6 @@ body { font-family: var(--sans); background: var(--surface); color: var(--ink);
 .nav-btn.outline:hover { background: var(--surface-3); }
 .nav-btn.solid { background: var(--ink); color: #fff; border: 1px solid var(--ink); }
 .nav-btn.solid:hover { background: #27272a; }
-
-/* ── Page header ── */
 .page-header { padding: 52px 28px 36px; max-width: 900px; margin: 0 auto; }
 .breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 13px;
               color: var(--ink-faint); margin-bottom: 20px; flex-wrap: wrap; }
@@ -174,8 +182,6 @@ body { font-family: var(--sans); background: var(--surface); color: var(--ink);
 .page-title { font-family: var(--serif); font-size: clamp(28px, 5vw, 42px); font-weight: 400;
               line-height: 1.15; letter-spacing: -0.02em; margin-bottom: 10px; }
 .page-sub { font-size: 15px; color: var(--ink-muted); max-width: 520px; line-height: 1.65; }
-
-/* ── Assessment list ── */
 .assmt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr));
               gap: 14px; max-width: 900px; margin: 0 auto 60px; padding: 0 28px; }
 .assmt-card { border: 1px solid var(--line); border-radius: var(--r); padding: 24px;
@@ -194,22 +200,16 @@ body { font-family: var(--sans); background: var(--surface); color: var(--ink);
              border-radius: var(--r); background: var(--accent); color: #fff;
              font-size: 13px; font-weight: 600; text-decoration: none; transition: 0.15s; }
 .btn-start:hover { background: #1e40af; }
-
-/* ── Empty state ── */
 .empty-state { text-align: center; padding: 80px 28px; max-width: 420px; margin: 0 auto; }
 .empty-icon { font-size: 40px; margin-bottom: 16px; }
 .empty-title { font-family: var(--serif); font-size: 22px; margin-bottom: 8px; }
 .empty-sub { font-size: 14px; color: var(--ink-muted); line-height: 1.6; }
-
-/* ── Test interface ── */
 .test-layout { display: grid; grid-template-columns: 1fr 280px; gap: 24px;
                max-width: 1040px; margin: 0 auto; padding: 0 28px 60px; align-items: start; }
 @media (max-width: 760px) {
     .test-layout { grid-template-columns: 1fr; }
     .sidebar { order: -1; }
 }
-
-/* Sidebar */
 .sidebar { position: sticky; top: 74px; }
 .sidebar-card { border: 1px solid var(--line); border-radius: var(--r); padding: 20px;
                 background: var(--surface-2); }
@@ -238,8 +238,7 @@ body { font-family: var(--sans); background: var(--surface); color: var(--ink);
               color: #fff; font-size: 14px; font-weight: 600; border: none; cursor: pointer;
               transition: 0.15s; font-family: var(--sans); }
 .btn-submit:hover { background: #27272a; }
-
-/* Questions panel */
+.btn-submit:disabled { opacity: 0.6; cursor: not-allowed; }
 .questions-panel {}
 .q-progress { font-size: 13px; color: var(--ink-muted); margin-bottom: 20px; }
 .q-progress strong { color: var(--ink); }
@@ -266,8 +265,6 @@ body { font-family: var(--sans); background: var(--surface); color: var(--ink);
               color: var(--ink-muted); flex-shrink: 0; transition: 0.15s; }
 .option-label.selected .option-key { background: var(--accent); border-color: var(--accent); color: #fff; }
 .option-text { font-size: 14.5px; line-height: 1.55; padding-top: 2px; }
-
-/* Result feedback (shown after correct answer revealed) */
 .option-label.correct  { border-color: #16a34a; background: #f0fdf4; }
 .option-label.wrong    { border-color: #dc2626; background: #fef2f2; }
 .option-label.correct .option-key { background: #16a34a; border-color: #16a34a; color: #fff; }
@@ -276,8 +273,6 @@ body { font-family: var(--sans); background: var(--surface); color: var(--ink);
                    border: 1px solid #bbf7d0; border-radius: 8px; font-size: 13.5px;
                    color: #14532d; line-height: 1.55; display: none; }
 .explanation-box.visible { display: block; }
-
-/* Question nav buttons */
 .q-nav-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: space-between; flex-wrap: wrap; }
 .btn-nav { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px;
            border-radius: var(--r); font-size: 13px; font-weight: 600;
@@ -287,8 +282,11 @@ body { font-family: var(--sans); background: var(--surface); color: var(--ink);
 .btn-nav:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-nav.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
 .btn-nav.primary:hover { background: #27272a; }
-
-/* Result overlay */
+.submitting-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.3);
+                      z-index: 150; align-items: center; justify-content: center; }
+.submitting-overlay.show { display: flex; }
+.submitting-box { background: #fff; border-radius: 12px; padding: 32px 40px;
+                  text-align: center; font-size: 15px; color: var(--ink); }
 .result-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
                   z-index: 200; align-items: center; justify-content: center; padding: 20px; }
 .result-overlay.show { display: flex; }
@@ -301,8 +299,7 @@ body { font-family: var(--sans); background: var(--surface); color: var(--ink);
 .result-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .result-pass { color: #15803d; }
 .result-fail { color: #dc2626; }
-
-/* Footer */
+.result-error { color: #b45309; font-size: 13px; margin-top: 8px; }
 .footer-outer { border-top: 1px solid var(--line); margin-top: 40px; }
 footer { padding: 24px 28px; display: flex; align-items: center; justify-content: space-between;
          flex-wrap: wrap; gap: 12px; max-width: 1040px; margin: 0 auto; }
@@ -314,7 +311,6 @@ footer { padding: 24px 28px; display: flex; align-items: center; justify-content
 </head>
 <body>
 
-<!-- ── Navbar ── -->
 <nav class="navbar">
     <a href="guest-dashboard.html" class="brand">
         <div class="brand-mark">PT</div>
@@ -330,20 +326,19 @@ footer { padding: 24px 28px; display: flex; align-items: center; justify-content
     </div>
 </nav>
 
-<!-- ── Page header ── -->
 <div class="page-header">
     <div class="breadcrumb">
         <a href="guest-dashboard.html">Home</a>
         <span class="breadcrumb-sep">›</span>
         <a href="home.php">Tests</a>
         <span class="breadcrumb-sep">›</span>
-        <span>Aptitude</span>
+        <span>Logical Reasoning</span>
         <?php if ($activeAssmt): ?>
             <span class="breadcrumb-sep">›</span>
             <span><?= htmlspecialchars($activeAssmt['title']) ?></span>
         <?php endif; ?>
     </div>
-    <div class="cat-badge">🧩 Logical</div>
+    <div class="cat-badge">🧩 Logical Reasoning</div>
     <h1 class="page-title">
         <?php if ($activeAssmt): ?>
             <?= htmlspecialchars($activeAssmt['title']) ?>
@@ -360,13 +355,13 @@ footer { padding: 24px 28px; display: flex; align-items: center; justify-content
     </p>
 </div>
 
-<?php if (!$activeAssmt && !$aid): /* ── Assessment picker ── */ ?>
+<?php if (!$activeAssmt && !$aid): ?>
 <div class="assmt-grid">
     <?php if (empty($assessments)): ?>
         <div class="empty-state" style="grid-column:1/-1">
             <div class="empty-icon">📋</div>
             <div class="empty-title">No tests available yet</div>
-            <p class="empty-sub">The admin hasn't published any Aptitude tests. Check back soon!</p>
+            <p class="empty-sub">The admin hasn&#39;t published any Logical Reasoning tests. Check back soon!</p>
         </div>
     <?php else: ?>
         <?php foreach ($assessments as $a): ?>
@@ -386,22 +381,21 @@ footer { padding: 24px 28px; display: flex; align-items: center; justify-content
     <?php endif; ?>
 </div>
 
-<?php elseif ($activeAssmt && empty($questions)): /* ── No questions yet ── */ ?>
+<?php elseif ($activeAssmt && empty($questions)): ?>
 <div class="empty-state">
     <div class="empty-icon">❓</div>
     <div class="empty-title">No questions found</div>
     <p class="empty-sub">This test doesn't have any questions added yet. Try another test.</p>
-    <br><a href="test-logical.php" class="btn-start">← Back to Logical Tests</a>
+    <br><a href="test-logical.php" class="btn-start">← Back to Logical Reasoning Tests</a>
 </div>
 
-<?php elseif ($activeAssmt && !empty($questions)): /* ── Test interface ── */ ?>
+<?php elseif ($activeAssmt && !empty($questions)): ?>
 <div class="test-layout">
-    <!-- Questions column -->
     <div class="questions-panel">
         <p class="q-progress">Question <strong id="qCurrent">1</strong> of <strong><?= count($questions) ?></strong></p>
 
         <?php foreach ($questions as $i => $q): ?>
-        <div class="question-card <?= $i === 0 ? 'active' : '' ?>" id="qcard-<?= $i ?>" data-index="<?= $i ?>">
+        <div class="question-card <?= $i === 0 ? 'active' : '' ?>" id="qcard-<?= $i ?>" data-qid="<?= (int)$q['question_id'] ?>">
             <div class="q-header">
                 <div class="q-num"><?= $i + 1 ?></div>
                 <?php if ($q['topic']): ?>
@@ -435,14 +429,12 @@ footer { padding: 24px 28px; display: flex; align-items: center; justify-content
                 <?php endforeach; ?>
             </div>
 
-            <!-- Hidden correct answer for client-side reveal -->
-            <input type="hidden" id="correct-<?= $i ?>" value="<?= htmlspecialchars($q['correct_answer']) ?>">
             <div class="explanation-box" id="expl-<?= $i ?>">
                 💡 <?= htmlspecialchars($q['explanation'] ?? 'No explanation provided.') ?>
             </div>
 
             <div class="q-nav-actions">
-                <button class="btn-nav" onclick="prevQuestion()" <?= $i===0?'disabled':'' ?> id="prevBtn-<?= $i ?>">← Prev</button>
+                <button class="btn-nav" onclick="prevQuestion()" <?= $i===0?'disabled':'' ?>>← Prev</button>
                 <?php if ($i < count($questions)-1): ?>
                     <button class="btn-nav primary" onclick="nextQuestion()">Next →</button>
                 <?php else: ?>
@@ -453,7 +445,6 @@ footer { padding: 24px 28px; display: flex; align-items: center; justify-content
         <?php endforeach; ?>
     </div>
 
-    <!-- Sidebar -->
     <aside class="sidebar">
         <div class="sidebar-card">
             <div class="sidebar-title">Time Remaining</div>
@@ -471,7 +462,7 @@ footer { padding: 24px 28px; display: flex; align-items: center; justify-content
             </div>
 
             <div class="sidebar-title">Questions</div>
-            <div class="q-nav-grid" id="qNavGrid">
+            <div class="q-nav-grid">
                 <?php for ($i=0; $i<count($questions); $i++): ?>
                 <button class="q-nav-btn <?= $i===0?'current':'' ?>"
                         id="qnav-<?= $i ?>" onclick="jumpTo(<?= $i ?>)"><?= $i+1 ?></button>
@@ -481,27 +472,30 @@ footer { padding: 24px 28px; display: flex; align-items: center; justify-content
                 <div class="legend-item"><div class="legend-dot answered"></div> Answered</div>
                 <div class="legend-item"><div class="legend-dot unanswered"></div> Not answered</div>
             </div>
-            <button class="btn-submit" onclick="submitTest()">Submit Test</button>
+            <button class="btn-submit" id="submitBtn" onclick="submitTest()">Submit Test</button>
         </div>
     </aside>
 </div>
 
-<!-- Result modal -->
+<div class="submitting-overlay" id="submittingOverlay">
+    <div class="submitting-box">⏳ Grading your answers…</div>
+</div>
+
 <div class="result-overlay" id="resultOverlay">
     <div class="result-modal">
         <div class="result-icon" id="resultIcon">🎉</div>
         <div class="result-title" id="resultTitle">Test Complete!</div>
         <div class="result-score" id="resultScore"></div>
         <div class="result-detail" id="resultDetail"></div>
+        <div class="result-error" id="resultError"></div>
         <div class="result-actions">
-            <a href="test-logical.php" class="btn-nav">← All Logical Tests</a>
-            <button class="btn-nav primary" onclick="reviewAnswers()">Review Answers</button>
+            <a href="test-logical.php" class="btn-nav">← All Logical Reasoning Tests</a>
+            <button class="btn-nav primary" onclick="reviewAnswers()" id="reviewBtn" style="display:none">Review Answers</button>
         </div>
     </div>
 </div>
 <?php endif; ?>
 
-<!-- Footer -->
 <div class="footer-outer">
     <footer>
         <span class="footer-copy">© 2025 Placement &amp; Training Portal</span>
@@ -514,20 +508,19 @@ footer { padding: 24px 28px; display: flex; align-items: center; justify-content
 
 <?php if ($activeAssmt && !empty($questions)): ?>
 <script>
-const TOTAL_Q     = <?= count($questions) ?>;
-const TOTAL_MARKS = <?= (int)$activeAssmt['total_marks'] ?>;
-const PASS_MARKS  = <?= (int)$activeAssmt['passing_marks'] ?>;
-const SHOW_ANSWERS= <?= $activeAssmt['show_correct_answers'] ? 'true' : 'false' ?>;
-const Q_MARKS     = <?= json_encode(array_column($questions, 'marks', null)) ?>;
-const Q_NEG       = <?= json_encode(array_column($questions, 'negative_marks', null)) ?>;
+const ASSESSMENT_ID = <?= (int)$activeAssmt['assessment_id'] ?>;
+const TOTAL_Q       = <?= count($questions) ?>;
+const TOTAL_MARKS   = <?= (int)$activeAssmt['total_marks'] ?>;
+const PASS_MARKS    = <?= (int)$activeAssmt['passing_marks'] ?>;
+// Question IDs in display order — sent to the grading endpoint
+const Q_IDS = <?= json_encode(array_column($questions, 'question_id')) ?>;
 
-let currentQ  = 0;
-let answers   = new Array(TOTAL_Q).fill(null);  // null | 'A'|'B'|'C'|'D'
-let submitted = false;
+let currentQ     = 0;
+let answers      = new Array(TOTAL_Q).fill(null);
+let submitted    = false;
 let totalSeconds = <?= $activeAssmt['duration_minutes'] * 60 ?>;
 let timerInterval;
 
-// ── Timer ──
 function startTimer() {
     timerInterval = setInterval(() => {
         totalSeconds--;
@@ -545,82 +538,106 @@ function startTimer() {
     }, 1000);
 }
 
-// ── Navigation ──
 function showQuestion(idx) {
     document.querySelectorAll('.question-card').forEach(c => c.classList.remove('active'));
     document.getElementById('qcard-'+idx).classList.add('active');
     document.getElementById('qCurrent').textContent = idx+1;
-    // Update sidebar nav
-    document.querySelectorAll('.q-nav-btn').forEach((b,i) => {
-        b.classList.toggle('current', i===idx);
-    });
+    document.querySelectorAll('.q-nav-btn').forEach((b,i) => b.classList.toggle('current', i===idx));
     currentQ = idx;
 }
 function nextQuestion() { if (currentQ < TOTAL_Q-1) showQuestion(currentQ+1); }
 function prevQuestion() { if (currentQ > 0) showQuestion(currentQ-1); }
 function jumpTo(idx)    { showQuestion(idx); }
 
-// ── Select option ──
 function selectOption(qIdx, key) {
     if (submitted) return;
     answers[qIdx] = key;
-    // Style options
     document.querySelectorAll(`[id^="opt-${qIdx}-"]`).forEach(el => el.classList.remove('selected'));
     document.getElementById(`opt-${qIdx}-${key}`).classList.add('selected');
-    // Update sidebar nav
-    const navBtn = document.getElementById(`qnav-${qIdx}`);
-    navBtn.classList.add('answered');
-    // Update progress bar
-    const answered = answers.filter(a=>a!==null).length;
-    document.getElementById('progressBar').style.width = (answered/TOTAL_Q*100)+'%';
+    document.getElementById(`qnav-${qIdx}`).classList.add('answered');
+    const n = answers.filter(a=>a!==null).length;
+    document.getElementById('progressBar').style.width = (n/TOTAL_Q*100)+'%';
 }
 
-// ── Submit ──
-function submitTest(timeout=false) {
+async function submitTest(timeout=false) {
     if (submitted) return;
-    const answered = answers.filter(a=>a!==null).length;
-    if (!timeout && answered < TOTAL_Q) {
-        if (!confirm(`You've answered ${answered} of ${TOTAL_Q} questions. Submit anyway?`)) return;
+    const answeredCount = answers.filter(a=>a!==null).length;
+    if (!timeout && answeredCount < TOTAL_Q) {
+        if (!confirm(`You've answered ${answeredCount} of ${TOTAL_Q} questions. Submit anyway?`)) return;
     }
     clearInterval(timerInterval);
     submitted = true;
 
-    // Score
-    let score = 0;
-    for (let i=0; i<TOTAL_Q; i++) {
-        const correct = document.getElementById('correct-'+i)?.value;
-        if (answers[i] && answers[i] === correct) {
-            score += parseFloat(Q_MARKS[i]||1);
-        } else if (answers[i] && answers[i] !== correct) {
-            score -= parseFloat(Q_NEG[i]||0);
+    document.getElementById('submitBtn').disabled = true;
+    document.querySelectorAll('.btn-nav.primary').forEach(b => b.disabled = true);
+    document.getElementById('submittingOverlay').classList.add('show');
+
+    // Build answers map: { question_id: 'A'|'B'|'C'|'D' }
+    // Only include answered questions — skipped ones score zero server-side
+    const answersMap = {};
+    for (let i = 0; i < TOTAL_Q; i++) {
+        if (answers[i] !== null) {
+            answersMap[String(Q_IDS[i])] = answers[i];
         }
     }
-    score = Math.max(0, score);
-    const pct = Math.round(score/TOTAL_MARKS*100);
-    const passed = score >= PASS_MARKS;
 
-    // Reveal correct answers if enabled
-    if (SHOW_ANSWERS) {
-        for (let i=0; i<TOTAL_Q; i++) {
-            const correct = document.getElementById('correct-'+i)?.value;
-            const expl = document.getElementById('expl-'+i);
-            if (answers[i]) {
-                document.getElementById(`opt-${i}-${answers[i]}`)?.classList.add(answers[i]===correct?'correct':'wrong');
+    try {
+        const resp = await fetch('api/guest/grade-test.php', {
+            method : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body   : JSON.stringify({ assessment_id: ASSESSMENT_ID, answers: answersMap }),
+        });
+
+        const data = await resp.json();
+        document.getElementById('submittingOverlay').classList.remove('show');
+
+        if (!data.success) {
+            showError(data.error || 'Grading failed. Please try again.');
+            return;
+        }
+
+        // Reveal correct/wrong highlighting if server sent results
+        if (data.results) {
+            for (let i = 0; i < TOTAL_Q; i++) {
+                const qid    = String(Q_IDS[i]);
+                const result = data.results[qid];
+                if (!result) continue;
+
+                if (!result.skipped && answers[i] !== null) {
+                    document.getElementById(`opt-${i}-${answers[i]}`)
+                        ?.classList.add(result.correct ? 'correct' : 'wrong');
+                }
+                if (result.correct_answer) {
+                    document.getElementById(`opt-${i}-${result.correct_answer}`)?.classList.add('correct');
+                }
+                document.getElementById(`expl-${i}`)?.classList.add('visible');
             }
-            if (correct) document.getElementById(`opt-${i}-${correct}`)?.classList.add('correct');
-            if (expl) expl.classList.add('visible');
+            document.getElementById('reviewBtn').style.display = '';
         }
-    }
 
-    // Show result modal
-    document.getElementById('resultIcon').textContent  = passed ? '🎉' : '📘';
-    document.getElementById('resultTitle').textContent = passed ? 'Well done!' : 'Keep practising!';
-    document.getElementById('resultScore').textContent = score + ' / ' + TOTAL_MARKS;
-    document.getElementById('resultScore').className   = 'result-score ' + (passed?'result-pass':'result-fail');
-    document.getElementById('resultDetail').innerHTML  =
-        `You answered <strong>${answered}</strong> of <strong>${TOTAL_Q}</strong> questions.<br>
-         Score: <strong>${pct}%</strong> &nbsp;·&nbsp; Passing: <strong>${PASS_MARKS}</strong> marks<br>
-         ${passed ? '✅ Passed' : '❌ Did not pass — review your answers below.'}`;
+        const passed = data.passed;
+        document.getElementById('resultIcon').textContent  = passed ? '🎉' : '📘';
+        document.getElementById('resultTitle').textContent = passed ? 'Well done!' : 'Keep practising!';
+        document.getElementById('resultScore').textContent = data.score + ' / ' + data.total_marks;
+        document.getElementById('resultScore').className   = 'result-score ' + (passed ? 'result-pass' : 'result-fail');
+        document.getElementById('resultDetail').innerHTML  =
+            `You answered <strong>${data.answered}</strong> of <strong>${data.total_q}</strong> questions.<br>
+             Score: <strong>${data.pct}%</strong> &nbsp;·&nbsp; Passing: <strong>${data.passing_marks}</strong> marks<br>
+             ${passed ? '✅ Passed' : '❌ Did not pass — review your answers below.'}`;
+        document.getElementById('resultOverlay').classList.add('show');
+
+    } catch (err) {
+        document.getElementById('submittingOverlay').classList.remove('show');
+        showError('Network error. Please check your connection and try again.');
+    }
+}
+
+function showError(msg) {
+    document.getElementById('resultIcon').textContent   = '⚠️';
+    document.getElementById('resultTitle').textContent  = 'Something went wrong';
+    document.getElementById('resultScore').textContent  = '';
+    document.getElementById('resultDetail').textContent = '';
+    document.getElementById('resultError').textContent  = msg;
     document.getElementById('resultOverlay').classList.add('show');
 }
 

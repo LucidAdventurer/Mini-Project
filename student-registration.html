@@ -457,7 +457,7 @@
 
       try {
         // 1. Fetch CSRF token (public endpoint — no login required)
-        const csrfRes = await fetch('api/csrf-token-public.php');
+        const csrfRes = await fetch('/pta/api/csrf-token-public.php');
         if (!csrfRes.ok) throw new Error('Failed to fetch CSRF token');
         const { token } = await csrfRes.json();
 

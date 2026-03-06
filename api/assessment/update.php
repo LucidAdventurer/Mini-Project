@@ -98,23 +98,23 @@ $description  = trim($body['description']  ?? '');
 $instructions = trim($body['instructions'] ?? '');
 $maxAttempts  = max(1, (int)($body['max_attempts'] ?? 1));
 
-// Validate datetime fields
+// ── Datetime fields ──
+// strtotime() handles all ISO-8601 variants the browser may send:
+// "2025-03-06T14:30", "2025-03-06T14:30:00", "2025-03-06 14:30:00", etc.
 $availableFrom  = null;
 $availableUntil = null;
 
 if (!empty($body['available_from'])) {
-    $dt = DateTime::createFromFormat('Y-m-d\TH:i:s', $body['available_from']);
-    if (!$dt) $dt = DateTime::createFromFormat('Y-m-d\TH:i', $body['available_from']);
-    if (!$dt) $dt = DateTime::createFromFormat('Y-m-d H:i:s', $body['available_from']);
-    if (!$dt) $dt = DateTime::createFromFormat('Y-m-d H:i', $body['available_from']);
-    if ($dt) $availableFrom = $dt->format('Y-m-d H:i:s');
+    $ts = strtotime($body['available_from']);
+    if ($ts !== false) {
+        $availableFrom = date('Y-m-d H:i:s', $ts);
+    }
 }
 if (!empty($body['available_until'])) {
-    $dt = DateTime::createFromFormat('Y-m-d\TH:i:s', $body['available_until']);
-    if (!$dt) $dt = DateTime::createFromFormat('Y-m-d\TH:i', $body['available_until']);
-    if (!$dt) $dt = DateTime::createFromFormat('Y-m-d H:i:s', $body['available_until']);
-    if (!$dt) $dt = DateTime::createFromFormat('Y-m-d H:i', $body['available_until']);
-    if ($dt) $availableUntil = $dt->format('Y-m-d H:i:s');
+    $ts = strtotime($body['available_until']);
+    if ($ts !== false) {
+        $availableUntil = date('Y-m-d H:i:s', $ts);
+    }
 }
 
 if ($availableFrom && $availableUntil && $availableFrom >= $availableUntil) {
@@ -151,12 +151,6 @@ $check['result']->free();
 
 // ── Update ──
 // 19 params: s s s s s i i i i s s i i i i i s i i
-// title description instructions category difficulty
-// duration totalMarks passingMarks maxAttempts
-// availableFrom availableUntil
-// showResults showCorrect randQ randO isPublic
-// status
-// assessmentId teacherId
 $result = safePreparedQuery($conn,
     "UPDATE assessments SET
         title                    = ?,
