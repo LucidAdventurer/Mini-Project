@@ -81,6 +81,10 @@ define('DB_WRITE_TIMEOUT',   30);
 define('DB_MAX_RETRIES',      5);
 define('DB_TYPE', 'MariaDB');
 
+define('CLOUDINARY_CLOUD_NAME', $env['CLOUDINARY_CLOUD_NAME']);
+define('CLOUDINARY_API_KEY',    $env['CLOUDINARY_API_KEY']);
+define('CLOUDINARY_API_SECRET', $env['CLOUDINARY_API_SECRET']);
+
 /**
  * Establish a database connection with retry + exponential backoff.
  */

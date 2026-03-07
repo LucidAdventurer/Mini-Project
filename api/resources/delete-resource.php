@@ -2,7 +2,8 @@
 // ============================================================
 // api/resources/delete-resource.php
 //
-// Deletes a training material and its associated file on disk.
+// Deletes a training material record from the DB, then removes
+// the file from Cloudinary via the Admin API (destroy).
 // Admins can delete any material; teachers only their own.
 //
 // POST JSON { material_id: int }
@@ -30,6 +31,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+validateCsrfToken();
+
 $body       = json_decode(file_get_contents('php://input'), true);
 $materialId = (int)($body['material_id'] ?? 0);
 
@@ -41,7 +44,8 @@ if ($materialId <= 0) {
 
 // ── Fetch material (verify exists + ownership) ──
 $check = safePreparedQuery($conn,
-    "SELECT material_id, uploaded_by, file_path FROM training_materials WHERE material_id = ?",
+    "SELECT material_id, uploaded_by, cloudinary_public_id, material_type
+     FROM training_materials WHERE material_id = ?",
     "i", [$materialId]
 );
 if (!$check['success'] || !$check['result'] || $check['result']->num_rows === 0) {
@@ -61,18 +65,6 @@ if ($role !== 'admin' && (int)$material['uploaded_by'] !== $userId) {
 $conn->begin_transaction();
 
 try {
-    // Soft-delete associated file record
-    $stmt = $conn->prepare(
-        "UPDATE uploaded_files SET is_deleted = 1
-         WHERE entity_type = 'material' AND entity_id = ?"
-    );
-    if ($stmt) {
-        $stmt->bind_param("i", $materialId);
-        $stmt->execute();
-        $stmt->close();
-    }
-
-    // Delete material record (FK cascades progress records)
     $stmt = $conn->prepare("DELETE FROM training_materials WHERE material_id = ?");
     if (!$stmt) {
         throw new Exception("Prepare failed: " . $conn->error);
@@ -86,19 +78,53 @@ try {
 
     $conn->commit();
 
-    // ── Delete physical file after DB commit ──
-    if (!empty($material['file_path'])) {
-        $absPath = __DIR__ . '/../../' . ltrim($material['file_path'], '/');
-        if (file_exists($absPath)) {
-            @unlink($absPath);
-        }
-    }
-
-    echo json_encode(['success' => true]);
-
 } catch (Exception $e) {
     $conn->rollback();
-    error_log("delete-resource.php failed: " . $e->getMessage());
+    error_log("delete-resource.php DB failed: " . $e->getMessage());
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'Delete failed. Please try again.']);
+    exit;
 }
+
+// ── Delete from Cloudinary after DB commit ──
+// Only attempt if we have a public_id (link/article types won't have one).
+$publicId = $material['cloudinary_public_id'] ?? '';
+if ($publicId !== '') {
+    // video → 'video', pdf/quiz → 'raw'
+    $resourceType = $material['material_type'] === 'video' ? 'video' : 'raw';
+
+    $timestamp = time();
+    // Sign only public_id + timestamp — resource_type is not part of destroy signature
+    $sigString = "public_id={$publicId}&timestamp={$timestamp}" . CLOUDINARY_API_SECRET;
+    $signature = sha1($sigString);
+
+    $postFields = http_build_query([
+        'public_id' => $publicId,
+        'timestamp' => $timestamp,
+        'api_key'   => CLOUDINARY_API_KEY,
+        'signature' => $signature,
+    ]);
+
+    // Correct endpoint: /v1_1/<cloud>/<resource_type>/destroy
+    $ch = curl_init("https://api.cloudinary.com/v1_1/" . CLOUDINARY_CLOUD_NAME . "/{$resourceType}/destroy");
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $postFields,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+    ]);
+    $response = curl_exec($ch);
+    $curlErr  = curl_error($ch);
+    curl_close($ch);
+
+    if ($curlErr) {
+        error_log("delete-resource.php Cloudinary destroy failed for public_id={$publicId}: {$curlErr}");
+    } else {
+        $decoded = json_decode($response, true);
+        if (($decoded['result'] ?? '') !== 'ok' && ($decoded['result'] ?? '') !== 'not found') {
+            error_log("delete-resource.php Cloudinary unexpected response for public_id={$publicId}: {$response}");
+        }
+    }
+}
+
+echo json_encode(['success' => true]);

@@ -2,20 +2,24 @@
 // ============================================================
 // api/resources/upload-resource.php
 //
-// Uploads a training material file (or registers a link/article).
+// Saves training material metadata after the file has been
+// uploaded directly to Cloudinary from the browser.
+// The Cloudinary secure_url is passed as external_url.
+//
 // Accessible by: admin, teacher
 //
-// POST multipart/form-data:
-//   file                    (required for pdf / video / quiz types)
+// POST JSON {
 //   title                   (required)
-//   description             (optional)
 //   material_type           pdf | video | link | article | quiz  (required)
 //   category                (required)
+//   external_url            (required — Cloudinary URL for files, raw URL for links)
+//   description             (optional)
 //   difficulty              beginner | intermediate | advanced   (optional, default beginner)
 //   is_public               0 | 1   (optional, default 1)
-//   external_url            (required if type = link | article)
 //   tags                    JSON array string e.g. '["arrays","sorting"]'
 //   estimated_time_minutes  (optional)
+//   file_size               (optional, bytes — returned by Cloudinary)
+// }
 //
 // Returns { success: bool, material_id: int, error?: string }
 // ============================================================
@@ -42,16 +46,26 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-// ── Read text fields ──
-$title        = trim($_POST['title']                   ?? '');
-$materialType = trim($_POST['material_type']           ?? '');
-$category     = trim($_POST['category']                ?? '');
-$description  = trim($_POST['description']             ?? '');
-$externalUrl  = trim($_POST['external_url']            ?? '');
-$tagsRaw      = trim($_POST['tags']                    ?? '');
-$difficulty   = trim($_POST['difficulty']              ?? 'beginner');
-$isPublic     = isset($_POST['is_public']) ? (int)(bool)$_POST['is_public'] : 1;
-$estTime      = max(0, (int)($_POST['estimated_time_minutes'] ?? 0));
+validateCsrfToken();
+
+// ── Parse JSON body ──
+$body = json_decode(file_get_contents('php://input'), true);
+if (!is_array($body)) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'error' => 'Invalid JSON body.']);
+    exit;
+}
+
+$title        = trim($body['title']                   ?? '');
+$materialType = trim($body['material_type']           ?? '');
+$category     = trim($body['category']                ?? '');
+$description  = trim($body['description']             ?? '');
+$externalUrl  = trim($body['external_url']            ?? '');
+$tagsRaw      = $body['tags']                         ?? null;
+$difficulty   = trim($body['difficulty']              ?? 'beginner');
+$isPublic     = isset($body['is_public']) ? (int)(bool)$body['is_public'] : 1;
+$estTime      = max(0, (int)($body['estimated_time_minutes'] ?? 0));
+$fileSize     = max(0, (int)($body['file_size']       ?? 0));
 
 // ── Validate title ──
 if ($title === '') {
@@ -89,124 +103,33 @@ if (!in_array($difficulty, $allowedDifficulties, true)) {
     $difficulty = 'beginner';
 }
 
+// ── Validate URL (required for all types now) ──
+if ($externalUrl === '') {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'error' => 'external_url is required.']);
+    exit;
+}
+if (!filter_var($externalUrl, FILTER_VALIDATE_URL)) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'error' => 'Invalid URL format.']);
+    exit;
+}
+
 // ── Parse tags ──
 $tagsJson = null;
-if ($tagsRaw !== '') {
+if (is_array($tagsRaw)) {
+    $clean    = array_slice(array_map('trim', $tagsRaw), 0, 10);
+    $tagsJson = json_encode(array_values(array_filter($clean)));
+} elseif (is_string($tagsRaw) && $tagsRaw !== '') {
     $decoded = json_decode($tagsRaw, true);
     if (is_array($decoded)) {
-        $decoded  = array_slice(array_map('trim', $decoded), 0, 10);
-        $tagsJson = json_encode(array_values(array_filter($decoded)));
+        $tagsJson = json_encode(array_values(array_filter(array_map('trim', $decoded))));
     }
 }
 
-// ── File upload vs URL ──
-$filePath         = null;
-$storedFilename   = null;
-$originalFilename = null;
-$fileSize         = null;
-$mimeType         = null;
-$destPath         = null;
-
-$requiresFile = ['pdf', 'video', 'quiz'];
-$requiresUrl  = ['link', 'article'];
-
-if (in_array($materialType, $requiresFile, true)) {
-
-    if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
-        $uploadErrors = [
-            UPLOAD_ERR_INI_SIZE   => 'File exceeds the server upload size limit.',
-            UPLOAD_ERR_FORM_SIZE  => 'File exceeds the form size limit.',
-            UPLOAD_ERR_PARTIAL    => 'File was only partially uploaded.',
-            UPLOAD_ERR_NO_FILE    => 'No file was uploaded. A file is required for this material type.',
-            UPLOAD_ERR_NO_TMP_DIR => 'Server is missing a temporary folder.',
-            UPLOAD_ERR_CANT_WRITE => 'Server failed to write the file to disk.',
-            UPLOAD_ERR_EXTENSION  => 'A PHP extension blocked the upload.',
-        ];
-        $code = $_FILES['file']['error'] ?? UPLOAD_ERR_NO_FILE;
-        http_response_code(400);
-        echo json_encode(['success' => false,
-            'error' => $uploadErrors[$code] ?? 'Unknown upload error.']);
-        exit;
-    }
-
-    $file             = $_FILES['file'];
-    $originalFilename = basename($file['name']);
-    $tmpPath          = $file['tmp_name'];
-    $fileSize         = (int) $file['size'];
-    $mimeType         = mime_content_type($tmpPath);
-
-    if ($fileSize > 50 * 1024 * 1024) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'File too large. Maximum allowed size is 50 MB.']);
-        exit;
-    }
-
-    $allowedMimes = [
-        'pdf'   => ['application/pdf'],
-        'video' => ['video/mp4', 'video/webm', 'video/ogg',
-                    'video/quicktime', 'video/x-msvideo', 'video/mpeg'],
-        'quiz'  => ['application/pdf',
-                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                    'application/msword'],
-    ];
-
-    if (!in_array($mimeType, $allowedMimes[$materialType] ?? [], true)) {
-        http_response_code(400);
-        echo json_encode(['success' => false,
-            'error' => "File type \"$mimeType\" is not allowed for material type \"$materialType\"."]);
-        exit;
-    }
-
-    $ext            = strtolower(pathinfo($originalFilename, PATHINFO_EXTENSION));
-    $safeName       = preg_replace('/[^a-z0-9_.-]/', '',
-                        strtolower(pathinfo($originalFilename, PATHINFO_FILENAME)));
-    $storedFilename = uniqid('mat_', true) . '_' . $safeName . '.' . $ext;
-
-    $uploadDir = __DIR__ . '/../../uploads/materials/' . date('Y') . '/' . date('m') . '/';
-    if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true)) {
-        error_log("upload-resource.php: cannot create dir $uploadDir");
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Server storage error. Contact administrator.']);
-        exit;
-    }
-
-    $destPath = $uploadDir . $storedFilename;
-    if (!move_uploaded_file($tmpPath, $destPath)) {
-        error_log("upload-resource.php: move_uploaded_file failed → $destPath");
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Failed to save file. Please try again.']);
-        exit;
-    }
-
-    $filePath = 'uploads/materials/' . date('Y') . '/' . date('m') . '/' . $storedFilename;
-
-} elseif (in_array($materialType, $requiresUrl, true)) {
-
-    if ($externalUrl === '') {
-        http_response_code(400);
-        echo json_encode(['success' => false,
-            'error' => 'External URL is required for link / article type.']);
-        exit;
-    }
-    if (!filter_var($externalUrl, FILTER_VALIDATE_URL)) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Invalid URL format.']);
-        exit;
-    }
-}
-
-// ── Normalise nullables ──
-// mysqli bind_param sends PHP null as SQL NULL for all types.
-$externalUrlParam = $externalUrl !== '' ? $externalUrl : null;
-
-// ── Insert ──
-// Param order : title | description | material_type | file_path | external_url
-//               | file_size | category | difficulty | uploaded_by
-//               | is_public | tags | estimated_time_minutes
-// Type string : s       s          s             s          s
-//               i         s          s            i
-//               i         s     i
-// = 12 params, type string = "sssssissiisi"  (12 chars ✓)
+// ── file_path is always NULL — files live on Cloudinary ──
+$filePath      = null;
+$fileSizeParam = $fileSize > 0 ? $fileSize : null;
 
 $conn->begin_transaction();
 
@@ -229,14 +152,14 @@ try {
         $title,
         $description,
         $materialType,
-        $filePath,           // null → SQL NULL for link/article
-        $externalUrlParam,   // null → SQL NULL for file types
-        $fileSize,           // null → SQL NULL for link/article
+        $filePath,
+        $externalUrl,
+        $fileSizeParam,
         $category,
         $difficulty,
         $userId,
         $isPublic,
-        $tagsJson,           // null → SQL NULL when no tags
+        $tagsJson,
         $estTime
     );
 
@@ -248,49 +171,16 @@ try {
         throw new Exception("INSERT returned no insert_id.");
     }
 
-    // ── Log in uploaded_files ──
-    if ($filePath !== null) {
-        $fileExt = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
-        $logStmt = $conn->prepare(
-            "INSERT INTO uploaded_files
-                 (original_filename, stored_filename, file_path,
-                  file_type, mime_type, file_size,
-                  uploaded_by, entity_type, entity_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 'material', ?)"
-        );
-        if ($logStmt) {
-            $logStmt->bind_param(
-                "sssssiiii",
-                $originalFilename,
-                $storedFilename,
-                $filePath,
-                $fileExt,
-                $mimeType,
-                $fileSize,
-                $userId,
-                $materialId
-            );
-            $logStmt->execute();
-            $logStmt->close();
-        }
-    }
-
     $conn->commit();
 
     echo json_encode([
         'success'     => true,
         'material_id' => $materialId,
-        'message'     => 'Resource uploaded successfully.',
+        'message'     => 'Resource saved successfully.',
     ]);
 
 } catch (Exception $e) {
     $conn->rollback();
-
-    // Clean up physical file on DB failure
-    if ($destPath !== null && file_exists($destPath)) {
-        @unlink($destPath);
-    }
-
     error_log("upload-resource.php transaction failed: " . $e->getMessage());
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'Failed to save resource. Please try again.']);

@@ -390,10 +390,12 @@ if ($remember) {
 // RESPOND
 // ════════════════════════════════════════
 
+$base = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
+
 $redirectMap = [
-    'student' => 'student-dashboard.php',
-    'teacher' => 'teacher-dashboard.php',
-    'admin'   => 'admin-dashboard.html',
+    'student' => $base . '/student-dashboard.php',
+    'teacher' => $base . '/teacher-dashboard.php',
+    'admin'   => $base . '/admin-dashboard.html',
 ];
 $redirectUrl = $redirectMap[$user['user_type']] ?? null;
 
