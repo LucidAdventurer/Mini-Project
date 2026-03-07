@@ -2431,6 +2431,8 @@
             getResources: _base + 'api/resources/get-resources.php',
             uploadResource: _base + 'api/resources/upload-resource.php',
             deleteResource: _base + 'api/resources/delete-resource.php',
+            serveResource:  _base + 'api/resources/serve-resource.php',
+            viewResource:   _base + 'api/resources/view-resource.php',
             getMe: _base + 'api/admin/get-me.php',
         };
 
@@ -2690,10 +2692,21 @@
                     link: 'rgba(234,179,8,0.12)', article: 'rgba(124,58,237,0.12)', quiz: 'rgba(239,68,68,0.12)'
                 };
 
+                const fileTypes = ['pdf', 'video', 'quiz'];
                 let html = d.materials.map(m => {
                     const sizeMB = m.file_size ? (m.file_size / (1024 * 1024)).toFixed(1) + ' MB' : (m.external_url ? 'Link' : '—');
-                    const viewBtn = m.external_url
-                        ? `<a href="${esc(m.external_url)}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 8px;">View</a>`
+                    const isFile = fileTypes.includes(m.material_type);
+                    const viewUrl = isFile
+                        ? `${API.viewResource}?material_id=${m.material_id}`
+                        : m.external_url;
+                    const dlUrl = isFile
+                        ? `${API.serveResource}?material_id=${m.material_id}&action=download`
+                        : null;
+                    const viewBtn = viewUrl
+                        ? `<a href="${viewUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 8px;">View</a>`
+                        : '';
+                    const dlBtn = dlUrl
+                        ? `<a href="${dlUrl}" class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 8px;">Download</a>`
                         : '';
                     return `<div class="resource-card">
                         <div class="resource-icon" style="background:${typeBg[m.material_type] || 'rgba(0,102,255,0.12)'};">${typeIcon[m.material_type] || '📦'}</div>
@@ -2703,8 +2716,9 @@
                             <span>${esc(m.material_type.toUpperCase())} · ${sizeMB}</span>
                             <span>↓ ${fmtNum(m.downloads)}</span>
                         </div>
-                        <div style="display:flex;gap:6px;margin-top:10px;">
+                        <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
                             ${viewBtn}
+                            ${dlBtn}
                             <button class="btn btn-danger btn-sm" style="font-size:11px;padding:4px 8px;" onclick="deleteResource(${m.material_id},'${esc(m.title)}')">Delete</button>
                         </div>
                     </div>`;
@@ -3454,10 +3468,10 @@
                     if (xhr.status === 200 && data.secure_url) {
                         onProgress(100);
                         resolve({
-                            url:       data.secure_url,
-                            publicId:  data.public_id || '',
-                            fileSize:  data.bytes || 0,
-                            mimeType:  data.format || file.type,
+                            url:      data.secure_url,
+                            publicId: data.public_id || '',
+                            fileSize: data.bytes || 0,
+                            mimeType: data.format || file.type,
                         });
                     } else {
                         const msg = data?.error?.message || 'Cloudinary upload failed.';
@@ -3530,7 +3544,6 @@
                 }
 
                 // Save metadata to your DB via upload-resource.php
-                // Since we now always have a URL (even for files), send as JSON
                 const payload = {
                     title,
                     material_type:           type,

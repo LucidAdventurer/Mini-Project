@@ -5,6 +5,7 @@
 // Saves training material metadata after the file has been
 // uploaded directly to Cloudinary from the browser.
 // The Cloudinary secure_url is passed as external_url.
+// The Cloudinary public_id is passed as cloudinary_public_id.
 //
 // Accessible by: admin, teacher
 //
@@ -13,6 +14,7 @@
 //   material_type           pdf | video | link | article | quiz  (required)
 //   category                (required)
 //   external_url            (required — Cloudinary URL for files, raw URL for links)
+//   cloudinary_public_id    (required for file types, null for link/article)
 //   description             (optional)
 //   difficulty              beginner | intermediate | advanced   (optional, default beginner)
 //   is_public               0 | 1   (optional, default 1)
@@ -56,16 +58,17 @@ if (!is_array($body)) {
     exit;
 }
 
-$title        = trim($body['title']                   ?? '');
-$materialType = trim($body['material_type']           ?? '');
-$category     = trim($body['category']                ?? '');
-$description  = trim($body['description']             ?? '');
-$externalUrl  = trim($body['external_url']            ?? '');
-$tagsRaw      = $body['tags']                         ?? null;
-$difficulty   = trim($body['difficulty']              ?? 'beginner');
-$isPublic     = isset($body['is_public']) ? (int)(bool)$body['is_public'] : 1;
-$estTime      = max(0, (int)($body['estimated_time_minutes'] ?? 0));
-$fileSize     = max(0, (int)($body['file_size']       ?? 0));
+$title           = trim($body['title']                   ?? '');
+$materialType    = trim($body['material_type']           ?? '');
+$category        = trim($body['category']                ?? '');
+$description     = trim($body['description']             ?? '');
+$externalUrl     = trim($body['external_url']            ?? '');
+$cloudinaryPubId = trim($body['cloudinary_public_id']    ?? '');
+$tagsRaw         = $body['tags']                         ?? null;
+$difficulty      = trim($body['difficulty']              ?? 'beginner');
+$isPublic        = isset($body['is_public']) ? (int)(bool)$body['is_public'] : 1;
+$estTime         = max(0, (int)($body['estimated_time_minutes'] ?? 0));
+$fileSize        = max(0, (int)($body['file_size']       ?? 0));
 
 // ── Validate title ──
 if ($title === '') {
@@ -103,7 +106,7 @@ if (!in_array($difficulty, $allowedDifficulties, true)) {
     $difficulty = 'beginner';
 }
 
-// ── Validate URL (required for all types now) ──
+// ── Validate URL ──
 if ($externalUrl === '') {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => 'external_url is required.']);
@@ -114,6 +117,15 @@ if (!filter_var($externalUrl, FILTER_VALIDATE_URL)) {
     echo json_encode(['success' => false, 'error' => 'Invalid URL format.']);
     exit;
 }
+
+// ── Require public_id for file-backed types ──
+$fileTypes = ['pdf', 'video', 'quiz'];
+if (in_array($materialType, $fileTypes, true) && $cloudinaryPubId === '') {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'error' => 'cloudinary_public_id is required for file uploads.']);
+    exit;
+}
+$cloudinaryPubIdParam = $cloudinaryPubId !== '' ? $cloudinaryPubId : null;
 
 // ── Parse tags ──
 $tagsJson = null;
@@ -127,7 +139,6 @@ if (is_array($tagsRaw)) {
     }
 }
 
-// ── file_path is always NULL — files live on Cloudinary ──
 $filePath      = null;
 $fileSizeParam = $fileSize > 0 ? $fileSize : null;
 
@@ -137,10 +148,10 @@ try {
     $stmt = $conn->prepare(
         "INSERT INTO training_materials
              (title, description, material_type,
-              file_path, external_url, file_size,
+              file_path, external_url, cloudinary_public_id, file_size,
               category, difficulty, uploaded_by,
               is_public, tags, estimated_time_minutes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
 
     if (!$stmt) {
@@ -148,12 +159,13 @@ try {
     }
 
     $stmt->bind_param(
-        "sssssissiisi",
+        "ssssssissiisi",
         $title,
         $description,
         $materialType,
         $filePath,
         $externalUrl,
+        $cloudinaryPubIdParam,
         $fileSizeParam,
         $category,
         $difficulty,

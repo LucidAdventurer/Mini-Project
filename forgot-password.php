@@ -25,13 +25,29 @@ if (!is_dir($logDir)) {
 }
 ini_set('error_log', $logDir . '/php_errors.log');
 
-set_time_limit(30);
+set_time_limit(60);
 
 if (!file_exists("config.php")) {
     ob_end_clean();
     die(renderPage('error', 'Configuration error. Please contact support.'));
 }
 require_once "config.php";
+
+// Load Composer autoloader for PHPMailer
+$autoloadPaths = [
+    __DIR__ . '/vendor/autoload.php',
+    dirname(__DIR__) . '/vendor/autoload.php',
+];
+foreach ($autoloadPaths as $autoload) {
+    if (file_exists($autoload)) {
+        require_once $autoload;
+        break;
+    }
+}
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\SMTP;
+use PHPMailer\PHPMailer\Exception as PHPMailerException;
 
 if (!ensureDatabaseConnection($conn)) {
     ob_end_clean();
@@ -80,8 +96,18 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-$email     = trim($_POST['email'] ?? '');
-$clientIp  = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+// ── CSRF check ──
+$sentToken    = $_POST['csrf_token'] ?? '';
+$sessionToken = $_SESSION['csrf_token'] ?? '';
+if ($sessionToken === '' || !hash_equals($sessionToken, $sentToken)) {
+    error_log("forgot-password: CSRF validation failed. IP: " . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
+    ob_end_clean();
+    echo renderForm('Invalid request. Please refresh and try again.');
+    exit;
+}
+
+$email    = trim($_POST['email'] ?? '');
+$clientIp = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 
 // Basic validation
 if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -107,7 +133,6 @@ if ($rateStmt) {
     if ((int)($rateRow['cnt'] ?? 0) >= 3) {
         error_log("Password reset rate limit hit for email: $email from IP: $clientIp");
         ob_end_clean();
-        // Generic message — don't reveal that the limit was hit
         echo renderPage('sent',
             'If an account with that email exists, a password reset link has been sent. Please check your inbox (and spam folder).');
         exit;
@@ -151,8 +176,8 @@ if ($invalidateStmt) {
 }
 
 // ── Generate secure token ──
-$rawToken  = bin2hex(random_bytes(32));          // 64-char hex string, sent in email
-$tokenHash = hash('sha256', $rawToken);          // stored in DB
+$rawToken  = bin2hex(random_bytes(32));           // 64-char hex string, sent in email
+$tokenHash = hash('sha256', $rawToken);           // stored in DB
 $expiresAt = date('Y-m-d H:i:s', time() + 3600); // 1 hour window
 
 $insertStmt = $conn->prepare(
@@ -181,15 +206,15 @@ $host      = $_SERVER['HTTP_HOST'] ?? 'localhost';
 $dir       = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
 $resetLink = $protocol . '://' . $host . $dir . '/reset-password.php?token=' . urlencode($rawToken);
 
-// ── Send email ──
+// ── Send email via PHPMailer ──
 $sent = sendResetEmail($email, $user['full_name'], $resetLink);
 
 if (!$sent) {
-    error_log("forgot-password: mail() failed for user_id={$user['user_id']} email=$email");
-    // We still show the generic success message for security, but log the failure.
+    error_log("forgot-password: PHPMailer failed for user_id={$user['user_id']} email=$email");
+    // Still show generic success for security — token is saved, user can try again
 }
 
-error_log("Password reset token created for user_id={$user['user_id']} email=$email");
+error_log("Password reset token created for user_id={$user['user_id']} email=$email sent=" . ($sent ? 'yes' : 'no'));
 
 ob_end_clean();
 echo renderPage('sent',
@@ -198,13 +223,19 @@ exit;
 
 
 /* ========================================
-   SEND RESET EMAIL
-   Uses PHP mail(). Swap this section for
-   PHPMailer / SMTP if your host requires it.
+   SEND RESET EMAIL — PHPMailer / Gmail SMTP
+   Reads credentials from env.php, matching
+   the same pattern used by register.php and
+   resend-verification.php.
    ======================================== */
 function sendResetEmail(string $toEmail, string $toName, string $resetLink): bool {
-    $subject    = 'Reset Your Password – PTA Platform';
-    $nameHtml   = htmlspecialchars($toName,   ENT_QUOTES, 'UTF-8');
+    // Use SMTP_* constants defined in config.php (loaded from env.php)
+    if (empty(SMTP_HOST) || empty(SMTP_USER) || empty(SMTP_PASS) || empty(SMTP_FROM)) {
+        error_log("sendResetEmail: SMTP credentials missing or incomplete in env.php");
+        return false;
+    }
+
+    $nameHtml   = htmlspecialchars($toName,    ENT_QUOTES, 'UTF-8');
     $linkHtml   = htmlspecialchars($resetLink, ENT_QUOTES, 'UTF-8');
     $expireNote = 'This link will expire in 1 hour.';
 
@@ -229,8 +260,8 @@ function sendResetEmail(string $toEmail, string $toName, string $resetLink): boo
         </tr>
         <tr>
           <td style="padding:36px 32px;text-align:center;">
-            <span style="font-size:48px;display:block;margin-bottom:16px;">🔑</span>
-            <h2 style="margin:0 0 12px;font-size:22px;font-weight:700;color:#1e429f;">
+            <span style="font-size:52px;">🔒</span>
+            <h2 style="margin:16px 0 8px;font-size:22px;font-weight:700;color:#1e429f;">
               Password Reset Request
             </h2>
             <p style="margin:0 0 12px;font-size:15px;color:#374151;">
@@ -272,24 +303,34 @@ HTML;
         . "If you did not request this, please ignore this email.\n\n"
         . "– PTA Platform Team";
 
-    $boundary = md5(uniqid(strval(rand()), true));
-    $headers  = implode("\r\n", [
-        'From: PTA Platform <no-reply@' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . '>',
-        'Reply-To: no-reply@' . ($_SERVER['HTTP_HOST'] ?? 'localhost'),
-        'MIME-Version: 1.0',
-        'Content-Type: multipart/alternative; boundary="' . $boundary . '"',
-        'X-Mailer: PHP/' . PHP_VERSION,
-    ]);
+    try {
+        $mail = new PHPMailer(true);
 
-    $message  = "--{$boundary}\r\n"
-        . "Content-Type: text/plain; charset=UTF-8\r\n\r\n"
-        . $textBody . "\r\n\r\n"
-        . "--{$boundary}\r\n"
-        . "Content-Type: text/html; charset=UTF-8\r\n\r\n"
-        . $htmlBody . "\r\n\r\n"
-        . "--{$boundary}--";
+        $mail->isSMTP();
+        $mail->Host       = SMTP_HOST;
+        $mail->SMTPAuth   = true;
+        $mail->Username   = SMTP_USER;
+        $mail->Password   = SMTP_PASS;
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port       = SMTP_PORT;
 
-    return mail($toEmail, $subject, $message, $headers);
+        $mail->setFrom(SMTP_FROM, SMTP_FROM_NAME);
+        $mail->addAddress($toEmail, $toName);
+        $mail->addReplyTo(SMTP_FROM, SMTP_FROM_NAME);
+
+        $mail->isHTML(true);
+        $mail->CharSet = 'UTF-8';
+        $mail->Subject = 'Reset Your Password – PTA Platform';
+        $mail->Body    = $htmlBody;
+        $mail->AltBody = $textBody;
+
+        $mail->send();
+        return true;
+
+    } catch (PHPMailerException $e) {
+        error_log("sendResetEmail PHPMailer error: " . $e->getMessage());
+        return false;
+    }
 }
 
 
@@ -297,6 +338,11 @@ HTML;
    RENDER HELPERS
    ======================================== */
 function renderForm(string $error = ''): string {
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    $csrfToken = htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8');
+
     $errorHtml = '';
     if ($error !== '') {
         $errorHtml = '<p style="color:#dc2626;background:#fef2f2;border-left:4px solid #dc2626;'
@@ -378,6 +424,7 @@ function renderForm(string $error = ''): string {
       </p>
       {$errorHtml}
       <form method="POST" action="forgot-password.php">
+        <input type="hidden" name="csrf_token" value="{$csrfToken}">
         <label for="email">Email Address</label>
         <input type="email" id="email" name="email"
                placeholder="your@institution.edu"

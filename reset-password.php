@@ -4,13 +4,14 @@
    File: reset-password.php
 
    GET  → Validate token → Show new-password form
-   POST → Validate token + inputs → Update password → Redirect to login
+   POST → Validate token + CSRF + inputs → Update password → Redirect to login
 
    SECURITY:
    1. Raw token arrives in URL; SHA-256 hash looked up in DB.
    2. Token is single-use and expires after 1 hour.
    3. Password is hashed with PASSWORD_DEFAULT (bcrypt).
    4. Session is untouched — user must log in again after reset.
+   5. CSRF token embedded in form, validated on POST.
    ======================================== */
 
 ob_start();
@@ -40,7 +41,7 @@ if (!ensureDatabaseConnection($conn)) {
 
 
 // ════════════════════════════════════════
-// VALIDATE TOKEN (shared by GET and POST)
+// VALIDATE RESET TOKEN (shared by GET and POST)
 // ════════════════════════════════════════
 
 $rawToken = trim($_GET['token'] ?? $_POST['token'] ?? '');
@@ -112,6 +113,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     ob_end_clean();
     header('Location: index.html');
+    exit;
+}
+
+// ── CSRF check ──
+$sentToken    = $_POST['csrf_token'] ?? '';
+$sessionToken = $_SESSION['csrf_token'] ?? '';
+if ($sessionToken === '' || !hash_equals($sessionToken, $sentToken)) {
+    error_log("reset-password: CSRF validation failed. IP: " . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
+    ob_end_clean();
+    echo renderForm($rawToken, $row['full_name'], ['Invalid request. Please refresh and try again.']);
     exit;
 }
 
@@ -187,6 +198,10 @@ try {
    ======================================== */
 
 function renderForm(string $rawToken, string $name, array $errors = []): string {
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    $csrfToken = htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8');
     $tokenHtml = htmlspecialchars($rawToken, ENT_QUOTES, 'UTF-8');
     $nameHtml  = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
 
@@ -286,6 +301,7 @@ function renderForm(string $rawToken, string $name, array $errors = []): string 
       {$errorHtml}
       <form method="POST" action="reset-password.php">
         <input type="hidden" name="token" value="{$tokenHtml}">
+        <input type="hidden" name="csrf_token" value="{$csrfToken}">
 
         <label for="password">New Password</label>
         <input type="password" id="password" name="password"

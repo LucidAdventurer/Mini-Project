@@ -73,17 +73,30 @@ define('DB_PASS', $env['DB_PASS']);
 define('DB_NAME', $env['DB_NAME']);
 define('DB_PORT', (int) $env['DB_PORT']);
 
-unset($env); // Don't leave credentials in memory longer than needed
-
 define('DB_CONNECT_TIMEOUT', 10);
 define('DB_READ_TIMEOUT',    30);
 define('DB_WRITE_TIMEOUT',   30);
 define('DB_MAX_RETRIES',      5);
 define('DB_TYPE', 'MariaDB');
 
-define('CLOUDINARY_CLOUD_NAME', $env['CLOUDINARY_CLOUD_NAME']);
-define('CLOUDINARY_API_KEY',    $env['CLOUDINARY_API_KEY']);
-define('CLOUDINARY_API_SECRET', $env['CLOUDINARY_API_SECRET']);
+// ========================================
+// CLOUDINARY CONSTANTS
+// ========================================
+define('CLOUDINARY_CLOUD_NAME', $env['CLOUDINARY_CLOUD_NAME'] ?? '');
+define('CLOUDINARY_API_KEY',    $env['CLOUDINARY_API_KEY']    ?? '');
+define('CLOUDINARY_API_SECRET', $env['CLOUDINARY_API_SECRET'] ?? '');
+
+// ========================================
+// SMTP CONSTANTS
+// ========================================
+define('SMTP_HOST',      $env['SMTP_HOST']      ?? '');
+define('SMTP_PORT',      (int) ($env['SMTP_PORT'] ?? 587));
+define('SMTP_USER',      $env['SMTP_USER']      ?? '');
+define('SMTP_PASS',      $env['SMTP_PASS']      ?? '');
+define('SMTP_FROM',      $env['SMTP_FROM']      ?? '');
+define('SMTP_FROM_NAME', $env['SMTP_FROM_NAME'] ?? 'PTA Platform');
+
+unset($env); // Credentials no longer needed in memory
 
 /**
  * Establish a database connection with retry + exponential backoff.
