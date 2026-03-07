@@ -763,3 +763,31 @@ CREATE TABLE assessment_groups (
     INDEX idx_assessment (assessment_id),
     INDEX idx_group (group_id)
 );
+
+-- =====================================================
+-- PASSWORD RESET TOKENS
+-- Add this table to your database (database.txt)
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    token_id   INT          PRIMARY KEY AUTO_INCREMENT,
+    user_id    INT          NOT NULL,
+    token      VARCHAR(64)  UNIQUE NOT NULL COMMENT 'SHA-256 hash of raw token sent in email',
+    expires_at DATETIME     NOT NULL,
+    is_used    BOOLEAN      DEFAULT FALSE,
+    request_ip VARCHAR(45),
+    created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    INDEX idx_token   (token),
+    INDEX idx_expires (expires_at),
+    INDEX idx_user    (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Why this table exists:
+--   Manages secure password-reset lifecycle separately from email verification.
+--
+-- Why each column exists:
+--   token      : SHA-256 hash of the raw token emailed to the user (never store raw).
+--   expires_at : 1-hour window; expired tokens are rejected.
+--   is_used    : Single-use enforcement — token is invalidated after one successful reset.
+--   request_ip : Abuse detection and audit trail.
