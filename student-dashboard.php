@@ -826,6 +826,7 @@ function timeAgo(string $datetime): string {
                     <?php else: ?>
                         <?php foreach ($assessments as $a):
                             $id           = (int) $a['assessment_id'];
+                            $lastAttemptId = (int) ($a['last_attempt_id'] ?? 0);
                             $attemptsLeft = (int)$a['max_attempts'] - (int)$a['attempts_used'];
                             $exhausted    = $attemptsLeft <= 0;
                             $catClass     = htmlspecialchars(strtolower($a['category']));
@@ -864,7 +865,7 @@ function timeAgo(string $datetime): string {
                             </div>
                             <?php else: ?>
                             <div class="assessment-actions">
-                                <button class="btn-details" onclick="viewDetails(<?= $id ?>)">View Results</button>
+                                <button class="btn-details" onclick="viewDetails(<?= $lastAttemptId ?>)">View Results</button>
                             </div>
                             <?php endif ?>
                         </div>
@@ -951,7 +952,7 @@ function timeAgo(string $datetime): string {
         }
 
         function viewDetails(id) {
-            window.location.href = 'test-results.php?id=' + id;
+            window.location.href = 'test-results.php?attempt_id=' + id;
         }
 
         function showQuickActions() {
