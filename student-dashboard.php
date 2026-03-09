@@ -78,7 +78,12 @@ $assessmentsResult = safePreparedQuery($conn,
         (SELECT COUNT(*) FROM assessment_attempts aa
           WHERE aa.assessment_id = a.assessment_id
             AND aa.user_id = ?
-            AND aa.status  = 'completed') AS attempts_used
+            AND aa.status  = 'completed') AS attempts_used,
+        (SELECT aa2.attempt_id FROM assessment_attempts aa2
+          WHERE aa2.assessment_id = a.assessment_id
+            AND aa2.user_id = ?
+            AND aa2.status  = 'completed'
+          ORDER BY aa2.submitted_at DESC LIMIT 1) AS last_attempt_id
      FROM assessments a
      WHERE a.status = 'active'
        AND (a.available_from  IS NULL OR a.available_from  <= NOW())
@@ -94,7 +99,7 @@ $assessmentsResult = safePreparedQuery($conn,
        )
      ORDER BY a.created_at DESC
      LIMIT 20",
-    "iis", [$userId, $userId, $userDept]
+    "iiis", [$userId, $userId, $userId, $userDept]
 );
 
 $assessments      = [];
