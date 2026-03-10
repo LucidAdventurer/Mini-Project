@@ -33,7 +33,17 @@ if ($statsResult['success'] && $statsResult['result']) {
     $statsResult['result']->free();
 }
 
-// ── Available assessments (active, within date window, accessible to this student) ──
+// ── Unread notification count ──
+$notifResult = safePreparedQuery($conn,
+    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
+    "i", [$userId]
+);
+$unreadCount = 0;
+if ($notifResult['success'] && $notifResult['result']) {
+    $notifRow    = $notifResult['result']->fetch_assoc();
+    $unreadCount = (int)($notifRow['cnt'] ?? 0);
+    $notifResult['result']->free();
+}
 // Accessible = public OR explicitly allowed for this user/department
 $availCountResult = safePreparedQuery($conn,
     "SELECT COUNT(DISTINCT a.assessment_id) AS cnt
@@ -386,6 +396,53 @@ function timeAgo(string $datetime): string {
             margin: 0 auto;
             padding: 30px;
         }
+
+        /* ── LEFT NAV SIDEBAR ── */
+        .page-wrapper {
+            display: flex;
+            min-height: calc(100vh - 70px);
+        }
+        .left-sidebar {
+            width: 220px;
+            flex-shrink: 0;
+            padding: 24px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            background: transparent;
+        }
+        .left-sidebar-label {
+            font-size: 11px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .08em;
+            color: #718096; padding: 14px 12px 6px;
+        }
+        .left-sidebar a {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px; border-radius: 10px;
+            text-decoration: none; font-size: 14px; font-weight: 500;
+            color: #4a5568; transition: background .15s, color .15s;
+        }
+        .left-sidebar a:hover { background: rgba(35,76,106,.08); color: var(--primary); }
+        .left-sidebar a.active { background: rgba(35,76,106,.12); color: var(--primary); font-weight: 600; }
+        .left-sidebar a i { width: 18px; text-align: center; font-size: 15px; }
+        .left-sidebar-bottom {
+            margin-top: auto;
+            padding-top: 12px;
+            border-top: 1px solid rgba(35,76,106,.12);
+        }
+        .left-sidebar-bottom button {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px; border-radius: 10px;
+            font-size: 14px; font-weight: 500;
+            color: #e53e3e; background: none; border: none;
+            cursor: pointer; width: 100%;
+            transition: background .15s, color .15s;
+        }
+        .left-sidebar-bottom button:hover { background: rgba(229,62,62,.08); }
+        .left-sidebar-bottom button i { width: 18px; text-align: center; font-size: 15px; }
+        .page-content { flex: 1; min-width: 0; padding: 30px 30px 30px 0; }
+
+        @media (max-width: 900px) { .left-sidebar { display: none; } .page-content { padding: 30px; } }
         .welcome-section {
             background: white;
             border-radius: 20px;
@@ -721,6 +778,7 @@ function timeAgo(string $datetime): string {
             .profile-name { display: none; }
         }
     </style>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
     <nav class="navbar">
@@ -735,7 +793,9 @@ function timeAgo(string $datetime): string {
         <div class="nav-profile">
             <button class="notification-icon" onclick="showNotifications()">
                 <span>🔔</span>
-                <div class="notification-badge">3</div>
+                <?php if ($unreadCount > 0): ?>
+                <div class="notification-badge"><?= $unreadCount ?></div>
+                <?php endif; ?>
             </button>
             <div class="profile-dropdown-container">
                 <button class="profile-button" onclick="toggleProfileDropdown()" aria-label="Profile menu" aria-expanded="false">
@@ -756,14 +816,6 @@ function timeAgo(string $datetime): string {
                             <span class="dropdown-item-icon">👤</span>
                             <span>My Profile</span>
                         </a>
-                        <a href="student-dashboard.php" class="dropdown-item">
-                            <span class="dropdown-item-icon">🏠</span>
-                            <span>Dashboard</span>
-                        </a>
-                        <a href="home.php" class="dropdown-item">
-                            <span class="dropdown-item-icon">📝</span>
-                            <span>Practice Tests</span>
-                        </a>
                         <a href="help.html" target="_blank" rel="noopener noreferrer" class="dropdown-item">
                             <span>❓</span>
                             <span>Help & Support</span>
@@ -781,7 +833,17 @@ function timeAgo(string $datetime): string {
 
     <div class="dropdown-overlay" id="dropdownOverlay" onclick="closeProfileDropdown()"></div>
 
-    <div class="container">
+    <div class="page-wrapper">
+    <aside class="left-sidebar">
+        <span class="left-sidebar-label">Navigation</span>
+        <a href="student-dashboard.php" class="active"><i class="fa fa-home"></i> Dashboard</a>
+        <a href="student-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
+        <div class="left-sidebar-bottom">
+            <button onclick="handleLogout()"><i class="fa fa-sign-out-alt"></i> Logout</button>
+        </div>
+    </aside>
+    <div class="page-content">
+    <div class="container" style="padding: 0; max-width: 100%;">
         <div class="welcome-section">
             <div class="welcome-content">
                 <h1>Welcome back, <?php echo strtoupper(htmlspecialchars($userName)); ?> 👋</h1>
@@ -921,7 +983,9 @@ function timeAgo(string $datetime): string {
                 </div>
             </div>
         </div>
-    </div>
+    </div><!-- /.container -->
+    </div><!-- /.page-content -->
+    </div><!-- /.page-wrapper -->
 
     <div class="quick-actions">
         <button class="action-button" onclick="showQuickActions()">➕</button>
@@ -961,7 +1025,7 @@ function timeAgo(string $datetime): string {
         }
 
         function showQuickActions() {
-            alert('Quick Actions:\n\n• Take Practice Test\n• View Progress Report\n• Schedule Assessment\n• Contact Support');
+            window.location.href = 'student-resources.php';
         }
 
         // Filter tabs

@@ -1212,55 +1212,99 @@
            FORM SUBMISSION HANDLER
            Validates inputs before sending to server
            ======================================== */
-        loginForm.addEventListener('submit', function(e) {
-            // Hide any existing errors
+        // ── Single submission guard ──
+        let isSubmitting = false;
+
+        loginForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            if (isSubmitting) return; // block double submissions
+            
             hideError();
-            
-            // Get form values
-            const email = document.getElementById('email').value.trim();
+
+            const email    = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
-            const role = roleInput.value;
-            
-            // Validate email format
+            const role     = roleInput.value;
+            const remember = document.getElementById('rememberMe').checked;
+
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!emailRegex.test(email)) {
-                e.preventDefault();
                 showError('Please enter a valid email address');
-                return false;
+                return;
             }
-            
-            // Validate password length (minimum 6 characters)
             if (password.length < 6) {
-                e.preventDefault();
                 showError('Password must be at least 6 characters long');
-                return false;
+                return;
             }
-            
-            // Validate role selection
-            if (!role || (role !== 'student' && role !== 'teacher')) {
-                e.preventDefault();
-                showError('Please select a valid role');
-                return false;
-            }
-            
-            // Disable button to prevent double submission
-            loginBtn.disabled = true;
+
+            isSubmitting         = true;
+            loginBtn.disabled    = true;
             loginBtn.textContent = 'Signing In...';
-            
-            // Log attempt for debugging (remove in production)
-            console.log('Login attempt:', {
-                email: email,
-                role: role,
-                timestamp: new Date().toISOString()
-            });
-            
-            // Form will submit normally to login.php
-            // Backend will handle:
-            // 1. SQL query to users table
-            // 2. Password verification
-            // 3. Session creation
-            // 4. Login activity logging
-            // 5. Redirect to appropriate dashboard
+
+            try {
+                const formData = new FormData();
+                formData.append('email',    email);
+                formData.append('password', password);
+                formData.append('role',     role);
+                if (remember) formData.append('remember', '1');
+
+                const response = await fetch('login.php', {
+                    method:   'POST',
+                    body:     formData,
+                    redirect: 'follow'
+                });
+
+                if (response.redirected) {
+                    window.location.href = response.url;
+                    return;
+                }
+
+                const text = await response.text();
+                const urlMatch = text.match(/href="([^"]*dashboard[^"]*)"/i);
+                if (urlMatch) {
+                    window.location.href = urlMatch[1];
+                    return;
+                }
+
+                if (response.url.includes('error=')) {
+                    const errParam = new URL(response.url).searchParams.get('error');
+                    showError(getErrorMessage(errParam));
+                } else {
+                    showError('Login failed. Please check your credentials.');
+                }
+
+            } catch (err) {
+                console.error('Login error:', err);
+                showError('Connection error. Please try again.');
+            } finally {
+                isSubmitting         = false;
+                loginBtn.disabled    = false;
+                loginBtn.textContent = 'Sign In';
+            }
+        });
+
+        function getErrorMessage(code) {
+            const messages = {
+                'invalid_credentials':     'Invalid email or password.',
+                'user_not_found':          'No account found with this email.',
+                'role_mismatch':           'This account is not registered as the selected role.',
+                'account_inactive':        'Your account has been deactivated.',
+                'email_not_verified':      'Please verify your email before logging in.',
+                'account_locked':          'Account locked due to too many failed attempts.',
+                'missing_fields':          'Please fill in all fields.',
+                'password_reset_required': 'Your password needs to be reset. Contact admin.',
+            };
+            return messages[code] || 'An error occurred. Please try again.';
+        }
+
+        // ── Enter key handler ──
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && e.target.classList.contains('form-control')) {
+                e.preventDefault();
+                if (!isSubmitting) {
+                    loginForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+                }
+            }
         });
 
         /* ========================================
@@ -1292,8 +1336,9 @@
 
         // ESC key to close modal
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape' && infoModal.classList.contains('show')) {
-                closeInfoModal();
+            if (e.key === 'Enter' && e.target.classList.contains('form-control')) {
+                e.preventDefault();
+                loginForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
             }
         });
 
@@ -1303,41 +1348,6 @@
            Example: login.php?error=invalid_credentials
            ======================================== */
         window.addEventListener('load', function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const errorParam = urlParams.get('error');
-            
-            if (errorParam) {
-                let errorMsg = '';
-                
-                switch(errorParam) {
-                    case 'invalid_credentials':
-                        errorMsg = 'Invalid email or password. Please try again.';
-                        break;
-                    case 'user_not_found':
-                        errorMsg = 'No account found with this email address.';
-                        break;
-                    case 'role_mismatch':
-                        errorMsg = 'This account is not registered as the selected role.';
-                        break;
-                    case 'account_inactive':
-                        errorMsg = 'Your account has been deactivated. Please contact administrator.';
-                        break;
-                    case 'email_not_verified':
-                        errorMsg = 'Please verify your email address before logging in.';
-                        break;
-                    case 'account_locked':
-                        errorMsg = 'Account temporarily locked due to multiple failed login attempts.';
-                        break;
-                    default:
-                        errorMsg = 'An error occurred. Please try again.';
-                }
-                
-                showError(errorMsg);
-                
-                // Clean URL without page reload
-                window.history.replaceState({}, document.title, window.location.pathname);
-            }
-            
             // Play card pop animation on load
             const loginCard = document.querySelector('.login-card');
             if (loginCard) {
