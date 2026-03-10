@@ -1968,7 +1968,8 @@
                 </div>
 
                 <div class="resource-grid" id="resourceGrid">
-                    <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);">Loading resources…</div>
+                    <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);">Loading resources…
+                    </div>
                 </div>
             </div>
 
@@ -2025,7 +2026,7 @@
                         <h2>Profile</h2>
                         <p>Your admin account details</p>
                     </div>
-                    <button class="btn btn-primary">Save Changes</button>
+                    <button class="btn btn-primary" onclick="saveProfile()">Save Changes</button>
                 </div>
 
                 <div class="profile-hero">
@@ -2067,7 +2068,8 @@
                                     id="profileNewPw" type="password" placeholder="Min 8 characters" /></div>
                             <div class="setting-group"><label>Confirm Password</label><input class="setting-input"
                                     id="profileConfirmPw" type="password" placeholder="Re-enter password" /></div>
-                            <button class="btn btn-primary" style="width:100%;">Update Password</button>
+                            <button class="btn btn-primary" style="width:100%;" onclick="updatePassword()">Update
+                                Password</button>
                         </div>
                     </div>
                 </div>
@@ -2081,7 +2083,7 @@
                         <p>System configuration from <code
                                 style="color:var(--blue-400);font-size:12px;">system_settings</code> table</p>
                     </div>
-                    <button class="btn btn-primary">Save All</button>
+                    <button class="btn btn-primary" onclick="saveSettings()">Save All</button>
                 </div>
 
                 <div class="two-col">
@@ -2134,14 +2136,16 @@
                                     <h4>Enable Proctoring</h4>
                                     <p>Camera/screen monitoring during tests</p>
                                 </div>
-                                <label class="toggle"><input type="checkbox"><span class="toggle-slider"></span></label>
+                                <label class="toggle"><input type="checkbox" data-key="enable_proctoring"><span
+                                        class="toggle-slider"></span></label>
                             </div>
                             <div class="toggle-row">
                                 <div class="toggle-info">
                                     <h4>SMTP Configured</h4>
                                     <p>Email delivery status</p>
                                 </div>
-                                <label class="toggle"><input type="checkbox"><span class="toggle-slider"></span></label>
+                                <label class="toggle"><input type="checkbox" data-key="smtp_configured"><span
+                                        class="toggle-slider"></span></label>
                             </div>
                         </div>
                     </div>
@@ -2348,7 +2352,9 @@
             </div>
 
             <div class="form-group" id="urFileGroup">
-                <label>File * <span id="urFileHint" style="font-weight:400;text-transform:none;color:var(--muted);font-size:11px;">(PDF, max 50 MB)</span></label>
+                <label>File * <span id="urFileHint"
+                        style="font-weight:400;text-transform:none;color:var(--muted);font-size:11px;">(PDF, max 50
+                        MB)</span></label>
                 <input class="form-input" id="urFile" type="file" accept=".pdf" style="padding:6px 12px;" />
             </div>
 
@@ -2359,7 +2365,8 @@
 
             <div class="form-group">
                 <label>Description</label>
-                <textarea class="form-input" id="urDescription" rows="3" placeholder="Brief description of this resource…" style="resize:vertical;"></textarea>
+                <textarea class="form-input" id="urDescription" rows="3"
+                    placeholder="Brief description of this resource…" style="resize:vertical;"></textarea>
             </div>
 
             <div class="form-row">
@@ -2379,7 +2386,9 @@
             <div id="urError" style="color:var(--red);font-size:12px;margin-top:4px;display:none;"></div>
             <div id="urProgress" style="display:none;margin-top:8px;">
                 <div style="height:4px;background:var(--surface3);border-radius:4px;overflow:hidden;">
-                    <div id="urProgressBar" style="height:100%;width:0%;background:var(--blue-500);transition:width 0.3s;border-radius:4px;"></div>
+                    <div id="urProgressBar"
+                        style="height:100%;width:0%;background:var(--blue-500);transition:width 0.3s;border-radius:4px;">
+                    </div>
                 </div>
                 <div id="urProgressText" style="font-size:11px;color:var(--muted);margin-top:4px;">Uploading…</div>
             </div>
@@ -2411,6 +2420,65 @@
         let testCategory = '';
         let testSearchTimer = null;
 
+        // ════════════════════════════════════════
+        // PAGE CACHE  — TTL-based, stale-while-revalidate
+        //
+        // Usage:
+        //   PageCache.get(key)           → data or null (if expired/missing)
+        //   PageCache.set(key, data)     → stores with TTL for that key
+        //   PageCache.invalidate(key)    → force-expire one entry
+        //   PageCache.invalidateMany([]) → force-expire several entries
+        //
+        // Keys and their TTLs (seconds):
+        //   overview  60   — dashboard summary
+        //   users     30   — user table (short: admins add users often)
+        //   tests     30   — assessment table
+        //   resources 60   — training materials
+        //   logs      20   — audit/login logs (changes fast)
+        //   settings  300  — system settings (rarely changes)
+        //   me        120  — current admin profile
+        // ════════════════════════════════════════
+        const PageCache = (() => {
+            const TTL = {
+                overview: 60,
+                users: 30,
+                tests: 30,
+                resources: 60,
+                logs: 20,
+                settings: 300,
+                me: 120,
+            };
+            const store = {};   // { key: { data, expiresAt } }
+
+            return {
+                get(key) {
+                    const entry = store[key];
+                    if (!entry) return null;
+                    if (Date.now() > entry.expiresAt) {
+                        delete store[key];
+                        return null;
+                    }
+                    return entry.data;
+                },
+                set(key, data) {
+                    const ttl = (TTL[key] ?? 30) * 1000;
+                    store[key] = { data, expiresAt: Date.now() + ttl };
+                },
+                isStale(key) {
+                    // Returns true if expired OR missing (needs fresh fetch)
+                    const entry = store[key];
+                    if (!entry) return true;
+                    return Date.now() > entry.expiresAt;
+                },
+                invalidate(key) {
+                    delete store[key];
+                },
+                invalidateMany(keys) {
+                    keys.forEach(k => delete store[k]);
+                },
+            };
+        })();
+
         // Auto-detect base path from current URL
         // e.g. /pta/Mini-Project/admin-dashboard.html -> /pta/Mini-Project/
         const _base = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
@@ -2423,7 +2491,8 @@
             editUser: _base + 'api/admin/edit-user.php',
             toggleStatus: _base + 'api/admin/toggle-user-status.php',
             getLogs: _base + 'api/admin/get-logs.php',
-            settings: _base + 'api/admin/settings.php',
+            getSettings: _base + 'api/admin/get-settings.php',
+            updateSettings: _base + 'api/admin/update-settings.php',
             getTests: _base + 'api/admin/get-tests.php',
             updateTestStatus: _base + 'api/admin/update-test-status.php',
             deleteTest: _base + 'api/admin/delete-test.php',
@@ -2431,9 +2500,11 @@
             getResources: _base + 'api/resources/get-resources.php',
             uploadResource: _base + 'api/resources/upload-resource.php',
             deleteResource: _base + 'api/resources/delete-resource.php',
-            serveResource:  _base + 'api/resources/serve-resource.php',
-            viewResource:   _base + 'api/resources/view-resource.php',
-            getMe: _base + 'api/admin/get-me.php',
+            serveResource: _base + 'api/resources/serve-resource.php',
+            viewResource: _base + 'api/resources/view-resource.php',
+            getMe: _base + 'api/profile/get-profile.php',
+            updateProfile: _base + 'api/profile/update-profile.php',
+            changePassword: _base + 'api/profile/change-password.php',
         };
 
         // ════════════════════════════════════════
@@ -2447,6 +2518,7 @@
             wireLogTabs();
             wireTestSearch();
             wireSettingsSave();
+            loadSettings();
         });
 
         async function fetchCsrf() {
@@ -2527,65 +2599,76 @@
         // OVERVIEW
         // ════════════════════════════════════════
         async function loadOverview() {
+            // Paint from cache instantly, then refresh in background if stale
+            const cached = PageCache.get('overview');
+            if (cached) renderOverview(cached);
+            if (!PageCache.isStale('overview')) return;   // cache is fresh, no network needed
+
             try {
                 const d = await apiGet(API.overview);
                 if (!d.success) return;
+                PageCache.set('overview', d);
+                renderOverview(d);
+            } catch (e) { console.error('Overview load error', e); }
+        }
 
-                const s = d.stats;
-                // Stat cards
-                setEl('statTotalUsers', fmtNum(s.total_users));
-                setEl('statActiveAssessments', fmtNum(s.active_assessments));
-                setEl('statTotalAttempts', fmtNum(s.total_attempts));
-                setEl('statFailedLogins', fmtNum(s.failed_logins_today));
-                setEl('statSuspiciousIPs', s.suspicious_ips_today + ' suspicious IPs');
+        function renderOverview(d) {
 
-                // User distribution donut
-                const dist = d.user_distribution;
-                const sp = dist.student_pct, tp = dist.teacher_pct, up = dist.unverified_pct, ip = dist.inactive_pct;
-                const donut = document.querySelector('.donut');
-                if (donut) {
-                    donut.style.background = `conic-gradient(
+            const s = d.stats;
+            // Stat cards
+            setEl('statTotalUsers', fmtNum(s.total_users));
+            setEl('statActiveAssessments', fmtNum(s.active_assessments));
+            setEl('statTotalAttempts', fmtNum(s.total_attempts));
+            setEl('statFailedLogins', fmtNum(s.failed_logins_today));
+            setEl('statSuspiciousIPs', s.suspicious_ips_today + ' suspicious IPs');
+
+            // User distribution donut
+            const dist = d.user_distribution;
+            const sp = dist.student_pct, tp = dist.teacher_pct, up = dist.unverified_pct, ip = dist.inactive_pct;
+            const donut = document.querySelector('.donut');
+            if (donut) {
+                donut.style.background = `conic-gradient(
         var(--blue-500) 0% ${sp}%,
         var(--green)    ${sp}% ${sp + tp}%,
         var(--yellow)   ${sp + tp}% ${sp + tp + up}%,
         var(--red)      ${sp + tp + up}% 100%)`;
-                }
-                setEl('legendStudents', `Students — ${sp}%`);
-                setEl('legendTeachers', `Teachers — ${tp}%`);
-                setEl('legendUnverified', `Unverified — ${up}%`);
-                setEl('legendInactive', `Inactive — ${ip}%`);
+            }
+            setEl('legendStudents', `Students — ${sp}%`);
+            setEl('legendTeachers', `Teachers — ${tp}%`);
+            setEl('legendUnverified', `Unverified — ${up}%`);
+            setEl('legendInactive', `Inactive — ${ip}%`);
 
-                // Dept bars
-                const barChart = document.getElementById('deptBars');
-                if (barChart && d.dept_breakdown.length) {
-                    barChart.innerHTML = d.dept_breakdown.map(dep => `
+            // Dept bars
+            const barChart = document.getElementById('deptBars');
+            if (barChart && d.dept_breakdown.length) {
+                barChart.innerHTML = d.dept_breakdown.map(dep => `
         <div class="bar-row">
           <div class="bar-label">${esc(dep.department)}</div>
           <div class="bar-track"><div class="bar-fill" style="width:${dep.pct}%"></div></div>
           <div class="bar-val">${dep.pct}%</div>
         </div>`).join('');
-                }
+            }
 
-                // Recent activity
-                const actList = document.getElementById('activityList');
-                if (actList && d.recent_activity.length) {
-                    actList.innerHTML = d.recent_activity.map(a => {
-                        const colorMap = { create_user: 'blue', edit_user: 'yellow', block_user: 'red', activate_user: 'green' };
-                        const color = colorMap[a.action] || 'blue';
-                        return `<div class="activity-item">
+            // Recent activity
+            const actList = document.getElementById('activityList');
+            if (actList && d.recent_activity.length) {
+                actList.innerHTML = d.recent_activity.map(a => {
+                    const colorMap = { create_user: 'blue', edit_user: 'yellow', block_user: 'red', activate_user: 'green' };
+                    const color = colorMap[a.action] || 'blue';
+                    return `<div class="activity-item">
           <div class="activity-dot ${color}"></div>
           <div>
             <div class="activity-text">${esc(ucwords(a.action.replace(/_/g, ' ')))} by <b>${esc(a.actor)}</b></div>
             <div class="activity-time">${a.time_ago}</div>
           </div>
         </div>`;
-                    }).join('');
-                }
+                }).join('');
+            }
 
-                // Assessment summary table
-                const tbody = document.getElementById('assessmentSummaryBody');
-                if (tbody && d.assessment_summary.length) {
-                    tbody.innerHTML = d.assessment_summary.map(a => `
+            // Assessment summary table
+            const tbody = document.getElementById('assessmentSummaryBody');
+            if (tbody && d.assessment_summary.length) {
+                tbody.innerHTML = d.assessment_summary.map(a => `
         <tr>
           <td>${esc(a.title)}</td>
           <td>${esc(a.category || '—')}</td>
@@ -2595,39 +2678,37 @@
           <td>${a.pass_rate !== null ? a.pass_rate + '%' : '—'}</td>
           <td><span class="badge ${a.status === 'active' ? 'published' : a.status}">${esc(a.status)}</span></td>
         </tr>`).join('');
-                }
+            }
 
-                // DB counts
-                if (d.db_counts) {
-                    setEl('dbUsers', fmtNum(d.db_counts.users || 0));
-                    setEl('dbAssessments', fmtNum(d.db_counts.assessments || 0));
-                    setEl('dbAttempts', fmtNum(d.db_counts.attempts || 0));
-                    setEl('dbNotifications', fmtNum(d.db_counts.notifications || 0));
-                    setEl('dbAuditLogs', fmtNum(d.db_counts.audit_logs || 0));
+            // DB counts
+            if (d.db_counts) {
+                setEl('dbUsers', fmtNum(d.db_counts.users || 0));
+                setEl('dbAssessments', fmtNum(d.db_counts.assessments || 0));
+                setEl('dbAttempts', fmtNum(d.db_counts.attempts || 0));
+                setEl('dbNotifications', fmtNum(d.db_counts.notifications || 0));
+                setEl('dbAuditLogs', fmtNum(d.db_counts.audit_logs || 0));
 
-                    // Update sidebar badge
-                    const badge = document.getElementById('sidebarUserCount');
-                    if (badge) badge.textContent = fmtNum(d.db_counts.users || 0);
+                // Update sidebar badge
+                const badge = document.getElementById('sidebarUserCount');
+                if (badge) badge.textContent = fmtNum(d.db_counts.users || 0);
 
-                    // Scale bar widths relative to the largest count
-                    const counts = [d.db_counts.users, d.db_counts.assessments, d.db_counts.attempts,
-                                    d.db_counts.notifications, d.db_counts.audit_logs].map(v => v || 0);
-                    const maxVal = Math.max(...counts, 1);
-                    const barIds = ['dbUsers', 'dbAssessments', 'dbAttempts', 'dbNotifications', 'dbAuditLogs'];
-                    const barBarIds = [null, 'dbAssessmentsBar', 'dbAttemptsBar', 'dbNotificationsBar', 'dbAuditLogsBar'];
-                    counts.forEach((v, i) => {
-                        if (barBarIds[i]) {
-                            const el = document.getElementById(barBarIds[i]);
-                            if (el) el.style.width = Math.round(v / maxVal * 100) + '%';
-                        }
-                    });
-                    // users bar has no separate ID, find it by position
-                    const firstBar = document.querySelector('#page-settings .bar-fill:first-of-type');
-                    if (firstBar) firstBar.style.width = Math.round((d.db_counts.users || 0) / maxVal * 100) + '%';
-                }
-
-            } catch (e) { console.error('Overview load error', e); }
-        }
+                // Scale bar widths relative to the largest count
+                const counts = [d.db_counts.users, d.db_counts.assessments, d.db_counts.attempts,
+                d.db_counts.notifications, d.db_counts.audit_logs].map(v => v || 0);
+                const maxVal = Math.max(...counts, 1);
+                const barIds = ['dbUsers', 'dbAssessments', 'dbAttempts', 'dbNotifications', 'dbAuditLogs'];
+                const barBarIds = [null, 'dbAssessmentsBar', 'dbAttemptsBar', 'dbNotificationsBar', 'dbAuditLogsBar'];
+                counts.forEach((v, i) => {
+                    if (barBarIds[i]) {
+                        const el = document.getElementById(barBarIds[i]);
+                        if (el) el.style.width = Math.round(v / maxVal * 100) + '%';
+                    }
+                });
+                // users bar has no separate ID, find it by position
+                const firstBar = document.querySelector('#page-settings .bar-fill:first-of-type');
+                if (firstBar) firstBar.style.width = Math.round((d.db_counts.users || 0) / maxVal * 100) + '%';
+            }
+        }   // end renderOverview
 
         // ════════════════════════════════════════
         // CURRENT USER (profile + topbar)
@@ -2636,31 +2717,100 @@
 
         async function loadMe(forceProfile = false) {
             try {
-                // Try to read from login-stored sessionStorage first (fast path)
-                const stored = sessionStorage.getItem('csrf_token') ? null : null; // placeholder
+                const cached = PageCache.get('me');
+                if (cached) renderMe(cached, forceProfile);
+                if (!PageCache.isStale('me') && cached) return;
+
                 const d = await apiGet(API.getMe);
                 if (!d.success) return;
-                _meCache = d.user;
-
-                // Topbar chip
-                const initials = d.user.full_name
-                    ? d.user.full_name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
-                    : '??';
-                setEl('topbarAvatar', initials);
-                setEl('topbarName', d.user.full_name || 'Admin');
-
-                // Profile page (always update in case they navigate to it)
-                setEl('profileAvatarLg', initials);
-                setEl('profileName', esc(d.user.full_name || ''));
-                setEl('profileEmail', esc(d.user.email || ''));
-                const nameInp = document.getElementById('profileInputName');
-                const emailInp = document.getElementById('profileInputEmail');
-                const deptInp = document.getElementById('profileInputDept');
-                if (nameInp) nameInp.value = d.user.full_name || '';
-                if (emailInp) emailInp.value = d.user.email || '';
-                if (deptInp) deptInp.value = d.user.department || '';
-
+                PageCache.set('me', d);
+                renderMe(d, forceProfile);
             } catch (e) { console.error('loadMe error', e); }
+        }
+
+        function renderMe(d, forceProfile = false) {
+            _meCache = d.user;
+
+            // Topbar chip
+            const initials = d.user.full_name
+                ? d.user.full_name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+                : '??';
+            setEl('topbarAvatar', initials);
+            setEl('topbarName', d.user.full_name || 'Admin');
+
+            // Profile page fields
+            setEl('profileAvatarLg', initials);
+            setEl('profileName', esc(d.user.full_name || ''));
+            setEl('profileEmail', esc(d.user.email || ''));
+            const nameInp = document.getElementById('profileInputName');
+            const emailInp = document.getElementById('profileInputEmail');
+            const deptInp = document.getElementById('profileInputDept');
+            if (nameInp) nameInp.value = d.user.full_name || '';
+            if (emailInp) emailInp.value = d.user.email || '';
+            if (deptInp) deptInp.value = d.user.department || '';
+        }   // end renderMe
+
+        // ════════════════════════════════════════
+        // PROFILE — Save personal info
+        // ════════════════════════════════════════
+        async function saveProfile() {
+            const fullName = document.getElementById('profileInputName')?.value.trim();
+            const dept = document.getElementById('profileInputDept')?.value.trim();
+
+            if (!fullName) { showToast('Full name is required.', 'error'); return; }
+
+            try {
+                const d = await apiPost(API.updateProfile, {
+                    full_name: fullName,
+                    department: dept,
+                });
+                if (d.success) {
+                    PageCache.invalidate('me');
+                    showToast('Profile updated successfully.', 'success');
+                    // Refresh topbar + hero with new name
+                    if (d.user) {
+                        const initials = d.user.full_name
+                            ? d.user.full_name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+                            : '??';
+                        setEl('topbarAvatar', initials);
+                        setEl('topbarName', d.user.full_name || 'Admin');
+                        setEl('profileAvatarLg', initials);
+                        setEl('profileName', esc(d.user.full_name || ''));
+                        _meCache = d.user;
+                    }
+                } else {
+                    showToast(d.error || 'Update failed.', 'error');
+                }
+            } catch (e) { showToast('Network error.', 'error'); }
+        }
+
+        // ════════════════════════════════════════
+        // PROFILE — Change password
+        // ════════════════════════════════════════
+        async function updatePassword() {
+            const curr = document.getElementById('profileCurrPw')?.value;
+            const newPw = document.getElementById('profileNewPw')?.value;
+            const confirm = document.getElementById('profileConfirmPw')?.value;
+
+            if (!curr || !newPw || !confirm) { showToast('All password fields are required.', 'error'); return; }
+            if (newPw !== confirm) { showToast('New passwords do not match.', 'error'); return; }
+            if (newPw.length < 8) { showToast('Password must be at least 8 characters.', 'error'); return; }
+
+            try {
+                const d = await apiPost(API.changePassword, {
+                    current_password: curr,
+                    new_password: newPw,
+                    confirm_password: confirm,
+                });
+                if (d.success) {
+                    showToast('Password changed successfully.', 'success');
+                    document.getElementById('profileCurrPw').value = '';
+                    document.getElementById('profileNewPw').value = '';
+                    document.getElementById('profileConfirmPw').value = '';
+                } else {
+                    showToast(d.error || 'Password change failed.', 'error');
+                }
+            } catch (e) { showToast('Network error.', 'error'); }
         }
 
         // ════════════════════════════════════════
@@ -2669,46 +2819,64 @@
         async function loadResources() {
             const grid = document.getElementById('resourceGrid');
             if (!grid) return;
-            grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);">Loading…</div>';
+
+            const cached = PageCache.get('resources');
+            if (cached) {
+                renderResources(cached, grid);
+            } else {
+                grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);">Loading…</div>';
+            }
+            if (!PageCache.isStale('resources') && cached) return;
 
             try {
                 const d = await apiGet(API.getResources, { limit: 20, page: 1 });
                 if (!d.success) {
-                    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--red);">${esc(d.error || 'Failed to load resources.')}</div>`;
+                    if (!cached) grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--red);">${esc(d.error || 'Failed to load resources.')}</div>`;
                     return;
                 }
+                PageCache.set('resources', d);
+                renderResources(d, grid);
+            } catch (e) {
+                if (!cached) grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--red);">Network error.</div>`;
+                console.error(e);
+            }
+        }
 
-                // Stats
-                if (d.stats) {
-                    setEl('resTotalMaterials', fmtNum(d.stats.total_materials));
-                    const gb = (d.stats.storage_used_bytes / (1024 ** 3)).toFixed(1);
-                    setEl('resStorageUsed', gb + ' GB');
-                    setEl('resTotalDownloads', fmtNum(d.stats.total_downloads));
-                }
+        function renderResources(d, grid) {
+            if (!grid) grid = document.getElementById('resourceGrid');
+            if (!grid) return;
 
-                const typeIcon = { pdf: '📄', video: '🎬', link: '🔗', article: '📰', quiz: '📝' };
-                const typeBg = {
-                    pdf: 'rgba(0,102,255,0.12)', video: 'rgba(34,197,94,0.12)',
-                    link: 'rgba(234,179,8,0.12)', article: 'rgba(124,58,237,0.12)', quiz: 'rgba(239,68,68,0.12)'
-                };
+            // Stats
+            if (d.stats) {
+                setEl('resTotalMaterials', fmtNum(d.stats.total_materials));
+                const gb = (d.stats.storage_used_bytes / (1024 ** 3)).toFixed(1);
+                setEl('resStorageUsed', gb + ' GB');
+                setEl('resTotalDownloads', fmtNum(d.stats.total_downloads));
+            }
 
-                const fileTypes = ['pdf', 'video', 'quiz'];
-                let html = d.materials.map(m => {
-                    const sizeMB = m.file_size ? (m.file_size / (1024 * 1024)).toFixed(1) + ' MB' : (m.external_url ? 'Link' : '—');
-                    const isFile = fileTypes.includes(m.material_type);
-                    const viewUrl = isFile
-                        ? `${API.viewResource}?material_id=${m.material_id}`
-                        : m.external_url;
-                    const dlUrl = isFile
-                        ? `${API.serveResource}?material_id=${m.material_id}&action=download`
-                        : null;
-                    const viewBtn = viewUrl
-                        ? `<a href="${viewUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 8px;">View</a>`
-                        : '';
-                    const dlBtn = dlUrl
-                        ? `<a href="${dlUrl}" class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 8px;">Download</a>`
-                        : '';
-                    return `<div class="resource-card">
+            const typeIcon = { pdf: '📄', video: '🎬', link: '🔗', article: '📰', quiz: '📝' };
+            const typeBg = {
+                pdf: 'rgba(0,102,255,0.12)', video: 'rgba(34,197,94,0.12)',
+                link: 'rgba(234,179,8,0.12)', article: 'rgba(124,58,237,0.12)', quiz: 'rgba(239,68,68,0.12)'
+            };
+
+            const fileTypes = ['pdf', 'video', 'quiz'];
+            let html = d.materials.map(m => {
+                const sizeMB = m.file_size ? (m.file_size / (1024 * 1024)).toFixed(1) + ' MB' : (m.external_url ? 'Link' : '—');
+                const isFile = fileTypes.includes(m.material_type);
+                const viewUrl = isFile
+                    ? `${API.viewResource}?material_id=${m.material_id}`
+                    : m.external_url;
+                const dlUrl = isFile
+                    ? `${API.serveResource}?material_id=${m.material_id}&action=download`
+                    : null;
+                const viewBtn = viewUrl
+                    ? `<a href="${viewUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 8px;">View</a>`
+                    : '';
+                const dlBtn = dlUrl
+                    ? `<a href="${dlUrl}" class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 8px;">Download</a>`
+                    : '';
+                return `<div class="resource-card">
                         <div class="resource-icon" style="background:${typeBg[m.material_type] || 'rgba(0,102,255,0.12)'};">${typeIcon[m.material_type] || '📦'}</div>
                         <h4>${esc(m.title)}</h4>
                         <p>${esc(m.description || '—')}</p>
@@ -2722,26 +2890,22 @@
                             <button class="btn btn-danger btn-sm" style="font-size:11px;padding:4px 8px;" onclick="deleteResource(${m.material_id},'${esc(m.title)}')">Delete</button>
                         </div>
                     </div>`;
-                }).join('');
+            }).join('');
 
-                html += `<div class="resource-card" onclick="openUploadModal()" style="border-style:dashed;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;min-height:140px;">
+            html += `<div class="resource-card" onclick="openUploadModal()" style="border-style:dashed;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;min-height:140px;">
                     <div style="font-size:28px;margin-bottom:8px;">+</div>
                     <div style="font-size:13px;color:var(--muted);">Upload New Resource</div>
                 </div>`;
 
-                grid.innerHTML = html || '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);">No resources yet.</div>';
-
-            } catch (e) {
-                grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--red);">Network error.</div>`;
-                console.error(e);
-            }
-        }
+            grid.innerHTML = html || '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);">No resources yet.</div>';
+        }   // end renderResources
         async function deleteResource(materialId, title) {
             if (!confirm(`Permanently delete "${title}"?\n\nThis will also remove the file from storage. This cannot be undone.`)) return;
             try {
                 const d = await apiPost(API.deleteResource, { material_id: materialId });
                 if (d.success) {
                     showToast('Resource deleted.', 'success');
+                    PageCache.invalidate('resources');
                     loadResources();
                 } else {
                     showToast(d.error || 'Delete failed.', 'error');
@@ -2779,44 +2943,57 @@
             const tbody = document.getElementById('usersTableBody');
             if (!tbody) return;
 
-            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted);">Loading…</td></tr>`;
+            // Cache key encodes current filter state so each unique view is cached separately
+            const cacheKey = `users:${userRole}:${userSearch}:${userPage}`;
+            const cached = PageCache.get(cacheKey);
+            if (cached) {
+                renderUsers(cached, tbody);
+            } else {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted);">Loading…</td></tr>`;
+            }
+            if (!PageCache.isStale(cacheKey) && cached) return;
 
             try {
                 const d = await apiGet(API.getUsers, {
                     role: userRole, search: userSearch, page: userPage, limit: 20,
                 });
-
                 if (!d.success) {
-                    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red);padding:24px;">${esc(d.error || 'Failed to load')}</td></tr>`;
+                    if (!cached) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red);padding:24px;">${esc(d.error || 'Failed to load')}</td></tr>`;
                     return;
                 }
-
-                // Update tab counts
-                const tabs = document.querySelectorAll('#page-users .tab');
-                const labels = ['All Users', 'Students', 'Teachers', 'Admins'];
-                const keys = ['all', 'student', 'teacher', 'admin'];
-                tabs.forEach((tab, i) => {
-                    const cnt = d.counts[keys[i]];
-                    tab.textContent = labels[i] + (cnt ? ` (${fmtNum(cnt)})` : '');
-                });
-
-                if (!d.users.length) {
-                    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted);">No users found.</td></tr>`;
-                } else {
-                    tbody.innerHTML = d.users.map(u => renderUserRow(u)).join('');
-                }
-
-                // Pagination
-                renderPagination('userPagination', d.page, d.pages, d.total, (p) => {
-                    userPage = p;
-                    loadUsers();
-                });
-
+                PageCache.set(cacheKey, d);
+                renderUsers(d, tbody);
             } catch (e) {
-                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red);padding:24px;">Network error.</td></tr>`;
+                if (!cached) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red);padding:24px;">Network error.</td></tr>`;
                 console.error(e);
             }
         }
+
+        function renderUsers(d, tbody) {
+            if (!tbody) tbody = document.getElementById('usersTableBody');
+            if (!tbody) return;
+
+            // Update tab counts
+            const tabs = document.querySelectorAll('#page-users .tab');
+            const labels = ['All Users', 'Students', 'Teachers', 'Admins'];
+            const keys = ['all', 'student', 'teacher', 'admin'];
+            tabs.forEach((tab, i) => {
+                const cnt = d.counts[keys[i]];
+                tab.textContent = labels[i] + (cnt ? ` (${fmtNum(cnt)})` : '');
+            });
+
+            if (!d.users.length) {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted);">No users found.</td></tr>`;
+            } else {
+                tbody.innerHTML = d.users.map(u => renderUserRow(u)).join('');
+            }
+
+            // Pagination
+            renderPagination('userPagination', d.page, d.pages, d.total, (p) => {
+                userPage = p;
+                loadUsers();
+            });
+        }   // end renderUsers
 
         function renderUserRow(u) {
             const verified = u.is_verified
@@ -2861,6 +3038,7 @@
                 const d = await apiPost(API.toggleStatus, { user_id: userId, action });
                 if (d.success) {
                     showToast(action === 'block' ? 'User blocked.' : 'User activated.', 'success');
+                    PageCache.invalidateMany(['overview', 'users']);
                     loadUsers();
                 } else {
                     showToast(d.error || 'Action failed.', 'error');
@@ -2943,6 +3121,7 @@
                 if (d.success) {
                     closeModal('modalAddUser');
                     showToast(isEdit ? 'User updated successfully.' : 'User created successfully.', 'success');
+                    PageCache.invalidateMany(['overview', 'users']);
                     loadUsers();
                     loadOverview();
                 } else {
@@ -3005,49 +3184,62 @@
         async function loadTests() {
             const tbody = document.getElementById('testsTableBody');
             if (!tbody) return;
-            tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--muted);">Loading&hellip;</td></tr>`;
+
+            const cacheKey = `tests:${testStatus}:${testSearch}:${testCategory}:${testPage}`;
+            const cached = PageCache.get(cacheKey);
+            if (cached) {
+                renderTests(cached, tbody);
+            } else {
+                tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--muted);">Loading&hellip;</td></tr>`;
+            }
+            if (!PageCache.isStale(cacheKey) && cached) return;
 
             try {
                 const d = await apiGet(API.getTests, {
                     status: testStatus, search: testSearch,
                     category: testCategory, page: testPage, limit: 20,
                 });
-
                 if (!d.success) {
-                    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--red);padding:24px;">${esc(d.error || 'Failed to load')}</td></tr>`;
+                    if (!cached) tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--red);padding:24px;">${esc(d.error || 'Failed to load')}</td></tr>`;
                     return;
                 }
-
-                // Stat cards
-                if (d.stats) {
-                    setEl('tStatTotal', fmtNum(d.stats.total_assessments));
-                    setEl('tStatActive', fmtNum(d.stats.active));
-                    setEl('tStatDraft', fmtNum(d.stats.draft));
-                    setEl('tStatPassRate', (d.stats.avg_pass_rate || 0) + '%');
-                }
-
-                // Tab counts
-                const tabs = document.querySelectorAll('#page-tests .tab');
-                const sKeys = ['all', 'active', 'draft', 'scheduled', 'archived'];
-                const sLabel = ['All', 'Active', 'Draft', 'Scheduled', 'Archived'];
-                tabs.forEach((tab, i) => {
-                    const cnt = d.counts[sKeys[i]];
-                    tab.textContent = sLabel[i] + (cnt ? ` (${fmtNum(cnt)})` : '');
-                });
-
-                if (!d.assessments.length) {
-                    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--muted);">No assessments found.</td></tr>`;
-                } else {
-                    tbody.innerHTML = d.assessments.map(t => renderTestRow(t)).join('');
-                }
-
-                renderTestPagination(d.page, d.pages, d.total);
-
+                PageCache.set(cacheKey, d);
+                renderTests(d, tbody);
             } catch (e) {
-                tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--red);padding:24px;">Network error.</td></tr>`;
+                if (!cached) tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--red);padding:24px;">Network error.</td></tr>`;
                 console.error(e);
             }
         }
+
+        function renderTests(d, tbody) {
+            if (!tbody) tbody = document.getElementById('testsTableBody');
+            if (!tbody) return;
+
+            // Stat cards
+            if (d.stats) {
+                setEl('tStatTotal', fmtNum(d.stats.total_assessments));
+                setEl('tStatActive', fmtNum(d.stats.active));
+                setEl('tStatDraft', fmtNum(d.stats.draft));
+                setEl('tStatPassRate', (d.stats.avg_pass_rate || 0) + '%');
+            }
+
+            // Tab counts
+            const tabs = document.querySelectorAll('#page-tests .tab');
+            const sKeys = ['all', 'active', 'draft', 'scheduled', 'archived'];
+            const sLabel = ['All', 'Active', 'Draft', 'Scheduled', 'Archived'];
+            tabs.forEach((tab, i) => {
+                const cnt = d.counts[sKeys[i]];
+                tab.textContent = sLabel[i] + (cnt ? ` (${fmtNum(cnt)})` : '');
+            });
+
+            if (!d.assessments.length) {
+                tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--muted);">No assessments found.</td></tr>`;
+            } else {
+                tbody.innerHTML = d.assessments.map(t => renderTestRow(t)).join('');
+            }
+
+            renderTestPagination(d.page, d.pages, d.total);
+        }   // end renderTests
 
         function renderTestRow(t) {
             const diffBadge = `<span class="badge ${t.difficulty}">${esc(t.difficulty)}</span>`;
@@ -3098,6 +3290,7 @@
                 const d = await apiPost(API.updateTestStatus, { assessment_id: assessmentId, status: newStatus });
                 if (d.success) {
                     showToast(`Assessment ${label.toLowerCase()}d.`, 'success');
+                    PageCache.invalidateMany(['overview', 'tests']);
                     loadTests();
                     loadOverview(); // refresh overview stats too
                 } else {
@@ -3112,6 +3305,7 @@
                 const d = await apiPost(API.deleteTest, { assessment_id: assessmentId });
                 if (d.success) {
                     showToast('Assessment deleted.', 'success');
+                    PageCache.invalidateMany(['overview', 'tests']);
                     loadTests();
                     loadOverview();
                 } else {
@@ -3220,6 +3414,7 @@
                 tab.addEventListener('click', () => {
                     logType = types[i] || 'login';
                     logPage = 1;
+                    PageCache.invalidate(`logs:${logType}:${logPage}`);
                     loadLogs();
                 });
             });
@@ -3228,7 +3423,15 @@
         async function loadLogs() {
             const logDiv = document.getElementById('logsContainer');
             if (!logDiv) return;
-            logDiv.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);">Loading…</div>';
+
+            const cacheKey = `logs:${logType}:${logPage}`;
+            const cached = PageCache.get(cacheKey);
+            if (cached) {
+                renderLogs(cached, logDiv);
+            } else {
+                logDiv.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);">Loading…</div>';
+            }
+            if (!PageCache.isStale(cacheKey) && cached) return;
 
             const titleMap = { login: 'Login Activity', audit: 'Audit Logs', email: 'Email Queue' };
             setEl('logsCardTitle', titleMap[logType] || 'Logs');
@@ -3236,71 +3439,117 @@
             try {
                 const d = await apiGet(API.getLogs, { type: logType, page: logPage, limit: 30 });
                 if (!d.success) {
-                    logDiv.innerHTML = `<div style="padding:24px;text-align:center;color:var(--red);">${esc(d.error || 'Failed to load logs.')}</div>`;
+                    if (!cached) logDiv.innerHTML = `<div style="padding:24px;text-align:center;color:var(--red);">${esc(d.error || 'Failed to load logs.')}</div>`;
                     return;
                 }
+                PageCache.set(cacheKey, d);
+                renderLogs(d, logDiv);
+            } catch (e) { console.error('Logs load error', e); }
+        }
 
-                // Alert badge
-                const alertBadge = document.getElementById('logsAlertBadge');
-                if (alertBadge && d.alert_count) {
-                    alertBadge.textContent = d.alert_count + ' alert' + (d.alert_count !== 1 ? 's' : '');
-                    alertBadge.style.display = '';
-                } else if (alertBadge) {
-                    alertBadge.style.display = 'none';
-                }
+        function renderLogs(d, logDiv) {
+            if (!logDiv) logDiv = document.getElementById('logsContainer');
+            if (!logDiv) return;
+            const titleMap = { login: 'Login Activity', audit: 'Audit Logs', email: 'Email Queue' };
+            setEl('logsCardTitle', titleMap[logType] || 'Logs');
 
-                if (!d.logs || !d.logs.length) {
-                    logDiv.innerHTML = `<div style="padding:24px;text-align:center;color:var(--muted);">No logs found.</div>`;
-                    return;
-                }
+            // Alert badge
+            const alertBadge = document.getElementById('logsAlertBadge');
+            if (alertBadge && d.alert_count) {
+                alertBadge.textContent = d.alert_count + ' alert' + (d.alert_count !== 1 ? 's' : '');
+                alertBadge.style.display = '';
+            } else if (alertBadge) {
+                alertBadge.style.display = 'none';
+            }
 
-                logDiv.innerHTML = d.logs.map(log => {
-                    const levelBadge = {
-                        success: `<span class="badge success" style="font-size:10px;">SUCCESS</span>`,
-                        error:   `<span class="badge error"   style="font-size:10px;">FAIL</span>`,
-                        warning: `<span class="badge warning" style="font-size:10px;">WARN</span>`,
-                        info:    `<span class="badge info"    style="font-size:10px;">INFO</span>`,
-                    }[log.level] || `<span class="badge info" style="font-size:10px;">INFO</span>`;
+            if (!d.logs || !d.logs.length) {
+                logDiv.innerHTML = `<div style="padding:24px;text-align:center;color:var(--muted);">No logs found.</div>`;
+                return;
+            }
 
-                    return `<div class="log-entry">
+            logDiv.innerHTML = d.logs.map(log => {
+                const levelBadge = {
+                    success: `<span class="badge success" style="font-size:10px;">SUCCESS</span>`,
+                    error: `<span class="badge error"   style="font-size:10px;">FAIL</span>`,
+                    warning: `<span class="badge warning" style="font-size:10px;">WARN</span>`,
+                    info: `<span class="badge info"    style="font-size:10px;">INFO</span>`,
+                }[log.level] || `<span class="badge info" style="font-size:10px;">INFO</span>`;
+
+                return `<div class="log-entry">
                         <span class="log-time">${esc(log.created_at)}</span>
                         <span class="log-level">${levelBadge}</span>
                         <span class="log-user">${esc(log.email || log.actor_email || '—')}</span>
                         <span class="log-msg">${esc(log.message)}</span>
                         <span class="log-ip">${esc(log.ip_address || '')}</span>
                     </div>`;
-                }).join('');
-
-            } catch (e) { console.error('Logs load error', e); }
-        }
+            }).join('');
+        }   // end renderLogs
 
         // ════════════════════════════════════════
         // SETTINGS
         // ════════════════════════════════════════
         async function loadSettings() {
+            const cached = PageCache.get('settings');
+            if (cached) renderSettings(cached);
+            if (!PageCache.isStale('settings') && cached) return;
+
             try {
-                const d = await apiGet(API.settings);
+                const d = await apiGet(API.getSettings);
                 if (!d.success) return;
-                const s = d.settings;
-
-                // Numeric inputs — match by data-key attribute
-                document.querySelectorAll('#page-settings input[data-key]').forEach(inp => {
-                    const key = inp.dataset.key;
-                    if (s[key] !== undefined) inp.value = s[key];
-                });
-
-                // Toggle checkboxes
-                document.querySelectorAll('#page-settings input[type=checkbox][data-key]').forEach(cb => {
-                    const key = cb.dataset.key;
-                    if (s[key] !== undefined) cb.checked = !!s[key];
-                });
-
+                PageCache.set('settings', d);
+                renderSettings(d);
             } catch (e) { console.error('Settings load error', e); }
         }
 
+        function renderSettings(d) {
+
+            // get-settings.php returns { settings: { "Category Name": [{key, value}...] } }
+            // Flatten into a simple key→value map for easy lookup
+            const s = {};
+            Object.values(d.settings).forEach(group => {
+                group.forEach(item => { s[item.key] = item.value; });
+            });
+
+            // Populate number/text inputs
+            document.querySelectorAll('#page-settings input[data-key]').forEach(inp => {
+                const key = inp.dataset.key;
+                if (s[key] === undefined) return;
+                if (inp.type === 'checkbox') {
+                    inp.checked = !!s[key];
+                } else {
+                    inp.value = s[key];
+                }
+            });
+
+            // Populate Database Overview bar chart if counts are returned
+            if (d.db_counts) populateDbOverview(d.db_counts);
+        }   // end renderSettings
+
+        function populateDbOverview(counts) {
+            const rows = [
+                { label: 'dbUsers', bar: null, val: counts.users },
+                { label: 'dbAssessments', bar: 'dbAssessmentsBar', val: counts.assessments },
+                { label: 'dbAttempts', bar: 'dbAttemptsBar', val: counts.attempts },
+                { label: 'dbNotifications', bar: 'dbNotificationsBar', val: counts.notifications },
+                { label: 'dbAuditLogs', bar: 'dbAuditLogsBar', val: counts.audit_logs },
+            ];
+            const maxVal = Math.max(1, ...rows.map(r => r.val || 0));
+            rows.forEach(({ label, bar, val }) => {
+                const valEl = document.getElementById(label);
+                if (valEl) valEl.textContent = val ?? '—';
+                if (bar) {
+                    const barEl = document.getElementById(bar);
+                    if (barEl) barEl.style.width = Math.round(((val || 0) / maxVal) * 100) + '%';
+                }
+            });
+            // First bar (users) has no separate bar id — find it directly
+            const firstBar = document.querySelector('#page-settings .bar-fill:first-of-type');
+            if (firstBar) firstBar.style.width = '100%'; // users is always the max reference
+        }
+
         function wireSettingsSave() {
-            const btn = document.querySelector('#page-settings .btn-primary');
-            if (btn) btn.addEventListener('click', saveSettings);
+            // Save All button on Settings page already has onclick="saveSettings()"
+            // This function is kept for any future dynamic wiring needs
         }
 
         async function saveSettings() {
@@ -3317,11 +3566,16 @@
             });
 
             try {
-                const d = await apiPost(API.settings, payload);
+                const d = await apiPost(API.updateSettings, { settings: payload });
                 if (d.success) {
-                    showToast('Settings saved successfully.', 'success');
+                    PageCache.invalidate('settings');
+                    showToast(`Settings saved (${d.updated ?? Object.keys(payload).length} updated).`, 'success');
                 } else {
-                    showToast(d.error || 'Save failed.', 'error');
+                    const errKeys = Object.keys(d.errors || {});
+                    const msg = errKeys.length
+                        ? 'Some settings failed: ' + errKeys.join(', ')
+                        : (d.error || 'Save failed.');
+                    showToast(msg, 'error');
                 }
             } catch (e) { showToast('Network error.', 'error'); }
         }
@@ -3394,7 +3648,7 @@
         // ════════════════════════════════════════
         // UPLOAD RESOURCE MODAL
         // ════════════════════════════════════════
-        const CLOUDINARY_CLOUD  = 'dmysg5azm';
+        const CLOUDINARY_CLOUD = 'dmysg5azm';
         const CLOUDINARY_PRESET = 'ptauploads';
 
         function openUploadModal() {
@@ -3420,15 +3674,15 @@
         function onUrTypeChange() {
             const type = document.getElementById('urType').value;
             const fileTypes = ['pdf', 'video', 'quiz'];
-            const urlTypes  = ['link', 'article'];
+            const urlTypes = ['link', 'article'];
             const fileGroup = document.getElementById('urFileGroup');
-            const urlGroup  = document.getElementById('urUrlGroup');
-            const hint      = document.getElementById('urFileHint');
+            const urlGroup = document.getElementById('urUrlGroup');
+            const hint = document.getElementById('urFileHint');
             const fileInput = document.getElementById('urFile');
 
             if (fileTypes.includes(type)) {
                 fileGroup.style.display = '';
-                urlGroup.style.display  = 'none';
+                urlGroup.style.display = 'none';
                 if (type === 'video') {
                     hint.textContent = '(MP4, WebM, max 50 MB)';
                     fileInput.accept = '.mp4,.webm,.ogg,.mov,.avi,.mpeg';
@@ -3438,7 +3692,7 @@
                 }
             } else {
                 fileGroup.style.display = 'none';
-                urlGroup.style.display  = '';
+                urlGroup.style.display = '';
             }
         }
 
@@ -3468,7 +3722,7 @@
                     if (xhr.status === 200 && data.secure_url) {
                         onProgress(100);
                         resolve({
-                            url:      data.secure_url,
+                            url: data.secure_url,
                             publicId: data.public_id || '',
                             fileSize: data.bytes || 0,
                             mimeType: data.format || file.type,
@@ -3485,25 +3739,25 @@
         }
 
         async function submitUploadResource() {
-            const title    = document.getElementById('urTitle').value.trim();
-            const type     = document.getElementById('urType').value;
+            const title = document.getElementById('urTitle').value.trim();
+            const type = document.getElementById('urType').value;
             const category = document.getElementById('urCategory').value;
-            const diff     = document.getElementById('urDifficulty').value;
-            const estTime  = document.getElementById('urEstTime').value;
-            const desc     = document.getElementById('urDescription').value.trim();
-            const tagsRaw  = document.getElementById('urTags').value.trim();
+            const diff = document.getElementById('urDifficulty').value;
+            const estTime = document.getElementById('urEstTime').value;
+            const desc = document.getElementById('urDescription').value.trim();
+            const tagsRaw = document.getElementById('urTags').value.trim();
             const isPublic = document.getElementById('urPublic').checked ? 1 : 0;
-            const fileEl   = document.getElementById('urFile');
-            const urlVal   = document.getElementById('urUrl').value.trim();
+            const fileEl = document.getElementById('urFile');
+            const urlVal = document.getElementById('urUrl').value.trim();
 
-            const errEl   = document.getElementById('urError');
+            const errEl = document.getElementById('urError');
             const showErr = (msg) => { errEl.textContent = msg; errEl.style.display = 'block'; };
             errEl.style.display = 'none';
 
             if (!title) return showErr('Title is required.');
 
             const fileTypes = ['pdf', 'video', 'quiz'];
-            const urlTypes  = ['link', 'article'];
+            const urlTypes = ['link', 'article'];
 
             if (fileTypes.includes(type) && (!fileEl.files || !fileEl.files[0])) {
                 return showErr('Please select a file to upload.');
@@ -3516,9 +3770,9 @@
                 ? JSON.stringify(tagsRaw.split(',').map(t => t.trim()).filter(Boolean).slice(0, 10))
                 : '[]';
 
-            const btn          = document.getElementById('btnUploadResource');
+            const btn = document.getElementById('btnUploadResource');
             const progressWrap = document.getElementById('urProgress');
-            const progressBar  = document.getElementById('urProgressBar');
+            const progressBar = document.getElementById('urProgressBar');
             const progressText = document.getElementById('urProgressText');
 
             btn.disabled = true;
@@ -3528,8 +3782,8 @@
 
             try {
                 let externalUrl = urlVal;
-                let fileSize    = 0;
-                let publicId    = '';
+                let fileSize = 0;
+                let publicId = '';
 
                 if (fileTypes.includes(type) && fileEl.files[0]) {
                     progressText.textContent = 'Uploading to storage…';
@@ -3538,24 +3792,24 @@
                         progressText.textContent = `Uploading… ${pct}%`;
                     });
                     externalUrl = result.url;
-                    fileSize    = result.fileSize;
-                    publicId    = result.publicId;
+                    fileSize = result.fileSize;
+                    publicId = result.publicId;
                     progressText.textContent = 'Saving to database…';
                 }
 
                 // Save metadata to your DB via upload-resource.php
                 const payload = {
                     title,
-                    material_type:           type,
+                    material_type: type,
                     category,
-                    difficulty:              diff,
-                    estimated_time_minutes:  parseInt(estTime) || 0,
-                    description:             desc,
-                    tags:                    tagsJson,
-                    is_public:               isPublic,
-                    external_url:            externalUrl,
-                    file_size:               fileSize,
-                    cloudinary_public_id:    publicId,
+                    difficulty: diff,
+                    estimated_time_minutes: parseInt(estTime) || 0,
+                    description: desc,
+                    tags: tagsJson,
+                    is_public: isPublic,
+                    external_url: externalUrl,
+                    file_size: fileSize,
+                    cloudinary_public_id: publicId,
                 };
 
                 const d = await apiPost(API.uploadResource, payload);
@@ -3566,6 +3820,7 @@
                     setTimeout(() => {
                         closeModal('modalUploadResource');
                         showToast('Resource uploaded successfully.', 'success');
+                        PageCache.invalidate('resources');
                         loadResources();
                     }, 500);
                 } else {

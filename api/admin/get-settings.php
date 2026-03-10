@@ -54,4 +54,29 @@ foreach ($groups as $groupName => $keys) {
     }
 }
 
-echo json_encode(['success' => true, 'settings' => $result]);
+// ── Database Overview counts ──
+$dbCounts = [
+    'users'         => 0,
+    'assessments'   => 0,
+    'attempts'      => 0,
+    'notifications' => 0,
+    'audit_logs'    => 0,
+];
+
+$countQueries = [
+    'users'         => "SELECT COUNT(*) AS c FROM users",
+    'assessments'   => "SELECT COUNT(*) AS c FROM assessments",
+    'attempts'      => "SELECT COUNT(*) AS c FROM assessment_attempts",
+    'notifications' => "SELECT COUNT(*) AS c FROM notifications",
+    'audit_logs'    => "SELECT COUNT(*) AS c FROM audit_logs",
+];
+
+foreach ($countQueries as $key => $sql) {
+    $r = safePreparedQuery($conn, $sql, "", []);
+    if ($r['success'] && $r['result']) {
+        $dbCounts[$key] = (int)($r['result']->fetch_assoc()['c'] ?? 0);
+        $r['result']->free();
+    }
+}
+
+echo json_encode(['success' => true, 'settings' => $result, 'db_counts' => $dbCounts]);
