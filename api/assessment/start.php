@@ -5,6 +5,10 @@
 // Creates a new assessment attempt for the logged-in student.
 // Validates access, attempt limits, and availability window.
 //
+// FIX: If an in_progress attempt already exists for this student
+// and assessment, return it instead of creating a duplicate.
+// This prevents two-tab exploits and stale orphaned attempts.
+//
 // POST JSON { assessment_id: int }
 // Returns {
 //   success: bool,
@@ -67,7 +71,31 @@ $asm = $asmResult['result']->fetch_assoc();
 $asmResult['result']->free();
 $maxAttempts = (int)$asm['max_attempts'];
 
-// ── Check attempt count ──
+// ── Resume existing in_progress attempt if one exists ──
+// Prevents duplicate attempts from double-clicks or multiple tabs.
+$existingResult = safePreparedQuery($conn,
+    "SELECT attempt_id FROM assessment_attempts
+     WHERE assessment_id = ? AND user_id = ? AND status = 'in_progress'
+     ORDER BY start_time DESC
+     LIMIT 1",
+    "ii", [$assessmentId, $userId]
+);
+
+if ($existingResult['success'] && $existingResult['result'] && $existingResult['result']->num_rows > 0) {
+    $existingRow = $existingResult['result']->fetch_assoc();
+    $existingResult['result']->free();
+    echo json_encode([
+        'success'    => true,
+        'attempt_id' => (int)$existingRow['attempt_id'],
+        'resumed'    => true,
+    ]);
+    exit;
+}
+if ($existingResult['result']) {
+    $existingResult['result']->free();
+}
+
+// ── Check completed attempt count ──
 $countResult = safePreparedQuery($conn,
     "SELECT COUNT(*) AS cnt
      FROM assessment_attempts

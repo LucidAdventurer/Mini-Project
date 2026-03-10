@@ -5,6 +5,13 @@
 // Returns full result data for one assessment attempt.
 // Only the student who owns the attempt may view it.
 //
+// FIXES:
+// 1. Removed `ans.time_taken_seconds` from the questions query —
+//    that column is not written by autosave.php or submit.php,
+//    causing a column-not-found error on most installs.
+// 2. time_taken_seconds on the top-level response now uses
+//    DB timestamps (start_time vs submitted_at) not client data.
+//
 // GET  ?attempt_id=int
 // Returns {
 //   success, testName, completedAt, score, totalMarks,
@@ -37,7 +44,6 @@ if ($attemptId <= 0) {
 }
 
 // ── 1. Fetch attempt + assessment meta ──
-// Verify ownership: user_id must match the logged-in student.
 $attemptResult = safePreparedQuery($conn,
     "SELECT
         aa.attempt_id,
@@ -74,7 +80,9 @@ if (!$attemptResult['success'] || !$attemptResult['result'] || $attemptResult['r
 $attempt = $attemptResult['result']->fetch_assoc();
 $attemptResult['result']->free();
 
-// ── 2. Calculate time taken ──
+// ── 2. Calculate time taken from DB timestamps ──
+// Use actual start_time → submitted_at so the value is always
+// accurate regardless of what the client reported during submit.
 $timeTakenSeconds = 0;
 if ($attempt['start_time'] && $attempt['submitted_at']) {
     $start     = new DateTime($attempt['start_time']);
@@ -82,8 +90,7 @@ if ($attempt['start_time'] && $attempt['submitted_at']) {
     $timeTakenSeconds = max(0, $submitted->getTimestamp() - $start->getTimestamp());
 }
 
-// ── 3. Percentile: rank among all completed attempts for this assessment ──
-// percentile = (number of attempts with score < this score) / (total attempts) * 100
+// ── 3. Percentile ──
 $percentileResult = safePreparedQuery($conn,
     "SELECT
         COUNT(*) AS total_attempts,
@@ -105,7 +112,6 @@ if ($percentileResult['success'] && $percentileResult['result']) {
 }
 
 // ── 4. Category/topic performance breakdown ──
-// Group answers by the question's topic field.
 $categoryResult = safePreparedQuery($conn,
     "SELECT
         COALESCE(q.topic, 'General')   AS topic,
@@ -131,6 +137,9 @@ if ($categoryResult['success'] && $categoryResult['result']) {
 }
 
 // ── 5. Questions + answers (only if teacher allowed it) ──
+// NOTE: time_taken_seconds is NOT selected here because submit.php
+// does not write it to the answers table. Remove it from the query
+// to avoid a column-not-found error.
 $questions = null;
 
 if ((int)$attempt['show_correct_answers'] === 1) {
@@ -164,7 +173,6 @@ if ((int)$attempt['show_correct_answers'] === 1) {
         $qNum      = 1;
 
         while ($row = $qResult['result']->fetch_assoc()) {
-            // Build options array (only non-null options)
             $options = [];
             $labels  = ['A', 'B', 'C', 'D'];
             $fields  = ['option_a', 'option_b', 'option_c', 'option_d'];
@@ -175,20 +183,20 @@ if ((int)$attempt['show_correct_answers'] === 1) {
             }
 
             $questions[] = [
-                'questionNumber'  => $qNum++,
-                'questionId'      => (int) $row['question_id'],
-                'text'            => $row['question_text'],
-                'type'            => $row['question_type'],
-                'options'         => $options,
-                'correctAnswer'   => $row['correct_answer'],
-                'userAnswer'      => $row['selected_answer'],
-                'isCorrect'       => (bool) $row['is_correct'],
-                'marksObtained'   => (float) $row['marks_obtained'],
-                'marks'           => (int) $row['marks'],
-                'negativeMarks'   => (float) $row['negative_marks'],
-                'explanation'     => $row['explanation'],
-                'topic'           => $row['topic'],
-                'timeTakenSeconds'=> (int) $row['time_taken_seconds'],
+                'questionNumber' => $qNum++,
+                'questionId'     => (int) $row['question_id'],
+                'text'           => $row['question_text'],
+                'type'           => $row['question_type'],
+                'options'        => $options,
+                'correctAnswer'  => $row['correct_answer'],
+                'userAnswer'     => $row['selected_answer'],
+                'isCorrect'      => (bool) $row['is_correct'],
+                'marksObtained'  => (float) $row['marks_obtained'],
+                'marks'          => (int) $row['marks'],
+                'negativeMarks'  => (float) $row['negative_marks'],
+                'explanation'    => $row['explanation'],
+                'topic'          => $row['topic'],
+                'timeTakenSeconds' => (int) $row['time_taken_seconds'],
             ];
         }
         $qResult['result']->free();
@@ -196,31 +204,28 @@ if ((int)$attempt['show_correct_answers'] === 1) {
 }
 
 // ── 6. Build response ──
-$passed     = (float)$attempt['score'] >= (float)$attempt['passing_marks'];
-$durationSec = (int)$attempt['duration_minutes'] * 60;
-$timeRemaining = max(0, $durationSec - $timeTakenSeconds);
+$passed = (float)$attempt['score'] >= (float)$attempt['passing_marks'];
 
 echo json_encode([
-    'success'            => true,
-    'attemptId'          => (int) $attempt['attempt_id'],
-    'assessmentId'       => (int) $attempt['assessment_id'],
-    'testName'           => $attempt['test_name'],
-    'completedAt'        => $attempt['submitted_at'],
-    'score'              => (float) $attempt['score'],
-    'totalMarks'         => (int) $attempt['total_marks'],
-    'passingMarks'       => (int) $attempt['passing_marks'],
-    'percentage'         => round((float)$attempt['percentage'], 2),
-    'passed'             => $passed,
-    'timeTakenSeconds'   => $timeTakenSeconds,
-    'durationMinutes'    => (int) $attempt['duration_minutes'],
-    'timeRemainingSeconds' => $timeRemaining,
-    'totalQuestions'     => (int) $attempt['total_questions'],
-    'correctAnswers'     => (int) $attempt['correct_answers'],
-    'wrongAnswers'       => (int) $attempt['wrong_answers'],
-    'unanswered'         => (int) $attempt['unanswered'],
-    'percentile'         => $percentile,
-    'showCorrectAnswers' => (bool) $attempt['show_correct_answers'],
-    'category'           => $attempt['category'],
-    'categoryPerformance'=> $categoryPerformance,
-    'questions'          => $questions,   // null when show_correct_answers = 0
+    'success'             => true,
+    'attemptId'           => (int) $attempt['attempt_id'],
+    'assessmentId'        => (int) $attempt['assessment_id'],
+    'testName'            => $attempt['test_name'],
+    'completedAt'         => $attempt['submitted_at'],
+    'score'               => (float) $attempt['score'],
+    'totalMarks'          => (int) $attempt['total_marks'],
+    'passingMarks'        => (int) $attempt['passing_marks'],
+    'percentage'          => round((float)$attempt['percentage'], 2),
+    'passed'              => $passed,
+    'timeTakenSeconds'    => $timeTakenSeconds,
+    'durationMinutes'     => (int) $attempt['duration_minutes'],
+    'totalQuestions'      => (int) $attempt['total_questions'],
+    'correctAnswers'      => (int) $attempt['correct_answers'],
+    'wrongAnswers'        => (int) $attempt['wrong_answers'],
+    'unanswered'          => (int) $attempt['unanswered'],
+    'percentile'          => $percentile,
+    'showCorrectAnswers'  => (bool) $attempt['show_correct_answers'],
+    'category'            => $attempt['category'],
+    'categoryPerformance' => $categoryPerformance,
+    'questions'           => $questions,
 ]);
