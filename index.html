@@ -1349,11 +1349,43 @@
            ENTER KEY HANDLING
            Allow Enter key to submit form from any input
            ======================================== */
-        document.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter' && e.target.classList.contains('form-control')) {
+        document.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && e.target.classList.contains('form-control')) {
+            loginForm.requestSubmit(); // triggers native submit with validation
+        }
+        });
+
+        loginForm.addEventListener('submit', function(e) {
+            hideError();
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            const role = roleInput.value;
+
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
                 e.preventDefault();
-                loginForm.dispatchEvent(new Event('submit'));
+                showError('Please enter a valid email address');
+                return false;
             }
+            if (password.length < 6) {
+                e.preventDefault();
+                showError('Password must be at least 6 characters long');
+                return false;
+            }
+            if (!role || (role !== 'student' && role !== 'teacher')) {
+                e.preventDefault();
+                showError('Please select a valid role');
+                return false;
+            }
+
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Signing In...';
+
+            // Re-enable button after 10s as a safety fallback
+            setTimeout(() => {
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Sign In';
+            }, 10000);
         });
 
         /* ========================================
