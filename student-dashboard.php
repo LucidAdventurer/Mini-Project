@@ -916,7 +916,7 @@ function timeAgo(string $datetime): string {
     <aside class="left-sidebar">
         <span class="left-sidebar-label">Navigation</span>
         <a href="student-dashboard.php" class="active"><i class="fa fa-home"></i> Dashboard</a>
-        <a href="#assessments-section" onclick="document.getElementById('assessments-section').scrollIntoView({behavior:'smooth'});return false;"><i class="fa fa-clipboard-list"></i> Assessments</a>
+        <a href="student-assessments.php"><i class="fa fa-clipboard-list"></i> Assessments</a>
         <a href="student-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
         <a href="notifications.php" style="position:relative">
             <i class="fa fa-bell"></i> Notifications
@@ -955,7 +955,7 @@ function timeAgo(string $datetime): string {
             <div class="assessments-section" id="assessments-section">
                 <div class="section-header">
                     <h2 class="section-title">Available Assessments</h2>
-                    <a href="all-assessments.php" class="view-all-link">View All →</a>
+                    <a href="student-assessments.php" class="view-all-link">View All →</a>
                 </div>
                 <div class="filter-tabs">
                     <button class="filter-tab active" data-category="all">All Tests</button>
