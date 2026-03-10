@@ -144,6 +144,21 @@ if ($activityResult['success'] && $activityResult['result']) {
     $activityResult['result']->free();
 }
 
+// ── Latest 5 notifications for dropdown ──
+$notifDropResult = safePreparedQuery($conn,
+    "SELECT notification_id, title, message, notification_type, is_read, created_at
+     FROM notifications WHERE user_id = ?
+     ORDER BY created_at DESC LIMIT 5",
+    "i", [$userId]
+);
+$notifItems = [];
+if ($notifDropResult['success'] && $notifDropResult['result']) {
+    while ($row = $notifDropResult['result']->fetch_assoc()) {
+        $notifItems[] = $row;
+    }
+    $notifDropResult['result']->free();
+}
+
 // ── Overall completion % (attempts used vs available) ──
 $completionPct = ($availableTests > 0)
     ? min(100, round(($testsCompleted / $availableTests) * 100))
@@ -251,11 +266,61 @@ function timeAgo(string $datetime): string {
             transition: 0.3s;
         }
         .notification-icon:hover { background: #e2e8f0; }
+        /* Notification dropdown */
+        .notif-dropdown-wrap { position: relative; }
+        .notif-dropdown {
+            position: absolute;
+            top: calc(100% + 10px);
+            right: 0;
+            background: white;
+            border-radius: 14px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+            width: 340px;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-8px);
+            transition: 0.25s;
+            z-index: 1002;
+        }
+        .notif-dropdown.show { opacity: 1; visibility: visible; transform: translateY(0); }
+        .notif-dropdown-header {
+            padding: 16px 20px 12px;
+            font-weight: 700; font-size: 15px; color: #2d3748;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .notif-list { max-height: 320px; overflow-y: auto; }
+        .notif-item {
+            display: flex; gap: 12px; align-items: flex-start;
+            padding: 14px 20px;
+            border-bottom: 1px solid #f0f4f8;
+            cursor: pointer; transition: background .15s;
+        }
+        .notif-item:hover { background: #f7fafc; }
+        .notif-item.unread { background: #f0f7ff; }
+        .notif-item.unread:hover { background: #e6f0fb; }
+        .notif-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #4facfe; flex-shrink: 0; margin-top: 5px;
+        }
+        .notif-dot.read { background: transparent; }
+        .notif-item-body { flex: 1; }
+        .notif-item-title { font-size: 13px; font-weight: 600; color: #2d3748; margin-bottom: 3px; }
+        .notif-item-msg { font-size: 12px; color: #718096; line-height: 1.4; }
+        .notif-item-time { font-size: 11px; color: #a0aec0; margin-top: 4px; }
+        .notif-see-all {
+            display: block; text-align: center;
+            padding: 12px; font-size: 13px; font-weight: 600;
+            color: #4facfe; text-decoration: none;
+            border-top: 1px solid #e2e8f0;
+            transition: background .15s; border-radius: 0 0 14px 14px;
+        }
+        .notif-see-all:hover { background: #f7fafc; }
+        .notif-empty { padding: 28px 20px; text-align: center; color: #a0aec0; font-size: 13px; }
         .notification-badge {
             position: absolute;
             top: -5px;
             right: -5px;
-            background: #ff6b6b;
+            background: #e53e3e;
             color: white;
             width: 20px;
             height: 20px;
@@ -265,6 +330,14 @@ function timeAgo(string $datetime): string {
             align-items: center;
             justify-content: center;
             font-weight: bold;
+            animation: badgePulse 1.8s ease-in-out infinite;
+            box-shadow: 0 0 0 0 rgba(229,62,62,0.6);
+        }
+        @keyframes badgePulse {
+            0%   { box-shadow: 0 0 0 0 rgba(229,62,62,0.6); }
+            70%  { box-shadow: 0 0 0 7px rgba(229,62,62,0); }
+            100% { box-shadow: 0 0 0 0 rgba(229,62,62,0); }
+        }
         }
         .profile-dropdown-container { position: relative; }
         .profile-button {
@@ -760,7 +833,7 @@ function timeAgo(string $datetime): string {
 <body>
     <nav class="navbar">
         <a href="student-dashboard.php" class="navbar-brand">
-            <div class="brand-logo">P</div>
+            <img src="prepaura-logo.png" alt="Prepaura Logo" style="width:44px;height:44px;border-radius:10px;object-fit:contain;background:white;padding:3px;">
             <div style="display:flex;flex-direction:column;line-height:1.1;color:white">
                 <span style="font-size:18px;font-weight:800;letter-spacing:.5px">PREPAURA</span>
                 <span style="font-size:11px;font-weight:400;opacity:.85;font-style:italic">Placement Training Platform</span>
@@ -771,12 +844,38 @@ function timeAgo(string $datetime): string {
             <input type="text" id="searchInput" placeholder="Search assessments..." autocomplete="off">
         </div>
         <div class="nav-profile">
-            <button class="notification-icon" onclick="showNotifications()">
-                <span>🔔</span>
-                <?php if ($unreadCount > 0): ?>
-                <div class="notification-badge"><?= $unreadCount ?></div>
-                <?php endif; ?>
-            </button>
+            <div class="notif-dropdown-wrap">
+                <button class="notification-icon" onclick="toggleNotifDropdown()" id="notifBtn">
+                    <span>🔔</span>
+                    <?php if ($unreadCount > 0): ?>
+                    <div class="notification-badge"><?= $unreadCount ?></div>
+                    <?php endif; ?>
+                </button>
+                <div class="notif-dropdown" id="notifDropdown">
+                    <div class="notif-dropdown-header">Notifications</div>
+                    <div class="notif-list">
+                        <?php if (empty($notifItems)): ?>
+                            <div class="notif-empty">No notifications yet.</div>
+                        <?php else: foreach ($notifItems as $n):
+                            $isUnread = !$n['is_read'];
+                            $typeIcons = ['info'=>'ℹ️','success'=>'✅','warning'=>'⚠️','error'=>'❌','assessment'=>'📝','result'=>'🏆','material'=>'📚'];
+                            $icon = $typeIcons[$n['notification_type']] ?? '🔔';
+                        ?>
+                        <div class="notif-item <?= $isUnread ? 'unread' : '' ?>">
+                            <div class="notif-dot <?= $isUnread ? '' : 'read' ?>"></div>
+                            <div class="notif-item-body">
+                                <div class="notif-item-title"><?= $icon ?> <?= htmlspecialchars($n['title']) ?></div>
+                                <?php if ($n['message']): ?>
+                                <div class="notif-item-msg"><?= htmlspecialchars($n['message']) ?></div>
+                                <?php endif; ?>
+                                <div class="notif-item-time"><?= timeAgo($n['created_at']) ?></div>
+                            </div>
+                        </div>
+                        <?php endforeach; endif; ?>
+                    </div>
+                    <a href="notifications.php" class="notif-see-all">See All</a>
+                </div>
+            </div>
             <div class="profile-dropdown-container">
                 <button class="profile-button" onclick="toggleProfileDropdown()" aria-label="Profile menu" aria-expanded="false">
                     <div class="profile-avatar" aria-hidden="true"><?php echo $userInitials; ?></div>
@@ -818,6 +917,12 @@ function timeAgo(string $datetime): string {
         <span class="left-sidebar-label">Navigation</span>
         <a href="student-dashboard.php" class="active"><i class="fa fa-home"></i> Dashboard</a>
         <a href="student-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
+        <a href="notifications.php" style="position:relative">
+            <i class="fa fa-bell"></i> Notifications
+            <?php if ($unreadCount > 0): ?>
+            <span style="margin-left:auto;background:#e53e3e;color:white;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;min-width:20px;text-align:center;"><?= $unreadCount ?></span>
+            <?php endif; ?>
+        </a>
         <div class="left-sidebar-bottom">
             <button onclick="handleLogout()"><i class="fa fa-sign-out-alt"></i> Logout</button>
         </div>
@@ -970,6 +1075,8 @@ function timeAgo(string $datetime): string {
 
 
     <script>
+        const CSRF_TOKEN = <?= json_encode($_SESSION['csrf_token']) ?>;
+
         function toggleProfileDropdown() {
             const dropdown = document.getElementById('profileDropdown');
             const overlay = document.getElementById('dropdownOverlay');
@@ -979,6 +1086,7 @@ function timeAgo(string $datetime): string {
 
         function closeProfileDropdown() {
             document.getElementById('profileDropdown').classList.remove('show');
+            document.getElementById('notifDropdown').classList.remove('show');
             document.getElementById('dropdownOverlay').classList.remove('show');
         }
 
@@ -988,8 +1096,28 @@ function timeAgo(string $datetime): string {
             }
         }
 
-        function showNotifications() {
-            alert('Notifications:\n\n1. New test available: Web Development Quiz\n2. Your result is ready: SQL Basics\n3. Reminder: Complete pending tests');
+        function toggleNotifDropdown() {
+            const dd = document.getElementById('notifDropdown');
+            const overlay = document.getElementById('dropdownOverlay');
+            const isOpen = dd.classList.contains('show');
+            // Close profile dropdown if open
+            document.getElementById('profileDropdown').classList.remove('show');
+            dd.classList.toggle('show', !isOpen);
+            overlay.classList.toggle('show', !isOpen);
+            // Mark all as read when opening
+            if (!isOpen) {
+                fetch('api/notifications/mark-read.php', {
+                    method: 'POST',
+                    headers: { 'X-CSRF-Token': CSRF_TOKEN, 'Content-Type': 'application/json' }
+                }).then(() => {
+                    // Clear badge
+                    const badge = document.querySelector('.notification-badge');
+                    if (badge) badge.remove();
+                    // Remove unread highlights
+                    document.querySelectorAll('.notif-item.unread').forEach(el => el.classList.remove('unread'));
+                    document.querySelectorAll('.notif-dot:not(.read)').forEach(el => el.classList.add('read'));
+                }).catch(() => {});
+            }
         }
 
         function startAssessment(id) {
@@ -1042,6 +1170,43 @@ function timeAgo(string $datetime): string {
                 setTimeout(() => bar.style.width = width, 100);
             });
         });
+
+        // ── Live notification badge polling ──
+        let lastUnreadCount = <?= $unreadCount ?>;
+
+        function updateNotifBadge(count) {
+            const wrap = document.querySelector('.notif-dropdown-wrap') || document.querySelector('.notification-icon').parentElement;
+            let badge = document.querySelector('.notification-badge');
+            if (count > 0) {
+                if (!badge) {
+                    badge = document.createElement('div');
+                    badge.className = 'notification-badge';
+                    document.querySelector('#notifBtn').appendChild(badge);
+                }
+                badge.textContent = count > 99 ? '99+' : count;
+            } else {
+                if (badge) badge.remove();
+            }
+        }
+
+        function pollNotifications() {
+            fetch('api/notifications/mark-read.php', { method: 'GET' })
+                .then(() => {}) .catch(() => {});
+
+            // Use a dedicated lightweight count endpoint
+            fetch('api/notifications/unread-count.php')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success && typeof data.count === 'number') {
+                        updateNotifBadge(data.count);
+                        lastUnreadCount = data.count;
+                    }
+                })
+                .catch(() => {});
+        }
+
+        // Poll every 30 seconds
+        setInterval(pollNotifications, 30000);
     </script>
 </body>
 </html>
