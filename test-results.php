@@ -146,7 +146,7 @@ if ($attemptId <= 0) {
             overflow: hidden;
         }
         .results-header::before {
-            content: '🎉 🌟 ✨ 🎊 ⭐';
+           /*content: '🎉 🌟 ✨ 🎊 ⭐';*/
             position: absolute; top: -20px; left: 0;
             width: 100%; font-size: 40px;
             opacity: 0.1;

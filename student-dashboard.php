@@ -33,7 +33,17 @@ if ($statsResult['success'] && $statsResult['result']) {
     $statsResult['result']->free();
 }
 
-// ── Available assessments (active, within date window, accessible to this student) ──
+// ── Unread notification count ──
+$notifResult = safePreparedQuery($conn,
+    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
+    "i", [$userId]
+);
+$unreadCount = 0;
+if ($notifResult['success'] && $notifResult['result']) {
+    $notifRow    = $notifResult['result']->fetch_assoc();
+    $unreadCount = (int)($notifRow['cnt'] ?? 0);
+    $notifResult['result']->free();
+}
 // Accessible = public OR explicitly allowed for this user/department
 $availCountResult = safePreparedQuery($conn,
     "SELECT COUNT(DISTINCT a.assessment_id) AS cnt
@@ -134,6 +144,21 @@ if ($activityResult['success'] && $activityResult['result']) {
     $activityResult['result']->free();
 }
 
+// ── Latest 5 notifications for dropdown ──
+$notifDropResult = safePreparedQuery($conn,
+    "SELECT notification_id, title, message, notification_type, is_read, created_at
+     FROM notifications WHERE user_id = ?
+     ORDER BY created_at DESC LIMIT 5",
+    "i", [$userId]
+);
+$notifItems = [];
+if ($notifDropResult['success'] && $notifDropResult['result']) {
+    while ($row = $notifDropResult['result']->fetch_assoc()) {
+        $notifItems[] = $row;
+    }
+    $notifDropResult['result']->free();
+}
+
 // ── Overall completion % (attempts used vs available) ──
 $completionPct = ($availableTests > 0)
     ? min(100, round(($testsCompleted / $availableTests) * 100))
@@ -207,23 +232,20 @@ function timeAgo(string $datetime): string {
             margin: 0 30px;
             position: relative;
         }
-        .search-input {
+        .nav-search input {
             width: 100%;
-            padding: 10px 40px 10px 15px;
+            padding: 10px 20px 10px 45px;
             border: 2px solid #e2e8f0;
             border-radius: 10px;
-            font-size: 14px;
-        }
-        .search-input:focus {
+            font-family: inherit; font-size: 14px;
+            background: #f7fafc; color: #2d3748;
             outline: none;
-            border-color: var(--primary);
+            transition: border-color .2s, box-shadow .2s;
         }
-        .search-icon {
-            position: absolute;
-            right: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #a0aec0;
+        .nav-search input:focus { border-color: #4facfe; box-shadow: 0 0 0 3px rgba(79,172,254,.15); }
+        .nav-search .sicon {
+            position: absolute; left: 15px; top: 50%; transform: translateY(-50%);
+            color: #a0aec0; font-size: 14px;
         }
         .nav-profile {
             display: flex;
@@ -244,11 +266,61 @@ function timeAgo(string $datetime): string {
             transition: 0.3s;
         }
         .notification-icon:hover { background: #e2e8f0; }
+        /* Notification dropdown */
+        .notif-dropdown-wrap { position: relative; }
+        .notif-dropdown {
+            position: absolute;
+            top: calc(100% + 10px);
+            right: 0;
+            background: white;
+            border-radius: 14px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+            width: 340px;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-8px);
+            transition: 0.25s;
+            z-index: 1002;
+        }
+        .notif-dropdown.show { opacity: 1; visibility: visible; transform: translateY(0); }
+        .notif-dropdown-header {
+            padding: 16px 20px 12px;
+            font-weight: 700; font-size: 15px; color: #2d3748;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .notif-list { max-height: 320px; overflow-y: auto; }
+        .notif-item {
+            display: flex; gap: 12px; align-items: flex-start;
+            padding: 14px 20px;
+            border-bottom: 1px solid #f0f4f8;
+            cursor: pointer; transition: background .15s;
+        }
+        .notif-item:hover { background: #f7fafc; }
+        .notif-item.unread { background: #f0f7ff; }
+        .notif-item.unread:hover { background: #e6f0fb; }
+        .notif-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #4facfe; flex-shrink: 0; margin-top: 5px;
+        }
+        .notif-dot.read { background: transparent; }
+        .notif-item-body { flex: 1; }
+        .notif-item-title { font-size: 13px; font-weight: 600; color: #2d3748; margin-bottom: 3px; }
+        .notif-item-msg { font-size: 12px; color: #718096; line-height: 1.4; }
+        .notif-item-time { font-size: 11px; color: #a0aec0; margin-top: 4px; }
+        .notif-see-all {
+            display: block; text-align: center;
+            padding: 12px; font-size: 13px; font-weight: 600;
+            color: #4facfe; text-decoration: none;
+            border-top: 1px solid #e2e8f0;
+            transition: background .15s; border-radius: 0 0 14px 14px;
+        }
+        .notif-see-all:hover { background: #f7fafc; }
+        .notif-empty { padding: 28px 20px; text-align: center; color: #a0aec0; font-size: 13px; }
         .notification-badge {
             position: absolute;
             top: -5px;
             right: -5px;
-            background: #ff6b6b;
+            background: #e53e3e;
             color: white;
             width: 20px;
             height: 20px;
@@ -258,6 +330,14 @@ function timeAgo(string $datetime): string {
             align-items: center;
             justify-content: center;
             font-weight: bold;
+            animation: badgePulse 1.8s ease-in-out infinite;
+            box-shadow: 0 0 0 0 rgba(229,62,62,0.6);
+        }
+        @keyframes badgePulse {
+            0%   { box-shadow: 0 0 0 0 rgba(229,62,62,0.6); }
+            70%  { box-shadow: 0 0 0 7px rgba(229,62,62,0); }
+            100% { box-shadow: 0 0 0 0 rgba(229,62,62,0); }
+        }
         }
         .profile-dropdown-container { position: relative; }
         .profile-button {
@@ -386,6 +466,57 @@ function timeAgo(string $datetime): string {
             margin: 0 auto;
             padding: 30px;
         }
+
+        /* ── LEFT NAV SIDEBAR ── */
+        .page-wrapper {
+            display: flex;
+            min-height: calc(100vh - 70px);
+        }
+        .left-sidebar {
+            width: 220px;
+            flex-shrink: 0;
+            padding: 24px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            background: transparent;
+            min-height: calc(100vh - 71px);
+            position: sticky;
+            top: 71px;
+            align-self: flex-start;
+        }
+        .left-sidebar-label {
+            font-size: 11px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .08em;
+            color: #718096; padding: 14px 12px 6px;
+        }
+        .left-sidebar a {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px; border-radius: 10px;
+            text-decoration: none; font-size: 14px; font-weight: 500;
+            color: #4a5568; transition: background .15s, color .15s;
+        }
+        .left-sidebar a:hover { background: rgba(35,76,106,.08); color: var(--primary); }
+        .left-sidebar a.active { background: rgba(35,76,106,.12); color: var(--primary); font-weight: 600; }
+        .left-sidebar a i { width: 18px; text-align: center; font-size: 15px; }
+        .left-sidebar-bottom {
+            margin-top: auto;
+            padding-top: 12px;
+            border-top: 1px solid rgba(35,76,106,.12);
+        }
+        .left-sidebar-bottom button {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px; border-radius: 10px;
+            font-size: 14px; font-weight: 500;
+            color: #e53e3e; background: none; border: none;
+            cursor: pointer; width: 100%;
+            transition: background .15s, color .15s;
+        }
+        .left-sidebar-bottom button:hover { background: rgba(229,62,62,.08); }
+        .left-sidebar-bottom button i { width: 18px; text-align: center; font-size: 15px; }
+        .page-content { flex: 1; min-width: 0; padding: 30px 30px 30px 0; }
+
+        @media (max-width: 900px) { .left-sidebar { display: none; } .page-content { padding: 30px; } }
         .welcome-section {
             background: white;
             border-radius: 20px;
@@ -659,31 +790,7 @@ function timeAgo(string $datetime): string {
             border-radius: 10px;
             transition: width 0.5s;
         }
-        .quick-actions {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            z-index: 50;
-        }
-        .action-button {
-            width: 60px;
-            height: 60px;
-            background: linear-gradient(135deg, #4facfe, #00f2fe);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 24px;
-            cursor: pointer;
-            box-shadow: 0 6px 20px rgba(79,172,254,0.4);
-            border: none;
-            transition: 0.3s;
-        }
-        .action-button:hover {
-            transform: scale(1.1);
-            box-shadow: 0 8px 30px rgba(79,172,254,0.6);
-        }
+
         .assessment-card.exhausted {
             opacity: 0.7;
         }
@@ -721,22 +828,54 @@ function timeAgo(string $datetime): string {
             .profile-name { display: none; }
         }
     </style>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
     <nav class="navbar">
         <a href="student-dashboard.php" class="navbar-brand">
-            <div class="brand-logo">P</div>
-            <span>Student Portal</span>
+            <img src="prepaura-logo.png" alt="Prepaura Logo" style="width:44px;height:44px;border-radius:10px;object-fit:contain;background:white;padding:3px;">
+            <div style="display:flex;flex-direction:column;line-height:1.1;color:white">
+                <span style="font-size:18px;font-weight:800;letter-spacing:.5px">PREPAURA</span>
+                <span style="font-size:11px;font-weight:400;opacity:.85;font-style:italic">Placement Training Platform</span>
+            </div>
         </a>
         <div class="nav-search">
-            <input type="text" class="search-input" placeholder="Search assessments..." id="searchInput">
-            <span class="search-icon">🔍</span>
+            <i class="fa fa-search sicon"></i>
+            <input type="text" id="searchInput" placeholder="Search assessments..." autocomplete="off">
         </div>
         <div class="nav-profile">
-            <button class="notification-icon" onclick="showNotifications()">
-                <span>🔔</span>
-                <div class="notification-badge">3</div>
-            </button>
+            <div class="notif-dropdown-wrap">
+                <button class="notification-icon" onclick="toggleNotifDropdown()" id="notifBtn">
+                    <span>🔔</span>
+                    <?php if ($unreadCount > 0): ?>
+                    <div class="notification-badge"><?= $unreadCount ?></div>
+                    <?php endif; ?>
+                </button>
+                <div class="notif-dropdown" id="notifDropdown">
+                    <div class="notif-dropdown-header">Notifications</div>
+                    <div class="notif-list">
+                        <?php if (empty($notifItems)): ?>
+                            <div class="notif-empty">No notifications yet.</div>
+                        <?php else: foreach ($notifItems as $n):
+                            $isUnread = !$n['is_read'];
+                            $typeIcons = ['info'=>'ℹ️','success'=>'✅','warning'=>'⚠️','error'=>'❌','assessment'=>'📝','result'=>'🏆','material'=>'📚'];
+                            $icon = $typeIcons[$n['notification_type']] ?? '🔔';
+                        ?>
+                        <div class="notif-item <?= $isUnread ? 'unread' : '' ?>">
+                            <div class="notif-dot <?= $isUnread ? '' : 'read' ?>"></div>
+                            <div class="notif-item-body">
+                                <div class="notif-item-title"><?= $icon ?> <?= htmlspecialchars($n['title']) ?></div>
+                                <?php if ($n['message']): ?>
+                                <div class="notif-item-msg"><?= htmlspecialchars($n['message']) ?></div>
+                                <?php endif; ?>
+                                <div class="notif-item-time"><?= timeAgo($n['created_at']) ?></div>
+                            </div>
+                        </div>
+                        <?php endforeach; endif; ?>
+                    </div>
+                    <a href="notifications.php" class="notif-see-all">See All</a>
+                </div>
+            </div>
             <div class="profile-dropdown-container">
                 <button class="profile-button" onclick="toggleProfileDropdown()" aria-label="Profile menu" aria-expanded="false">
                     <div class="profile-avatar" aria-hidden="true"><?php echo $userInitials; ?></div>
@@ -756,14 +895,6 @@ function timeAgo(string $datetime): string {
                             <span class="dropdown-item-icon">👤</span>
                             <span>My Profile</span>
                         </a>
-                        <a href="student-dashboard.php" class="dropdown-item">
-                            <span class="dropdown-item-icon">🏠</span>
-                            <span>Dashboard</span>
-                        </a>
-                        <a href="home.php" class="dropdown-item">
-                            <span class="dropdown-item-icon">📝</span>
-                            <span>Practice Tests</span>
-                        </a>
                         <a href="help.html" target="_blank" rel="noopener noreferrer" class="dropdown-item">
                             <span>❓</span>
                             <span>Help & Support</span>
@@ -781,7 +912,23 @@ function timeAgo(string $datetime): string {
 
     <div class="dropdown-overlay" id="dropdownOverlay" onclick="closeProfileDropdown()"></div>
 
-    <div class="container">
+    <div class="page-wrapper">
+    <aside class="left-sidebar">
+        <span class="left-sidebar-label">Navigation</span>
+        <a href="student-dashboard.php" class="active"><i class="fa fa-home"></i> Dashboard</a>
+        <a href="student-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
+        <a href="notifications.php" style="position:relative">
+            <i class="fa fa-bell"></i> Notifications
+            <?php if ($unreadCount > 0): ?>
+            <span style="margin-left:auto;background:#e53e3e;color:white;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;min-width:20px;text-align:center;"><?= $unreadCount ?></span>
+            <?php endif; ?>
+        </a>
+        <div class="left-sidebar-bottom">
+            <button onclick="handleLogout()"><i class="fa fa-sign-out-alt"></i> Logout</button>
+        </div>
+    </aside>
+    <div class="page-content">
+    <div class="container" style="padding: 0; max-width: 100%;">
         <div class="welcome-section">
             <div class="welcome-content">
                 <h1>Welcome back, <?php echo strtoupper(htmlspecialchars($userName)); ?> 👋</h1>
@@ -921,13 +1068,15 @@ function timeAgo(string $datetime): string {
                 </div>
             </div>
         </div>
-    </div>
+    </div><!-- /.container -->
+    </div><!-- /.page-content -->
+    </div><!-- /.page-wrapper -->
 
-    <div class="quick-actions">
-        <button class="action-button" onclick="showQuickActions()">➕</button>
-    </div>
+
 
     <script>
+        const CSRF_TOKEN = <?= json_encode($_SESSION['csrf_token']) ?>;
+
         function toggleProfileDropdown() {
             const dropdown = document.getElementById('profileDropdown');
             const overlay = document.getElementById('dropdownOverlay');
@@ -937,6 +1086,7 @@ function timeAgo(string $datetime): string {
 
         function closeProfileDropdown() {
             document.getElementById('profileDropdown').classList.remove('show');
+            document.getElementById('notifDropdown').classList.remove('show');
             document.getElementById('dropdownOverlay').classList.remove('show');
         }
 
@@ -946,8 +1096,28 @@ function timeAgo(string $datetime): string {
             }
         }
 
-        function showNotifications() {
-            alert('Notifications:\n\n1. New test available: Web Development Quiz\n2. Your result is ready: SQL Basics\n3. Reminder: Complete pending tests');
+        function toggleNotifDropdown() {
+            const dd = document.getElementById('notifDropdown');
+            const overlay = document.getElementById('dropdownOverlay');
+            const isOpen = dd.classList.contains('show');
+            // Close profile dropdown if open
+            document.getElementById('profileDropdown').classList.remove('show');
+            dd.classList.toggle('show', !isOpen);
+            overlay.classList.toggle('show', !isOpen);
+            // Mark all as read when opening
+            if (!isOpen) {
+                fetch('api/notifications/mark-read.php', {
+                    method: 'POST',
+                    headers: { 'X-CSRF-Token': CSRF_TOKEN, 'Content-Type': 'application/json' }
+                }).then(() => {
+                    // Clear badge
+                    const badge = document.querySelector('.notification-badge');
+                    if (badge) badge.remove();
+                    // Remove unread highlights
+                    document.querySelectorAll('.notif-item.unread').forEach(el => el.classList.remove('unread'));
+                    document.querySelectorAll('.notif-dot:not(.read)').forEach(el => el.classList.add('read'));
+                }).catch(() => {});
+            }
         }
 
         function startAssessment(id) {
@@ -960,9 +1130,7 @@ function timeAgo(string $datetime): string {
             window.location.href = 'test-results.php?attempt_id=' + id;
         }
 
-        function showQuickActions() {
-            alert('Quick Actions:\n\n• Take Practice Test\n• View Progress Report\n• Schedule Assessment\n• Contact Support');
-        }
+
 
         // Filter tabs
         document.querySelectorAll('.filter-tab').forEach(tab => {
@@ -1002,6 +1170,43 @@ function timeAgo(string $datetime): string {
                 setTimeout(() => bar.style.width = width, 100);
             });
         });
+
+        // ── Live notification badge polling ──
+        let lastUnreadCount = <?= $unreadCount ?>;
+
+        function updateNotifBadge(count) {
+            const wrap = document.querySelector('.notif-dropdown-wrap') || document.querySelector('.notification-icon').parentElement;
+            let badge = document.querySelector('.notification-badge');
+            if (count > 0) {
+                if (!badge) {
+                    badge = document.createElement('div');
+                    badge.className = 'notification-badge';
+                    document.querySelector('#notifBtn').appendChild(badge);
+                }
+                badge.textContent = count > 99 ? '99+' : count;
+            } else {
+                if (badge) badge.remove();
+            }
+        }
+
+        function pollNotifications() {
+            fetch('api/notifications/mark-read.php', { method: 'GET' })
+                .then(() => {}) .catch(() => {});
+
+            // Use a dedicated lightweight count endpoint
+            fetch('api/notifications/unread-count.php')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success && typeof data.count === 'number') {
+                        updateNotifBadge(data.count);
+                        lastUnreadCount = data.count;
+                    }
+                })
+                .catch(() => {});
+        }
+
+        // Poll every 30 seconds
+        setInterval(pollNotifications, 30000);
     </script>
 </body>
 </html>

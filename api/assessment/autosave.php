@@ -6,9 +6,14 @@
  * is taking the test. Saves/updates each answer so progress
  * is never lost on a page refresh or connection drop.
  *
+ * FIX: The old guard `!in_array($selectedAnswer, ['A','B','C','D'])`
+ * silently dropped multiple_select answers ("A,C") and short_answer /
+ * fill_blank freetext. Now accepts any non-empty string up to 500 chars.
+ * Grading is done only in submit.php — autosave just stores the raw value.
+ *
  * POST JSON {
  *   attempt_id:    int,
- *   answers:       { "questionId": "A"|"B"|"C"|"D", ... },
+ *   answers:       { "questionId": "A"|"B"|"C"|"D"|"A,C"|"freetext", ... },
  *   time_remaining: int   (seconds, optional — for logging)
  * }
  * Returns { success: bool }
@@ -56,17 +61,25 @@ if (!$check['success'] || !$check['result'] || $check['result']->num_rows === 0)
     echo json_encode(['success' => false, 'error' => 'Attempt not found or already submitted.']);
     exit;
 }
-$assessmentId = (int)$check['result']->fetch_assoc()['assessment_id'];
 $check['result']->free();
 
-/* ── Upsert each answer ── */
+/* ── Upsert each answer ──
+ * Accept any non-empty answer string — MCQ single letter, comma-separated
+ * multiple_select, or freetext for short_answer/fill_blank.
+ * Truncate to 500 chars as a safety cap.
+ * Grading happens in submit.php, not here.
+ */
 foreach ($answers as $questionId => $selectedAnswer) {
     $questionId     = (int)$questionId;
     $selectedAnswer = strtoupper(trim((string)$selectedAnswer));
 
-    if ($questionId <= 0 || !in_array($selectedAnswer, ['A','B','C','D'], true)) continue;
+    if ($questionId <= 0 || $selectedAnswer === '') {
+        continue;
+    }
 
-    /* INSERT or UPDATE — we don't grade here, just store the selection */
+    // Cap length to prevent oversized payloads being stored
+    $selectedAnswer = mb_substr($selectedAnswer, 0, 500);
+
     safePreparedQuery($conn,
         "INSERT INTO answers (attempt_id, question_id, selected_answer, answered_at)
          VALUES (?, ?, ?, NOW())

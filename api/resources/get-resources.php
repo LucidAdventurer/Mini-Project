@@ -59,8 +59,8 @@ if ($role === 'admin') {
         $types       .= "i";
     }
 } else {
-    // Students see only public
-    $conditions[] = "m.is_public = 1";
+    // Students see only public resources uploaded by teachers
+    $conditions[] = "m.is_public = 1 AND u.user_type = 'teacher'";
 }
 
 if ($search !== '') {

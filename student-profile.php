@@ -17,7 +17,42 @@ $userId       = $user['user_id'];
 $memberSince  = !empty($user['created_at']) ? date('F Y', strtotime($user['created_at'])) : 'N/A';
 $lastLogin    = $user['last_login'] ?? null;
 
-// ── Aggregate stats from assessment_attempts ──────────────────────────────
+// ── Unread notification count ──
+$unreadResult = safePreparedQuery($conn,
+    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
+    "i", [$userId]
+);
+$unreadCount = 0;
+if ($unreadResult['success'] && $unreadResult['result']) {
+    $row = $unreadResult['result']->fetch_assoc();
+    $unreadCount = (int)($row['cnt'] ?? 0);
+    $unreadResult['result']->free();
+}
+
+// ── Latest 5 for navbar dropdown ──
+$notifDropResult = safePreparedQuery($conn,
+    "SELECT notification_id, title, message, notification_type, is_read, created_at
+     FROM notifications WHERE user_id = ?
+     ORDER BY created_at DESC LIMIT 5",
+    "i", [$userId]
+);
+$notifItems = [];
+if ($notifDropResult['success'] && $notifDropResult['result']) {
+    while ($nrow = $notifDropResult['result']->fetch_assoc()) {
+        $notifItems[] = $nrow;
+    }
+    $notifDropResult['result']->free();
+}
+
+function timeAgoProfile(string $datetime): string {
+    $diff = time() - strtotime($datetime);
+    if ($diff < 60)     return 'Just now';
+    if ($diff < 3600)   return floor($diff / 60)   . ' min ago';
+    if ($diff < 86400)  return floor($diff / 3600)  . ' hr ago';
+    if ($diff < 604800) return floor($diff / 86400) . ' day ago';
+    return date('d M Y', strtotime($datetime));
+}
+
 $statsQuery = "
     SELECT
         COUNT(DISTINCT a.attempt_id)             AS tests_completed,
@@ -342,7 +377,8 @@ function parseUA(string $ua): string {
         .navbar {
             background: var(--color-primary);
             box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-            padding: 12px 28px;
+            padding: 0 30px;
+            height: 70px;
             display: flex; align-items: center; justify-content: space-between;
             position: fixed; top: 0; left: 0; right: 0;
             z-index: 1000;
@@ -350,37 +386,107 @@ function parseUA(string $ua): string {
 
         .navbar-brand {
             display: flex; align-items: center; gap: 12px;
-            font-size: 20px; font-weight: 700; color: white; text-decoration: none;
+            text-decoration: none;
         }
 
-        .brand-logo {
-            width: 44px; height: 44px;
-            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+        .nav-search {
+            flex: 1; max-width: 500px; margin: 0 30px;
+            position: relative;
+        }
+        .nav-search input {
+            width: 100%;
+            padding: 10px 20px 10px 45px;
+            border: 2px solid #e2e8f0;
             border-radius: 10px;
-            display: flex; align-items: center; justify-content: center;
-            color: white; font-weight: 700; font-size: 18px;
-            border: 2px solid rgba(255,255,255,0.3);
+            font-family: inherit; font-size: 14px;
+            background: #f7fafc; color: #2d3748;
+            outline: none;
+            transition: border-color .2s, box-shadow .2s;
+        }
+        .nav-search input:focus { border-color: #4facfe; box-shadow: 0 0 0 3px rgba(79,172,254,.15); }
+        .nav-search .sicon {
+            position: absolute; left: 15px; top: 50%; transform: translateY(-50%);
+            color: #a0aec0; font-size: 14px;
         }
 
         .nav-profile { display: flex; align-items: center; gap: 15px; }
 
+        /* Notification bell */
+        .notif-dropdown-wrap { position: relative; }
+        .notification-btn {
+            position: relative; width: 40px; height: 40px;
+            background: #f7fafc; border-radius: 10px;
+            border: none; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px; transition: 0.3s;
+        }
+        .notification-btn:hover { background: #e2e8f0; }
+        .notif-badge {
+            position: absolute; top: -5px; right: -5px;
+            background: #e53e3e; color: white;
+            width: 20px; height: 20px; border-radius: 50%;
+            font-size: 11px; font-weight: bold;
+            display: flex; align-items: center; justify-content: center;
+            animation: badgePulse 1.8s ease-in-out infinite;
+        }
+        @keyframes badgePulse {
+            0%   { box-shadow: 0 0 0 0 rgba(229,62,62,0.6); }
+            70%  { box-shadow: 0 0 0 7px rgba(229,62,62,0); }
+            100% { box-shadow: 0 0 0 0 rgba(229,62,62,0); }
+        }
+        .notif-dropdown-menu {
+            position: absolute; top: calc(100% + 10px); right: 0;
+            background: white; border-radius: 14px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+            width: 340px; opacity: 0; visibility: hidden;
+            transform: translateY(-8px); transition: 0.25s; z-index: 1002;
+        }
+        .notif-dropdown-menu.show { opacity: 1; visibility: visible; transform: translateY(0); }
+        .notif-dd-header {
+            padding: 16px 20px 12px;
+            font-weight: 700; font-size: 15px; color: #2d3748;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .notif-dd-list { max-height: 320px; overflow-y: auto; }
+        .notif-dd-item {
+            display: flex; gap: 12px; align-items: flex-start;
+            padding: 14px 20px; border-bottom: 1px solid #f0f4f8;
+            cursor: pointer; transition: background .15s;
+        }
+        .notif-dd-item:hover { background: #f7fafc; }
+        .notif-dd-item.unread { background: #f0f7ff; }
+        .notif-dd-dot { width: 8px; height: 8px; border-radius: 50%; background: #4facfe; flex-shrink: 0; margin-top: 5px; }
+        .notif-dd-dot.read { background: transparent; }
+        .notif-dd-body { flex: 1; }
+        .notif-dd-title { font-size: 13px; font-weight: 600; color: #2d3748; margin-bottom: 3px; }
+        .notif-dd-msg   { font-size: 12px; color: #718096; line-height: 1.4; }
+        .notif-dd-time  { font-size: 11px; color: #a0aec0; margin-top: 4px; }
+        .notif-see-all {
+            display: block; text-align: center; padding: 12px;
+            font-size: 13px; font-weight: 600; color: #4facfe;
+            text-decoration: none; border-top: 1px solid #e2e8f0;
+            transition: background .15s; border-radius: 0 0 14px 14px;
+        }
+        .notif-see-all:hover { background: #f7fafc; }
+        .notif-dd-empty { padding: 28px 20px; text-align: center; color: #a0aec0; font-size: 13px; }
+
         .profile-button {
             display: flex; align-items: center; gap: 10px;
-            padding: 8px 15px;
+            padding: 6px 14px 6px 6px;
             background: #f7fafc;
-            border: none; border-radius: 10px;
-            cursor: pointer; transition: var(--transition);
-            position: relative;
+            border: 2px solid #e2e8f0; border-radius: 10px;
+            cursor: pointer; transition: background .2s;
+            position: relative; font-family: inherit;
         }
 
         .profile-button:hover { background: #e2e8f0; }
 
         .profile-avatar {
-            width: 35px; height: 35px;
+            width: 32px; height: 32px;
             background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
             border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
-            color: white; font-weight: bold; font-size: 14px;
+            color: white; font-weight: bold; font-size: 12px;
         }
 
         .profile-name { font-weight: 600; font-size: 14px; color: var(--color-text); }
@@ -388,23 +494,27 @@ function parseUA(string $ua): string {
         /* Dropdown */
         .profile-dropdown {
             position: absolute; top: calc(100% + 10px); right: 0;
-            background: var(--color-white); border-radius: var(--border-radius);
-            box-shadow: var(--shadow-lg); min-width: 220px;
+            background: var(--color-white); border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15); min-width: 220px;
             opacity: 0; visibility: hidden; transform: translateY(-10px);
             transition: var(--transition); z-index: 1001;
         }
 
         .profile-dropdown.active { opacity: 1; visibility: visible; transform: translateY(0); }
 
-        .profile-dropdown::before {
-            content: ''; position: absolute; top: -8px; right: 20px;
-            width: 16px; height: 16px; background: var(--color-white);
-            transform: rotate(45deg); border-radius: 3px;
+        .dropdown-header {
+            display: flex; align-items: center; gap: 12px;
+            padding: 16px; border-bottom: 1px solid var(--color-border);
         }
-
-        .dropdown-header { padding: 15px 20px; border-bottom: 1px solid var(--color-border); }
-        .dropdown-name  { font-weight: 600; font-size: 14px; color: var(--color-text); margin-bottom: 4px; }
-        .dropdown-email { font-size: 13px; color: var(--color-text-light); }
+        .dropdown-avatar {
+            width: 42px; height: 42px;
+            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 14px; font-weight: 700; flex-shrink: 0;
+        }
+        .dropdown-name  { font-weight: 700; font-size: 15px; color: var(--color-text); }
+        .dropdown-email { font-size: 12px; color: var(--color-text-light); margin-top: 2px; }
         .dropdown-menu  { padding: 8px 0; }
 
         .dropdown-item {
@@ -423,6 +533,48 @@ function parseUA(string $ua): string {
         /* ============================================
            BREADCRUMB
            ============================================ */
+        /* ============================================
+           SIDEBAR
+           ============================================ */
+        .page-wrapper { display: flex; min-height: calc(100vh - 70px); }
+        .left-sidebar {
+            width: 220px; flex-shrink: 0; padding: 24px 12px;
+            display: flex; flex-direction: column; gap: 2px;
+            min-height: calc(100vh - 70px);
+            position: sticky; top: 70px; align-self: flex-start;
+        }
+        .left-sidebar-label {
+            font-size: 11px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .08em;
+            color: #718096; padding: 14px 12px 6px;
+        }
+        .left-sidebar a {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px; border-radius: 10px;
+            text-decoration: none; font-size: 14px; font-weight: 500;
+            color: #4a5568; transition: background .15s, color .15s;
+        }
+        .left-sidebar a:hover { background: rgba(35,76,106,.08); color: var(--color-primary); }
+        .left-sidebar a.active { background: rgba(35,76,106,.12); color: var(--color-primary); font-weight: 600; }
+        .left-sidebar a i { width: 18px; text-align: center; font-size: 15px; }
+        .left-sidebar-bottom {
+            margin-top: auto; padding-top: 12px;
+            border-top: 1px solid rgba(35,76,106,.12);
+        }
+        .left-sidebar-bottom button {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px; border-radius: 10px;
+            font-size: 14px; font-weight: 500;
+            color: #e53e3e; background: none; border: none;
+            cursor: pointer; width: 100%;
+            transition: background .15s; font-family: inherit;
+        }
+        .left-sidebar-bottom button:hover { background: rgba(229,62,62,.08); }
+        .left-sidebar-bottom button i { width: 18px; text-align: center; font-size: 15px; }
+        .page-content { flex: 1; min-width: 0; padding: 24px 24px 40px 0; }
+
+        @media (max-width: 900px) { .left-sidebar { display: none; } .page-content { padding: 16px; } }
+
         .breadcrumb {
             max-width: 1100px; margin: 24px auto 0; padding: 0 20px;
             display: flex; align-items: center; gap: 8px;
@@ -436,7 +588,7 @@ function parseUA(string $ua): string {
            PAGE LAYOUT
            ============================================ */
         .container {
-            max-width: 1100px; margin: 24px auto 40px; padding: 0 20px;
+            max-width: 100%; margin: 0; padding: 0 8px;
             display: grid; grid-template-columns: 300px 1fr; gap: 24px;
         }
 
@@ -670,6 +822,7 @@ function parseUA(string $ua): string {
             .container { padding: 0 14px; }
         }
     </style>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
 
@@ -678,54 +831,101 @@ function parseUA(string $ua): string {
      ================================================ -->
 <nav class="navbar">
     <a href="student-dashboard.php" class="navbar-brand">
-        <div class="brand-logo">PT</div>
-        <span>Placement Portal</span>
+        <img src="prepaura-logo.png" alt="Prepaura Logo" style="width:44px;height:44px;border-radius:10px;object-fit:contain;background:white;padding:3px;">
+        <div style="display:flex;flex-direction:column;line-height:1.1;color:white">
+            <span style="font-size:18px;font-weight:800;letter-spacing:.5px">PREPAURA</span>
+            <span style="font-size:11px;font-weight:400;opacity:.85;font-style:italic">Placement Training Platform</span>
+        </div>
     </a>
 
     <div class="nav-profile">
-        <button class="profile-button" onclick="toggleProfileDropdown()" aria-expanded="false" aria-haspopup="true">
-            <div class="profile-avatar"><?php echo htmlspecialchars($userInitials); ?></div>
-            <span class="profile-name"><?php echo htmlspecialchars($userName); ?></span>
-            <span style="color:#a0aec0;">▼</span>
-        </button>
-
-        <div class="profile-dropdown" id="profileDropdown">
-            <div class="dropdown-header">
-                <div class="dropdown-name"><?php echo htmlspecialchars($userName); ?></div>
-                <div class="dropdown-email"><?php echo htmlspecialchars($userEmail); ?></div>
-                <div style="margin-top:6px;">
-                    <span style="display:inline-block;padding:2px 10px;background:linear-gradient(135deg,var(--color-primary),var(--color-primary-dark));color:#fff;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:0.5px;">Student</span>
+        <!-- Notification bell -->
+        <div class="notif-dropdown-wrap">
+            <button class="notification-btn" onclick="toggleNotifDropdown()" title="Notifications">
+                <span>🔔</span>
+                <?php if ($unreadCount > 0): ?>
+                <div class="notif-badge" id="notifBadge"><?= $unreadCount ?></div>
+                <?php endif; ?>
+            </button>
+            <div class="notif-dropdown-menu" id="notifDropdown">
+                <div class="notif-dd-header">Notifications</div>
+                <div class="notif-dd-list">
+                    <?php if (empty($notifItems)): ?>
+                        <div class="notif-dd-empty">No notifications yet.</div>
+                    <?php else: foreach ($notifItems as $n):
+                        $isU = !$n['is_read'];
+                        $typeIcons = ['info'=>'ℹ️','success'=>'✅','warning'=>'⚠️','error'=>'❌','assessment'=>'📝','result'=>'🏆','material'=>'📚'];
+                        $ico = $typeIcons[$n['notification_type']] ?? '🔔';
+                    ?>
+                    <div class="notif-dd-item <?= $isU ? 'unread' : '' ?>">
+                        <div class="notif-dd-dot <?= $isU ? '' : 'read' ?>"></div>
+                        <div class="notif-dd-body">
+                            <div class="notif-dd-title"><?= $ico ?> <?= htmlspecialchars($n['title']) ?></div>
+                            <?php if ($n['message']): ?>
+                            <div class="notif-dd-msg"><?= htmlspecialchars($n['message']) ?></div>
+                            <?php endif; ?>
+                            <div class="notif-dd-time"><?= timeAgoProfile($n['created_at']) ?></div>
+                        </div>
+                    </div>
+                    <?php endforeach; endif; ?>
                 </div>
+                <a href="notifications.php" class="notif-see-all">See All</a>
             </div>
-            <div class="dropdown-menu">
-                <a href="student-profile.php" class="dropdown-item" style="background:var(--color-bg-light);">
-                    <span>👤</span><span>My Profile</span>
-                </a>
-                <a href="student-dashboard.php" class="dropdown-item">
-                    <span>📊</span><span>Dashboard</span>
-                </a>
-                <a href="home.php" class="dropdown-item">
-                    <span>📝</span><span>Practice Tests</span>
-                </a>
-                <a href="help.html" target="_blank" rel="noopener noreferrer" class="dropdown-item">
-                    <span>❓</span>
-                    <span>Help & Support</span>
-                </a>
-                <div class="dropdown-divider"></div>
-                <button onclick="handleLogout()" class="dropdown-item danger">
-                    <span>🚪</span><span>Logout</span>
-                </button>
+        </div>
+
+        <!-- Profile dropdown -->
+        <div style="position:relative" id="profileWrapper">
+            <button class="profile-button" onclick="toggleProfileDropdown()" aria-expanded="false" aria-haspopup="true">
+                <div class="profile-avatar"><?php echo htmlspecialchars($userInitials); ?></div>
+                <span class="profile-name"><?php echo htmlspecialchars($userName); ?></span>
+                <i class="fa fa-chevron-down" style="font-size:11px;color:#718096;margin-left:4px;"></i>
+            </button>
+
+            <div class="profile-dropdown" id="profileDropdown">
+                <div class="dropdown-header">
+                    <div class="dropdown-avatar"><?php echo htmlspecialchars($userInitials); ?></div>
+                    <div>
+                        <div class="dropdown-name"><?php echo htmlspecialchars($userName); ?></div>
+                        <div class="dropdown-email"><?php echo htmlspecialchars($userEmail); ?></div>
+                    </div>
+                </div>
+                <div class="dropdown-menu">
+                    <a href="student-dashboard.php" class="dropdown-item">
+                        <i class="fa fa-home" style="width:18px"></i><span>Dashboard</span>
+                    </a>
+                    <a href="help.html" target="_blank" rel="noopener noreferrer" class="dropdown-item">
+                        <i class="fa fa-circle-question" style="width:18px"></i><span>Help & Support</span>
+                    </a>
+                    <div class="dropdown-divider"></div>
+                    <button onclick="handleLogout()" class="dropdown-item danger">
+                        <i class="fa fa-sign-out-alt" style="width:18px"></i><span>Logout</span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
 </nav>
 
 <!-- Breadcrumb -->
-<div class="breadcrumb">
-    <a href="student-dashboard.php">Dashboard</a>
-    <span>›</span>
-    <span>My Profile</span>
-</div>
+<div class="page-wrapper">
+
+<!-- LEFT SIDEBAR -->
+<aside class="left-sidebar">
+    <span class="left-sidebar-label">Navigation</span>
+    <a href="student-dashboard.php"><i class="fa fa-home"></i> Dashboard</a>
+    <a href="student-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
+    <a href="notifications.php" style="position:relative">
+        <i class="fa fa-bell"></i> Notifications
+        <?php if ($unreadCount > 0): ?>
+        <span style="margin-left:auto;background:#e53e3e;color:white;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;"><?= $unreadCount ?></span>
+        <?php endif; ?>
+    </a>
+    <div class="left-sidebar-bottom">
+        <button onclick="handleLogout()"><i class="fa fa-sign-out-alt"></i> Logout</button>
+    </div>
+</aside>
+
+<div class="page-content">
 
 <!-- ================================================
      MAIN LAYOUT
@@ -1200,7 +1400,9 @@ function parseUA(string $ua): string {
         </div><!-- /panel-security -->
 
     </main>
-</div>
+</div><!-- /.container -->
+</div><!-- /.page-content -->
+</div><!-- /.page-wrapper -->
 
 <script>
     /* ============================================
@@ -1218,19 +1420,43 @@ function parseUA(string $ua): string {
     /* ============================================
        PROFILE DROPDOWN
        ============================================ */
+    const CSRF_TOKEN = <?= json_encode($_SESSION['csrf_token']) ?>;
+
     function toggleProfileDropdown() {
         const dropdown = document.getElementById('profileDropdown');
         const button   = document.querySelector('.profile-button');
+        document.getElementById('notifDropdown').classList.remove('show');
         dropdown.classList.toggle('active');
         button.setAttribute('aria-expanded', dropdown.classList.contains('active'));
+    }
+
+    function toggleNotifDropdown() {
+        const dd = document.getElementById('notifDropdown');
+        document.getElementById('profileDropdown').classList.remove('active');
+        dd.classList.toggle('show');
+        if (dd.classList.contains('show')) {
+            fetch('api/notifications/mark-read.php', {
+                method: 'POST',
+                headers: { 'X-CSRF-Token': CSRF_TOKEN, 'Content-Type': 'application/json' }
+            }).then(() => {
+                const badge = document.getElementById('notifBadge');
+                if (badge) badge.remove();
+                document.querySelectorAll('.notif-dd-item.unread').forEach(el => el.classList.remove('unread'));
+                document.querySelectorAll('.notif-dd-dot:not(.read)').forEach(el => el.classList.add('read'));
+            }).catch(() => {});
+        }
     }
 
     document.addEventListener('click', function(e) {
         const btn      = document.querySelector('.profile-button');
         const dropdown = document.getElementById('profileDropdown');
-        if (!btn.contains(e.target) && dropdown.classList.contains('active')) {
+        const nw       = document.querySelector('.notif-dropdown-wrap');
+        if (btn && !btn.contains(e.target) && !document.getElementById('profileWrapper').contains(e.target)) {
             dropdown.classList.remove('active');
             btn.setAttribute('aria-expanded', 'false');
+        }
+        if (nw && !nw.contains(e.target)) {
+            document.getElementById('notifDropdown').classList.remove('show');
         }
     });
 
