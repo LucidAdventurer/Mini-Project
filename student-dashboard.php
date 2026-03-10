@@ -33,8 +33,7 @@ if ($statsResult['success'] && $statsResult['result']) {
     $statsResult['result']->free();
 }
 
-// ── Available assessments (active, within date window, accessible to this student) ──
-// Accessible = public OR explicitly allowed for this user/department
+// ── Available assessments count ──
 $availCountResult = safePreparedQuery($conn,
     "SELECT COUNT(DISTINCT a.assessment_id) AS cnt
      FROM assessments a
@@ -61,7 +60,8 @@ if ($availCountResult['success'] && $availCountResult['result']) {
 }
 
 // ── Fetch assessments for the dashboard list (latest 20) ──
-// Excludes assessments the student has already exhausted max_attempts on.
+// FIX: Added correlated subquery for last_attempt_id so the
+// "View Results" button on exhausted cards links to the correct attempt.
 $assessmentsResult = safePreparedQuery($conn,
     "SELECT
         a.assessment_id,
@@ -83,7 +83,8 @@ $assessmentsResult = safePreparedQuery($conn,
           WHERE aa2.assessment_id = a.assessment_id
             AND aa2.user_id = ?
             AND aa2.status  = 'completed'
-          ORDER BY aa2.submitted_at DESC LIMIT 1) AS last_attempt_id
+          ORDER BY aa2.submitted_at DESC
+          LIMIT 1) AS last_attempt_id
      FROM assessments a
      WHERE a.status = 'active'
        AND (a.available_from  IS NULL OR a.available_from  <= NOW())
@@ -134,7 +135,7 @@ if ($activityResult['success'] && $activityResult['result']) {
     $activityResult['result']->free();
 }
 
-// ── Overall completion % (attempts used vs available) ──
+// ── Overall completion % ──
 $completionPct = ($availableTests > 0)
     ? min(100, round(($testsCompleted / $availableTests) * 100))
     : 0;
@@ -315,6 +316,9 @@ function timeAgo(string $datetime): string {
         .dropdown-header {
             padding: 20px;
             border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
         .dropdown-avatar {
             width: 50px;
@@ -327,10 +331,9 @@ function timeAgo(string $datetime): string {
             color: white;
             font-weight: bold;
             font-size: 20px;
+            flex-shrink: 0;
         }
-        .dropdown-user-info {
-            flex: 1;
-        }
+        .dropdown-user-info { flex: 1; }
         .dropdown-user-name {
             font-weight: 700;
             font-size: 16px;
@@ -513,18 +516,9 @@ function timeAgo(string $datetime): string {
             font-size: 12px;
             font-weight: 600;
         }
-        .difficulty-badge.easy {
-            background: #c6f6d5;
-            color: #22543d;
-        }
-        .difficulty-badge.medium {
-            background: #feebc8;
-            color: #7c2d12;
-        }
-        .difficulty-badge.hard {
-            background: #fed7d7;
-            color: #742a2a;
-        }
+        .difficulty-badge.easy   { background: #c6f6d5; color: #22543d; }
+        .difficulty-badge.medium { background: #feebc8; color: #7c2d12; }
+        .difficulty-badge.hard   { background: #fed7d7; color: #742a2a; }
         .assessment-meta {
             display: flex;
             gap: 20px;
@@ -538,10 +532,7 @@ function timeAgo(string $datetime): string {
             font-size: 13px;
             color: #718096;
         }
-        .assessment-actions {
-            display: flex;
-            gap: 10px;
-        }
+        .assessment-actions { display: flex; gap: 10px; }
         .btn-start {
             padding: 10px 24px;
             background: linear-gradient(135deg, #4facfe, #00f2fe);
@@ -568,10 +559,7 @@ function timeAgo(string $datetime): string {
             cursor: pointer;
             transition: 0.3s;
         }
-        .btn-details:hover {
-            background: #4facfe;
-            color: white;
-        }
+        .btn-details:hover { background: #4facfe; color: white; }
         .sidebar {
             display: flex;
             flex-direction: column;
@@ -600,10 +588,7 @@ function timeAgo(string $datetime): string {
             padding-bottom: 15px;
             border-bottom: 1px solid #e2e8f0;
         }
-        .activity-item:last-child {
-            border-bottom: none;
-            padding-bottom: 0;
-        }
+        .activity-item:last-child { border-bottom: none; padding-bottom: 0; }
         .activity-icon {
             width: 40px;
             height: 40px;
@@ -623,10 +608,7 @@ function timeAgo(string $datetime): string {
             color: #2d3748;
             margin-bottom: 4px;
         }
-        .activity-time {
-            font-size: 12px;
-            color: #a0aec0;
-        }
+        .activity-time { font-size: 12px; color: #a0aec0; }
         .progress-chart {
             height: 200px;
             background: linear-gradient(135deg, #f7fafc, #e2e8f0);
@@ -684,13 +666,8 @@ function timeAgo(string $datetime): string {
             transform: scale(1.1);
             box-shadow: 0 8px 30px rgba(79,172,254,0.6);
         }
-        .assessment-card.exhausted {
-            opacity: 0.7;
-        }
-        .assessment-card.exhausted:hover {
-            border-color: #e2e8f0;
-            box-shadow: none;
-        }
+        .assessment-card.exhausted { opacity: 0.7; }
+        .assessment-card.exhausted:hover { border-color: #e2e8f0; box-shadow: none; }
         .state-message {
             display: flex;
             flex-direction: column;
@@ -713,11 +690,7 @@ function timeAgo(string $datetime): string {
         @media (max-width: 768px) {
             .navbar { padding: 15px; }
             .container { padding: 15px; }
-            .welcome-section {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 20px;
-            }
+            .welcome-section { flex-direction: column; align-items: flex-start; gap: 20px; }
             .profile-name { display: none; }
         }
     </style>
@@ -766,7 +739,7 @@ function timeAgo(string $datetime): string {
                         </a>
                         <a href="help.html" target="_blank" rel="noopener noreferrer" class="dropdown-item">
                             <span>❓</span>
-                            <span>Help & Support</span>
+                            <span>Help &amp; Support</span>
                         </a>
                         <div class="dropdown-divider"></div>
                         <button onclick="handleLogout()" class="dropdown-item logout">
@@ -830,16 +803,16 @@ function timeAgo(string $datetime): string {
                         </div>
                     <?php else: ?>
                         <?php foreach ($assessments as $a):
-                            $id           = (int) $a['assessment_id'];
+                            $id            = (int) $a['assessment_id'];
                             $lastAttemptId = (int) ($a['last_attempt_id'] ?? 0);
-                            $attemptsLeft = (int)$a['max_attempts'] - (int)$a['attempts_used'];
-                            $exhausted    = $attemptsLeft <= 0;
-                            $catClass     = htmlspecialchars(strtolower($a['category']));
-                            $diff         = strtolower($a['difficulty']);
-                            $diffLabel    = ucfirst($diff);
-                            $deadline     = $a['available_until']
-                                            ? date('d M Y, g:i A', strtotime($a['available_until']))
-                                            : null;
+                            $attemptsLeft  = (int)$a['max_attempts'] - (int)$a['attempts_used'];
+                            $exhausted     = $attemptsLeft <= 0;
+                            $catClass      = htmlspecialchars(strtolower($a['category']));
+                            $diff          = strtolower($a['difficulty']);
+                            $diffLabel     = ucfirst($diff);
+                            $deadline      = $a['available_until']
+                                             ? date('d M Y, g:i A', strtotime($a['available_until']))
+                                             : null;
                         ?>
                         <div class="assessment-card <?= $exhausted ? 'exhausted' : '' ?>" data-category="<?= $catClass ?>">
                             <div class="assessment-header">
@@ -870,7 +843,11 @@ function timeAgo(string $datetime): string {
                             </div>
                             <?php else: ?>
                             <div class="assessment-actions">
-                                <button class="btn-details" onclick="viewDetails(<?= $lastAttemptId ?>)">View Results</button>
+                                <?php if ($lastAttemptId > 0): ?>
+                                <button class="btn-details" onclick="viewResults(<?= $lastAttemptId ?>)">View Results</button>
+                                <?php else: ?>
+                                <span style="font-size:13px;color:#a0aec0;">No results available</span>
+                                <?php endif ?>
                             </div>
                             <?php endif ?>
                         </div>
@@ -930,7 +907,7 @@ function timeAgo(string $datetime): string {
     <script>
         function toggleProfileDropdown() {
             const dropdown = document.getElementById('profileDropdown');
-            const overlay = document.getElementById('dropdownOverlay');
+            const overlay  = document.getElementById('dropdownOverlay');
             dropdown.classList.toggle('show');
             overlay.classList.toggle('show');
         }
@@ -956,8 +933,14 @@ function timeAgo(string $datetime): string {
             }
         }
 
+        // viewDetails: for non-exhausted cards — goes to the assessment preview
         function viewDetails(id) {
-            window.location.href = 'test-results.php?attempt_id=' + id;
+            window.location.href = 'test-preview.php?id=' + id;
+        }
+
+        // viewResults: for exhausted cards — goes directly to attempt results
+        function viewResults(attemptId) {
+            window.location.href = 'test-results.php?attempt_id=' + attemptId;
         }
 
         function showQuickActions() {
@@ -966,7 +949,7 @@ function timeAgo(string $datetime): string {
 
         // Filter tabs
         document.querySelectorAll('.filter-tab').forEach(tab => {
-            tab.addEventListener('click', function() {
+            tab.addEventListener('click', function () {
                 document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
                 this.classList.add('active');
                 const category = this.dataset.category;
@@ -980,11 +963,11 @@ function timeAgo(string $datetime): string {
             });
         });
 
-        // Search functionality
-        document.getElementById('searchInput').addEventListener('input', function(e) {
+        // Search
+        document.getElementById('searchInput').addEventListener('input', function (e) {
             const search = e.target.value.toLowerCase();
             document.querySelectorAll('.assessment-card').forEach(card => {
-                const title = card.querySelector('.assessment-title').textContent.toLowerCase();
+                const title    = card.querySelector('.assessment-title').textContent.toLowerCase();
                 const category = card.querySelector('.assessment-category').textContent.toLowerCase();
                 if (title.includes(search) || category.includes(search)) {
                     card.classList.remove('hidden');
@@ -995,7 +978,7 @@ function timeAgo(string $datetime): string {
         });
 
         // Animate progress bars on load
-        window.addEventListener('load', function() {
+        window.addEventListener('load', function () {
             document.querySelectorAll('.progress-bar-fill').forEach(bar => {
                 const width = bar.style.width;
                 bar.style.width = '0';

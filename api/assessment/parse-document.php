@@ -542,18 +542,20 @@ function decodePdfStringFull(string $str): string {
 // ============================================================
 // FUNCTION: parseQuestions
 //
-// Parses raw text into MCQ question objects.
-// Tolerates spacing anomalies introduced by Google Docs PDF export.
+// Parses raw text into question objects. Handles two types:
 //
-// Supported question formats:
-//   1. Question    1) Question    Q1. Question
+// 1. MCQ — numbered question followed by lettered options (a/b/c/d).
+//    Answer line: Answer: b  Ans: b  Key: b  Correct: b
 //
-// Supported option formats — all tolerated:
-//   a) Option   a. Option   A) Option
-//   a ) Option  (a) Option  [a] Option  a  )  Option
+// 2. True/False — numbered question followed by lines containing
+//    only "True" and "False" (in either order), then an Ans line.
+//    Answer: "true" or "false" (lowercase string).
 //
-// Answer line (optional):
-//   Answer: b   Ans: b   Key: b   Correct: b
+// Supported question number formats:  1.  1)  Q1.  Question 1.
+// Supported option formats:  a) a. A) (a) [a]  a )
+// Answer line formats:  Ans: a.  Ans : a  Answer: b  Key: c  Correct: d
+//
+// Tolerates Google Docs PDF word-per-line fragmentation.
 // ============================================================
 function parseQuestions(string $text): array {
     $questions = [];
@@ -563,7 +565,7 @@ function parseQuestions(string $text): array {
 
     $lines = explode("\n", $text);
 
-    // Per-line normalisation
+    // Per-line normalisation: collapse horizontal whitespace; fix spaced option labels
     $lines = array_map(function(string $line): string {
         $line = preg_replace('/\h+/', ' ', $line);
         $line = preg_replace('/^(\s*[\[(]?\s*[a-dA-D])\s+([).\]])\s*/', '$1$2 ', $line);
@@ -572,14 +574,16 @@ function parseQuestions(string $text): array {
     $lines = array_values(array_filter($lines, fn($l) => $l !== ''));
 
     // ── Reassemble word-per-line fragments (Google Docs PDF output) ──
-    // Google Docs PDFs produce one word per line from the CID stream extractor.
-    // Join consecutive lines into the previous line unless the line starts with
-    // a recognised anchor: question number, option letter, or answer marker.
+    // Lines are joined onto the previous one unless they look like a
+    // recognised anchor: question number, option letter, answer marker,
+    // or a bare True/False token (T/F question choices).
     $reAnchor = '/^(?:'
         . '(?:Q(?:uestion)?\s*)?\d+\s*[.):\s]'   // question number
         . '|[a-dA-D]\s*[).]\s'                    // option letter with text after
         . '|[a-dA-D][).]\s*$'                     // bare option label "a)"
         . '|(?:answer|ans|key|correct)\s*[:\s.]'  // answer line
+        . '|true\s*$'                              // bare True token
+        . '|false\s*$'                             // bare False token
         . ')/i';
 
     $joined = [];
@@ -614,8 +618,12 @@ function parseQuestions(string $text): array {
 
     $reQuestion = '/^(?:Q(?:uestion)?\s*)?(\d+)\s*[.):\s]\s*(.{5,})/i';
     $reOption   = '/^\s*[\[(]?\s*([a-dA-D])\s*[\].):\s]\s*(.+)/';
-    $reAnswer   = '/^(?:answer|ans|key|correct)\s*[:\s.]+\s*([a-dA-D])/i';
+    // Answer regex: captures either a letter (MCQ) or true/false word (T/F)
+    $reAnswer   = '/^(?:answer|ans|key|correct)\s*[:\s.]+\s*([a-dA-D]|true|false)\b/i';
+    // Compact "Ans : a." style — letter or t/f, period optional
+    $reAnswerCompact = '/^(?:answer|ans|key|correct)\s*[:\s.]*\s*([a-dA-D]|true|false)\.?\s*$/i';
     $reNextQ    = '/^(?:Q(?:uestion)?\s*)?\d+\s*[.):\s]/i';
+    $reTrueFalse = '/^(true|false)\s*$/i';
 
     while ($i < $totalLines) {
         $line = $lines[$i];
@@ -625,9 +633,80 @@ function parseQuestions(string $text): array {
         $questionText  = trim($qMatch[2]);
         $options       = [];
         $correctAnswer = null;
+        $questionType  = 'mcq'; // default; may be upgraded to 'true_false'
         $i++;
         $unrecognised  = 0;
 
+        // ── Look-ahead: detect True/False question ──
+        // A T/F question has exactly the tokens "True" and "False" (in either
+        // order) within the next 1–3 lines, before any lettered option or next
+        // question number appears.
+        $tfTokens = [];
+        $lookahead = 0;
+        while (
+            $lookahead < 3
+            && ($i + $lookahead) < $totalLines
+            && !preg_match($reOption, $lines[$i + $lookahead])
+            && !preg_match($reNextQ,  $lines[$i + $lookahead])
+        ) {
+            $ll = trim($lines[$i + $lookahead]);
+            if (preg_match($reTrueFalse, $ll)) {
+                $tfTokens[] = strtolower($ll);
+            }
+            $lookahead++;
+        }
+
+        $hasBothTF = in_array('true', $tfTokens, true) && in_array('false', $tfTokens, true);
+
+        if ($hasBothTF) {
+            // ── True/False branch ──
+            $questionType = 'true_false';
+            // Consume the True/False lines
+            for ($k = 0; $k < $lookahead; $k++) {
+                $ll = trim($lines[$i]);
+                if (preg_match($reTrueFalse, $ll) || preg_match($reAnswer, $ll) || preg_match($reAnswerCompact, $ll)) {
+                    // consume silently — we handle answer below
+                }
+                $i++;
+            }
+            // Now look for the answer line (may already be past, or immediately next)
+            // Re-check if we consumed an answer line in the loop above
+            // Back up and re-scan from question start+1 properly:
+            $scanFrom = $i - $lookahead;
+            for ($s = $scanFrom; $s < $scanFrom + $lookahead + 2 && $s < $totalLines; $s++) {
+                $sl = trim($lines[$s]);
+                if (preg_match($reAnswer, $sl, $ansMatch) || preg_match($reAnswerCompact, $sl, $ansMatch)) {
+                    $raw = strtolower($ansMatch[1]);
+                    // "a" or "true" both mean true; "b" or "false" mean false
+                    if ($raw === 'a' || $raw === 'true') {
+                        $correctAnswer = 'true';
+                    } elseif ($raw === 'b' || $raw === 'false') {
+                        $correctAnswer = 'false';
+                    }
+                    // Advance $i past this answer line if we haven't yet
+                    if ($s >= $i) $i = $s + 1;
+                    break;
+                }
+            }
+            // Skip any further answer/noise lines before the next question
+            while ($i < $totalLines
+                && !preg_match($reNextQ, $lines[$i])
+                && (preg_match($reAnswer, $lines[$i]) || preg_match($reAnswerCompact, $lines[$i]) || preg_match($reTrueFalse, $lines[$i]))
+            ) {
+                $i++;
+            }
+
+            $questions[] = [
+                'id'            => $qIndex++,
+                'type'          => 'true_false',
+                'text'          => $questionText,
+                'options'       => ['True', 'False'],
+                'correctAnswer' => $correctAnswer,
+            ];
+            continue;
+        }
+
+        // ── MCQ branch ──
         while ($i < $totalLines && count($options) < 4) {
             $optLine = $lines[$i];
 
@@ -635,8 +714,10 @@ function parseQuestions(string $text): array {
                 $options[strtolower($optMatch[1])] = trim($optMatch[2]);
                 $unrecognised = 0;
                 $i++;
-            } elseif (preg_match($reAnswer, $optLine, $ansMatch)) {
-                $correctAnswer = strtolower($ansMatch[1]);
+            } elseif (preg_match($reAnswer, $optLine, $ansMatch) || preg_match($reAnswerCompact, $optLine, $ansMatch)) {
+                $raw = strtolower($ansMatch[1]);
+                // Normalise: letter only
+                $correctAnswer = (strlen($raw) === 1 && ctype_alpha($raw)) ? $raw : null;
                 $i++;
                 break;
             } elseif (preg_match($reNextQ, $optLine)) {
@@ -649,9 +730,11 @@ function parseQuestions(string $text): array {
             }
         }
 
+        // One more look for answer line immediately after options
         if ($correctAnswer === null && $i < $totalLines) {
-            if (preg_match($reAnswer, $lines[$i], $ansMatch)) {
-                $correctAnswer = strtolower($ansMatch[1]);
+            if (preg_match($reAnswer, $lines[$i], $ansMatch) || preg_match($reAnswerCompact, $lines[$i], $ansMatch)) {
+                $raw = strtolower($ansMatch[1]);
+                $correctAnswer = (strlen($raw) === 1 && ctype_alpha($raw)) ? $raw : null;
                 $i++;
             }
         }
@@ -660,6 +743,7 @@ function parseQuestions(string $text): array {
 
         $questions[] = [
             'id'            => $qIndex++,
+            'type'          => 'mcq',
             'text'          => $questionText,
             'options'       => [
                 $options['a'] ?? '',
