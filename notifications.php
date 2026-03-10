@@ -9,6 +9,68 @@ $currentUser  = validateSession($conn);
 $userName     = htmlspecialchars($currentUser['full_name']);
 $userInitials = strtoupper(substr($currentUser['full_name'], 0, 2));
 $userId       = (int) $currentUser['user_id'];
+$userRole     = $currentUser['role'] ?? 'student';   // expected values: 'admin', 'teacher', 'student'
+$canEdit      = in_array($userRole, ['admin', 'teacher'], true);
+
+// ── Handle AJAX edit / delete requests ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canEdit) {
+    header('Content-Type: application/json');
+
+    // CSRF check
+    $csrfHeader = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    if (!hash_equals($_SESSION['csrf_token'] ?? '', $csrfHeader)) {
+        echo json_encode(['success' => false, 'error' => 'Invalid CSRF token']);
+        exit;
+    }
+
+    $body   = json_decode(file_get_contents('php://input'), true) ?? [];
+    $action = $body['action'] ?? '';
+
+    if ($action === 'edit') {
+        $nid     = (int)($body['notification_id'] ?? 0);
+        $title   = trim($body['title']   ?? '');
+        $message = trim($body['message'] ?? '');
+        $type    = $body['notification_type'] ?? '';
+        $allowed_types = ['info','success','warning','error','assessment','result','material'];
+
+        if (!$nid || $title === '' || !in_array($type, $allowed_types, true)) {
+            echo json_encode(['success' => false, 'error' => 'Invalid input']);
+            exit;
+        }
+
+        // Admin can edit any notification; teacher only their own target notifications
+        $checkCol = ($userRole === 'admin') ? '1=1' : 'created_by = ?';
+        $editResult = ($userRole === 'admin')
+            ? safePreparedQuery($conn,
+                "UPDATE notifications SET title=?, message=?, notification_type=? WHERE notification_id=?",
+                "sssi", [$title, $message, $type, $nid])
+            : safePreparedQuery($conn,
+                "UPDATE notifications SET title=?, message=?, notification_type=? WHERE notification_id=? AND created_by=?",
+                "sssii", [$title, $message, $type, $nid, $userId]);
+
+        echo json_encode(['success' => (bool)($editResult['success'] ?? false)]);
+        exit;
+    }
+
+    if ($action === 'delete') {
+        $nid = (int)($body['notification_id'] ?? 0);
+        if (!$nid) { echo json_encode(['success' => false, 'error' => 'Invalid id']); exit; }
+
+        $delResult = ($userRole === 'admin')
+            ? safePreparedQuery($conn,
+                "DELETE FROM notifications WHERE notification_id=?",
+                "i", [$nid])
+            : safePreparedQuery($conn,
+                "DELETE FROM notifications WHERE notification_id=? AND created_by=?",
+                "ii", [$nid, $userId]);
+
+        echo json_encode(['success' => (bool)($delResult['success'] ?? false)]);
+        exit;
+    }
+
+    echo json_encode(['success' => false, 'error' => 'Unknown action']);
+    exit;
+}
 
 // ── Unread count for sidebar badge & navbar ──
 $unreadResult = safePreparedQuery($conn,
@@ -401,6 +463,87 @@ body {
 .empty-state h3 { font-size: 18px; color: #4a5568; font-weight: 600; }
 .empty-state p  { font-size: 14px; color: #a0aec0; }
 
+/* ── CARD ACTION BUTTONS (edit/delete) ── */
+.notif-card-actions {
+    display: flex; gap: 8px; margin-top: 10px;
+}
+.btn-edit-notif, .btn-delete-notif {
+    padding: 5px 14px; border-radius: 8px;
+    font-size: 12px; font-weight: 600; font-family: inherit;
+    border: none; cursor: pointer; display: inline-flex;
+    align-items: center; gap: 6px; transition: opacity .2s, transform .15s;
+}
+.btn-edit-notif   { background: linear-gradient(135deg,#4facfe,#00f2fe); color: white; }
+.btn-delete-notif { background: #fff5f5; color: #e53e3e; border: 1px solid #fed7d7; }
+.btn-edit-notif:hover,
+.btn-delete-notif:hover { opacity: .85; transform: translateY(-1px); }
+
+/* ── EDIT MODAL ── */
+.modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.45); z-index: 2000;
+    align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+    background: white; border-radius: 18px;
+    padding: 30px 28px; width: 100%; max-width: 520px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    animation: modalIn .22s ease;
+}
+@keyframes modalIn {
+    from { opacity:0; transform: scale(.95) translateY(10px); }
+    to   { opacity:1; transform: scale(1)  translateY(0);     }
+}
+.modal-box h2 { font-size: 18px; font-weight: 700; color: #2d3748; margin-bottom: 20px; }
+.modal-field  { margin-bottom: 16px; }
+.modal-field label {
+    display: block; font-size: 13px; font-weight: 600;
+    color: #4a5568; margin-bottom: 6px;
+}
+.modal-field input,
+.modal-field textarea,
+.modal-field select {
+    width: 100%; padding: 10px 14px; border-radius: 10px;
+    border: 2px solid #e2e8f0; font-size: 14px;
+    font-family: inherit; color: #2d3748;
+    outline: none; transition: border-color .2s;
+    background: #f7fafc;
+}
+.modal-field textarea { resize: vertical; min-height: 90px; }
+.modal-field input:focus,
+.modal-field textarea:focus,
+.modal-field select:focus { border-color: #4facfe; background: white; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+.btn-modal-cancel {
+    padding: 10px 22px; border-radius: 10px;
+    background: #f7fafc; border: 2px solid #e2e8f0;
+    color: #4a5568; font-size: 14px; font-weight: 600;
+    cursor: pointer; font-family: inherit; transition: background .15s;
+}
+.btn-modal-cancel:hover { background: #e2e8f0; }
+.btn-modal-save {
+    padding: 10px 22px; border-radius: 10px;
+    background: linear-gradient(135deg,#4facfe,#00f2fe);
+    color: white; border: none; font-size: 14px; font-weight: 600;
+    cursor: pointer; font-family: inherit; transition: opacity .2s;
+}
+.btn-modal-save:hover { opacity: .88; }
+.modal-error {
+    margin-top: 12px; padding: 10px 14px;
+    background: #fff5f5; border-radius: 8px;
+    color: #e53e3e; font-size: 13px; display: none;
+}
+
+/* ── ROLE BADGE in header ── */
+.role-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;
+    margin-left: 10px; vertical-align: middle;
+}
+.role-badge.admin   { background: #fef3c7; color: #92400e; }
+.role-badge.teacher { background: #e0f2fe; color: #075985; }
+
 @media (max-width: 900px) {
     .sidebar { display: none; }
     .main { padding: 20px; }
@@ -515,7 +658,14 @@ body {
         <!-- Page header -->
         <div class="page-header">
             <div>
-                <h1><i class="fa fa-bell" style="color:#4facfe;margin-right:10px;"></i>Notifications</h1>
+                <h1><i class="fa fa-bell" style="color:#4facfe;margin-right:10px;"></i>Notifications
+                    <?php if ($canEdit): ?>
+                    <span class="role-badge <?= htmlspecialchars($userRole) ?>">
+                        <i class="fa fa-<?= $userRole === 'admin' ? 'shield-halved' : 'chalkboard-teacher' ?>"></i>
+                        <?= ucfirst($userRole) ?> View
+                    </span>
+                    <?php endif; ?>
+                </h1>
                 <p><?= count($allNotifs) ?> notification<?= count($allNotifs) !== 1 ? 's' : '' ?>
                 <?php if ($filter !== 'all'): ?> · filtered by <strong><?= ucfirst($filter) ?></strong><?php endif; ?></p>
             </div>
@@ -544,7 +694,7 @@ body {
                 $info     = $typeIcons[$n['notification_type']] ?? ['🔔','#4facfe','#ebf8ff'];
                 $ico      = $info[0]; $color = $info[1]; $bg = $info[2];
             ?>
-            <div class="notif-card <?= $isUnread ? 'unread' : '' ?>" data-title="<?= htmlspecialchars(strtolower($n['title'])) ?>" data-msg="<?= htmlspecialchars(strtolower($n['message'] ?? '')) ?>">
+            <div class="notif-card <?= $isUnread ? 'unread' : '' ?>" data-id="<?= $n['notification_id'] ?>" data-title="<?= htmlspecialchars(strtolower($n['title'])) ?>" data-msg="<?= htmlspecialchars(strtolower($n['message'] ?? '')) ?>">
                 <div class="notif-icon-wrap" style="background:<?= $bg ?>; color:<?= $color ?>">
                     <?= $ico ?>
                 </div>
@@ -565,6 +715,18 @@ body {
                         <a href="<?= htmlspecialchars($n['action_url']) ?>">View details →</a>
                     </div>
                     <?php endif; ?>
+                    <?php if ($canEdit): ?>
+                    <div class="notif-card-actions">
+                        <button class="btn-edit-notif"
+                            onclick="openEditModal(<?= $n['notification_id'] ?>, <?= htmlspecialchars(json_encode($n['title'])) ?>, <?= htmlspecialchars(json_encode($n['message'] ?? '')) ?>, <?= htmlspecialchars(json_encode($n['notification_type'])) ?>)">
+                            <i class="fa fa-pen"></i> Edit
+                        </button>
+                        <button class="btn-delete-notif"
+                            onclick="deleteNotification(<?= $n['notification_id'] ?>, this)">
+                            <i class="fa fa-trash"></i> Delete
+                        </button>
+                    </div>
+                    <?php endif; ?>
                 </div>
             </div>
             <?php endforeach; ?>
@@ -574,8 +736,48 @@ body {
     </main>
 </div>
 
+<!-- ── EDIT NOTIFICATION MODAL (admin / teacher only) ── -->
+<?php if ($canEdit): ?>
+<div class="modal-overlay" id="editModalOverlay" onclick="closeEditModalOnBg(event)">
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="editModalTitle">
+        <h2 id="editModalTitle"><i class="fa fa-pen" style="color:#4facfe;margin-right:8px;"></i>Edit Notification</h2>
+
+        <input type="hidden" id="editNotifId">
+
+        <div class="modal-field">
+            <label for="editTitle">Title</label>
+            <input type="text" id="editTitle" maxlength="255" placeholder="Notification title">
+        </div>
+        <div class="modal-field">
+            <label for="editMessage">Message</label>
+            <textarea id="editMessage" maxlength="1000" placeholder="Notification message (optional)"></textarea>
+        </div>
+        <div class="modal-field">
+            <label for="editType">Type</label>
+            <select id="editType">
+                <option value="info">ℹ️ Info</option>
+                <option value="success">✅ Success</option>
+                <option value="warning">⚠️ Warning</option>
+                <option value="error">❌ Error</option>
+                <option value="assessment">📝 Assessment</option>
+                <option value="result">🏆 Result</option>
+                <option value="material">📚 Material</option>
+            </select>
+        </div>
+
+        <div class="modal-error" id="editModalError"></div>
+
+        <div class="modal-actions">
+            <button class="btn-modal-cancel" onclick="closeEditModal()">Cancel</button>
+            <button class="btn-modal-save"   onclick="saveEditModal()"><i class="fa fa-save"></i> Save Changes</button>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
 <script>
 const CSRF_TOKEN = <?= json_encode($_SESSION['csrf_token']) ?>;
+const CAN_EDIT   = <?= json_encode($canEdit) ?>;
 
 // Profile dropdown
 function toggleDropdown() {
@@ -644,6 +846,137 @@ function pollNotifications() {
         }).catch(() => {});
 }
 setInterval(pollNotifications, 30000);
+
+// ── Edit modal ──────────────────────────────────────────
+function openEditModal(id, title, message, type) {
+    document.getElementById('editNotifId').value  = id;
+    document.getElementById('editTitle').value    = title;
+    document.getElementById('editMessage').value  = message;
+    document.getElementById('editType').value     = type;
+    document.getElementById('editModalError').style.display = 'none';
+    document.getElementById('editModalOverlay').classList.add('open');
+    document.getElementById('editTitle').focus();
+}
+
+function closeEditModal() {
+    document.getElementById('editModalOverlay').classList.remove('open');
+}
+
+function closeEditModalOnBg(e) {
+    if (e.target === document.getElementById('editModalOverlay')) closeEditModal();
+}
+
+// Close on Escape
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeEditModal();
+});
+
+async function saveEditModal() {
+    const id      = parseInt(document.getElementById('editNotifId').value);
+    const title   = document.getElementById('editTitle').value.trim();
+    const message = document.getElementById('editMessage').value.trim();
+    const type    = document.getElementById('editType').value;
+    const errEl   = document.getElementById('editModalError');
+
+    if (!title) {
+        errEl.textContent = 'Title cannot be empty.';
+        errEl.style.display = 'block';
+        return;
+    }
+
+    try {
+        const res  = await fetch('notifications.php', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': CSRF_TOKEN, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'edit', notification_id: id, title, message, notification_type: type })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            // Update the card in the DOM
+            const card = document.querySelector(`.notif-card[data-id="${id}"]`);
+            if (card) {
+                card.dataset.title = title.toLowerCase();
+                card.dataset.msg   = message.toLowerCase();
+                card.querySelector('.notif-card-title').textContent = title;
+                const msgEl = card.querySelector('.notif-card-msg');
+                if (msgEl) msgEl.textContent = message;
+                else if (message) {
+                    const bodyEl = card.querySelector('.notif-card-body');
+                    const metaEl = card.querySelector('.notif-card-meta');
+                    const p = document.createElement('div');
+                    p.className = 'notif-card-msg';
+                    p.textContent = message;
+                    bodyEl.insertBefore(p, metaEl);
+                }
+                // Update type badge
+                const typeIcons = {
+                    info:'ℹ️', success:'✅', warning:'⚠️', error:'❌',
+                    assessment:'📝', result:'🏆', material:'📚'
+                };
+                const badgeEl = card.querySelector('.notif-type-badge');
+                if (badgeEl) badgeEl.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+                const iconEl = card.querySelector('.notif-icon-wrap');
+                if (iconEl) iconEl.textContent = typeIcons[type] || '🔔';
+            }
+            closeEditModal();
+            showToast('Notification updated successfully.', 'success');
+        } else {
+            errEl.textContent = data.error || 'Failed to update. Please try again.';
+            errEl.style.display = 'block';
+        }
+    } catch {
+        errEl.textContent = 'Network error. Please try again.';
+        errEl.style.display = 'block';
+    }
+}
+
+// ── Delete notification ──────────────────────────────────
+async function deleteNotification(id, btn) {
+    if (!confirm('Delete this notification? This cannot be undone.')) return;
+
+    try {
+        const res  = await fetch('notifications.php', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': CSRF_TOKEN, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'delete', notification_id: id })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            const card = btn.closest('.notif-card');
+            card.style.transition = 'opacity .3s, transform .3s';
+            card.style.opacity = '0';
+            card.style.transform = 'translateX(30px)';
+            setTimeout(() => card.remove(), 300);
+            showToast('Notification deleted.', 'info');
+        } else {
+            showToast(data.error || 'Could not delete notification.', 'error');
+        }
+    } catch {
+        showToast('Network error. Please try again.', 'error');
+    }
+}
+
+// ── Toast helper ─────────────────────────────────────────
+function showToast(msg, type = 'success') {
+    const colors = { success: '#48bb78', error: '#e53e3e', info: '#4facfe' };
+    const t = document.createElement('div');
+    t.textContent = msg;
+    Object.assign(t.style, {
+        position: 'fixed', bottom: '24px', right: '24px',
+        background: colors[type] || '#4facfe', color: 'white',
+        padding: '12px 22px', borderRadius: '10px', fontWeight: '600',
+        fontSize: '14px', boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+        zIndex: '3000', opacity: '0', transition: 'opacity .3s'
+    });
+    document.body.appendChild(t);
+    requestAnimationFrame(() => { t.style.opacity = '1'; });
+    setTimeout(() => {
+        t.style.opacity = '0';
+        setTimeout(() => t.remove(), 400);
+    }, 3000);
+}
 </script>
 </body>
 </html>
