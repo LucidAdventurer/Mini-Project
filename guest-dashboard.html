@@ -214,6 +214,77 @@
             to   { opacity: 1; transform: translateY(0); }
         }
 
+        /* Resources section */
+        .resources-tabs {
+            display: flex; gap: 4px; margin-bottom: 28px; flex-wrap: wrap;
+        }
+        .res-tab {
+            padding: 7px 18px; border-radius: 99px;
+            border: 1px solid var(--line); background: var(--surface);
+            font-size: 13px; font-weight: 500; color: var(--ink-muted);
+            cursor: pointer; transition: 0.15s; font-family: var(--sans);
+        }
+        .res-tab:hover { background: var(--surface-3); color: var(--ink); }
+        .res-tab.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+        .resources-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 12px;
+        }
+        .resource-card {
+            border: 1px solid var(--line); border-radius: var(--r);
+            padding: 18px 20px; background: var(--surface);
+            display: flex; flex-direction: column; gap: 10px;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .resource-card:hover { border-color: var(--ink); box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+        .resource-card-head { display: flex; align-items: center; gap: 12px; }
+        .resource-type-icon {
+            width: 38px; height: 38px; border-radius: 8px; flex-shrink: 0;
+            display: grid; place-items: center; font-size: 18px;
+        }
+        .rtype-pdf     { background: #eff6ff; }
+        .rtype-video   { background: #f0fdf4; }
+        .rtype-link    { background: #fefce8; }
+        .rtype-article { background: #faf5ff; }
+        .rtype-quiz    { background: #fdf2f8; }
+        .resource-card-title {
+            font-size: 14px; font-weight: 600; color: var(--ink);
+            line-height: 1.35;
+        }
+        .resource-card-desc {
+            font-size: 13px; color: var(--ink-muted); line-height: 1.5;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        }
+        .resource-card-foot {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-top: auto;
+        }
+        .resource-type-badge {
+            font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+            padding: 3px 8px; border-radius: 99px; background: var(--surface-3); color: var(--ink-muted);
+        }
+        .resource-open-btn {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 6px 13px; border-radius: 7px; font-size: 12px; font-weight: 600;
+            text-decoration: none; background: var(--surface-3); color: var(--ink);
+            border: 1px solid var(--line); transition: 0.15s; font-family: var(--sans);
+        }
+        .resource-open-btn:hover { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+        .resources-empty {
+            grid-column: 1/-1; text-align: center; padding: 52px 0;
+            color: var(--ink-faint); font-size: 14px;
+        }
+        .resources-loading {
+            grid-column: 1/-1; text-align: center; padding: 52px 0;
+            color: var(--ink-faint); font-size: 14px;
+        }
+        .resources-view-all {
+            text-align: center; margin-top: 28px;
+        }
+
         @media (max-width: 640px) {
             .desktop-links { display: none; }
             .hamburger { display: flex; }
@@ -235,6 +306,7 @@
     <div class="nav-links desktop-links">
         <a href="#features" class="nav-link">Features</a>
         <a href="#tests" class="nav-link">Tests</a>
+        <a href="#resources" class="nav-link">Resources</a>
         <a href="#about" class="nav-link">About</a>
     </div>
     <div class="nav-links desktop-links">
@@ -249,6 +321,7 @@
 <div class="mobile-nav" id="mobileNav">
     <a href="#features" class="nav-link" onclick="toggleMenu()">Features</a>
     <a href="#tests" class="nav-link" onclick="toggleMenu()">Tests</a>
+    <a href="#resources" class="nav-link" onclick="toggleMenu()">Resources</a>
     <a href="#about" class="nav-link" onclick="toggleMenu()">About</a>
     <div class="mobile-nav-actions">
         <a href="index.html" class="nav-btn outline" style="flex:1;text-align:center">Log in</a>
@@ -261,7 +334,7 @@
     <h1 class="hero-title">Practice tests for <em>placement</em> training</h1>
     <p class="hero-sub">A straightforward portal for students to take practice assessments and track their preparation. Built to be simple and useful.</p>
     <div class="hero-actions">
-        <a href="#tests" class="btn-primary" class="nav-link" onclick="toggleMenu()">
+        <a href="home.php" class="btn-primary">
             Browse Tests
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
         </a>
@@ -327,29 +400,58 @@
     <h2 class="section-title reveal">What you can practise</h2>
     <p class="section-sub reveal">Tests are grouped into four areas commonly covered in placement rounds.</p>
     <div class="categories reveal">
-        <a href="gt-test-aptitude.php" class="category-card cat-aptitude">
+        <a href="home.php?category=aptitude" class="category-card cat-aptitude">
             <div class="cat-label">Aptitude</div>
             <div class="cat-name">Quantitative</div>
             <div class="cat-count">Arithmetic, percentages, ratios, algebra</div>
             <span class="cat-arrow">↗</span>
         </a>
-        <a href="gt-test-verbal.php" class="category-card cat-verbal">
+        <a href="home.php?category=verbal" class="category-card cat-verbal">
             <div class="cat-label">Verbal</div>
             <div class="cat-name">English</div>
             <div class="cat-count">Grammar, comprehension, vocabulary</div>
             <span class="cat-arrow">↗</span>
         </a>
-        <a href="gt-test-logical.php" class="category-card cat-logical">
+        <a href="home.php?category=logical" class="category-card cat-logical">
             <div class="cat-label">Logical</div>
             <div class="cat-name">Reasoning</div>
             <div class="cat-count">Patterns, sequences, puzzles</div>
             <span class="cat-arrow">↗</span>
         </a>
-        <a href="gt-test-technical.php" class="category-card cat-technical">
+        <a href="home.php?category=technical" class="category-card cat-technical">
             <div class="cat-label">Technical</div>
             <div class="cat-name">CS Fundamentals</div>
             <div class="cat-count">Data structures, algorithms, basics</div>
             <span class="cat-arrow">↗</span>
+        </a>
+    </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════ RESOURCES SECTION ═══════════ -->
+<section class="section" id="resources">
+    <p class="section-label reveal">Study materials</p>
+    <h2 class="section-title reveal">Resources to help you prepare</h2>
+    <p class="section-sub reveal">PDFs, videos, links and articles uploaded by your teachers — filtered by topic.</p>
+
+    <!-- Category tabs -->
+    <div class="resources-tabs reveal">
+        <button class="res-tab active" onclick="switchResTab('all',this)">All</button>
+        <button class="res-tab" onclick="switchResTab('aptitude',this)">Aptitude</button>
+        <button class="res-tab" onclick="switchResTab('verbal',this)">Verbal</button>
+        <button class="res-tab" onclick="switchResTab('logical',this)">Logical</button>
+        <button class="res-tab" onclick="switchResTab('technical',this)">Technical</button>
+    </div>
+
+    <div class="resources-grid" id="resourcesGrid">
+        <div class="resources-loading">Loading resources…</div>
+    </div>
+
+    <div class="resources-view-all reveal" id="resourcesViewAll" style="display:none;">
+        <a href="home.php" class="btn-secondary" id="resourcesViewAllLink">
+            View all resources on test page
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
         </a>
     </div>
 </section>
@@ -397,6 +499,7 @@
 </div>
 
 <script>
+    // ── Mobile menu ───────────────────────────────────────────
     function toggleMenu() {
         document.getElementById('mobileNav').classList.toggle('open');
     }
@@ -404,10 +507,121 @@
         const nav = document.getElementById('mobileNav');
         if (!nav.contains(e.target) && !e.target.closest('.hamburger')) nav.classList.remove('open');
     });
+
+    // ── Reveal on scroll ──────────────────────────────────────
     const io = new IntersectionObserver(entries => {
         entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); } });
     }, { threshold: 0.1 });
     document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+    // ── Resources ─────────────────────────────────────────────
+    const _base = (function() {
+        const s = window.location.pathname;
+        return s.substring(0, s.lastIndexOf('/') + 1);
+    })();
+
+    const typeIcon  = { pdf:'📄', video:'🎬', link:'🔗', article:'📰', quiz:'📝' };
+    const typeClass = { pdf:'rtype-pdf', video:'rtype-video', link:'rtype-link', article:'rtype-article', quiz:'rtype-quiz' };
+
+    let activeResTab = 'all';
+    let resCache     = {};
+
+    function switchResTab(cat, btn) {
+        activeResTab = cat;
+        document.querySelectorAll('.res-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        loadResources(cat);
+
+        // Update "View all" link
+        const link = document.getElementById('resourcesViewAllLink');
+        if (link) {
+            link.href = cat === 'all' ? 'home.php' : `home.php?category=${cat}`;
+        }
+    }
+
+    async function loadResources(cat) {
+        const grid = document.getElementById('resourcesGrid');
+        if (!grid) return;
+
+        // Cache hit
+        const key = cat || 'all';
+        if (resCache[key]) { renderResources(resCache[key], grid); return; }
+
+        grid.innerHTML = '<div class="resources-loading">Loading resources…</div>';
+
+        try {
+            const params = new URLSearchParams({ limit: 8 });
+            if (cat && cat !== 'all') params.set('category', cat);
+
+            const r = await fetch(_base + 'api/resources/get-resources.php?' + params);
+            const d = await r.json();
+
+            if (!d.success) {
+                grid.innerHTML = `<div class="resources-empty">Could not load resources.</div>`;
+                return;
+            }
+
+            resCache[key] = d.materials;
+            renderResources(d.materials, grid);
+
+            // Show "View all" button if there are results
+            const viewAll = document.getElementById('resourcesViewAll');
+            if (viewAll) viewAll.style.display = d.materials.length ? '' : 'none';
+
+        } catch(err) {
+            grid.innerHTML = `<div class="resources-empty">Network error loading resources.</div>`;
+            console.error(err);
+        }
+    }
+
+    function renderResources(materials, grid) {
+        if (!materials.length) {
+            grid.innerHTML = `<div class="resources-empty">No resources available for this category yet.<br>Check back after your teacher uploads some.</div>`;
+            const viewAll = document.getElementById('resourcesViewAll');
+            if (viewAll) viewAll.style.display = 'none';
+            return;
+        }
+
+        grid.innerHTML = materials.map(m => {
+            const icon   = typeIcon[m.material_type]  || '📦';
+            const tcls   = typeClass[m.material_type] || 'rtype-pdf';
+            const url    = m.external_url || '#';
+            const target = url !== '#' ? 'target="_blank" rel="noopener"' : '';
+            const desc   = m.description ? esc(m.description) : '<em style="color:var(--ink-faint)">No description</em>';
+            const size   = m.file_size   ? `· ${(m.file_size/(1024*1024)).toFixed(1)} MB` : '';
+            const catBadge = m.category  ? `<span style="font-size:10px;color:var(--ink-faint);margin-left:6px;">${esc(m.category)}</span>` : '';
+
+            return `<div class="resource-card">
+                <div class="resource-card-head">
+                    <div class="resource-type-icon ${tcls}">${icon}</div>
+                    <div class="resource-card-title">${esc(m.title)}</div>
+                </div>
+                <div class="resource-card-desc">${desc}</div>
+                <div class="resource-card-foot">
+                    <div>
+                        <span class="resource-type-badge">${esc(m.material_type)}</span>${catBadge}
+                        <span style="font-size:11px;color:var(--ink-faint);">${size}</span>
+                    </div>
+                    <a class="resource-open-btn" href="${esc(url)}" ${target}>
+                        Open
+                        <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    </a>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function esc(s) {
+        if (s === null || s === undefined) return '';
+        return String(s)
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+            .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+    }
+
+    // ── Init ──────────────────────────────────────────────────
+    window.addEventListener('DOMContentLoaded', () => {
+        loadResources('all');
+    });
 </script>
 </body>
 </html>
