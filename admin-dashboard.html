@@ -1968,7 +1968,8 @@
                 </div>
 
                 <div class="resource-grid" id="resourceGrid">
-                    <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);">Loading resources…</div>
+                    <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);">Loading resources…
+                    </div>
                 </div>
             </div>
 
@@ -2025,7 +2026,7 @@
                         <h2>Profile</h2>
                         <p>Your admin account details</p>
                     </div>
-                    <button class="btn btn-primary">Save Changes</button>
+                    <button class="btn btn-primary" onclick="saveProfile()">Save Changes</button>
                 </div>
 
                 <div class="profile-hero">
@@ -2067,7 +2068,8 @@
                                     id="profileNewPw" type="password" placeholder="Min 8 characters" /></div>
                             <div class="setting-group"><label>Confirm Password</label><input class="setting-input"
                                     id="profileConfirmPw" type="password" placeholder="Re-enter password" /></div>
-                            <button class="btn btn-primary" style="width:100%;">Update Password</button>
+                            <button class="btn btn-primary" style="width:100%;" onclick="updatePassword()">Update
+                                Password</button>
                         </div>
                     </div>
                 </div>
@@ -2081,7 +2083,7 @@
                         <p>System configuration from <code
                                 style="color:var(--blue-400);font-size:12px;">system_settings</code> table</p>
                     </div>
-                    <button class="btn btn-primary">Save All</button>
+                    <button class="btn btn-primary" onclick="saveSettings()">Save All</button>
                 </div>
 
                 <div class="two-col">
@@ -2348,7 +2350,9 @@
             </div>
 
             <div class="form-group" id="urFileGroup">
-                <label>File * <span id="urFileHint" style="font-weight:400;text-transform:none;color:var(--muted);font-size:11px;">(PDF, max 50 MB)</span></label>
+                <label>File * <span id="urFileHint"
+                        style="font-weight:400;text-transform:none;color:var(--muted);font-size:11px;">(PDF, max 50
+                        MB)</span></label>
                 <input class="form-input" id="urFile" type="file" accept=".pdf" style="padding:6px 12px;" />
             </div>
 
@@ -2359,7 +2363,8 @@
 
             <div class="form-group">
                 <label>Description</label>
-                <textarea class="form-input" id="urDescription" rows="3" placeholder="Brief description of this resource…" style="resize:vertical;"></textarea>
+                <textarea class="form-input" id="urDescription" rows="3"
+                    placeholder="Brief description of this resource…" style="resize:vertical;"></textarea>
             </div>
 
             <div class="form-row">
@@ -2379,7 +2384,9 @@
             <div id="urError" style="color:var(--red);font-size:12px;margin-top:4px;display:none;"></div>
             <div id="urProgress" style="display:none;margin-top:8px;">
                 <div style="height:4px;background:var(--surface3);border-radius:4px;overflow:hidden;">
-                    <div id="urProgressBar" style="height:100%;width:0%;background:var(--blue-500);transition:width 0.3s;border-radius:4px;"></div>
+                    <div id="urProgressBar"
+                        style="height:100%;width:0%;background:var(--blue-500);transition:width 0.3s;border-radius:4px;">
+                    </div>
                 </div>
                 <div id="urProgressText" style="font-size:11px;color:var(--muted);margin-top:4px;">Uploading…</div>
             </div>
@@ -2423,7 +2430,8 @@
             editUser: _base + 'api/admin/edit-user.php',
             toggleStatus: _base + 'api/admin/toggle-user-status.php',
             getLogs: _base + 'api/admin/get-logs.php',
-            settings: _base + 'api/admin/settings.php',
+            getSettings: _base + 'api/admin/get-settings.php',
+            updateSettings: _base + 'api/admin/update-settings.php',
             getTests: _base + 'api/admin/get-tests.php',
             updateTestStatus: _base + 'api/admin/update-test-status.php',
             deleteTest: _base + 'api/admin/delete-test.php',
@@ -2431,9 +2439,11 @@
             getResources: _base + 'api/resources/get-resources.php',
             uploadResource: _base + 'api/resources/upload-resource.php',
             deleteResource: _base + 'api/resources/delete-resource.php',
-            serveResource:  _base + 'api/resources/serve-resource.php',
-            viewResource:   _base + 'api/resources/view-resource.php',
-            getMe: _base + 'api/admin/get-me.php',
+            serveResource: _base + 'api/resources/serve-resource.php',
+            viewResource: _base + 'api/resources/view-resource.php',
+            getMe: _base + 'api/profile/get-profile.php',
+            updateProfile: _base + 'api/profile/update-profile.php',
+            changePassword: _base + 'api/profile/change-password.php',
         };
 
         // ════════════════════════════════════════
@@ -2611,7 +2621,7 @@
 
                     // Scale bar widths relative to the largest count
                     const counts = [d.db_counts.users, d.db_counts.assessments, d.db_counts.attempts,
-                                    d.db_counts.notifications, d.db_counts.audit_logs].map(v => v || 0);
+                    d.db_counts.notifications, d.db_counts.audit_logs].map(v => v || 0);
                     const maxVal = Math.max(...counts, 1);
                     const barIds = ['dbUsers', 'dbAssessments', 'dbAttempts', 'dbNotifications', 'dbAuditLogs'];
                     const barBarIds = [null, 'dbAssessmentsBar', 'dbAttemptsBar', 'dbNotificationsBar', 'dbAuditLogsBar'];
@@ -2636,8 +2646,6 @@
 
         async function loadMe(forceProfile = false) {
             try {
-                // Try to read from login-stored sessionStorage first (fast path)
-                const stored = sessionStorage.getItem('csrf_token') ? null : null; // placeholder
                 const d = await apiGet(API.getMe);
                 if (!d.success) return;
                 _meCache = d.user;
@@ -2649,7 +2657,7 @@
                 setEl('topbarAvatar', initials);
                 setEl('topbarName', d.user.full_name || 'Admin');
 
-                // Profile page (always update in case they navigate to it)
+                // Profile page fields
                 setEl('profileAvatarLg', initials);
                 setEl('profileName', esc(d.user.full_name || ''));
                 setEl('profileEmail', esc(d.user.email || ''));
@@ -2661,6 +2669,68 @@
                 if (deptInp) deptInp.value = d.user.department || '';
 
             } catch (e) { console.error('loadMe error', e); }
+        }
+
+        // ════════════════════════════════════════
+        // PROFILE — Save personal info
+        // ════════════════════════════════════════
+        async function saveProfile() {
+            const fullName = document.getElementById('profileInputName')?.value.trim();
+            const dept = document.getElementById('profileInputDept')?.value.trim();
+
+            if (!fullName) { showToast('Full name is required.', 'error'); return; }
+
+            try {
+                const d = await apiPost(API.updateProfile, {
+                    full_name: fullName,
+                    department: dept,
+                });
+                if (d.success) {
+                    showToast('Profile updated successfully.', 'success');
+                    // Refresh topbar + hero with new name
+                    if (d.user) {
+                        const initials = d.user.full_name
+                            ? d.user.full_name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+                            : '??';
+                        setEl('topbarAvatar', initials);
+                        setEl('topbarName', d.user.full_name || 'Admin');
+                        setEl('profileAvatarLg', initials);
+                        setEl('profileName', esc(d.user.full_name || ''));
+                        _meCache = d.user;
+                    }
+                } else {
+                    showToast(d.error || 'Update failed.', 'error');
+                }
+            } catch (e) { showToast('Network error.', 'error'); }
+        }
+
+        // ════════════════════════════════════════
+        // PROFILE — Change password
+        // ════════════════════════════════════════
+        async function updatePassword() {
+            const curr = document.getElementById('profileCurrPw')?.value;
+            const newPw = document.getElementById('profileNewPw')?.value;
+            const confirm = document.getElementById('profileConfirmPw')?.value;
+
+            if (!curr || !newPw || !confirm) { showToast('All password fields are required.', 'error'); return; }
+            if (newPw !== confirm) { showToast('New passwords do not match.', 'error'); return; }
+            if (newPw.length < 8) { showToast('Password must be at least 8 characters.', 'error'); return; }
+
+            try {
+                const d = await apiPost(API.changePassword, {
+                    current_password: curr,
+                    new_password: newPw,
+                    confirm_password: confirm,
+                });
+                if (d.success) {
+                    showToast('Password changed successfully.', 'success');
+                    document.getElementById('profileCurrPw').value = '';
+                    document.getElementById('profileNewPw').value = '';
+                    document.getElementById('profileConfirmPw').value = '';
+                } else {
+                    showToast(d.error || 'Password change failed.', 'error');
+                }
+            } catch (e) { showToast('Network error.', 'error'); }
         }
 
         // ════════════════════════════════════════
@@ -3257,9 +3327,9 @@
                 logDiv.innerHTML = d.logs.map(log => {
                     const levelBadge = {
                         success: `<span class="badge success" style="font-size:10px;">SUCCESS</span>`,
-                        error:   `<span class="badge error"   style="font-size:10px;">FAIL</span>`,
+                        error: `<span class="badge error"   style="font-size:10px;">FAIL</span>`,
                         warning: `<span class="badge warning" style="font-size:10px;">WARN</span>`,
-                        info:    `<span class="badge info"    style="font-size:10px;">INFO</span>`,
+                        info: `<span class="badge info"    style="font-size:10px;">INFO</span>`,
                     }[log.level] || `<span class="badge info" style="font-size:10px;">INFO</span>`;
 
                     return `<div class="log-entry">
@@ -3299,8 +3369,8 @@
         }
 
         function wireSettingsSave() {
-            const btn = document.querySelector('#page-settings .btn-primary');
-            if (btn) btn.addEventListener('click', saveSettings);
+            // Save All button on Settings page already has onclick="saveSettings()"
+            // This function is kept for any future dynamic wiring needs
         }
 
         async function saveSettings() {
@@ -3317,11 +3387,15 @@
             });
 
             try {
-                const d = await apiPost(API.settings, payload);
+                const d = await apiPost(API.updateSettings, { settings: payload });
                 if (d.success) {
-                    showToast('Settings saved successfully.', 'success');
+                    showToast(`Settings saved (${d.updated ?? Object.keys(payload).length} updated).`, 'success');
                 } else {
-                    showToast(d.error || 'Save failed.', 'error');
+                    const errKeys = Object.keys(d.errors || {});
+                    const msg = errKeys.length
+                        ? 'Some settings failed: ' + errKeys.join(', ')
+                        : (d.error || 'Save failed.');
+                    showToast(msg, 'error');
                 }
             } catch (e) { showToast('Network error.', 'error'); }
         }
@@ -3394,7 +3468,7 @@
         // ════════════════════════════════════════
         // UPLOAD RESOURCE MODAL
         // ════════════════════════════════════════
-        const CLOUDINARY_CLOUD  = 'dmysg5azm';
+        const CLOUDINARY_CLOUD = 'dmysg5azm';
         const CLOUDINARY_PRESET = 'ptauploads';
 
         function openUploadModal() {
@@ -3420,15 +3494,15 @@
         function onUrTypeChange() {
             const type = document.getElementById('urType').value;
             const fileTypes = ['pdf', 'video', 'quiz'];
-            const urlTypes  = ['link', 'article'];
+            const urlTypes = ['link', 'article'];
             const fileGroup = document.getElementById('urFileGroup');
-            const urlGroup  = document.getElementById('urUrlGroup');
-            const hint      = document.getElementById('urFileHint');
+            const urlGroup = document.getElementById('urUrlGroup');
+            const hint = document.getElementById('urFileHint');
             const fileInput = document.getElementById('urFile');
 
             if (fileTypes.includes(type)) {
                 fileGroup.style.display = '';
-                urlGroup.style.display  = 'none';
+                urlGroup.style.display = 'none';
                 if (type === 'video') {
                     hint.textContent = '(MP4, WebM, max 50 MB)';
                     fileInput.accept = '.mp4,.webm,.ogg,.mov,.avi,.mpeg';
@@ -3438,7 +3512,7 @@
                 }
             } else {
                 fileGroup.style.display = 'none';
-                urlGroup.style.display  = '';
+                urlGroup.style.display = '';
             }
         }
 
@@ -3468,7 +3542,7 @@
                     if (xhr.status === 200 && data.secure_url) {
                         onProgress(100);
                         resolve({
-                            url:      data.secure_url,
+                            url: data.secure_url,
                             publicId: data.public_id || '',
                             fileSize: data.bytes || 0,
                             mimeType: data.format || file.type,
@@ -3485,25 +3559,25 @@
         }
 
         async function submitUploadResource() {
-            const title    = document.getElementById('urTitle').value.trim();
-            const type     = document.getElementById('urType').value;
+            const title = document.getElementById('urTitle').value.trim();
+            const type = document.getElementById('urType').value;
             const category = document.getElementById('urCategory').value;
-            const diff     = document.getElementById('urDifficulty').value;
-            const estTime  = document.getElementById('urEstTime').value;
-            const desc     = document.getElementById('urDescription').value.trim();
-            const tagsRaw  = document.getElementById('urTags').value.trim();
+            const diff = document.getElementById('urDifficulty').value;
+            const estTime = document.getElementById('urEstTime').value;
+            const desc = document.getElementById('urDescription').value.trim();
+            const tagsRaw = document.getElementById('urTags').value.trim();
             const isPublic = document.getElementById('urPublic').checked ? 1 : 0;
-            const fileEl   = document.getElementById('urFile');
-            const urlVal   = document.getElementById('urUrl').value.trim();
+            const fileEl = document.getElementById('urFile');
+            const urlVal = document.getElementById('urUrl').value.trim();
 
-            const errEl   = document.getElementById('urError');
+            const errEl = document.getElementById('urError');
             const showErr = (msg) => { errEl.textContent = msg; errEl.style.display = 'block'; };
             errEl.style.display = 'none';
 
             if (!title) return showErr('Title is required.');
 
             const fileTypes = ['pdf', 'video', 'quiz'];
-            const urlTypes  = ['link', 'article'];
+            const urlTypes = ['link', 'article'];
 
             if (fileTypes.includes(type) && (!fileEl.files || !fileEl.files[0])) {
                 return showErr('Please select a file to upload.');
@@ -3516,9 +3590,9 @@
                 ? JSON.stringify(tagsRaw.split(',').map(t => t.trim()).filter(Boolean).slice(0, 10))
                 : '[]';
 
-            const btn          = document.getElementById('btnUploadResource');
+            const btn = document.getElementById('btnUploadResource');
             const progressWrap = document.getElementById('urProgress');
-            const progressBar  = document.getElementById('urProgressBar');
+            const progressBar = document.getElementById('urProgressBar');
             const progressText = document.getElementById('urProgressText');
 
             btn.disabled = true;
@@ -3528,8 +3602,8 @@
 
             try {
                 let externalUrl = urlVal;
-                let fileSize    = 0;
-                let publicId    = '';
+                let fileSize = 0;
+                let publicId = '';
 
                 if (fileTypes.includes(type) && fileEl.files[0]) {
                     progressText.textContent = 'Uploading to storage…';
@@ -3538,24 +3612,24 @@
                         progressText.textContent = `Uploading… ${pct}%`;
                     });
                     externalUrl = result.url;
-                    fileSize    = result.fileSize;
-                    publicId    = result.publicId;
+                    fileSize = result.fileSize;
+                    publicId = result.publicId;
                     progressText.textContent = 'Saving to database…';
                 }
 
                 // Save metadata to your DB via upload-resource.php
                 const payload = {
                     title,
-                    material_type:           type,
+                    material_type: type,
                     category,
-                    difficulty:              diff,
-                    estimated_time_minutes:  parseInt(estTime) || 0,
-                    description:             desc,
-                    tags:                    tagsJson,
-                    is_public:               isPublic,
-                    external_url:            externalUrl,
-                    file_size:               fileSize,
-                    cloudinary_public_id:    publicId,
+                    difficulty: diff,
+                    estimated_time_minutes: parseInt(estTime) || 0,
+                    description: desc,
+                    tags: tagsJson,
+                    is_public: isPublic,
+                    external_url: externalUrl,
+                    file_size: fileSize,
+                    cloudinary_public_id: publicId,
                 };
 
                 const d = await apiPost(API.uploadResource, payload);
