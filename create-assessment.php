@@ -1406,15 +1406,34 @@ async function importParsedQuestions() {
     }
 
     for (const q of parsedQs) {
+        let qType, optA, optB, optC, optD, correctAnswer;
+
+        if (q.type === 'true_false') {
+            qType   = 'true_false';
+            optA    = 'True';
+            optB    = 'False';
+            optC    = null;
+            optD    = null;
+            // parser returns 'true'/'false'; DB expects 'A'/'B'
+            correctAnswer = (q.correctAnswer === 'false') ? 'B' : 'A';
+        } else {
+            qType   = 'mcq';
+            optA    = q.options[0] || null;
+            optB    = q.options[1] || null;
+            optC    = q.options[2] || null;
+            optD    = q.options[3] || null;
+            correctAnswer = q.correctAnswer ? q.correctAnswer.toUpperCase() : 'A';
+        }
+
         const payload = {
             assessment_id : assessmentId,
-            question_type : 'mcq',
+            question_type : qType,
             question_text : q.text,
-            option_a      : q.options[0] || null,
-            option_b      : q.options[1] || null,
-            option_c      : q.options[2] || null,
-            option_d      : q.options[3] || null,
-            correct_answer: q.correctAnswer ? q.correctAnswer.toUpperCase() : 'A',
+            option_a      : optA,
+            option_b      : optB,
+            option_c      : optC,
+            option_d      : optD,
+            correct_answer: correctAnswer,
             marks         : 1,
             negative_marks: 0,
         };

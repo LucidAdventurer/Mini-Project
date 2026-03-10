@@ -217,23 +217,20 @@ function timeAgo(string $datetime): string {
             margin: 0 30px;
             position: relative;
         }
-        .search-input {
+        .nav-search input {
             width: 100%;
-            padding: 10px 40px 10px 15px;
+            padding: 10px 20px 10px 45px;
             border: 2px solid #e2e8f0;
             border-radius: 10px;
-            font-size: 14px;
-        }
-        .search-input:focus {
+            font-family: inherit; font-size: 14px;
+            background: #f7fafc; color: #2d3748;
             outline: none;
-            border-color: var(--primary);
+            transition: border-color .2s, box-shadow .2s;
         }
-        .search-icon {
-            position: absolute;
-            right: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #a0aec0;
+        .nav-search input:focus { border-color: #4facfe; box-shadow: 0 0 0 3px rgba(79,172,254,.15); }
+        .nav-search .sicon {
+            position: absolute; left: 15px; top: 50%; transform: translateY(-50%);
+            color: #a0aec0; font-size: 14px;
         }
         .nav-profile {
             display: flex;
@@ -410,6 +407,10 @@ function timeAgo(string $datetime): string {
             flex-direction: column;
             gap: 2px;
             background: transparent;
+            min-height: calc(100vh - 71px);
+            position: sticky;
+            top: 71px;
+            align-self: flex-start;
         }
         .left-sidebar-label {
             font-size: 11px; font-weight: 700;
@@ -716,31 +717,7 @@ function timeAgo(string $datetime): string {
             border-radius: 10px;
             transition: width 0.5s;
         }
-        .quick-actions {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            z-index: 50;
-        }
-        .action-button {
-            width: 60px;
-            height: 60px;
-            background: linear-gradient(135deg, #4facfe, #00f2fe);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 24px;
-            cursor: pointer;
-            box-shadow: 0 6px 20px rgba(79,172,254,0.4);
-            border: none;
-            transition: 0.3s;
-        }
-        .action-button:hover {
-            transform: scale(1.1);
-            box-shadow: 0 8px 30px rgba(79,172,254,0.6);
-        }
+
         .assessment-card.exhausted {
             opacity: 0.7;
         }
@@ -784,11 +761,14 @@ function timeAgo(string $datetime): string {
     <nav class="navbar">
         <a href="student-dashboard.php" class="navbar-brand">
             <div class="brand-logo">P</div>
-            <span>Student Portal</span>
+            <div style="display:flex;flex-direction:column;line-height:1.1;color:white">
+                <span style="font-size:18px;font-weight:800;letter-spacing:.5px">PREPAURA</span>
+                <span style="font-size:11px;font-weight:400;opacity:.85;font-style:italic">Placement Training Platform</span>
+            </div>
         </a>
         <div class="nav-search">
-            <input type="text" class="search-input" placeholder="Search assessments..." id="searchInput">
-            <span class="search-icon">🔍</span>
+            <i class="fa fa-search sicon"></i>
+            <input type="text" id="searchInput" placeholder="Search assessments..." autocomplete="off">
         </div>
         <div class="nav-profile">
             <button class="notification-icon" onclick="showNotifications()">
@@ -987,9 +967,7 @@ function timeAgo(string $datetime): string {
     </div><!-- /.page-content -->
     </div><!-- /.page-wrapper -->
 
-    <div class="quick-actions">
-        <button class="action-button" onclick="showQuickActions()">➕</button>
-    </div>
+
 
     <script>
         function toggleProfileDropdown() {
@@ -1024,9 +1002,7 @@ function timeAgo(string $datetime): string {
             window.location.href = 'test-results.php?attempt_id=' + id;
         }
 
-        function showQuickActions() {
-            window.location.href = 'student-resources.php';
-        }
+
 
         // Filter tabs
         document.querySelectorAll('.filter-tab').forEach(tab => {

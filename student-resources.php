@@ -275,9 +275,7 @@ body {
 }
 .ic-pdf     { background: #fff5f5; color: #fc8181; }
 .ic-video   { background: #fffaf0; color: #ed8936; }
-.ic-link    { background: #f0fff4; color: #48bb78; }
-.ic-article { background: #ebf8ff; color: #4facfe; }
-.ic-quiz    { background: #faf5ff; color: #9f7aea; }
+.ic-image   { background: #faf5ff; color: #9f7aea; }
 .ic-file    { background: #f7fafc; color: #a0aec0; }
 
 .card-title {
@@ -410,17 +408,7 @@ body {
 .dropdown-item.logout:hover { background: #fff5f5; }
 
 /* ── FAB (exact match) ── */
-.quick-actions { position: fixed; bottom: 30px; right: 30px; z-index: 50; }
-.action-button {
-    width: 60px; height: 60px;
-    background: linear-gradient(135deg, #4facfe, #00f2fe);
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    color: white; font-size: 24px;
-    cursor: pointer; box-shadow: 0 6px 20px rgba(79,172,254,0.4);
-    border: none; transition: .3s;
-}
-.action-button:hover { transform: scale(1.1); box-shadow: 0 8px 30px rgba(79,172,254,0.6); }
+
 
 /* ── TOAST ── */
 .toast {
@@ -441,7 +429,10 @@ body {
 <nav class="navbar">
     <a href="student-dashboard.php" class="navbar-brand">
         <div class="brand-logo">P</div>
-        <span class="brand-name">Student Portal</span>
+        <div style="display:flex;flex-direction:column;line-height:1.1;color:white">
+            <span style="font-size:18px;font-weight:800;letter-spacing:.5px">PREPAURA</span>
+            <span style="font-size:11px;font-weight:400;opacity:.85;font-style:italic">Placement Training Platform</span>
+        </div>
     </a>
 
     <div class="nav-search">
@@ -492,9 +483,7 @@ body {
     <a href="#" id="t-all"     onclick="setType('',this)"><i class="fa fa-layer-group"></i> All Types</a>
     <a href="#" id="t-pdf"     onclick="setType('pdf',this)"><i class="fa fa-file-pdf"         style="color:#fc8181"></i> PDF</a>
     <a href="#" id="t-video"   onclick="setType('video',this)"><i class="fa fa-file-video"     style="color:#ed8936"></i> Video</a>
-    <a href="#" id="t-article" onclick="setType('article',this)"><i class="fa fa-file-lines"   style="color:#4facfe"></i> Article</a>
-    <a href="#" id="t-link"    onclick="setType('link',this)"><i class="fa fa-link"            style="color:#48bb78"></i> Link</a>
-    <a href="#" id="t-quiz"    onclick="setType('quiz',this)"><i class="fa fa-circle-question" style="color:#9f7aea"></i> Quiz</a>
+    <a href="#" id="t-image"   onclick="setType('image',this)"><i class="fa fa-image"          style="color:#9f7aea"></i> Images</a>
     <div class="sidebar-bottom">
         <button onclick="if(confirm('Are you sure you want to logout?')) window.location.href='logout.php'">
             <i class="fa fa-sign-out-alt"></i> Logout
@@ -554,12 +543,7 @@ body {
 </main>
 </div>
 
-<!-- FAB — back to dashboard -->
-<div class="quick-actions">
-    <button class="action-button" onclick="location.href='student-dashboard.php'" title="Back to Dashboard">
-        <i class="fa fa-home"></i>
-    </button>
-</div>
+
 
 <div class="toast" id="toast"></div>
 
@@ -573,9 +557,7 @@ const LIMIT     = 20;
 const ICONS = {
     pdf:     ['ic-pdf',     'fa-file-pdf'],
     video:   ['ic-video',   'fa-file-video'],
-    link:    ['ic-link',    'fa-link'],
-    article: ['ic-article', 'fa-file-lines'],
-    quiz:    ['ic-quiz',    'fa-circle-question'],
+    image:   ['ic-image',   'fa-image'],
 };
 function iconFor(t) { return ICONS[t] || ['ic-file','fa-file']; }
 
