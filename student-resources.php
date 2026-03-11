@@ -8,6 +8,11 @@ $userName     = htmlspecialchars($currentUser['full_name']);
 $userInitials = strtoupper(substr($currentUser['full_name'], 0, 2));
 $userId       = (int) $currentUser['user_id'];
 
+// Ensure CSRF token exists
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 // ── Unread notification count ──
 $notifResult = safePreparedQuery($conn,
     "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
@@ -357,6 +362,7 @@ body {
 .ic-pdf     { background: #fff5f5; color: #fc8181; }
 .ic-video   { background: #fffaf0; color: #ed8936; }
 .ic-image   { background: #faf5ff; color: #9f7aea; }
+.ic-purple  { background: #faf5ff; color: #9f7aea; }
 .ic-file    { background: #f7fafc; color: #a0aec0; }
 
 .card-title {
@@ -671,7 +677,9 @@ const LIMIT     = 20;
 const ICONS = {
     pdf:     ['ic-pdf',     'fa-file-pdf'],
     video:   ['ic-video',   'fa-file-video'],
-    image:   ['ic-image',   'fa-image'],
+    link:    ['ic-file',    'fa-link'],
+    article: ['ic-file',    'fa-newspaper'],
+    quiz:    ['ic-purple',  'fa-circle-question'],
 };
 function iconFor(t) { return ICONS[t] || ['ic-file','fa-file']; }
 

@@ -2,10 +2,18 @@
 // ============================================================
 // api/assessment/get-assessments.php
 //
-// CHANGE: Replaced LEFT JOIN questions + LEFT JOIN attempts
-// (which caused row multiplication requiring DISTINCT + GROUP BY)
-// with correlated subqueries. Each subquery hits one table with
-// a targeted index lookup — no row explosion, no heavy aggregation.
+// Returns all active/available assessments for the logged-in
+// student, split into:
+//   - not_attended : assessments the student has NOT completed
+//   - attended     : assessments the student HAS completed
+//                    (status = 'completed'), with their best result
+//
+// GET (no body needed)
+// Returns {
+//   success: bool,
+//   not_attended: [...],
+//   attended: [...]
+// }
 // ============================================================
 
 require_once __DIR__ . '/../../config.php';
@@ -13,125 +21,157 @@ require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
-$currentUser = validateSession($conn, 'teacher');
-$teacherId   = (int) $currentUser['user_id'];
+$currentUser = validateSession($conn, 'student');
+$studentId   = (int) $currentUser['user_id'];
 
-// ── Query params ──
-$status = trim($_GET['status'] ?? '');
-$search = trim($_GET['search'] ?? '');
-$page   = max(1, (int)($_GET['page']  ?? 1));
-$limit  = min(100, max(1, (int)($_GET['limit'] ?? 20)));
-$offset = ($page - 1) * $limit;
-
-$allowedStatuses = ['active', 'draft', 'archived', 'scheduled'];
-
-// ── Build WHERE clause ──
-$conditions = ["a.created_by = ?"];
-$params     = [$teacherId];
-$types      = "i";
-
-if ($status !== '' && in_array($status, $allowedStatuses, true)) {
-    $conditions[] = "a.status = ?";
-    $params[]     = $status;
-    $types       .= "s";
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+    http_response_code(405);
+    echo json_encode(['success' => false, 'error' => 'Method not allowed.']);
+    exit;
 }
 
-if ($search !== '') {
-    $conditions[] = "(a.title LIKE ? OR a.category LIKE ?)";
-    $like         = '%' . $search . '%';
-    $params[]     = $like;
-    $params[]     = $like;
-    $types       .= "ss";
-}
+// ── Fetch all active assessments that are currently available ──
+// Includes question count and the student's best completed attempt (if any).
+$now = date('Y-m-d H:i:s');
 
-$where = implode(' AND ', $conditions);
-
-// ── Total count ──
-$total = 0;
-$rc = safePreparedQuery($conn,
-    "SELECT COUNT(*) AS cnt FROM assessments a WHERE $where",
-    $types, $params
-);
-if ($rc['success'] && $rc['result']) {
-    $row   = $rc['result']->fetch_assoc();
-    $total = (int)($row['cnt'] ?? 0);
-    $rc['result']->free();
-}
-
-// ── Fetch page using correlated subqueries ──
-// Each subquery does a single indexed lookup per row.
-// No row multiplication, no GROUP BY, no DISTINCT needed.
-$listTypes  = $types . "ii";
-$listParams = array_merge($params, [$limit, $offset]);
-
-$r = safePreparedQuery($conn,
+$result = safePreparedQuery($conn,
     "SELECT
         a.assessment_id,
         a.title,
+        a.description,
         a.category,
         a.difficulty,
-        a.status,
         a.duration_minutes,
         a.total_marks,
         a.passing_marks,
-        a.is_public,
+        a.max_attempts,
+        a.show_results_immediately,
         a.available_from,
         a.available_until,
+        a.instructions,
+        a.is_public,
         a.created_at,
-        a.updated_at,
-        (SELECT COUNT(*)
-         FROM questions q
-         WHERE q.assessment_id = a.assessment_id)                              AS question_count,
-        (SELECT COUNT(*)
-         FROM assessment_attempts aa
+
+        -- Question count
+        (SELECT COUNT(*) FROM questions q WHERE q.assessment_id = a.assessment_id) AS question_count,
+
+        -- Creator name
+        u.full_name AS created_by_name,
+
+        -- Student's best completed attempt
+        best.attempt_id       AS best_attempt_id,
+        best.score            AS best_score,
+        best.percentage       AS best_percentage,
+        best.correct_answers  AS best_correct,
+        best.wrong_answers    AS best_wrong,
+        best.unanswered       AS best_unanswered,
+        best.submitted_at     AS best_submitted_at,
+        best.attempt_number   AS best_attempt_number,
+
+        -- Total attempts by student
+        (SELECT COUNT(*) FROM assessment_attempts aa
          WHERE aa.assessment_id = a.assessment_id
-           AND aa.status = 'completed')                                        AS attempt_count,
-        (SELECT COUNT(DISTINCT aa2.user_id)
-         FROM assessment_attempts aa2
+           AND aa.user_id = ?
+           AND aa.status IN ('completed','timeout')) AS attempts_used,
+
+        -- Has any in-progress attempt?
+        (SELECT aa2.attempt_id FROM assessment_attempts aa2
          WHERE aa2.assessment_id = a.assessment_id
-           AND aa2.status = 'completed'
-           AND aa2.user_id IS NOT NULL)                                        AS student_count,
-        (SELECT ROUND(AVG(aa3.percentage), 1)
-         FROM assessment_attempts aa3
-         WHERE aa3.assessment_id = a.assessment_id
-           AND aa3.status = 'completed')                                       AS avg_score
+           AND aa2.user_id = ?
+           AND aa2.status = 'in_progress'
+         ORDER BY aa2.created_at DESC LIMIT 1) AS in_progress_attempt_id
+
      FROM assessments a
-     WHERE $where
-     ORDER BY FIELD(a.status,'active','scheduled','draft','archived'), a.updated_at DESC
-     LIMIT ? OFFSET ?",
-    $listTypes, $listParams
+     JOIN users u ON u.user_id = a.created_by
+
+     -- Best completed attempt subquery
+     LEFT JOIN (
+         SELECT
+             aa.assessment_id,
+             aa.attempt_id,
+             aa.score,
+             aa.percentage,
+             aa.correct_answers,
+             aa.wrong_answers,
+             aa.unanswered,
+             aa.submitted_at,
+             aa.attempt_number
+         FROM assessment_attempts aa
+         WHERE aa.user_id = ?
+           AND aa.status = 'completed'
+           AND aa.percentage = (
+               SELECT MAX(aa2.percentage)
+               FROM assessment_attempts aa2
+               WHERE aa2.assessment_id = aa.assessment_id
+                 AND aa2.user_id = aa.user_id
+                 AND aa2.status = 'completed'
+           )
+         GROUP BY aa.assessment_id
+     ) best ON best.assessment_id = a.assessment_id
+
+     WHERE a.status = 'active'
+       AND (a.available_from IS NULL OR a.available_from <= ?)
+       AND (a.available_until IS NULL OR a.available_until >= ?)
+     ORDER BY a.created_at DESC",
+    "iiiss",
+    [$studentId, $studentId, $studentId, $now, $now]
 );
 
-$assessments = [];
-if ($r['success'] && $r['result']) {
-    while ($row = $r['result']->fetch_assoc()) {
-        $assessments[] = [
-            'assessment_id'    => (int)$row['assessment_id'],
-            'title'            => $row['title'],
-            'category'         => $row['category'],
-            'difficulty'       => $row['difficulty'],
-            'status'           => $row['status'],
-            'duration_minutes' => (int)$row['duration_minutes'],
-            'total_marks'      => (int)$row['total_marks'],
-            'passing_marks'    => (int)$row['passing_marks'],
-            'is_public'        => (bool)$row['is_public'],
-            'available_from'   => $row['available_from'],
-            'available_until'  => $row['available_until'],
-            'created_at'       => $row['created_at'],
-            'updated_at'       => $row['updated_at'],
-            'question_count'   => (int)$row['question_count'],
-            'attempt_count'    => (int)$row['attempt_count'],
-            'student_count'    => (int)$row['student_count'],
-            'avg_score'        => (float)($row['avg_score'] ?? 0),
+if (!$result['success']) {
+    http_response_code(500);
+    echo json_encode(['success' => false, 'error' => 'Failed to load assessments.']);
+    exit;
+}
+
+$notAttended = [];
+$attended    = [];
+
+if ($result['result']) {
+    while ($row = $result['result']->fetch_assoc()) {
+        $assessment = [
+            'assessment_id'            => (int) $row['assessment_id'],
+            'title'                    => $row['title'],
+            'description'              => $row['description'],
+            'category'                 => $row['category'],
+            'difficulty'               => $row['difficulty'],
+            'duration_minutes'         => (int) $row['duration_minutes'],
+            'total_marks'              => (int) $row['total_marks'],
+            'passing_marks'            => (int) $row['passing_marks'],
+            'max_attempts'             => (int) $row['max_attempts'],
+            'show_results_immediately' => (bool) $row['show_results_immediately'],
+            'available_from'           => $row['available_from'],
+            'available_until'          => $row['available_until'],
+            'instructions'             => $row['instructions'],
+            'question_count'           => (int) $row['question_count'],
+            'created_by_name'          => $row['created_by_name'],
+            'attempts_used'            => (int) $row['attempts_used'],
+            'in_progress_attempt_id'   => $row['in_progress_attempt_id'] ? (int) $row['in_progress_attempt_id'] : null,
+            'can_attempt'              => ((int)$row['attempts_used'] < (int)$row['max_attempts']),
         ];
+
+        // Has a completed attempt?
+        if ($row['best_attempt_id']) {
+            $assessment['best_attempt'] = [
+                'attempt_id'     => (int) $row['best_attempt_id'],
+                'score'          => (float) $row['best_score'],
+                'percentage'     => (float) $row['best_percentage'],
+                'correct'        => (int) $row['best_correct'],
+                'wrong'          => (int) $row['best_wrong'],
+                'unanswered'     => (int) $row['best_unanswered'],
+                'submitted_at'   => $row['best_submitted_at'],
+                'attempt_number' => (int) $row['best_attempt_number'],
+                'passed'         => ((float)$row['best_percentage'] >= ((int)$row['passing_marks'] / (int)$row['total_marks'] * 100)),
+            ];
+            $attended[] = $assessment;
+        } else {
+            $notAttended[] = $assessment;
+        }
     }
-    $r['result']->free();
+    $result['result']->free();
 }
 
 echo json_encode([
-    'success'     => true,
-    'assessments' => $assessments,
-    'total'       => $total,
-    'page'        => $page,
-    'pages'       => (int) ceil($total / $limit),
+    'success'      => true,
+    'not_attended' => $notAttended,
+    'attended'     => $attended,
 ]);

@@ -15,6 +15,11 @@ $userRegNo    = $user['registration_number'] ?? '';
 $userInitials = strtoupper(substr($userName, 0, 2));
 $userId       = $user['user_id'];
 $memberSince  = !empty($user['created_at']) ? date('F Y', strtotime($user['created_at'])) : 'N/A';
+
+// Ensure CSRF token exists
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 $lastLogin    = $user['last_login'] ?? null;
 
 // ── Unread notification count ──
@@ -155,61 +160,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     // ── Update profile ────────────────────────────────────────────────────
     if ($_POST['action'] === 'update_profile') {
-
-        $phone  = trim($_POST['phone']   ?? '');
-        $bio    = trim($_POST['bio']     ?? '');
-        $year   = intval($_POST['year']  ?? 0);
-        $degree = trim($_POST['degree']  ?? '');
-        $branch = trim($_POST['branch']  ?? '');
-
-        $tableCheck = safeQuery($conn, "SHOW TABLES LIKE 'student_profiles'");
-        $tableExists = false;
-        if ($tableCheck) {
-            $tableExists = (bool)$tableCheck->fetch_row();
-            $tableCheck->free();
-        }
-
-        if ($tableExists) {
-            $existsResult = safePreparedQuery(
-                $conn, "SELECT user_id FROM student_profiles WHERE user_id = ?", "i", [$userId]
-            );
-            $rowExists = false;
-            if ($existsResult['success'] && $existsResult['result']) {
-                $rowExists = (bool)$existsResult['result']->fetch_assoc();
-                $existsResult['result']->free();
-            }
-
-            if ($rowExists) {
-                $uq = "UPDATE student_profiles
-                       SET phone=?, bio=?, year_of_study=?, degree=?, branch=?, updated_at=NOW()
-                       WHERE user_id=?";
-                $ur = safePreparedQuery($conn, $uq, "ssissi", [$phone, $bio, $year, $degree, $branch, $userId]);
-            } else {
-                $uq = "INSERT INTO student_profiles (user_id, phone, bio, year_of_study, degree, branch, created_at, updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())";
-                $ur = safePreparedQuery($conn, $uq, "ississ", [$userId, $phone, $bio, $year, $degree, $branch]);
-            }
-
-            if ($ur['success']) {
-                $updateMessage = 'Profile updated successfully.';
-                $updateType    = 'success';
-            } else {
-                $updateMessage = 'Failed to update profile. Please try again.';
-                $updateType    = 'error';
-            }
-        } else {
-            $updateMessage = 'Profile details cannot be saved yet — student_profiles table not found.';
-            $updateType    = 'error';
-        }
-
-        // Re-fetch profile
-        if ($tableExists) {
-            $pRefresh = safePreparedQuery($conn, "SELECT * FROM student_profiles WHERE user_id = ?", "i", [$userId]);
-            if ($pRefresh['success'] && $pRefresh['result']) {
-                $profile = $pRefresh['result']->fetch_assoc() ?? [];
-                $pRefresh['result']->free();
-            }
-        }
+        // student_profiles table does not exist in the current schema.
+        // Core fields (name, email, dept, reg no) are managed by admin via the users table.
+        $updateMessage = 'Additional profile fields are not available yet.';
+        $updateType    = 'error';
     }
 
     // ── Change password ───────────────────────────────────────────────────
@@ -258,21 +212,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 }
 
-// ── Fetch student_profiles if table exists ────────────────────────────────
-$profile     = [];
-$tableCheck2 = safeQuery($conn, "SHOW TABLES LIKE 'student_profiles'");
-$spExists    = false;
-if ($tableCheck2) {
-    $spExists = (bool)$tableCheck2->fetch_row();
-    $tableCheck2->free();
-}
-if ($spExists) {
-    $pResult = safePreparedQuery($conn, "SELECT * FROM student_profiles WHERE user_id = ?", "i", [$userId]);
-    if ($pResult['success'] && $pResult['result']) {
-        $profile = $pResult['result']->fetch_assoc() ?? [];
-        $pResult['result']->free();
-    }
-}
+// ── student_profiles table does not exist in the current schema ──────────
+$profile  = [];
+$spExists = false;
 
 // ── Login activity (last 5 successful logins) ─────────────────────────────
 $loginResult = safePreparedQuery(
@@ -1062,120 +1004,38 @@ function parseUA(string $ua): string {
         <div class="tab-panel active" id="panel-info">
             <div class="card">
                 <div class="card-title">👤 Personal Information</div>
-                <form method="POST" action="">
-                    <input type="hidden" name="action" value="update_profile">
-                    <div class="form-grid">
+                <div class="form-grid">
 
-                        <div class="form-group">
-                            <label class="form-label">Full Name</label>
-                            <input type="text" class="form-control" value="<?php echo htmlspecialchars($userName); ?>" disabled>
-                            <span class="form-hint">Managed by admin.</span>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Email Address</label>
-                            <input type="email" class="form-control" value="<?php echo htmlspecialchars($userEmail); ?>" disabled>
-                            <span class="form-hint">Managed by admin.</span>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Department</label>
-                            <input type="text" class="form-control" value="<?php echo htmlspecialchars($userDept); ?>" disabled>
-                            <span class="form-hint">Managed by admin.</span>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Registration Number</label>
-                            <input type="text" class="form-control" value="<?php echo htmlspecialchars($userRegNo); ?>" disabled>
-                            <span class="form-hint">Managed by admin.</span>
-                        </div>
-
-                        <?php if ($spExists): ?>
-
-                        <div class="form-group">
-                            <label class="form-label">Phone Number</label>
-                            <input type="tel" name="phone" class="form-control"
-                                   placeholder="+91 9876543210"
-                                   value="<?php echo htmlspecialchars($profile['phone'] ?? ''); ?>"
-                                   maxlength="20">
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Year of Study</label>
-                            <select name="year" class="form-control">
-                                <option value="0">Select year</option>
-                                <?php for ($y = 1; $y <= 5; $y++): ?>
-                                <option value="<?php echo $y; ?>"
-                                    <?php echo (($profile['year_of_study'] ?? 0) == $y) ? 'selected' : ''; ?>>
-                                    Year <?php echo $y; ?>
-                                </option>
-                                <?php endfor; ?>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Degree</label>
-                            <select name="degree" class="form-control">
-                                <option value="">Select degree</option>
-                                <?php foreach (['B.Tech','B.E.','B.Sc','B.Com','BBA','B.A','M.Tech','MBA','M.Sc','PhD','Other'] as $d): ?>
-                                <option value="<?php echo $d; ?>" <?php echo (($profile['degree'] ?? '') === $d) ? 'selected' : ''; ?>>
-                                    <?php echo $d; ?>
-                                </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Branch / Specialization</label>
-                            <input type="text" name="branch" class="form-control"
-                                   placeholder="e.g. Computer Science"
-                                   value="<?php echo htmlspecialchars($profile['branch'] ?? ''); ?>"
-                                   maxlength="100">
-                        </div>
-
-                        <div class="form-group full-width">
-                            <label class="form-label">College / University</label>
-                            <input type="text" name="college" class="form-control"
-                                   placeholder="e.g. Indian Institute of Technology"
-                                   value="<?php echo htmlspecialchars($profile['college'] ?? ''); ?>"
-                                   maxlength="150">
-                        </div>
-
-                        <div class="form-group full-width">
-                            <label class="form-label">Bio</label>
-                            <textarea name="bio" class="form-control"
-                                      placeholder="Tell us a little about yourself..."
-                                      maxlength="500"><?php echo htmlspecialchars($profile['bio'] ?? ''); ?></textarea>
-                            <span class="form-hint">Max 500 characters.</span>
-                        </div>
-
-                        <?php else: ?>
-                        <div class="form-group full-width">
-                            <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:9px;padding:14px;font-size:13px;color:#92400e;">
-                                ⚠️ The <code>student_profiles</code> table does not exist yet.
-                                Additional profile fields (phone, degree, bio, etc.) will be available once it is created.
-                            </div>
-                        </div>
-                        <?php endif; ?>
-
+                    <div class="form-group">
+                        <label class="form-label">Full Name</label>
+                        <input type="text" class="form-control" value="<?php echo htmlspecialchars($userName); ?>" disabled>
+                        <span class="form-hint">Managed by admin.</span>
                     </div>
 
-                    <?php if ($spExists): ?>
-                    <div class="form-actions">
-                        <span style="font-size:12px;color:var(--color-text-light);">
-                            <?php if (!empty($profile['updated_at'])): ?>
-                                Last updated: <?php echo date('M j, Y', strtotime($profile['updated_at'])); ?>
-                            <?php else: ?>
-                                Profile not yet saved.
-                            <?php endif; ?>
-                        </span>
-                        <div class="form-actions-right">
-                            <button type="reset" class="btn btn-secondary">Reset</button>
-                            <button type="submit" class="btn btn-primary"><span>💾</span> Save Changes</button>
-                        </div>
+                    <div class="form-group">
+                        <label class="form-label">Email Address</label>
+                        <input type="email" class="form-control" value="<?php echo htmlspecialchars($userEmail); ?>" disabled>
+                        <span class="form-hint">Managed by admin.</span>
                     </div>
-                    <?php endif; ?>
-                </form>
+
+                    <div class="form-group">
+                        <label class="form-label">Department</label>
+                        <input type="text" class="form-control" value="<?php echo htmlspecialchars($userDept ?: '—'); ?>" disabled>
+                        <span class="form-hint">Managed by admin.</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Registration Number</label>
+                        <input type="text" class="form-control" value="<?php echo htmlspecialchars($userRegNo ?: '—'); ?>" disabled>
+                        <span class="form-hint">Managed by admin.</span>
+                    </div>
+
+                </div>
+
+                <div style="margin-top:20px;padding:14px;background:#f0f9ff;border:1px solid #bee3f8;border-radius:9px;font-size:13px;color:#2c5282;">
+                    ℹ️ Additional profile fields (phone, bio, degree, etc.) will be available in a future update.
+                    Contact your administrator to update your core details.
+                </div>
             </div>
 
             <!-- Account Details -->

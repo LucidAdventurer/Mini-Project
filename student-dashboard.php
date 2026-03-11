@@ -13,6 +13,10 @@ $userDept     = $user['department'] ?? null;
 $userInitials = strtoupper(substr($userName, 0, 2));
 $userId       = (int) $user['user_id'];
 
+// Ensure CSRF token exists (new config.php sets this, but guard here too)
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 // ── Student statistics ──
 $statsResult = safePreparedQuery($conn,
     "SELECT
@@ -59,8 +63,19 @@ $availCountResult = safePreparedQuery($conn,
                  AND ac.access_type   = 'allow'
                  AND (ac.user_id = ? OR ac.department = ?)
            )
+           OR EXISTS (
+               SELECT 1 FROM assessment_groups ag
+               JOIN group_members gm ON gm.group_id = ag.group_id
+               WHERE ag.assessment_id = a.assessment_id
+                 AND gm.student_id = ?
+           )
+           OR EXISTS (
+               SELECT 1 FROM teacher_students ts
+               WHERE ts.student_id = ?
+                 AND ts.teacher_id = a.created_by
+           )
        )",
-    "is", [$userId, $userDept]
+    "isii", [$userId, $userDept, $userId, $userId]
 );
 
 $availableTests = 0;
@@ -106,10 +121,21 @@ $assessmentsResult = safePreparedQuery($conn,
                  AND ac.access_type   = 'allow'
                  AND (ac.user_id = ? OR ac.department = ?)
            )
+           OR EXISTS (
+               SELECT 1 FROM assessment_groups ag
+               JOIN group_members gm ON gm.group_id = ag.group_id
+               WHERE ag.assessment_id = a.assessment_id
+                 AND gm.student_id = ?
+           )
+           OR EXISTS (
+               SELECT 1 FROM teacher_students ts
+               WHERE ts.student_id = ?
+                 AND ts.teacher_id = a.created_by
+           )
        )
      ORDER BY a.created_at DESC
      LIMIT 20",
-    "iiis", [$userId, $userId, $userId, $userDept]
+    "iiisii", [$userId, $userId, $userId, $userDept, $userId, $userId]
 );
 
 $assessments      = [];
@@ -337,7 +363,6 @@ function timeAgo(string $datetime): string {
             0%   { box-shadow: 0 0 0 0 rgba(229,62,62,0.6); }
             70%  { box-shadow: 0 0 0 7px rgba(229,62,62,0); }
             100% { box-shadow: 0 0 0 0 rgba(229,62,62,0); }
-        }
         }
         .profile-dropdown-container { position: relative; }
         .profile-button {

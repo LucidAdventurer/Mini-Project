@@ -9,8 +9,13 @@ $currentUser  = validateSession($conn);
 $userName     = htmlspecialchars($currentUser['full_name']);
 $userInitials = strtoupper(substr($currentUser['full_name'], 0, 2));
 $userId       = (int) $currentUser['user_id'];
-$userRole     = $currentUser['role'] ?? 'student';   // expected values: 'admin', 'teacher', 'student'
-$canEdit      = in_array($userRole, ['admin', 'teacher'], true);
+$userRole     = $currentUser['user_type'] ?? 'student'; // from users.user_type: 'admin', 'teacher', 'student'
+$canEdit      = ($userRole === 'admin');                // only admins can edit/delete notifications (no created_by column)
+
+// Ensure CSRF token exists
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 
 // ── Handle AJAX edit / delete requests ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canEdit) {
@@ -38,15 +43,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canEdit) {
             exit;
         }
 
-        // Admin can edit any notification; teacher only their own target notifications
-        $checkCol = ($userRole === 'admin') ? '1=1' : 'created_by = ?';
-        $editResult = ($userRole === 'admin')
-            ? safePreparedQuery($conn,
-                "UPDATE notifications SET title=?, message=?, notification_type=? WHERE notification_id=?",
-                "sssi", [$title, $message, $type, $nid])
-            : safePreparedQuery($conn,
-                "UPDATE notifications SET title=?, message=?, notification_type=? WHERE notification_id=? AND created_by=?",
-                "sssii", [$title, $message, $type, $nid, $userId]);
+        // Only admins can edit notifications (no created_by column in schema)
+        $editResult = safePreparedQuery($conn,
+            "UPDATE notifications SET title=?, message=?, notification_type=? WHERE notification_id=?",
+            "sssi", [$title, $message, $type, $nid]);
 
         echo json_encode(['success' => (bool)($editResult['success'] ?? false)]);
         exit;
@@ -56,13 +56,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canEdit) {
         $nid = (int)($body['notification_id'] ?? 0);
         if (!$nid) { echo json_encode(['success' => false, 'error' => 'Invalid id']); exit; }
 
-        $delResult = ($userRole === 'admin')
-            ? safePreparedQuery($conn,
-                "DELETE FROM notifications WHERE notification_id=?",
-                "i", [$nid])
-            : safePreparedQuery($conn,
-                "DELETE FROM notifications WHERE notification_id=? AND created_by=?",
-                "ii", [$nid, $userId]);
+        // Only admins can delete any notification (no created_by column in schema)
+        $delResult = safePreparedQuery($conn,
+            "DELETE FROM notifications WHERE notification_id=?",
+            "i", [$nid]);
 
         echo json_encode(['success' => (bool)($delResult['success'] ?? false)]);
         exit;
