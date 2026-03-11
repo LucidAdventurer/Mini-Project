@@ -46,9 +46,9 @@ $asmResult = safePreparedQuery($conn,
     "SELECT assessment_id, max_attempts
      FROM assessments
      WHERE assessment_id = ?
-       AND status = 'active'
-       AND (available_from  IS NULL OR available_from  <= NOW())
-       AND (available_until IS NULL OR available_until >= NOW())
+       AND status = 'published'
+       AND (start_time IS NULL OR start_time <= NOW())
+       AND (end_time   IS NULL OR end_time   >= NOW())
        AND (
            is_public = 1
            OR EXISTS (
@@ -99,7 +99,7 @@ if ($existingResult['result']) {
 $countResult = safePreparedQuery($conn,
     "SELECT COUNT(*) AS cnt
      FROM assessment_attempts
-     WHERE assessment_id = ? AND user_id = ? AND status = 'completed'",
+     WHERE assessment_id = ? AND user_id = ? AND status = 'submitted'",
     "ii", [$assessmentId, $userId]
 );
 

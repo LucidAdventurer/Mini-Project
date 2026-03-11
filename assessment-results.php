@@ -32,7 +32,7 @@ $assessment = null;
 $r = safePreparedQuery($conn,
     "SELECT assessment_id, title, category, difficulty, status,
             duration_minutes, total_marks, passing_marks,
-            available_from, available_until, created_at, updated_at
+            start_time, end_time, created_at, updated_at
      FROM assessments
      WHERE assessment_id = ? AND created_by = ?",
     "ii", [$assessmentId, $teacherId]
@@ -49,7 +49,7 @@ if (!$assessment) {
 // ── Aggregate stats ──
 $stats = [
     'total_attempts'   => 0,
-    'completed'        => 0,
+    'submitted'        => 0,
     'avg_score'        => 0,
     'highest_score'    => 0,
     'lowest_score'     => 0,
@@ -61,13 +61,13 @@ $stats = [
 $rs = safePreparedQuery($conn,
     "SELECT
         COUNT(*)                                                        AS total_attempts,
-        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END)          AS completed,
-        ROUND(AVG(CASE WHEN status='completed' THEN percentage END), 1) AS avg_score,
+        SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END)          AS submitted,
+        ROUND(AVG(CASE WHEN status='submitted' THEN percentage END), 1) AS avg_score,
         ROUND(MAX(percentage), 1)                                       AS highest_score,
-        ROUND(MIN(CASE WHEN status='completed' THEN percentage END), 1) AS lowest_score,
-        SUM(CASE WHEN status='completed'
+        ROUND(MIN(CASE WHEN status='submitted' THEN percentage END), 1) AS lowest_score,
+        SUM(CASE WHEN status='submitted'
                   AND percentage >= ? THEN 1 ELSE 0 END)               AS pass_count,
-        ROUND(AVG(CASE WHEN status='completed'
+        ROUND(AVG(CASE WHEN status='submitted'
                   THEN TIMESTAMPDIFF(MINUTE, start_time, submitted_at)
                   END), 0)                                             AS avg_time,
         COUNT(DISTINCT user_id)                                         AS unique_students
@@ -84,7 +84,7 @@ if ($rs['success'] && $rs['result']) {
     $row = $rs['result']->fetch_assoc();
     if ($row) {
         $stats['total_attempts']   = (int)($row['total_attempts'] ?? 0);
-        $stats['completed']        = (int)($row['completed']       ?? 0);
+        $stats['submitted']        = (int)($row['submitted']       ?? 0);
         $stats['avg_score']        = (float)($row['avg_score']      ?? 0);
         $stats['highest_score']    = (float)($row['highest_score']  ?? 0);
         $stats['lowest_score']     = (float)($row['lowest_score']   ?? 0);
@@ -95,15 +95,15 @@ if ($rs['success'] && $rs['result']) {
     $rs['result']->free();
 }
 
-$passRate = $stats['completed'] > 0
-    ? round(($stats['pass_count'] / $stats['completed']) * 100, 1)
+$passRate = $stats['submitted'] > 0
+    ? round(($stats['pass_count'] / $stats['submitted']) * 100, 1)
     : 0;
 
 // ── Score distribution (buckets: 0-20, 20-40, 40-60, 60-80, 80-100) ──
 $distribution = [0, 0, 0, 0, 0];
 $rd = safePreparedQuery($conn,
     "SELECT percentage FROM assessment_attempts
-     WHERE assessment_id = ? AND status = 'completed' AND percentage IS NOT NULL",
+     WHERE assessment_id = ? AND status = 'submitted' AND percentage IS NOT NULL",
     "i", [$assessmentId]
 );
 if ($rd['success'] && $rd['result']) {
@@ -162,6 +162,58 @@ if ($rqc['success'] && $rqc['result']) {
     $row = $rqc['result']->fetch_assoc();
     $questionCount = (int)($row['cnt'] ?? 0);
     $rqc['result']->free();
+}
+
+// ── Top performers (up to 5, submitted attempts only) ──
+$topPerformers = [];
+$rtp = safePreparedQuery($conn,
+    "SELECT
+        COALESCE(u.full_name, aa.guest_name, 'Guest') AS student_name,
+        COALESCE(u.registration_number, '—')           AS reg_number,
+        aa.percentage,
+        aa.score
+     FROM assessment_attempts aa
+     LEFT JOIN users u ON u.user_id = aa.user_id
+     WHERE aa.assessment_id = ? AND aa.status = 'submitted' AND aa.percentage IS NOT NULL
+     ORDER BY aa.percentage DESC, aa.score DESC
+     LIMIT 5",
+    "i", [$assessmentId]
+);
+if ($rtp['success'] && $rtp['result']) {
+    while ($row = $rtp['result']->fetch_assoc()) {
+        $topPerformers[] = $row;
+    }
+    $rtp['result']->free();
+}
+
+// ── Question-wise analysis ──
+$questionAnalysis = [];
+$rqa = safePreparedQuery($conn,
+    "SELECT
+        q.question_id,
+        q.question_order,
+        q.question_text,
+        q.marks,
+        COUNT(ans.answer_id)                                             AS total_answers,
+        SUM(CASE WHEN ans.marks_awarded >= q.marks THEN 1 ELSE 0 END)   AS correct_count,
+        SUM(CASE WHEN ans.marks_awarded = 0 AND ans.selected_option_id IS NOT NULL
+                  AND ans.text_answer IS NULL THEN 1 ELSE 0 END)        AS incorrect_count,
+        SUM(CASE WHEN ans.selected_option_id IS NULL
+                  AND ans.text_answer IS NULL THEN 1 ELSE 0 END)        AS skipped_count
+     FROM questions q
+     LEFT JOIN answers ans ON ans.question_id = q.question_id
+     LEFT JOIN assessment_attempts aa ON aa.attempt_id = ans.attempt_id
+         AND aa.status = 'submitted'
+     WHERE q.assessment_id = ?
+     GROUP BY q.question_id
+     ORDER BY q.question_order ASC",
+    "i", [$assessmentId]
+);
+if ($rqa['success'] && $rqa['result']) {
+    while ($row = $rqa['result']->fetch_assoc()) {
+        $questionAnalysis[] = $row;
+    }
+    $rqa['result']->free();
 }
 
 // ── Helpers ──
@@ -304,6 +356,16 @@ function passBadge(float $pct, float $passingPct): string {
 
         /* ── TWO-COL LAYOUT ── */
         .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+        .performers-list { display:flex; flex-direction:column; gap:10px; }
+        .performer-item { display:flex; align-items:center; gap:12px; padding:10px; background:var(--color-bg-light); border-radius:10px; }
+        .performer-rank { width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; flex-shrink:0; background:linear-gradient(135deg,var(--color-teacher-primary),var(--color-teacher-secondary)); color:white; }
+        .performer-rank.gold   { background:linear-gradient(135deg,#ffd700,#ffed4e); color:#7c2d12; }
+        .performer-rank.silver { background:linear-gradient(135deg,#c0c0c0,#e8e8e8); color:#2d3748; }
+        .performer-rank.bronze { background:linear-gradient(135deg,#cd7f32,#e59b5f); color:white; }
+        .performer-info { flex:1; }
+        .performer-name { font-size:14px; font-weight:600; color:var(--color-text); }
+        .performer-reg  { font-size:12px; color:var(--color-text-light); }
+        .performer-score { font-size:17px; font-weight:700; color:var(--color-teacher-primary); }
 
         /* ── CARD ── */
         .card {
@@ -509,11 +571,11 @@ function passBadge(float $pct, float $passingPct): string {
                     </span>
                     <span class="meta-badge info">📚 <?= ucfirst($assessment['category'] ?? 'General') ?></span>
                     <span class="meta-badge info">🎯 <?= ucfirst($assessment['difficulty'] ?? 'Medium') ?></span>
-                    <?php if ($assessment['available_from']): ?>
-                        <span class="meta-badge info">📅 From: <?= fmtDate($assessment['available_from']) ?></span>
+                    <?php if ($assessment['start_time']): ?>
+                        <span class="meta-badge info">📅 From: <?= fmtDate($assessment['start_time']) ?></span>
                     <?php endif; ?>
-                    <?php if ($assessment['available_until']): ?>
-                        <span class="meta-badge info">📅 Until: <?= fmtDate($assessment['available_until']) ?></span>
+                    <?php if ($assessment['end_time']): ?>
+                        <span class="meta-badge info">📅 Until: <?= fmtDate($assessment['end_time']) ?></span>
                     <?php endif; ?>
                 </div>
             </div>
@@ -535,7 +597,7 @@ function passBadge(float $pct, float $passingPct): string {
         </div>
         <div class="stat-card">
             <div class="stat-icon">✅</div>
-            <div class="stat-value"><?= $stats['completed'] ?></div>
+            <div class="stat-value"><?= $stats['submitted'] ?></div>
             <div class="stat-label">Completed</div>
         </div>
         <div class="stat-card">
@@ -643,6 +705,77 @@ function passBadge(float $pct, float $passingPct): string {
 
     </div>
 
+    <!-- Top Performers + Question Analysis -->
+    <div class="two-col" style="margin-bottom:24px;">
+
+        <!-- Top Performers -->
+        <div class="card">
+            <div class="card-title">
+                <div class="card-icon">🏆</div>
+                Top Performers
+            </div>
+            <?php if (empty($topPerformers)): ?>
+                <div style="color:var(--color-text-light);font-size:14px;padding:12px 0;">No submitted attempts yet.</div>
+            <?php else: ?>
+            <div class="performers-list">
+                <?php
+                $rankClasses = ['gold', 'silver', 'bronze'];
+                foreach ($topPerformers as $i => $p):
+                    $rankCls = $rankClasses[$i] ?? '';
+                    $pct     = $p['percentage'] !== null ? number_format((float)$p['percentage'], 1) . '%' : '—';
+                ?>
+                <div class="performer-item">
+                    <div class="performer-rank <?= $rankCls ?>"><?= $i + 1 ?></div>
+                    <div class="performer-info">
+                        <div class="performer-name"><?= htmlspecialchars($p['student_name']) ?></div>
+                        <div class="performer-reg"><?= htmlspecialchars($p['reg_number']) ?></div>
+                    </div>
+                    <div class="performer-score"><?= $pct ?></div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
+        </div>
+
+        <!-- Question-wise Analysis -->
+        <div class="card">
+            <div class="card-title">
+                <div class="card-icon">📋</div>
+                Question Analysis
+            </div>
+            <?php if (empty($questionAnalysis)): ?>
+                <div style="color:var(--color-text-light);font-size:14px;padding:12px 0;">No question data available.</div>
+            <?php else: ?>
+            <div style="display:flex;flex-direction:column;gap:10px;max-height:340px;overflow-y:auto;padding-right:4px;">
+                <?php foreach ($questionAnalysis as $qi => $q):
+                    $total      = max(1, (int)$q['total_answers']);
+                    $correct    = (int)$q['correct_count'];
+                    $incorrect  = (int)$q['incorrect_count'];
+                    $skipped    = (int)$q['skipped_count'];
+                    $successPct = $total > 0 ? round(($correct / $total) * 100) : 0;
+                    $barColor   = $successPct >= 70 ? '#48bb78' : ($successPct >= 40 ? '#ffc107' : '#f56565');
+                ?>
+                <div style="background:var(--color-bg-light);border-radius:8px;padding:10px 12px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                        <span style="font-size:13px;font-weight:600;color:var(--color-teacher-primary);">
+                            Q<?= $qi + 1 ?>
+                        </span>
+                        <span style="font-size:12px;color:var(--color-text-light);">
+                            ✓ <?= $correct ?> &nbsp; ✗ <?= $incorrect ?> &nbsp; — <?= $skipped ?>
+                        </span>
+                        <span style="font-size:13px;font-weight:700;color:var(--color-text);"><?= $successPct ?>%</span>
+                    </div>
+                    <div style="width:100%;height:6px;background:#e2e8f0;border-radius:4px;overflow:hidden;">
+                        <div style="width:<?= $successPct ?>%;height:100%;background:<?= $barColor ?>;border-radius:4px;transition:width 0.4s;"></div>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
+        </div>
+
+    </div>
+
     <!-- Attempts Table -->
     <div class="table-section">
         <div class="table-controls">
@@ -658,9 +791,8 @@ function passBadge(float $pct, float $passingPct): string {
                 </div>
                 <select class="filter-select" id="statusFilter" onchange="filterTable()">
                     <option value="">All statuses</option>
-                    <option value="completed">Completed</option>
+                    <option value="submitted">Submitted</option>
                     <option value="in_progress">In Progress</option>
-                    <option value="abandoned">Abandoned</option>
                     <option value="timeout">Timeout</option>
                 </select>
                 <select class="filter-select" id="resultFilter" onchange="filterTable()">
@@ -705,16 +837,15 @@ function passBadge(float $pct, float $passingPct): string {
                             $pct      = $a['percentage'] !== null ? (float)$a['percentage'] : null;
                             $isPassed = $pct !== null && $pct >= $passingPct;
                             $statusCls = match($a['status']) {
-                                'completed'   => 'badge-completed',
+                                'submitted'   => 'badge-completed',
                                 'in_progress' => 'badge-progress',
-                                'abandoned'   => 'badge-abandoned',
                                 'timeout'     => 'badge-timeout',
-                                default       => 'badge-abandoned',
+                                default       => 'badge-abandoned',  // fallback for unknown statuses
                             };
                         ?>
                         <tr data-status="<?= htmlspecialchars($a['status']) ?>"
-                            data-result="<?= ($a['status'] === 'completed' ? ($isPassed ? 'pass' : 'fail') : '') ?>"
-                            data-search="<?= strtolower(htmlspecialchars($a['student_name'] . ' ' . $a['student_email'] . ' ' . $a['reg_number'])) ?>">
+                            data-result="<?= ($a['status'] === 'submitted' ? ($isPassed ? 'pass' : 'fail') : '') ?>"
+                            data-search="<?= strtolower(htmlspecialchars($a['student_name'] . ' ' . $a['student_email'] . ' ' . $a['reg_number'])) ?>"><?php // data attrs use new status ?>
                             <td>
                                 <div class="student-info">
                                     <div class="name"><?= htmlspecialchars($a['student_name']) ?></div>
@@ -730,14 +861,14 @@ function passBadge(float $pct, float $passingPct): string {
                                 </div>
                             </td>
                             <td>
-                                <?php if ($a['status'] === 'completed' && $pct !== null): ?>
+                                <?php if ($a['status'] === 'submitted' && $pct !== null): ?>
                                     <?= passBadge($pct, $passingPct) ?>
                                 <?php else: ?>
                                     <span style="color:var(--color-text-light);font-size:12px;">—</span>
                                 <?php endif; ?>
                             </td>
                             <td>
-                                <?php if ($a['status'] === 'completed'): ?>
+                                <?php if ($a['status'] === 'submitted'): ?>
                                     <div class="answers-split">
                                         <span class="ans-correct">✓ <?= (int)$a['correct_answers'] ?></span>
                                         <span class="ans-wrong">✗ <?= (int)$a['wrong_answers'] ?></span>

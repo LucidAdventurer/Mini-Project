@@ -9,8 +9,8 @@
 // POST JSON {
 //   assessment_id, title, description, instructions,
 //   category, difficulty, duration_minutes, total_marks,
-//   passing_marks, max_attempts, available_from,
-//   available_until, show_results_immediately,
+//   passing_marks, max_attempts, start_time,
+//   end_time, show_results_immediately,
 //   show_correct_answers, randomize_questions,
 //   randomize_options, is_public, status
 // }
@@ -101,25 +101,25 @@ $maxAttempts  = max(1, (int)($body['max_attempts'] ?? 1));
 // ── Datetime fields ──
 // strtotime() handles all ISO-8601 variants the browser may send:
 // "2025-03-06T14:30", "2025-03-06T14:30:00", "2025-03-06 14:30:00", etc.
-$availableFrom  = null;
-$availableUntil = null;
+$startTime  = null;
+$endTime    = null;
 
-if (!empty($body['available_from'])) {
-    $ts = strtotime($body['available_from']);
+if (!empty($body['start_time'])) {
+    $ts = strtotime($body['start_time']);
     if ($ts !== false) {
-        $availableFrom = date('Y-m-d H:i:s', $ts);
+        $startTime = date('Y-m-d H:i:s', $ts);
     }
 }
-if (!empty($body['available_until'])) {
-    $ts = strtotime($body['available_until']);
+if (!empty($body['end_time'])) {
+    $ts = strtotime($body['end_time']);
     if ($ts !== false) {
-        $availableUntil = date('Y-m-d H:i:s', $ts);
+        $endTime = date('Y-m-d H:i:s', $ts);
     }
 }
 
-if ($availableFrom && $availableUntil && $availableFrom >= $availableUntil) {
+if ($startTime && $endTime && $startTime >= $endTime) {
     http_response_code(400);
-    echo json_encode(['success' => false, 'error' => '"Available Until" must be after "Available From".']);
+    echo json_encode(['success' => false, 'error' => '"End Time" must be after "Start Time".']);
     exit;
 }
 
@@ -132,7 +132,7 @@ $isPublic               = !empty($body['is_public'])                ? 1 : 0;
 
 // Status — only allow valid enum values
 $status = trim($body['status'] ?? 'draft');
-if (!in_array($status, ['draft', 'active', 'archived', 'scheduled'], true)) {
+if (!in_array($status, ['draft', 'published', 'archived'], true)) {
     $status = 'draft';
 }
 
@@ -150,7 +150,6 @@ if (!$check['success'] || !$check['result'] || $check['result']->num_rows === 0)
 $check['result']->free();
 
 // ── Update ──
-// 19 params: s s s s s i i i i s s i i i i i s i i
 $result = safePreparedQuery($conn,
     "UPDATE assessments SET
         title                    = ?,
@@ -162,8 +161,8 @@ $result = safePreparedQuery($conn,
         total_marks              = ?,
         passing_marks            = ?,
         max_attempts             = ?,
-        available_from           = ?,
-        available_until          = ?,
+        start_time               = ?,
+        end_time                 = ?,
         show_results_immediately = ?,
         show_correct_answers     = ?,
         randomize_questions      = ?,
@@ -177,7 +176,7 @@ $result = safePreparedQuery($conn,
         $title, $description, $instructions,
         $category, $difficulty,
         $duration, $totalMarks, $passingMarks, $maxAttempts,
-        $availableFrom, $availableUntil,
+        $startTime, $endTime,
         $showResultsImmediately, $showCorrectAnswers,
         $randomizeQuestions, $randomizeOptions, $isPublic,
         $status,

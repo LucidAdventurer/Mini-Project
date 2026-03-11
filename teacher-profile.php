@@ -7,10 +7,10 @@ require "config.php";
 
 /*
  * SESSION GUARD
- * Column: users.user_type (ENUM: 'student','teacher','admin')
- * Session key set at login must match: $_SESSION['user_type']
+ * Column: users.role (ENUM: 'student','teacher','admin')
+ * Session key set at login must match: $_SESSION['role']
  */
-if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'teacher') {
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'teacher') {
     header("Location: index.html");
     exit;
 }
@@ -55,7 +55,7 @@ $statsStmt = $conn->prepare("
     FROM assessments a
     LEFT JOIN assessment_attempts aa
         ON aa.assessment_id = a.assessment_id
-        AND aa.status = 'completed'
+        AND aa.status = 'submitted'
     WHERE a.created_by = ?
 ");
 $statsStmt->bind_param("i", $_SESSION['user_id']);
@@ -1105,7 +1105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 <div class="form-grid">
                     <div class="form-group">
                         <label class="form-label">Role</label>
-                        <!-- users.user_type value for this account -->
+                        <!-- users.role value for this account -->
                         <input type="text" class="form-control" value="Teacher" readonly>
                     </div>
                     <div class="form-group">

@@ -35,8 +35,8 @@ $r = safePreparedQuery($conn,
         a.duration_minutes,
         a.total_marks,
         a.passing_marks,
-        a.available_from,
-        a.available_until,
+        a.start_time,
+        a.end_time,
         a.max_attempts,
         a.show_results_immediately,
         a.show_correct_answers,
@@ -102,7 +102,7 @@ $rs = safePreparedQuery($conn,
         ROUND(AVG(percentage), 1) AS avg_score,
         ROUND(AVG(TIMESTAMPDIFF(MINUTE, start_time, submitted_at)), 0) AS avg_time,
         ROUND(
-            100.0 * SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0),
+            100.0 * SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0),
             1
         ) AS completion_rate
      FROM assessment_attempts
@@ -658,9 +658,9 @@ function fmtDate(?string $dt): string {
             </div>
         </div>
         <div class="status-toggle">
-            <span class="toggle-label">Active Status</span>
-            <div class="toggle-switch <?= $assessment['status'] === 'active' ? 'active' : '' ?>"
-                 id="statusToggle" onclick="toggleStatus()" title="Toggle active/draft">
+            <span class="toggle-label">Published Status</span>
+            <div class="toggle-switch <?= $assessment['status'] === 'published' ? 'active' : '' ?>"
+                 id="statusToggle" onclick="toggleStatus()" title="Toggle published/draft">
                 <div class="toggle-slider"></div>
             </div>
         </div>
@@ -767,13 +767,13 @@ function fmtDate(?string $dt): string {
             <div class="form-group">
                 <label class="form-label">Available From</label>
                 <input type="datetime-local" class="form-input" id="availableFrom"
-                       value="<?= toDatetimeLocal($assessment['available_from']) ?>">
+                       value="<?= toDatetimeLocal($assessment['start_time']) ?>">
             </div>
 
             <div class="form-group">
                 <label class="form-label">Available Until</label>
                 <input type="datetime-local" class="form-input" id="availableUntil"
-                       value="<?= toDatetimeLocal($assessment['available_until']) ?>">
+                       value="<?= toDatetimeLocal($assessment['end_time']) ?>">
             </div>
         </div>
 
@@ -1199,7 +1199,7 @@ document.getElementById('confirmModal').addEventListener('click', function(e) {
 function toggleStatus() {
     const toggle    = document.getElementById('statusToggle');
     const isActive  = toggle.classList.contains('active');
-    const newStatus = isActive ? 'draft' : 'active';
+    const newStatus = isActive ? 'draft' : 'published';
 
     openConfirmModal(
         isActive ? 'Set to Draft?' : 'Set to Active?',
@@ -1275,8 +1275,8 @@ async function saveAll() {
         total_marks             : marks,
         passing_marks           : passing,
         max_attempts            : parseInt(document.getElementById('maxAttempts').value, 10) || 1,
-        available_from          : document.getElementById('availableFrom').value || null,
-        available_until         : document.getElementById('availableUntil').value || null,
+        start_time          : document.getElementById('availableFrom').value || null,
+        end_time            : document.getElementById('availableUntil').value || null,
         show_results_immediately: document.getElementById('showResultsImmediately').checked ? 1 : 0,
         show_correct_answers    : document.getElementById('showCorrectAnswers').checked ? 1 : 0,
         randomize_questions     : document.getElementById('randomizeQuestions').checked ? 1 : 0,

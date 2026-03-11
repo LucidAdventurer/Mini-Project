@@ -6,7 +6,7 @@
 // teachers, with question count, attempt count, pass rate,
 // and the creating teacher's name.
 //
-// GET ?status=active|draft|archived|scheduled  (optional)
+// GET ?status=published|draft|archived  (optional)
 //     ?search=keyword                           (optional — searches title, category, teacher name)
 //     ?category=aptitude|technical|...          (optional)
 //     ?page=1&limit=20                          (optional)
@@ -37,7 +37,7 @@ $page     = max(1, (int)($_GET['page']  ?? 1));
 $limit    = min(100, max(1, (int)($_GET['limit'] ?? 20)));
 $offset   = ($page - 1) * $limit;
 
-$allowedStatuses   = ['active', 'draft', 'archived', 'scheduled'];
+$allowedStatuses   = ['published', 'draft', 'archived'];
 $allowedCategories = ['aptitude', 'technical', 'coding', 'reasoning', 'english', 'general'];
 
 // ── Build WHERE clause ──
@@ -75,9 +75,9 @@ $statsParams = $params;
 $rsStats = safePreparedQuery($conn,
     "SELECT
         COUNT(*)                                                              AS total,
-        SUM(CASE WHEN a.status = 'active'    THEN 1 ELSE 0 END)             AS active,
+        SUM(CASE WHEN a.status = 'published'    THEN 1 ELSE 0 END)             AS active,
         SUM(CASE WHEN a.status = 'draft'     THEN 1 ELSE 0 END)             AS drafts,
-        SUM(CASE WHEN a.status = 'scheduled' THEN 1 ELSE 0 END)             AS scheduled,
+        SUM(CASE WHEN a.status = 'archived' THEN 1 ELSE 0 END)             AS archived,
         ROUND(
             AVG(
                 CASE WHEN aa_stats.completed > 0
@@ -90,8 +90,8 @@ $rsStats = safePreparedQuery($conn,
      LEFT JOIN (
          SELECT
              assessment_id,
-             SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END)                                   AS completed,
-             SUM(CASE WHEN status = 'completed' AND percentage >= pass_pct THEN 1 ELSE 0 END)         AS pass_count
+             SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END)                                   AS completed,
+             SUM(CASE WHEN status = 'submitted' AND percentage >= pass_pct THEN 1 ELSE 0 END)         AS pass_count
          FROM (
              SELECT aa.assessment_id, aa.status, aa.percentage,
                     (SELECT (passing_marks / total_marks) * 100 FROM assessments WHERE assessment_id = aa.assessment_id) AS pass_pct
@@ -111,7 +111,7 @@ if ($rsStats['success'] && $rsStats['result']) {
             'total'         => (int)($row['total']         ?? 0),
             'active'        => (int)($row['active']        ?? 0),
             'drafts'        => (int)($row['drafts']        ?? 0),
-            'scheduled'     => (int)($row['scheduled']     ?? 0),
+            'scheduled'     => (int)($row['archived']      ?? 0),
             'avg_pass_rate' => (float)($row['avg_pass_rate'] ?? 0),
         ];
     }
@@ -151,8 +151,8 @@ $r = safePreparedQuery($conn,
         a.total_marks,
         a.passing_marks,
         a.is_public,
-        a.available_from,
-        a.available_until,
+        a.start_time,
+        a.end_time,
         a.created_at,
         a.updated_at,
         u.full_name                                  AS teacher_name,
@@ -161,10 +161,10 @@ $r = safePreparedQuery($conn,
         COUNT(DISTINCT aa.attempt_id)                AS attempt_count,
         COUNT(DISTINCT aa.user_id)                   AS student_count,
         ROUND(AVG(aa.percentage), 1)                 AS avg_score,
-        SUM(CASE WHEN aa.status = 'completed'
+        SUM(CASE WHEN aa.status = 'submitted'
                   AND aa.percentage >= (a.passing_marks / a.total_marks * 100)
              THEN 1 ELSE 0 END)                      AS pass_count,
-        SUM(CASE WHEN aa.status = 'completed' THEN 1 ELSE 0 END) AS completed_count
+        SUM(CASE WHEN aa.status = 'submitted' THEN 1 ELSE 0 END) AS completed_count
      FROM assessments a
      JOIN users u ON u.user_id = a.created_by
      LEFT JOIN questions q
@@ -173,7 +173,7 @@ $r = safePreparedQuery($conn,
             ON aa.assessment_id = a.assessment_id
      WHERE $where
      GROUP BY a.assessment_id, u.full_name, u.user_id
-     ORDER BY FIELD(a.status,'active','scheduled','draft','archived'), a.updated_at DESC
+     ORDER BY FIELD(a.status,'published','draft','archived'), a.updated_at DESC
      LIMIT ? OFFSET ?",
     $listTypes, $listParams
 );
@@ -195,8 +195,8 @@ if ($r['success'] && $r['result']) {
             'total_marks'      => (int)$row['total_marks'],
             'passing_marks'    => (int)$row['passing_marks'],
             'is_public'        => (bool)$row['is_public'],
-            'available_from'   => $row['available_from'],
-            'available_until'  => $row['available_until'],
+            'start_time'   => $row['start_time'],
+            'end_time'  => $row['end_time'],
             'created_at'       => $row['created_at'],
             'updated_at'       => $row['updated_at'],
             'teacher_name'     => $row['teacher_name'],

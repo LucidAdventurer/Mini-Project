@@ -30,7 +30,7 @@ if (isset($_GET['edit']) && (int)$_GET['edit'] > 0) {
     $r = safePreparedQuery($conn,
         "SELECT assessment_id, title, description, instructions, category, difficulty,
                 status, duration_minutes, total_marks, passing_marks, max_attempts,
-                available_from, available_until,
+                start_time, end_time,
                 show_results_immediately, show_correct_answers,
                 randomize_questions, randomize_options, is_public, created_at
          FROM assessments
@@ -50,7 +50,7 @@ if (isset($_GET['edit']) && (int)$_GET['edit'] > 0) {
     }
 
     // Only allow editing drafts (and scheduled — teacher may want to adjust before it goes live)
-    if (!in_array($assessment['status'], ['draft', 'scheduled'], true)) {
+    if ($assessment['status'] !== 'draft') {
         // Active/archived assessments go to edit-assessment.php instead
         header('Location: edit-assessment.php?id=' . $assessmentId);
         exit;
@@ -646,12 +646,12 @@ function sel(?array $a = null, string $key, string $value, string $default = '')
             <div class="form-group">
                 <label class="form-label">Available From</label>
                 <input type="datetime-local" class="form-input" id="availableFrom"
-                       value="<?= toDatetimeLocal($assessment['available_from'] ?? null) ?>">
+                       value="<?= toDatetimeLocal($assessment['start_time'] ?? null) ?>">
             </div>
             <div class="form-group">
                 <label class="form-label">Available Until</label>
                 <input type="datetime-local" class="form-input" id="availableUntil"
-                       value="<?= toDatetimeLocal($assessment['available_until'] ?? null) ?>">
+                       value="<?= toDatetimeLocal($assessment['end_time'] ?? null) ?>">
             </div>
         </div>
 
@@ -1022,8 +1022,8 @@ function collectBasicData() {
         total_marks             : parseInt(document.getElementById('totalMarks').value, 10) || 0,
         passing_marks           : parseInt(document.getElementById('passingMarks').value, 10) || 0,
         max_attempts            : parseInt(document.getElementById('maxAttempts').value, 10) || 1,
-        available_from          : document.getElementById('availableFrom').value || null,
-        available_until         : document.getElementById('availableUntil').value || null,
+        start_time          : document.getElementById('availableFrom').value || null,
+        end_time            : document.getElementById('availableUntil').value || null,
         show_results_immediately: document.getElementById('showResults').checked ? 1 : 0,
         show_correct_answers    : document.getElementById('showAnswers').checked ? 1 : 0,
         randomize_questions     : document.getElementById('randQ').checked ? 1 : 0,
@@ -1095,7 +1095,7 @@ async function publish() {
         return;
     }
 
-    data.status = 'active';
+    data.status = 'published';
     showLoading('Publishing…');
     try {
         const token = await getCsrfToken();

@@ -23,7 +23,7 @@ $statsResult = safePreparedQuery($conn,
         COUNT(DISTINCT attempt_id)   AS tests_completed,
         COALESCE(AVG(percentage), 0) AS avg_score
      FROM assessment_attempts
-     WHERE user_id = ? AND status = 'completed'",
+     WHERE user_id = ? AND status = 'submitted'",
     "i", [$userId]
 );
 
@@ -52,9 +52,9 @@ if ($notifResult['success'] && $notifResult['result']) {
 $availCountResult = safePreparedQuery($conn,
     "SELECT COUNT(DISTINCT a.assessment_id) AS cnt
      FROM assessments a
-     WHERE a.status = 'active'
-       AND (a.available_from  IS NULL OR a.available_from  <= NOW())
-       AND (a.available_until IS NULL OR a.available_until >= NOW())
+     WHERE a.status = 'published'
+       AND (a.start_time  IS NULL OR a.start_time  <= NOW())
+       AND (a.end_time IS NULL OR a.end_time >= NOW())
        AND (
            a.is_public = 1
            OR EXISTS (
@@ -98,21 +98,21 @@ $assessmentsResult = safePreparedQuery($conn,
         a.total_marks,
         a.passing_marks,
         a.max_attempts,
-        a.available_until,
+        a.end_time,
         (SELECT COUNT(*) FROM questions q WHERE q.assessment_id = a.assessment_id) AS question_count,
         (SELECT COUNT(*) FROM assessment_attempts aa
           WHERE aa.assessment_id = a.assessment_id
             AND aa.user_id = ?
-            AND aa.status  = 'completed') AS attempts_used,
+            AND aa.status  = 'submitted') AS attempts_used,
         (SELECT aa2.attempt_id FROM assessment_attempts aa2
           WHERE aa2.assessment_id = a.assessment_id
             AND aa2.user_id = ?
-            AND aa2.status  = 'completed'
+            AND aa2.status  = 'submitted'
           ORDER BY aa2.submitted_at DESC LIMIT 1) AS last_attempt_id
      FROM assessments a
-     WHERE a.status = 'active'
-       AND (a.available_from  IS NULL OR a.available_from  <= NOW())
-       AND (a.available_until IS NULL OR a.available_until >= NOW())
+     WHERE a.status = 'published'
+       AND (a.start_time  IS NULL OR a.start_time  <= NOW())
+       AND (a.end_time IS NULL OR a.end_time >= NOW())
        AND (
            a.is_public = 1
            OR EXISTS (
@@ -156,7 +156,7 @@ $activityResult = safePreparedQuery($conn,
             a.title
      FROM assessment_attempts aa
      JOIN assessments a ON a.assessment_id = aa.assessment_id
-     WHERE aa.user_id = ? AND aa.status = 'completed'
+     WHERE aa.user_id = ? AND aa.status = 'submitted'
      ORDER BY aa.submitted_at DESC
      LIMIT 5",
     "i", [$userId]
@@ -1010,8 +1010,8 @@ function timeAgo(string $datetime): string {
                             $catClass     = htmlspecialchars(strtolower($a['category']));
                             $diff         = strtolower($a['difficulty']);
                             $diffLabel    = ucfirst($diff);
-                            $deadline     = $a['available_until']
-                                            ? date('d M Y, g:i A', strtotime($a['available_until']))
+                            $deadline     = $a['end_time']
+                                            ? date('d M Y, g:i A', strtotime($a['end_time']))
                                             : null;
                         ?>
                         <div class="assessment-card <?= $exhausted ? 'exhausted' : '' ?>" data-category="<?= $catClass ?>">
