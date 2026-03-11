@@ -61,9 +61,12 @@ if (!is_array($submitted) || empty($submitted)) {
 }
 
 // ── Verify assessment is still active & public ──
+// New schema: assessments table columns are identical — assessment_id,
+//   total_marks, passing_marks, show_correct_answers, is_public, status.
 $aRes = safePreparedQuery(
     $conn,
-    "SELECT assessment_id, total_marks, passing_marks, show_correct_answers
+    "SELECT assessment_id, total_marks, passing_marks, show_correct_answers,
+            randomize_questions, questions_per_attempt
      FROM assessments
      WHERE assessment_id = ? AND is_public = 1 AND status = 'active'",
     "i", [$assessmentId]
@@ -78,9 +81,55 @@ if (!$aRes['success'] || !$aRes['result'] || $aRes['result']->num_rows === 0) {
 $assmt = $aRes['result']->fetch_assoc();
 $aRes['result']->free();
 
-$totalMarks         = (int)$assmt['total_marks'];
-$passingMarks       = (int)$assmt['passing_marks'];
-$showCorrectAnswers = (bool)$assmt['show_correct_answers'];
+$totalMarks          = (int)$assmt['total_marks'];
+$passingMarks        = (int)$assmt['passing_marks'];
+$showCorrectAnswers  = (bool)$assmt['show_correct_answers'];
+$randomizeQuestions  = (bool)$assmt['randomize_questions'];
+
+// ── Resolve the attempt_id for this submission ──
+// The new schema introduces attempt_questions: when questions are randomised
+// (or a subset is served via questions_per_attempt), the exact set of
+// question IDs assigned to an attempt is stored there.
+// We check the session for a guest attempt_id set by the test-delivery layer.
+// If found, we restrict grading to only those question IDs — preventing a
+// client from submitting answers for questions they were never served.
+$allowedQuestionIds = null; // null = no restriction (all questions allowed)
+
+if ($randomizeQuestions || $assmt['questions_per_attempt'] !== null) {
+    $attemptId = isset($_SESSION['current_attempt_id'])
+                 ? (int)$_SESSION['current_attempt_id']
+                 : 0;
+
+    if ($attemptId > 0) {
+        // Verify the attempt belongs to this assessment before trusting it
+        $aqRes = safePreparedQuery(
+            $conn,
+            "SELECT aq.question_id
+             FROM attempt_questions aq
+             INNER JOIN assessment_attempts aa
+                     ON aa.attempt_id = aq.attempt_id
+            WHERE aq.attempt_id  = ?
+              AND aa.assessment_id = ?",
+            "ii", [$attemptId, $assessmentId]
+        );
+
+        if ($aqRes['success'] && $aqRes['result']) {
+            $allowedQuestionIds = [];
+            while ($r = $aqRes['result']->fetch_assoc()) {
+                $allowedQuestionIds[] = (int)$r['question_id'];
+            }
+            $aqRes['result']->free();
+
+            if (empty($allowedQuestionIds)) {
+                // attempt_id found but belongs to a different assessment — reject
+                http_response_code(403);
+                echo json_encode(['success' => false, 'error' => 'Invalid attempt for this assessment.']);
+                exit;
+            }
+        }
+        // If the query fails, fall through without restriction (graceful degradation)
+    }
+}
 
 // ── Fetch questions (marks, negative_marks, correct_answer) ──
 // Only fetch question IDs submitted by the client to avoid loading
@@ -89,6 +138,11 @@ $submittedIds = [];
 foreach (array_keys($submitted) as $qid) {
     $int = (int)$qid;
     if ($int > 0) {
+        // If we have an allowed set (randomised/subset attempt), silently drop
+        // any question IDs the client submitted that weren't part of their attempt.
+        if ($allowedQuestionIds !== null && !in_array($int, $allowedQuestionIds, true)) {
+            continue;
+        }
         $submittedIds[] = $int;
     }
 }
