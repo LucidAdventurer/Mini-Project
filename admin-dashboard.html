@@ -2333,13 +2333,10 @@
                     <label>Category *</label>
                     <select class="form-input" id="urCategory">
                         <option value="aptitude">Aptitude</option>
+                        <option value="verbal">Verbal</option>
+                        <option value="logical">Logical</option>
                         <option value="technical">Technical</option>
-                        <option value="coding">Coding</option>
-                        <option value="reasoning">Reasoning</option>
-                        <option value="english">English</option>
                         <option value="general">General</option>
-                        <option value="placement">Placement</option>
-                        <option value="interview">Interview</option>
                     </select>
                 </div>
             </div>
@@ -2867,16 +2864,26 @@
                 pdf: 'rgba(0,102,255,0.12)', video: 'rgba(34,197,94,0.12)',
                 link: 'rgba(234,179,8,0.12)', article: 'rgba(124,58,237,0.12)', quiz: 'rgba(239,68,68,0.12)'
             };
+            // Category pill colours matching guest-dashboard filter tabs
+            const catBg = {
+                aptitude: 'rgba(59,130,246,0.12)', verbal: 'rgba(236,72,153,0.12)',
+                logical: 'rgba(34,197,94,0.12)', technical: 'rgba(234,179,8,0.12)', general: 'rgba(107,114,128,0.12)'
+            };
+            const catColor = {
+                aptitude: '#1e40af', verbal: '#be185d', logical: '#15803d', technical: '#a16207', general: '#374151'
+            };
 
             const fileTypes = ['pdf', 'video', 'quiz'];
             let html = d.materials.map(m => {
+                // get-resources.php returns resource_id; support legacy material_id too
+                const rid = m.resource_id ?? m.material_id;
                 const sizeMB = m.file_size ? (m.file_size / (1024 * 1024)).toFixed(1) + ' MB' : (m.external_url ? 'Link' : '—');
                 const isFile = fileTypes.includes(m.material_type);
                 const viewUrl = isFile
-                    ? `${API.viewResource}?material_id=${m.material_id}`
+                    ? `${API.viewResource}?material_id=${rid}`
                     : m.external_url;
                 const dlUrl = isFile
-                    ? `${API.serveResource}?material_id=${m.material_id}&action=download`
+                    ? `${API.serveResource}?material_id=${rid}&action=download`
                     : null;
                 const viewBtn = viewUrl
                     ? `<a href="${viewUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 8px;">View</a>`
@@ -2884,18 +2891,21 @@
                 const dlBtn = dlUrl
                     ? `<a href="${dlUrl}" class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 8px;">Download</a>`
                     : '';
+                const cat = (m.category || 'general').toLowerCase();
+                const catPill = `<span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:600;background:${catBg[cat]||catBg.general};color:${catColor[cat]||catColor.general};margin-left:6px;">${esc(cat)}</span>`;
+                const visIcon = m.is_public == 1 ? '🌐' : '🔒';
                 return `<div class="resource-card">
                         <div class="resource-icon" style="background:${typeBg[m.material_type] || 'rgba(0,102,255,0.12)'};">${typeIcon[m.material_type] || '📦'}</div>
-                        <h4>${esc(m.title)}</h4>
+                        <h4>${esc(m.title)}${catPill}</h4>
                         <p>${esc(m.description || '—')}</p>
                         <div class="resource-meta">
-                            <span>${esc(m.material_type.toUpperCase())} · ${sizeMB}</span>
+                            <span>${esc(m.material_type.toUpperCase())} · ${sizeMB} ${visIcon}</span>
                             <span>↓ ${fmtNum(m.downloads)}</span>
                         </div>
                         <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
                             ${viewBtn}
                             ${dlBtn}
-                            <button class="btn btn-danger btn-sm" style="font-size:11px;padding:4px 8px;" onclick="deleteResource(${m.material_id},'${esc(m.title)}')">Delete</button>
+                            <button class="btn btn-danger btn-sm" style="font-size:11px;padding:4px 8px;" onclick="deleteResource(${rid},'${esc(m.title)}')">Delete</button>
                         </div>
                     </div>`;
             }).join('');

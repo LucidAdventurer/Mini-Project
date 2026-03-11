@@ -2,28 +2,25 @@
 // ============================================================
 // api/resources/upload-resource.php
 //
-// Saves training material metadata after the file has been
-// uploaded directly to Cloudinary from the browser.
-// The Cloudinary secure_url is passed as external_url.
-// The Cloudinary public_id is passed as cloudinary_public_id.
+// Saves a resource record to the `resources` table after the
+// admin has already uploaded the file to Cloudinary from the
+// browser. This endpoint only handles DB metadata — the file
+// itself travels directly from browser → Cloudinary.
 //
-// Accessible by: admin, teacher
+// Requires: admin session + valid CSRF token.
 //
 // POST JSON {
-//   title                   (required)
-//   material_type           pdf | video | link | article | quiz  (required)
-//   category                (required)
-//   external_url            (required — Cloudinary URL for files, raw URL for links)
-//   cloudinary_public_id    (required for file types, null for link/article)
-//   description             (optional)
-//   difficulty              beginner | intermediate | advanced   (optional, default beginner)
-//   is_public               0 | 1   (optional, default 1)
-//   tags                    JSON array string e.g. '["arrays","sorting"]'
-//   estimated_time_minutes  (optional)
-//   file_size               (optional, bytes — returned by Cloudinary)
+//   title                 : string   (required)
+//   material_type         : 'pdf'|'video'|'link'|'article'|'quiz'
+//   category              : 'aptitude'|'verbal'|'logical'|'technical'|'general'
+//   description           : string
+//   external_url          : string   (Cloudinary secure_url or plain URL)
+//   file_size             : int      (bytes; 0 for links/articles)
+//   cloudinary_public_id  : string   (empty for links/articles)
+//   is_public             : 0|1
 // }
 //
-// Returns { success: bool, material_id: int, error?: string }
+// Returns { success: bool, resource_id: int }
 // ============================================================
 
 require_once __DIR__ . '/../../config.php';
@@ -31,26 +28,29 @@ require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
-// ── Auth: admin or teacher only ──
-$currentUser = validateSession($conn);
-$userId      = (int) $currentUser['user_id'];
-$role        = $currentUser['user_type'];
-
-if (!in_array($role, ['admin', 'teacher'], true)) {
-    http_response_code(403);
-    echo json_encode(['success' => false, 'error' => 'Only teachers and admins can upload resources.']);
-    exit;
-}
-
+// ── Method ─────────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['success' => false, 'error' => 'Method not allowed.']);
     exit;
 }
 
-validateCsrfToken();
+// ── Admin session guard ────────────────────────────────────────────────────
+if (empty($_SESSION['user_id']) || empty($_SESSION['user_type']) || $_SESSION['user_type'] !== 'admin') {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'Admin access required.']);
+    exit;
+}
 
-// ── Parse JSON body ──
+// ── CSRF check ─────────────────────────────────────────────────────────────
+$csrfHeader = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+if (empty($csrfHeader) || !hash_equals($_SESSION['csrf_token'] ?? '', $csrfHeader)) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'Invalid CSRF token.']);
+    exit;
+}
+
+// ── Parse body ─────────────────────────────────────────────────────────────
 $body = json_decode(file_get_contents('php://input'), true);
 if (!is_array($body)) {
     http_response_code(400);
@@ -58,142 +58,79 @@ if (!is_array($body)) {
     exit;
 }
 
-$title           = trim($body['title']                   ?? '');
-$materialType    = trim($body['material_type']           ?? '');
-$category        = trim($body['category']                ?? '');
-$description     = trim($body['description']             ?? '');
-$externalUrl     = trim($body['external_url']            ?? '');
-$cloudinaryPubId = trim($body['cloudinary_public_id']    ?? '');
-$tagsRaw         = $body['tags']                         ?? null;
-$difficulty      = trim($body['difficulty']              ?? 'beginner');
-$isPublic        = isset($body['is_public']) ? (int)(bool)$body['is_public'] : 1;
-$estTime         = max(0, (int)($body['estimated_time_minutes'] ?? 0));
-$fileSize        = max(0, (int)($body['file_size']       ?? 0));
-
-// ── Validate title ──
-if ($title === '') {
+// ── Validate & sanitise inputs ─────────────────────────────────────────────
+$title = trim($body['title'] ?? '');
+if ($title === '' || mb_strlen($title) > 200) {
     http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Title is required.']);
-    exit;
-}
-if (mb_strlen($title) > 200) {
-    http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Title must not exceed 200 characters.']);
+    echo json_encode(['success' => false, 'error' => 'Title is required (max 200 chars).']);
     exit;
 }
 
-// ── Validate material_type ──
-$allowedTypes = ['pdf', 'video', 'link', 'article', 'quiz'];
-if (!in_array($materialType, $allowedTypes, true)) {
+$validTypes      = ['pdf', 'video', 'link', 'article', 'quiz'];
+$validCategories = ['aptitude', 'verbal', 'logical', 'technical', 'general'];
+
+$materialType = strtolower(trim($body['material_type'] ?? ''));
+if (!in_array($materialType, $validTypes, true)) {
     http_response_code(400);
-    echo json_encode(['success' => false,
-        'error' => 'Invalid material type. Allowed: ' . implode(', ', $allowedTypes)]);
+    echo json_encode(['success' => false, 'error' => 'Invalid material type.']);
     exit;
 }
 
-// ── Validate category ──
-$allowedCategories = ['aptitude', 'technical', 'coding', 'reasoning',
-                      'english', 'general', 'placement', 'interview'];
-if (!in_array($category, $allowedCategories, true)) {
-    http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Invalid category.']);
-    exit;
+$category = strtolower(trim($body['category'] ?? 'general'));
+if (!in_array($category, $validCategories, true)) {
+    $category = 'general';
 }
 
-// ── Validate difficulty ──
-$allowedDifficulties = ['beginner', 'intermediate', 'advanced'];
-if (!in_array($difficulty, $allowedDifficulties, true)) {
-    $difficulty = 'beginner';
-}
+$description        = trim($body['description']           ?? '');
+$externalUrl        = trim($body['external_url']          ?? '');
+$fileSize           = max(0, (int)($body['file_size']     ?? 0));
+$cloudinaryPublicId = trim($body['cloudinary_public_id']  ?? '');
+$isPublic           = (int)(bool)($body['is_public']      ?? 1);
 
-// ── Validate URL ──
+// File types must have a URL (the Cloudinary secure_url); link/article must also have a URL
 if ($externalUrl === '') {
     http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'external_url is required.']);
+    echo json_encode(['success' => false, 'error' => 'A URL or uploaded file URL is required.']);
     exit;
 }
+
+// Basic URL validation
 if (!filter_var($externalUrl, FILTER_VALIDATE_URL)) {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => 'Invalid URL format.']);
     exit;
 }
 
-// ── Require public_id for file-backed types ──
-$fileTypes = ['pdf', 'video', 'quiz'];
-if (in_array($materialType, $fileTypes, true) && $cloudinaryPubId === '') {
-    http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'cloudinary_public_id is required for file uploads.']);
-    exit;
-}
-$cloudinaryPubIdParam = $cloudinaryPubId !== '' ? $cloudinaryPubId : null;
+$uploadedBy = (int)$_SESSION['user_id'];
 
-// ── Parse tags ──
-$tagsJson = null;
-if (is_array($tagsRaw)) {
-    $clean    = array_slice(array_map('trim', $tagsRaw), 0, 10);
-    $tagsJson = json_encode(array_values(array_filter($clean)));
-} elseif (is_string($tagsRaw) && $tagsRaw !== '') {
-    $decoded = json_decode($tagsRaw, true);
-    if (is_array($decoded)) {
-        $tagsJson = json_encode(array_values(array_filter(array_map('trim', $decoded))));
-    }
-}
-
-$filePath      = null;
-$fileSizeParam = $fileSize > 0 ? $fileSize : null;
-
-$conn->begin_transaction();
-
-try {
-    $stmt = $conn->prepare(
-        "INSERT INTO training_materials
-             (title, description, material_type,
-              file_path, external_url, cloudinary_public_id, file_size,
-              category, difficulty, uploaded_by,
-              is_public, tags, estimated_time_minutes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    );
-
-    if (!$stmt) {
-        throw new Exception("Prepare failed: " . $conn->error);
-    }
-
-    $stmt->bind_param(
-        "ssssssissiisi",
+// ── Insert ─────────────────────────────────────────────────────────────────
+$ins = safePreparedQuery(
+    $conn,
+    "INSERT INTO resources
+        (title, description, category, resource_type,
+         external_url, file_size, cloudinary_public_id,
+         is_public, uploaded_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "sssssisis",
+    [
         $title,
         $description,
-        $materialType,
-        $filePath,
-        $externalUrl,
-        $cloudinaryPubIdParam,
-        $fileSizeParam,
         $category,
-        $difficulty,
-        $userId,
+        $materialType,
+        $externalUrl,
+        $fileSize,
+        $cloudinaryPublicId,
         $isPublic,
-        $tagsJson,
-        $estTime
-    );
+        $uploadedBy,
+    ]
+);
 
-    $stmt->execute();
-    $materialId = (int) $stmt->insert_id;
-    $stmt->close();
-
-    if (!$materialId) {
-        throw new Exception("INSERT returned no insert_id.");
-    }
-
-    $conn->commit();
-
-    echo json_encode([
-        'success'     => true,
-        'material_id' => $materialId,
-        'message'     => 'Resource saved successfully.',
-    ]);
-
-} catch (Exception $e) {
-    $conn->rollback();
-    error_log("upload-resource.php transaction failed: " . $e->getMessage());
+if (!$ins['success']) {
     http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Failed to save resource. Please try again.']);
+    echo json_encode(['success' => false, 'error' => 'Failed to save resource to database.']);
+    exit;
 }
+
+$newId = $conn->insert_id;
+
+echo json_encode(['success' => true, 'resource_id' => $newId]);
