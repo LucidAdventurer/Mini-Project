@@ -1,938 +1,702 @@
 <?php
 // ============================================================
-// assessments.php  — Student Assessment Hub
-// Session-protected. Renders the available assessments page.
-// CSRF token injected server-side for fetch() calls.
+// assessments.php — Student Assessment Hub
+// Matches the exact design system of student-resources.php
 // ============================================================
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db-guard.php';
 
-$currentUser = validateSession($conn, 'student');
-$csrfToken   = $_SESSION['csrf_token'];
-$userName    = htmlspecialchars($currentUser['full_name'], ENT_QUOTES, 'UTF-8');
+$currentUser  = validateSession($conn, 'student');
+$userName     = htmlspecialchars($currentUser['full_name']);
+$userInitials = strtoupper(substr($currentUser['full_name'], 0, 2));
+$userId       = (int) $currentUser['user_id'];
+
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+// ── Unread notification count ──
+$notifResult = safePreparedQuery($conn,
+    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
+    "i", [$userId]
+);
+$unreadCount = 0;
+if ($notifResult['success'] && $notifResult['result']) {
+    $notifRow    = $notifResult['result']->fetch_assoc();
+    $unreadCount = (int)($notifRow['cnt'] ?? 0);
+    $notifResult['result']->free();
+}
+
+// ── Latest 5 notifications for dropdown ──
+$notifDropResult = safePreparedQuery($conn,
+    "SELECT notification_id, title, message, notification_type, is_read, created_at
+     FROM notifications WHERE user_id = ?
+     ORDER BY created_at DESC LIMIT 5",
+    "i", [$userId]
+);
+$notifItems = [];
+if ($notifDropResult['success'] && $notifDropResult['result']) {
+    while ($row = $notifDropResult['result']->fetch_assoc()) {
+        $notifItems[] = $row;
+    }
+    $notifDropResult['result']->free();
+}
+
+function timeAgoPhp(string $datetime): string {
+    $diff = time() - strtotime($datetime);
+    if ($diff < 60)     return 'Just now';
+    if ($diff < 3600)   return floor($diff / 60)   . ' min ago';
+    if ($diff < 86400)  return floor($diff / 3600)  . ' hr ago';
+    if ($diff < 604800) return floor($diff / 86400) . ' day ago';
+    return date('d M Y', strtotime($datetime));
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Assessments — PTA</title>
-
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet" />
-
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assessments – PTA Platform</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 <style>
-/* ─── RESET & TOKENS ─────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-    --bg:        #0c0f14;
-    --surface:   #13171f;
-    --surface2:  #1a1f2b;
-    --border:    #252b38;
-    --border2:   #2f3848;
-    --text:      #e8edf5;
-    --muted:     #6b7a96;
-    --accent:    #4f8fff;
-    --accent2:   #7eb8ff;
-    --green:     #29d68a;
-    --green-dim: #1a3d2e;
-    --amber:     #f5a623;
-    --amber-dim: #3d2c0f;
-    --red:       #ff5252;
-    --red-dim:   #3d1414;
-    --easy:      #29d68a;
-    --medium:    #f5a623;
-    --hard:      #ff5252;
-    --radius:    14px;
-    --radius-sm: 8px;
-    --shadow:    0 4px 24px rgba(0,0,0,.45);
-    --shadow-lg: 0 12px 48px rgba(0,0,0,.6);
-    --font-head: 'Syne', sans-serif;
-    --font-body: 'DM Sans', sans-serif;
+    --primary:      #234C6A;
+    --primary-dark: #456882;
 }
 
-html { scroll-behavior: smooth; }
 body {
-    font-family: var(--font-body);
-    background: var(--bg);
-    color: var(--text);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #D3DAD9 0%, white 100%);
     min-height: 100vh;
-    overflow-x: hidden;
 }
 
-/* ─── BACKGROUND MESH ─────────────────────────────── */
-body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background:
-        radial-gradient(ellipse 80% 50% at 10% 0%, rgba(79,143,255,.07) 0%, transparent 60%),
-        radial-gradient(ellipse 60% 40% at 90% 100%, rgba(41,214,138,.05) 0%, transparent 60%);
-    pointer-events: none;
-    z-index: 0;
-}
-
-/* ─── NAV ─────────────────────────────────────────── */
-.nav {
+/* ── NAVBAR ── */
+.navbar {
+    background: var(--primary);
+    padding: 0 30px;
+    height: 70px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     position: sticky;
     top: 0;
     z-index: 100;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 2rem;
-    height: 64px;
-    background: rgba(13,16,21,.85);
-    backdrop-filter: blur(16px);
-    border-bottom: 1px solid var(--border);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.15);
 }
-.nav-brand {
-    font-family: var(--font-head);
-    font-size: 1.25rem;
-    font-weight: 800;
-    letter-spacing: -.02em;
-    color: var(--text);
-    text-decoration: none;
-    display: flex;
-    align-items: center;
-    gap: .5rem;
+.navbar-brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+.nav-search { flex: 1; max-width: 500px; margin: 0 30px; position: relative; }
+.nav-search input {
+    width: 100%; padding: 10px 20px 10px 45px;
+    border: 2px solid #e2e8f0; border-radius: 10px;
+    font-family: inherit; font-size: 14px;
+    background: #f7fafc; color: #2d3748; outline: none;
+    transition: border-color .2s, box-shadow .2s;
 }
-.nav-brand span {
-    display: inline-block;
-    width: 28px; height: 28px;
-    background: var(--accent);
-    border-radius: 7px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: .8rem; font-weight: 800; color: #fff;
-}
-.nav-links {
-    display: flex;
-    align-items: center;
-    gap: .25rem;
-    list-style: none;
-}
-.nav-links a {
-    display: flex;
-    align-items: center;
-    gap: .4rem;
-    padding: .45rem .85rem;
-    border-radius: var(--radius-sm);
-    color: var(--muted);
-    text-decoration: none;
-    font-size: .875rem;
-    font-weight: 500;
-    transition: color .2s, background .2s;
-}
-.nav-links a:hover,
-.nav-links a.active { color: var(--text); background: var(--surface2); }
-.nav-links a.active { color: var(--accent); }
-.nav-right {
-    display: flex;
-    align-items: center;
-    gap: .75rem;
-}
-.avatar {
-    width: 34px; height: 34px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--accent), var(--green));
-    display: flex; align-items: center; justify-content: center;
-    font-family: var(--font-head);
-    font-weight: 700; font-size: .8rem;
-    color: #fff; cursor: pointer;
-    flex-shrink: 0;
-}
+.nav-search input:focus { border-color: #4facfe; box-shadow: 0 0 0 3px rgba(79,172,254,.15); }
+.nav-search .sicon { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: #a0aec0; font-size: 14px; }
+.nav-right { display: flex; align-items: center; gap: 15px; }
 
-/* ─── PAGE LAYOUT ─────────────────────────────────── */
-.page {
-    position: relative;
-    z-index: 1;
-    max-width: 1240px;
-    margin: 0 auto;
-    padding: 2.5rem 2rem 5rem;
+/* Notifications */
+.notification-btn {
+    position: relative; width: 40px; height: 40px;
+    background: #f7fafc; border-radius: 10px; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font-size: 16px; transition: 0.3s;
 }
+.notification-btn:hover { background: #e2e8f0; }
+.notif-dropdown-wrap { position: relative; }
+.notif-dropdown {
+    position: absolute; top: calc(100% + 10px); right: 0;
+    background: white; border-radius: 14px; box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+    width: 340px; opacity: 0; visibility: hidden; transform: translateY(-8px);
+    transition: 0.25s; z-index: 1002;
+}
+.notif-dropdown.show { opacity: 1; visibility: visible; transform: translateY(0); }
+.notif-dropdown-header { padding: 16px 20px 12px; font-weight: 700; font-size: 15px; color: #2d3748; border-bottom: 1px solid #e2e8f0; }
+.notif-list { max-height: 320px; overflow-y: auto; }
+.notif-item { display: flex; gap: 12px; align-items: flex-start; padding: 14px 20px; border-bottom: 1px solid #f0f4f8; cursor: pointer; transition: background .15s; }
+.notif-item:hover { background: #f7fafc; }
+.notif-item.unread { background: #f0f7ff; }
+.notif-dot { width: 8px; height: 8px; border-radius: 50%; background: #4facfe; flex-shrink: 0; margin-top: 5px; }
+.notif-dot.read { background: transparent; }
+.notif-item-body { flex: 1; }
+.notif-item-title { font-size: 13px; font-weight: 600; color: #2d3748; margin-bottom: 3px; }
+.notif-item-msg { font-size: 12px; color: #718096; line-height: 1.4; }
+.notif-item-time { font-size: 11px; color: #a0aec0; margin-top: 4px; }
+.notif-see-all { display: block; text-align: center; padding: 12px; font-size: 13px; font-weight: 600; color: #4facfe; text-decoration: none; border-top: 1px solid #e2e8f0; transition: background .15s; border-radius: 0 0 14px 14px; }
+.notif-see-all:hover { background: #f7fafc; }
+.notif-empty { padding: 28px 20px; text-align: center; color: #a0aec0; font-size: 13px; }
+.notif-badge {
+    position: absolute; top: -5px; right: -5px;
+    background: #e53e3e; color: white; width: 20px; height: 20px; border-radius: 50%;
+    font-size: 11px; font-weight: bold; display: flex; align-items: center; justify-content: center;
+    animation: badgePulse 1.8s ease-in-out infinite;
+}
+@keyframes badgePulse { 0%{box-shadow:0 0 0 0 rgba(229,62,62,0.6)} 70%{box-shadow:0 0 0 7px rgba(229,62,62,0)} 100%{box-shadow:0 0 0 0 rgba(229,62,62,0)} }
 
-/* ─── PAGE HEADER ─────────────────────────────────── */
-.page-header {
-    margin-bottom: 2.5rem;
-    animation: fadeUp .5s ease both;
-}
-.page-header h1 {
-    font-family: var(--font-head);
-    font-size: clamp(1.75rem, 4vw, 2.5rem);
-    font-weight: 800;
-    letter-spacing: -.03em;
-    line-height: 1.15;
-    margin-bottom: .5rem;
-}
-.page-header h1 em {
-    font-style: normal;
-    background: linear-gradient(90deg, var(--accent), var(--green));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-.page-header p {
-    color: var(--muted);
-    font-size: .975rem;
-    font-weight: 300;
-}
+/* Profile */
+.profile-button { display: flex; align-items: center; gap: 10px; background: #f7fafc; border: 2px solid #e2e8f0; border-radius: 10px; padding: 6px 14px 6px 6px; cursor: pointer; transition: background .2s; font-family: inherit; }
+.profile-button:hover { background: #e2e8f0; }
+.profile-avatar { width: 32px; height: 32px; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: 700; }
+.profile-name { color: #2d3748; font-size: 14px; font-weight: 500; }
+.profile-wrapper { position: relative; }
+.profile-dropdown { display: none; position: absolute; top: calc(100% + 10px); right: 0; background: white; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.15); min-width: 220px; z-index: 200; overflow: hidden; border: 1px solid #e2e8f0; }
+.profile-dropdown.open { display: block; }
+.dropdown-header { display: flex; align-items: center; gap: 12px; padding: 16px; border-bottom: 1px solid #e2e8f0; }
+.dropdown-avatar { width: 42px; height: 42px; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; font-weight: 700; flex-shrink: 0; }
+.dropdown-name { font-size: 14px; font-weight: 600; color: #2d3748; }
+.dropdown-email { font-size: 12px; color: #718096; margin-top: 2px; }
+.dropdown-divider { height: 1px; background: #e2e8f0; }
+.dropdown-item { display: flex; align-items: center; gap: 10px; padding: 11px 16px; font-size: 14px; color: #2d3748; text-decoration: none; cursor: pointer; transition: background .15s; font-family: inherit; background: none; border: none; width: 100%; text-align: left; }
+.dropdown-item .di { width: 20px; text-align: center; font-size: 16px; }
+.dropdown-item:hover { background: #f7fafc; }
+.dropdown-item.logout { color: #e53e3e; }
+.dropdown-item.logout:hover { background: #fff5f5; }
 
-/* ─── FILTER BAR ──────────────────────────────────── */
-.filter-bar {
-    display: flex;
-    align-items: center;
-    gap: .75rem;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
-    animation: fadeUp .5s .08s ease both;
-}
-.search-wrap {
-    position: relative;
-    flex: 1;
-    min-width: 220px;
-}
-.search-wrap svg {
-    position: absolute;
-    left: .85rem;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--muted);
-    pointer-events: none;
-}
-.search-wrap input {
-    width: 100%;
-    padding: .65rem .9rem .65rem 2.5rem;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    color: var(--text);
-    font-family: var(--font-body);
-    font-size: .875rem;
-    outline: none;
-    transition: border-color .2s;
-}
-.search-wrap input:focus { border-color: var(--accent); }
-.search-wrap input::placeholder { color: var(--muted); }
+/* ── LAYOUT ── */
+.page-wrapper { display: flex; min-height: calc(100vh - 70px); align-items: stretch; }
 
-.filter-pill-group {
-    display: flex;
-    gap: .4rem;
-    flex-wrap: wrap;
-}
-.filter-pill {
-    padding: .45rem .9rem;
-    border-radius: 100px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--muted);
-    font-size: .8rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all .18s;
-    font-family: var(--font-body);
-}
-.filter-pill:hover { border-color: var(--border2); color: var(--text); }
-.filter-pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+/* ── SIDEBAR ── */
+.sidebar { width: 230px; flex-shrink: 0; padding: 24px 12px; display: flex; flex-direction: column; gap: 2px; }
+.sidebar-section { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: #718096; padding: 14px 12px 6px; }
+.sidebar a { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; text-decoration: none; font-size: 14px; font-weight: 500; color: #4a5568; transition: background .15s, color .15s; }
+.sidebar a:hover { background: rgba(35,76,106,.08); color: var(--primary); }
+.sidebar a.active { background: rgba(35,76,106,.12); color: var(--primary); font-weight: 600; }
+.sidebar a i { width: 18px; text-align: center; font-size: 15px; }
+.sidebar-bottom { margin-top: auto; padding-top: 12px; border-top: 1px solid rgba(35,76,106,.12); }
+.sidebar-bottom button { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; font-size: 14px; font-weight: 500; color: #e53e3e; background: none; border: none; cursor: pointer; width: 100%; transition: background .15s; font-family: inherit; }
+.sidebar-bottom button:hover { background: rgba(229,62,62,.08); }
+.sidebar-bottom button i { width: 18px; text-align: center; font-size: 15px; }
 
-/* ─── SECTION TITLE ───────────────────────────────── */
-.section-label {
-    display: flex;
-    align-items: center;
-    gap: .75rem;
-    margin-bottom: 1.25rem;
-    margin-top: 2.5rem;
-}
-.section-label:first-of-type { margin-top: 0; }
-.section-label h2 {
-    font-family: var(--font-head);
-    font-size: 1.05rem;
-    font-weight: 700;
-    letter-spacing: -.01em;
-}
-.section-count {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 24px;
-    height: 24px;
-    padding: 0 7px;
-    border-radius: 100px;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    font-size: .75rem;
-    font-weight: 600;
-    color: var(--muted);
-}
-.section-line {
-    flex: 1;
-    height: 1px;
-    background: var(--border);
-}
+/* ── MAIN ── */
+.main { flex: 1; padding: 28px 28px 100px; }
 
-/* ─── GRID ─────────────────────────────────────────── */
-.cards-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    gap: 1.25rem;
-}
+/* ── STATS ── */
+.stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 24px; }
+.stat-card { background: white; border-radius: 20px; padding: 20px 22px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); display: flex; align-items: center; gap: 16px; }
+.stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+.si-blue   { background: rgba(79,172,254,.15); color: #4facfe; }
+.si-green  { background: rgba(72,187,120,.15); color: #48bb78; }
+.si-orange { background: rgba(237,137,54,.15);  color: #ed8936; }
+.si-purple { background: rgba(159,122,234,.15); color: #9f7aea; }
+.stat-val  { font-size: 1.6rem; font-weight: 700; color: #2d3748; line-height: 1; }
+.stat-lbl  { font-size: 12px; color: #718096; margin-top: 4px; }
 
-/* ─── CARD ─────────────────────────────────────────── */
-.card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 1.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    transition: border-color .2s, transform .2s, box-shadow .2s;
-    animation: fadeUp .4s ease both;
-    cursor: default;
-}
-.card:hover {
-    border-color: var(--border2);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow);
-}
+/* ── FILTER TABS ── */
+.filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+.filter-tab { padding: 8px 18px; border-radius: 8px; border: 2px solid #e2e8f0; background: white; font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; color: #4a5568; transition: all .18s; }
+.filter-tab:hover:not(.active) { background: #e2e8f0; }
+.filter-tab.active { background: linear-gradient(135deg, #4facfe, #00f2fe); border-color: transparent; color: white; font-weight: 600; }
 
-/* Card top row */
-.card-top {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: .75rem;
-}
-.card-badges {
-    display: flex;
-    gap: .4rem;
-    flex-wrap: wrap;
-}
-.badge {
-    display: inline-flex;
-    align-items: center;
-    gap: .3rem;
-    padding: .25rem .6rem;
-    border-radius: 100px;
-    font-size: .72rem;
-    font-weight: 600;
-    letter-spacing: .02em;
-    text-transform: uppercase;
-}
-.badge-category {
-    background: rgba(79,143,255,.12);
-    color: var(--accent2);
-    border: 1px solid rgba(79,143,255,.2);
-}
-.badge-easy   { background: rgba(41,214,138,.1); color: var(--easy);   border: 1px solid rgba(41,214,138,.2); }
-.badge-medium { background: rgba(245,166,35,.1);  color: var(--amber);  border: 1px solid rgba(245,166,35,.2); }
-.badge-hard   { background: rgba(255,82,82,.1);   color: var(--red);    border: 1px solid rgba(255,82,82,.2); }
+/* ── SECTION HEADER ── */
+.section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.section-header h2 { font-size: 15px; font-weight: 700; color: #2d3748; }
+.section-count { background: #e2e8f0; color: #718096; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; }
+.section-line { flex: 1; height: 1px; background: #e2e8f0; }
 
-/* Card title */
-.card-title {
-    font-family: var(--font-head);
-    font-size: 1.05rem;
-    font-weight: 700;
-    letter-spacing: -.015em;
-    line-height: 1.3;
-}
-.card-desc {
-    font-size: .85rem;
-    color: var(--muted);
-    line-height: 1.55;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
+/* ── ASSESSMENT GRID ── */
+.assessment-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; margin-bottom: 36px; }
 
-/* Meta row */
-.card-meta {
-    display: flex;
-    gap: 1.25rem;
-    flex-wrap: wrap;
-}
-.meta-item {
-    display: flex;
-    align-items: center;
-    gap: .35rem;
-    font-size: .8rem;
-    color: var(--muted);
-}
-.meta-item svg { flex-shrink: 0; }
-.meta-item strong { color: var(--text); font-weight: 500; }
+/* ── ASSESSMENT CARD ── */
+.assessment-card { background: white; border-radius: 15px; padding: 20px; box-shadow: 0 4px 15px rgba(79,172,254,0.1); border: 2px solid #e2e8f0; display: flex; flex-direction: column; gap: 12px; transition: transform .2s, box-shadow .2s, border-color .2s; }
+.assessment-card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(79,172,254,0.2); border-color: #4facfe; }
 
-/* Divider */
-.card-divider {
-    height: 1px;
-    background: var(--border);
-    margin: 0 -.25rem;
-}
+.card-top { display: flex; align-items: flex-start; gap: 14px; }
+.aicon { width: 46px; height: 46px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0; }
+.ai-pending   { background: #ebf8ff; color: #4facfe; }
+.ai-completed { background: #f0fff4; color: #48bb78; }
+.ai-failed    { background: #fff5f5; color: #fc8181; }
 
-/* Result block (for attended) */
-.result-block {
-    background: var(--surface2);
-    border-radius: var(--radius-sm);
-    padding: 1rem;
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-}
-.result-score-ring {
-    flex-shrink: 0;
-    width: 56px; height: 56px;
-    border-radius: 50%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    border: 3px solid;
-    gap: 0;
-}
-.result-score-ring.pass { border-color: var(--green); }
-.result-score-ring.fail { border-color: var(--red); }
-.ring-pct {
-    font-family: var(--font-head);
-    font-size: .95rem;
-    font-weight: 800;
-    line-height: 1;
-}
-.ring-pct.pass { color: var(--green); }
-.ring-pct.fail { color: var(--red); }
-.ring-label { font-size: .6rem; color: var(--muted); font-weight: 500; }
+.card-title { font-size: 15px; font-weight: 600; color: #2d3748; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.card-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
+.badge-cat { padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; background: #e9f4ff; color: #2b6cb0; }
+.badge-diff { padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+.badge-diff.easy   { background: #c6f6d5; color: #22543d; }
+.badge-diff.medium { background: #feebc8; color: #744210; }
+.badge-diff.hard   { background: #fed7d7; color: #742a2a; }
 
-.result-stats {
-    flex: 1;
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: .35rem .75rem;
-}
-.rstat {
-    display: flex;
-    flex-direction: column;
-    gap: .1rem;
-}
-.rstat-val {
-    font-family: var(--font-head);
-    font-size: 1rem;
-    font-weight: 700;
-}
-.rstat-val.green { color: var(--green); }
-.rstat-val.red   { color: var(--red); }
-.rstat-val.amber { color: var(--amber); }
-.rstat-lbl {
-    font-size: .7rem;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: .04em;
-}
+.card-desc { font-size: 13px; color: #718096; line-height: 1.45; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.card-meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: #718096; }
+.card-meta span { display: flex; align-items: center; gap: 4px; }
+.card-divider { height: 1px; background: #e2e8f0; }
 
-.pass-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: .3rem;
-    padding: .2rem .6rem;
-    border-radius: 100px;
-    font-size: .7rem;
-    font-weight: 600;
-    margin-top: .35rem;
-}
-.pass-badge.pass { background: var(--green-dim); color: var(--green); }
-.pass-badge.fail { background: var(--red-dim);   color: var(--red); }
+/* Result block */
+.result-block { background: #f7fafc; border-radius: 10px; padding: 12px; display: flex; align-items: center; gap: 12px; }
+.score-ring { width: 52px; height: 52px; border-radius: 50%; border: 3px solid; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; }
+.score-ring.pass { border-color: #48bb78; }
+.score-ring.fail { border-color: #fc8181; }
+.ring-pct { font-size: 13px; font-weight: 800; line-height: 1; }
+.ring-pct.pass { color: #48bb78; }
+.ring-pct.fail { color: #fc8181; }
+.ring-lbl { font-size: 9px; color: #a0aec0; font-weight: 500; }
+.result-stats { flex: 1; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px 8px; }
+.rstat-val { font-size: 15px; font-weight: 700; line-height: 1; }
+.rstat-val.green  { color: #48bb78; }
+.rstat-val.red    { color: #fc8181; }
+.rstat-val.orange { color: #ed8936; }
+.rstat-lbl { font-size: 10px; color: #a0aec0; text-transform: uppercase; letter-spacing: .04em; }
+.pass-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; margin-top: 4px; }
+.pass-chip.pass { background: #c6f6d5; color: #276749; }
+.pass-chip.fail { background: #fed7d7; color: #742a2a; }
 
-/* Card footer */
-.card-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: .75rem;
-}
-.attempt-info {
-    font-size: .78rem;
-    color: var(--muted);
-}
-.attempt-info strong { color: var(--text); }
+/* Chips */
+.deadline-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; background: #feebc8; color: #744210; }
+.inprogress-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; background: #ebf8ff; color: #2b6cb0; }
 
 /* Buttons */
-.btn {
-    display: inline-flex;
-    align-items: center;
-    gap: .45rem;
-    padding: .55rem 1.15rem;
-    border-radius: var(--radius-sm);
-    font-family: var(--font-body);
-    font-size: .85rem;
-    font-weight: 600;
-    text-decoration: none;
-    border: none;
-    cursor: pointer;
-    transition: all .18s;
-    flex-shrink: 0;
-}
-.btn-primary {
-    background: var(--accent);
-    color: #fff;
-}
-.btn-primary:hover { background: #6aa5ff; }
-.btn-outline {
-    background: transparent;
-    border: 1px solid var(--border2);
-    color: var(--text);
-}
-.btn-outline:hover { background: var(--surface2); border-color: var(--accent); color: var(--accent); }
-.btn-ghost {
-    background: transparent;
-    color: var(--muted);
-}
-.btn-ghost:hover { color: var(--text); }
-.btn:disabled, .btn[disabled] {
-    opacity: .45;
-    cursor: not-allowed;
-    pointer-events: none;
-}
+.btn-start { flex: 1; padding: 9px 0; background: linear-gradient(135deg, #4facfe, #00f2fe); color: white; border: none; border-radius: 8px; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: opacity .2s, transform .15s; text-decoration: none; }
+.btn-start:hover { opacity: .9; transform: translateY(-1px); }
+.btn-start.resume { background: linear-gradient(135deg, #f6ad55, #ed8936); }
+.btn-start:disabled { background: #e2e8f0; color: #a0aec0; cursor: not-allowed; transform: none; opacity: 1; }
+.btn-view { padding: 9px 14px; background: white; color: var(--primary); border: 2px solid var(--primary); border-radius: 8px; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all .2s; text-decoration: none; }
+.btn-view:hover { background: var(--primary); color: white; }
+.card-actions { display: flex; gap: 8px; }
+.attempt-info { font-size: 12px; color: #718096; display: flex; align-items: center; gap: 4px; }
+.attempt-info strong { color: #4a5568; }
 
-/* ─── EMPTY STATE ─────────────────────────────────── */
-.empty-state {
-    grid-column: 1 / -1;
-    text-align: center;
-    padding: 4rem 2rem;
-    color: var(--muted);
-}
-.empty-state .empty-icon {
-    font-size: 2.5rem;
-    margin-bottom: 1rem;
-    opacity: .5;
-}
-.empty-state h3 {
-    font-family: var(--font-head);
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--text);
-    margin-bottom: .4rem;
-}
-.empty-state p { font-size: .875rem; }
+/* ── EMPTY STATE ── */
+.empty-state { text-align: center; padding: 50px 24px; color: #a0aec0; grid-column: 1/-1; }
+.empty-state i { font-size: 3rem; margin-bottom: 16px; display: block; opacity: .4; }
+.empty-state p { font-size: 14px; line-height: 1.6; }
 
-/* ─── SKELETON ────────────────────────────────────── */
-.skeleton-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    gap: 1.25rem;
-}
-.skeleton-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 1.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: .85rem;
-}
-.skel {
-    background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%);
-    background-size: 200% 100%;
-    border-radius: 6px;
-    animation: shimmer 1.5s infinite;
-}
-@keyframes shimmer { to { background-position: -200% 0; } }
+/* ── SKELETON ── */
+.skeleton { animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+.skel { background: #e2e8f0; border-radius: 8px; }
 
-/* ─── TOAST ───────────────────────────────────────── */
-.toast-container {
-    position: fixed;
-    bottom: 1.5rem;
-    right: 1.5rem;
-    z-index: 9999;
-    display: flex;
-    flex-direction: column;
-    gap: .5rem;
-    pointer-events: none;
-}
-.toast {
-    display: flex;
-    align-items: center;
-    gap: .75rem;
-    padding: .8rem 1.1rem;
-    background: var(--surface);
-    border: 1px solid var(--border2);
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-lg);
-    font-size: .875rem;
-    font-weight: 500;
-    animation: slideIn .25s ease;
-    pointer-events: all;
-    max-width: 340px;
-}
-.toast.error { border-color: var(--red); }
-.toast.success { border-color: var(--green); }
-@keyframes slideIn { from { opacity: 0; transform: translateX(1rem); } }
+/* ── TOAST ── */
+.toast { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%) translateY(20px); background: #2d3748; color: white; padding: 12px 24px; border-radius: 10px; font-size: 13px; font-weight: 500; box-shadow: 0 8px 30px rgba(0,0,0,.15); opacity: 0; transition: all .3s; pointer-events: none; z-index: 999; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-/* ─── AVAILABILITY CHIP ───────────────────────────── */
-.avail-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: .3rem;
-    font-size: .72rem;
-    color: var(--amber);
-    background: var(--amber-dim);
-    border: 1px solid rgba(245,166,35,.2);
-    border-radius: 100px;
-    padding: .2rem .55rem;
-}
-
-/* ─── ANIMATIONS ──────────────────────────────────── */
-@keyframes fadeUp {
-    from { opacity: 0; transform: translateY(16px); }
-    to   { opacity: 1; transform: translateY(0); }
-}
-
-/* stagger cards */
-.card:nth-child(1)  { animation-delay: .03s; }
-.card:nth-child(2)  { animation-delay: .06s; }
-.card:nth-child(3)  { animation-delay: .09s; }
-.card:nth-child(4)  { animation-delay: .12s; }
-.card:nth-child(5)  { animation-delay: .15s; }
-.card:nth-child(6)  { animation-delay: .18s; }
-
-/* ─── RESPONSIVE ──────────────────────────────────── */
-@media (max-width: 640px) {
-    .nav { padding: 0 1rem; }
-    .nav-links { display: none; }
-    .page { padding: 1.5rem 1rem 4rem; }
-    .cards-grid, .skeleton-grid { grid-template-columns: 1fr; }
-    .result-stats { grid-template-columns: 1fr 1fr; }
-}
+@media (max-width: 900px) { .stats-row { grid-template-columns: repeat(2,1fr); } }
+@media (max-width: 768px) { .sidebar { display: none; } .main { padding: 16px 16px 100px; } }
 </style>
 </head>
 <body>
 
-<!-- ─── NAV ─────────────────────────────────────────── -->
-<nav class="nav">
-    <a class="nav-brand" href="dashboard.php">
-        <span>P</span> PTA
+<!-- ── NAVBAR ── -->
+<nav class="navbar">
+    <a href="student-dashboard.php" class="navbar-brand">
+        <img src="prepaura-logo.png" alt="Prepaura Logo" style="width:44px;height:44px;border-radius:10px;object-fit:contain;background:white;padding:3px;">
+        <div style="display:flex;flex-direction:column;line-height:1.1;color:white">
+            <span style="font-size:18px;font-weight:800;letter-spacing:.5px">PREPAURA</span>
+            <span style="font-size:11px;font-weight:400;opacity:.85;font-style:italic">Placement Training Platform</span>
+        </div>
     </a>
-    <ul class="nav-links">
-        <li><a href="dashboard.php">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-            Dashboard
-        </a></li>
-        <li><a href="assessments.php" class="active">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-            Assessments
-        </a></li>
-        <li><a href="materials.php">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
-            Materials
-        </a></li>
-        <li><a href="results.php">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-            My Results
-        </a></li>
-    </ul>
+
+    <div class="nav-search">
+        <i class="fa fa-search sicon"></i>
+        <input type="text" id="searchInput" placeholder="Search assessments…" autocomplete="off">
+    </div>
+
     <div class="nav-right">
-        <div class="avatar" title="<?= $userName ?>"><?= strtoupper(mb_substr($currentUser['full_name'], 0, 2)) ?></div>
+        <div class="notif-dropdown-wrap">
+            <button class="notification-btn" onclick="toggleNotifDropdown()" title="Notifications">
+                <span>🔔</span>
+                <?php if ($unreadCount > 0): ?>
+                <div class="notif-badge" id="notifBadge"><?= $unreadCount ?></div>
+                <?php endif; ?>
+            </button>
+            <div class="notif-dropdown" id="notifDropdown">
+                <div class="notif-dropdown-header">Notifications</div>
+                <div class="notif-list">
+                    <?php if (empty($notifItems)): ?>
+                        <div class="notif-empty">No notifications yet.</div>
+                    <?php else: foreach ($notifItems as $n):
+                        $isUnread  = !$n['is_read'];
+                        $typeIcons = ['info'=>'ℹ️','success'=>'✅','warning'=>'⚠️','error'=>'❌','assessment'=>'📝','result'=>'🏆','material'=>'📚'];
+                        $icon      = $typeIcons[$n['notification_type']] ?? '🔔';
+                    ?>
+                    <div class="notif-item <?= $isUnread ? 'unread' : '' ?>">
+                        <div class="notif-dot <?= $isUnread ? '' : 'read' ?>"></div>
+                        <div class="notif-item-body">
+                            <div class="notif-item-title"><?= $icon ?> <?= htmlspecialchars($n['title']) ?></div>
+                            <?php if ($n['message']): ?>
+                            <div class="notif-item-msg"><?= htmlspecialchars($n['message']) ?></div>
+                            <?php endif; ?>
+                            <div class="notif-item-time"><?= timeAgoPhp($n['created_at']) ?></div>
+                        </div>
+                    </div>
+                    <?php endforeach; endif; ?>
+                </div>
+                <a href="notifications.php" class="notif-see-all">See All</a>
+            </div>
+        </div>
+
+        <div class="profile-wrapper" id="profileWrapper">
+            <div class="profile-button" onclick="toggleDropdown()">
+                <div class="profile-avatar"><?= $userInitials ?></div>
+                <span class="profile-name"><?= $userName ?></span>
+                <i class="fa fa-chevron-down" style="font-size:11px;color:#a0aec0;margin-left:4px"></i>
+            </div>
+            <div class="profile-dropdown" id="profileDropdown">
+                <div class="dropdown-header">
+                    <div class="dropdown-avatar"><?= $userInitials ?></div>
+                    <div>
+                        <div class="dropdown-name"><?= $userName ?></div>
+                        <div class="dropdown-email"><?= htmlspecialchars($currentUser['email'] ?? '') ?></div>
+                    </div>
+                </div>
+                <div class="dropdown-divider"></div>
+                <a href="student-profile.php" class="dropdown-item"><span class="di">👤</span> My Profile</a>
+                <a href="help.html" target="_blank" rel="noopener noreferrer" class="dropdown-item"><span class="di">❓</span> Help &amp; Support</a>
+                <div class="dropdown-divider"></div>
+                <a href="#" onclick="if(confirm('Are you sure you want to logout?')) window.location.href='logout.php'" class="dropdown-item logout"><span class="di">🚪</span> Logout</a>
+            </div>
+        </div>
     </div>
 </nav>
 
-<!-- ─── PAGE ─────────────────────────────────────────── -->
-<main class="page">
+<div class="page-wrapper">
 
-    <header class="page-header">
-        <h1>Your <em>Assessments</em></h1>
-        <p>All available tests — pending ones on top so you never miss a deadline.</p>
-    </header>
+<!-- ── SIDEBAR ── -->
+<aside class="sidebar">
+    <span class="sidebar-section">Navigation</span>
+    <a href="student-dashboard.php"><i class="fa fa-home"></i> Dashboard</a>
+    <a href="assessments.php" class="active"><i class="fa fa-clipboard-list"></i> Assessments</a>
+    <a href="student-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
+    <a href="notifications.php" style="position:relative">
+        <i class="fa fa-bell"></i> Notifications
+        <?php if ($unreadCount > 0): ?>
+        <span style="margin-left:auto;background:#e53e3e;color:white;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;min-width:20px;text-align:center;"><?= $unreadCount ?></span>
+        <?php endif; ?>
+    </a>
 
-    <!-- Filter bar -->
-    <div class="filter-bar">
-        <div class="search-wrap">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" id="searchInput" placeholder="Search assessments…" autocomplete="off" />
+    <span class="sidebar-section">Filter by Difficulty</span>
+    <a href="#" id="f-all"    onclick="setDiff('',this);return false;"><i class="fa fa-layer-group"></i> All Types</a>
+    <a href="#" id="f-easy"   onclick="setDiff('easy',this);return false;"><i class="fa fa-circle-check" style="color:#48bb78"></i> Easy</a>
+    <a href="#" id="f-medium" onclick="setDiff('medium',this);return false;"><i class="fa fa-circle-check" style="color:#ed8936"></i> Medium</a>
+    <a href="#" id="f-hard"   onclick="setDiff('hard',this);return false;"><i class="fa fa-circle-check" style="color:#fc8181"></i> Hard</a>
+
+    <div class="sidebar-bottom">
+        <button onclick="if(confirm('Are you sure you want to logout?')) window.location.href='logout.php'">
+            <i class="fa fa-sign-out-alt"></i> Logout
+        </button>
+    </div>
+</aside>
+
+<!-- ── MAIN ── -->
+<main class="main">
+
+    <!-- Stats -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-icon si-blue"><i class="fa fa-clipboard-list"></i></div>
+            <div><div class="stat-val" id="st-total">—</div><div class="stat-lbl">Total Available</div></div>
         </div>
-        <div class="filter-pill-group" id="categoryFilter">
-            <button class="filter-pill active" data-cat="all">All</button>
-            <button class="filter-pill" data-cat="aptitude">Aptitude</button>
-            <button class="filter-pill" data-cat="technical">Technical</button>
-            <button class="filter-pill" data-cat="coding">Coding</button>
-            <button class="filter-pill" data-cat="reasoning">Reasoning</button>
-            <button class="filter-pill" data-cat="english">English</button>
-            <button class="filter-pill" data-cat="general">General</button>
+        <div class="stat-card">
+            <div class="stat-icon si-orange"><i class="fa fa-hourglass-half"></i></div>
+            <div><div class="stat-val" id="st-pending">—</div><div class="stat-lbl">Pending</div></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon si-green"><i class="fa fa-circle-check"></i></div>
+            <div><div class="stat-val" id="st-done">—</div><div class="stat-lbl">Completed</div></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon si-purple"><i class="fa fa-trophy"></i></div>
+            <div><div class="stat-val" id="st-passed">—</div><div class="stat-lbl">Passed</div></div>
         </div>
     </div>
 
-    <!-- ── NOT ATTENDED ── -->
-    <div class="section-label">
-        <h2>Pending</h2>
+    <!-- Category filter tabs -->
+    <div class="filter-bar" id="catFilter">
+        <button class="filter-tab active" data-cat="">All Categories</button>
+        <button class="filter-tab" data-cat="aptitude">Aptitude</button>
+        <button class="filter-tab" data-cat="technical">Technical</button>
+        <button class="filter-tab" data-cat="coding">Coding</button>
+        <button class="filter-tab" data-cat="reasoning">Reasoning</button>
+        <button class="filter-tab" data-cat="english">English</button>
+        <button class="filter-tab" data-cat="general">General</button>
+    </div>
+
+    <!-- ── PENDING SECTION ── -->
+    <div class="section-header">
+        <h2><i class="fa fa-hourglass-half" style="color:#ed8936;margin-right:6px"></i>Pending</h2>
         <span class="section-count" id="pendingCount">—</span>
         <div class="section-line"></div>
     </div>
 
-    <div class="cards-grid" id="pendingGrid">
-        <!-- Skeleton -->
-        <div class="skeleton-card" id="skel1"><div class="skel" style="height:20px;width:60%"></div><div class="skel" style="height:14px;width:80%"></div><div class="skel" style="height:14px;width:40%"></div><div class="skel" style="height:36px;margin-top:.5rem"></div></div>
-        <div class="skeleton-card" id="skel2"><div class="skel" style="height:20px;width:55%"></div><div class="skel" style="height:14px;width:75%"></div><div class="skel" style="height:14px;width:50%"></div><div class="skel" style="height:36px;margin-top:.5rem"></div></div>
-        <div class="skeleton-card" id="skel3"><div class="skel" style="height:20px;width:65%"></div><div class="skel" style="height:14px;width:70%"></div><div class="skel" style="height:14px;width:45%"></div><div class="skel" style="height:36px;margin-top:.5rem"></div></div>
+    <div class="assessment-grid" id="pendingGrid">
+        <?php for ($s = 0; $s < 3; $s++): ?>
+        <div class="assessment-card skeleton">
+            <div style="display:flex;gap:14px">
+                <div class="skel" style="width:46px;height:46px;border-radius:10px;flex-shrink:0"></div>
+                <div style="flex:1">
+                    <div class="skel" style="height:15px;width:80%;margin-bottom:8px"></div>
+                    <div class="skel" style="height:11px;width:50%"></div>
+                </div>
+            </div>
+            <div class="skel" style="height:12px;width:90%"></div>
+            <div class="skel" style="height:12px;width:65%"></div>
+            <div class="skel" style="height:36px;border-radius:8px;margin-top:4px"></div>
+        </div>
+        <?php endfor; ?>
     </div>
 
-    <!-- ── ATTENDED ── -->
-    <div class="section-label" style="margin-top:3rem">
-        <h2>Completed</h2>
+    <!-- ── COMPLETED SECTION ── -->
+    <div class="section-header" style="margin-top:36px">
+        <h2><i class="fa fa-circle-check" style="color:#48bb78;margin-right:6px"></i>Completed</h2>
         <span class="section-count" id="completedCount">—</span>
         <div class="section-line"></div>
     </div>
 
-    <div class="cards-grid" id="completedGrid">
-        <!-- filled by JS -->
-    </div>
+    <div class="assessment-grid" id="completedGrid"></div>
 
 </main>
+</div>
 
-<!-- Toast container -->
-<div class="toast-container" id="toastContainer"></div>
+<div class="toast" id="toast"></div>
 
 <script>
-// ── Server-injected state ──────────────────────────
-const CSRF = <?= json_encode($csrfToken) ?>;
-const USER = <?= json_encode(['name' => $currentUser['full_name'], 'id' => (int)$currentUser['user_id']]) ?>;
+const CSRF_TOKEN = <?= json_encode($_SESSION['csrf_token']) ?>;
 
-// ── State ─────────────────────────────────────────
 let allPending   = [];
 let allCompleted = [];
-let currentCat   = 'all';
-let searchQuery  = '';
+let activeCat    = '';
+let activeDiff   = '';
+let searchQ      = '';
 
-// ── Toast ─────────────────────────────────────────
-function showToast(msg, type = 'info') {
-    const tc   = document.getElementById('toastContainer');
-    const icon = type === 'error'   ? '✕'
-               : type === 'success' ? '✓' : 'i';
-    const t    = document.createElement('div');
-    t.className = `toast ${type}`;
-    t.innerHTML = `<span>${icon}</span><span>${msg}</span>`;
-    tc.appendChild(t);
-    setTimeout(() => t.remove(), 4000);
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = String(s || '');
+    return d.innerHTML;
 }
-
-// ── Icon helpers ───────────────────────────────────
-const icons = {
-    clock  : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
-    list   : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`,
-    star   : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
-    user   : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
-    refresh: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>`,
-    play   : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>`,
-    eye    : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
-    cal    : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
-};
-
-// ── Format helpers ─────────────────────────────────
-function fmtDuration(mins) {
-    if (mins < 60) return `${mins}m`;
-    const h = Math.floor(mins / 60), m = mins % 60;
-    return m ? `${h}h ${m}m` : `${h}h`;
+function capFirst(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+function fmtDuration(m) {
+    if (m < 60) return m + ' min';
+    const h = Math.floor(m/60), r = m%60;
+    return r ? `${h}h ${r}m` : `${h}h`;
 }
 function fmtDate(dt) {
-    if (!dt) return null;
-    return new Date(dt).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+    if (!dt) return '';
+    return new Date(dt).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'});
 }
-function capFirst(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2800);
+}
 
-// ── Build pending card ─────────────────────────────
 function buildPendingCard(a) {
-    const canAttempt = a.can_attempt;
-    const diffClass  = `badge-${a.difficulty}`;
-    const availUntil = a.available_until ? fmtDate(a.available_until) : null;
     const resume     = !!a.in_progress_attempt_id;
+    const canAttempt = a.can_attempt;
+    const deadline   = a.available_until
+        ? `<span class="deadline-chip"><i class="fa fa-clock"></i> Ends ${esc(fmtDate(a.available_until))}</span>` : '';
+    const inprog     = resume
+        ? `<span class="inprogress-chip"><i class="fa fa-circle-play"></i> In Progress</span>` : '';
 
-    let availChip = '';
-    if (availUntil) {
-        availChip = `<span class="avail-chip">${icons.cal} Ends ${availUntil}</span>`;
-    }
-
-    let footerBtn = '';
+    let btn = '';
     if (resume) {
-        footerBtn = `<a class="btn btn-primary" href="take-assessment.php?id=${a.assessment_id}&attempt=${a.in_progress_attempt_id}">${icons.play} Resume</a>`;
+        btn = `<a class="btn-start resume" href="take-assessment.php?id=${a.assessment_id}&attempt=${a.in_progress_attempt_id}"><i class="fa fa-play"></i> Resume</a>`;
     } else if (canAttempt) {
-        footerBtn = `<a class="btn btn-primary" href="take-assessment.php?id=${a.assessment_id}">${icons.play} Start</a>`;
+        btn = `<a class="btn-start" href="take-assessment.php?id=${a.assessment_id}"><i class="fa fa-play"></i> Start</a>`;
     } else {
-        footerBtn = `<button class="btn btn-outline" disabled>No Attempts Left</button>`;
+        btn = `<button class="btn-start" disabled><i class="fa fa-ban"></i> No Attempts Left</button>`;
     }
 
     return `
-    <article class="card" data-cat="${a.category}" data-title="${a.title.toLowerCase()}">
+    <div class="assessment-card">
         <div class="card-top">
-            <div class="card-badges">
-                <span class="badge badge-category">${capFirst(a.category)}</span>
-                <span class="badge ${diffClass}">${capFirst(a.difficulty)}</span>
+            <div class="aicon ai-pending"><i class="fa fa-clipboard-list"></i></div>
+            <div style="flex:1;min-width:0">
+                <div class="card-title" title="${esc(a.title)}">${esc(a.title)}</div>
+                <div class="card-badges">
+                    <span class="badge-cat">${esc(capFirst(a.category))}</span>
+                    <span class="badge-diff ${esc(a.difficulty)}">${esc(capFirst(a.difficulty))}</span>
+                </div>
             </div>
-            ${availChip}
         </div>
-
-        <div>
-            <h3 class="card-title">${escHtml(a.title)}</h3>
-            ${a.description ? `<p class="card-desc">${escHtml(a.description)}</p>` : ''}
-        </div>
-
+        ${a.description ? `<div class="card-desc">${esc(a.description)}</div>` : ''}
         <div class="card-meta">
-            <span class="meta-item">${icons.clock} <strong>${fmtDuration(a.duration_minutes)}</strong></span>
-            <span class="meta-item">${icons.list} <strong>${a.question_count}</strong> Qs</span>
-            <span class="meta-item">${icons.star} <strong>${a.total_marks}</strong> marks</span>
-            <span class="meta-item">${icons.user} ${escHtml(a.created_by_name)}</span>
+            <span><i class="fa fa-clock"></i>${esc(fmtDuration(a.duration_minutes))}</span>
+            <span><i class="fa fa-circle-question"></i>${a.question_count} Questions</span>
+            <span><i class="fa fa-star"></i>${a.total_marks} Marks</span>
+            <span><i class="fa fa-user"></i>${esc(a.created_by_name)}</span>
         </div>
-
+        ${(deadline||inprog) ? `<div style="display:flex;gap:6px;flex-wrap:wrap">${deadline}${inprog}</div>` : ''}
         <div class="card-divider"></div>
-
-        <div class="card-footer">
-            <span class="attempt-info">
-                <strong>${a.attempts_used}</strong>/${a.max_attempts} attempts used
-                ${resume ? ' &mdash; <span style="color:var(--amber)">In progress</span>' : ''}
-            </span>
-            ${footerBtn}
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <span class="attempt-info"><i class="fa fa-rotate-right"></i>&nbsp;<strong>${a.attempts_used}</strong>/${a.max_attempts} used</span>
+            ${btn}
         </div>
-    </article>`;
+    </div>`;
 }
 
-// ── Build completed card ───────────────────────────
 function buildCompletedCard(a) {
-    const b        = a.best_attempt;
-    const pct      = b.percentage.toFixed(1);
-    const passClass = b.passed ? 'pass' : 'fail';
-    const diffClass = `badge-${a.difficulty}`;
-    const canRetry  = a.can_attempt;
+    const b   = a.best_attempt;
+    const pct = parseFloat(b.percentage).toFixed(1);
+    const rc  = b.passed ? 'pass' : 'fail';
+    const ic  = b.passed ? 'ai-completed' : 'ai-failed';
+    const ico = b.passed ? 'circle-check' : 'circle-xmark';
 
-    let retryBtn = '';
-    if (canRetry) {
-        retryBtn = `<a class="btn btn-outline" href="take-assessment.php?id=${a.assessment_id}">${icons.refresh} Retry</a>`;
-    }
-    let viewBtn = a.show_results_immediately
-        ? `<a class="btn btn-ghost" href="test-results.php?attempt_id=${b.attempt_id}">${icons.eye} View</a>`
-        : '';
+    const viewBtn  = a.show_results_immediately
+        ? `<a class="btn-view" href="test-results.php?attempt_id=${b.attempt_id}"><i class="fa fa-eye"></i> Results</a>` : '';
+    const retryBtn = a.can_attempt
+        ? `<a class="btn-start" href="take-assessment.php?id=${a.assessment_id}" style="flex:none;padding:9px 14px"><i class="fa fa-rotate-right"></i> Retry</a>` : '';
 
     return `
-    <article class="card" data-cat="${a.category}" data-title="${a.title.toLowerCase()}">
+    <div class="assessment-card">
         <div class="card-top">
-            <div class="card-badges">
-                <span class="badge badge-category">${capFirst(a.category)}</span>
-                <span class="badge ${diffClass}">${capFirst(a.difficulty)}</span>
+            <div class="aicon ${ic}"><i class="fa fa-${ico}"></i></div>
+            <div style="flex:1;min-width:0">
+                <div class="card-title" title="${esc(a.title)}">${esc(a.title)}</div>
+                <div class="card-badges">
+                    <span class="badge-cat">${esc(capFirst(a.category))}</span>
+                    <span class="badge-diff ${esc(a.difficulty)}">${esc(capFirst(a.difficulty))}</span>
+                </div>
             </div>
         </div>
-
-        <div>
-            <h3 class="card-title">${escHtml(a.title)}</h3>
-            ${a.description ? `<p class="card-desc">${escHtml(a.description)}</p>` : ''}
-        </div>
-
         <div class="result-block">
-            <div class="result-score-ring ${passClass}">
-                <span class="ring-pct ${passClass}">${pct}%</span>
-                <span class="ring-label">score</span>
+            <div class="score-ring ${rc}">
+                <span class="ring-pct ${rc}">${pct}%</span>
+                <span class="ring-lbl">score</span>
             </div>
             <div style="flex:1">
                 <div class="result-stats">
-                    <div class="rstat"><span class="rstat-val green">${b.correct}</span><span class="rstat-lbl">Correct</span></div>
-                    <div class="rstat"><span class="rstat-val red">${b.wrong}</span><span class="rstat-lbl">Wrong</span></div>
-                    <div class="rstat"><span class="rstat-val amber">${b.unanswered}</span><span class="rstat-lbl">Skipped</span></div>
+                    <div><div class="rstat-val green">${b.correct}</div><div class="rstat-lbl">Correct</div></div>
+                    <div><div class="rstat-val red">${b.wrong}</div><div class="rstat-lbl">Wrong</div></div>
+                    <div><div class="rstat-val orange">${b.unanswered}</div><div class="rstat-lbl">Skipped</div></div>
                 </div>
-                <span class="pass-badge ${passClass}">${b.passed ? '✓ Passed' : '✕ Failed'}</span>
+                <span class="pass-chip ${rc}">${b.passed ? '✓ Passed' : '✕ Failed'}</span>
             </div>
         </div>
-
         <div class="card-meta">
-            <span class="meta-item">${icons.clock} <strong>${fmtDuration(a.duration_minutes)}</strong></span>
-            <span class="meta-item">${icons.list} <strong>${a.question_count}</strong> Qs</span>
-            <span class="meta-item">${icons.star} <strong>${b.score.toFixed(0)}/${a.total_marks}</strong></span>
+            <span><i class="fa fa-clock"></i>${esc(fmtDuration(a.duration_minutes))}</span>
+            <span><i class="fa fa-circle-question"></i>${a.question_count} Qs</span>
+            <span><i class="fa fa-star"></i>${parseFloat(b.score).toFixed(0)}/${a.total_marks}</span>
+            <span><i class="fa fa-calendar"></i>${esc(fmtDate(b.submitted_at))}</span>
         </div>
-
         <div class="card-divider"></div>
-
-        <div class="card-footer">
-            <span class="attempt-info">
-                Attempt <strong>${b.attempt_number}</strong> &bull; ${fmtDate(b.submitted_at)}
-            </span>
-            <div style="display:flex;gap:.5rem">
-                ${viewBtn}
-                ${retryBtn}
-            </div>
+        <div class="card-actions">
+            ${viewBtn}
+            ${retryBtn}
+            ${!viewBtn && !retryBtn ? '<span class="attempt-info">Max attempts reached</span>' : ''}
         </div>
-    </article>`;
+    </div>`;
 }
 
-// ── XSS helper ────────────────────────────────────
-function escHtml(str) {
-    const d = document.createElement('div');
-    d.textContent = str || '';
-    return d.innerHTML;
-}
-
-// ── Filter & render ────────────────────────────────
 function applyFilters() {
-    const q = searchQuery.toLowerCase().trim();
-
+    const q = searchQ.toLowerCase().trim();
     function match(a) {
-        if (currentCat !== 'all' && a.category !== currentCat) return false;
-        if (q && !a.title.toLowerCase().includes(q) && !(a.description || '').toLowerCase().includes(q)) return false;
+        if (activeCat  && a.category   !== activeCat)  return false;
+        if (activeDiff && a.difficulty !== activeDiff) return false;
+        if (q && !a.title.toLowerCase().includes(q) && !(a.description||'').toLowerCase().includes(q)) return false;
         return true;
     }
-
     const pending   = allPending.filter(match);
     const completed = allCompleted.filter(match);
 
     document.getElementById('pendingCount').textContent   = pending.length;
     document.getElementById('completedCount').textContent = completed.length;
 
-    const pg = document.getElementById('pendingGrid');
-    const cg = document.getElementById('completedGrid');
-
-    pg.innerHTML = pending.length
+    document.getElementById('pendingGrid').innerHTML = pending.length
         ? pending.map(buildPendingCard).join('')
-        : `<div class="empty-state"><div class="empty-icon">🎉</div><h3>All done!</h3><p>No pending assessments match your filter.</p></div>`;
+        : `<div class="empty-state"><i class="fa fa-party-horn"></i><p>No pending assessments match your filter.<br>You're all caught up!</p></div>`;
 
-    cg.innerHTML = completed.length
+    document.getElementById('completedGrid').innerHTML = completed.length
         ? completed.map(buildCompletedCard).join('')
-        : `<div class="empty-state"><div class="empty-icon">📋</div><h3>Nothing here yet</h3><p>Complete an assessment to see your results.</p></div>`;
+        : `<div class="empty-state"><i class="fa fa-clipboard"></i><p>No completed assessments yet.<br>Start one from the Pending section above.</p></div>`;
 }
 
-// ── Fetch data ─────────────────────────────────────
-async function loadAssessments() {
+async function load() {
     try {
         const res  = await fetch('api/assessment/get-assessments.php', {
-            headers: {
-                'X-CSRF-Token'    : CSRF,
-                'X-Requested-With': 'XMLHttpRequest',
-            }
+            headers: { 'X-CSRF-Token': CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest' }
         });
         const data = await res.json();
-
         if (!data.success) throw new Error(data.error || 'Failed to load');
 
         allPending   = data.not_attended;
         allCompleted = data.attended;
 
-        applyFilters();
+        const passed = allCompleted.filter(a => a.best_attempt?.passed).length;
+        document.getElementById('st-total').textContent   = allPending.length + allCompleted.length;
+        document.getElementById('st-pending').textContent = allPending.length;
+        document.getElementById('st-done').textContent    = allCompleted.length;
+        document.getElementById('st-passed').textContent  = passed;
 
-    } catch (err) {
-        showToast(err.message || 'Could not load assessments', 'error');
+        applyFilters();
+    } catch(e) {
+        toast('Could not load assessments: ' + e.message);
         document.getElementById('pendingGrid').innerHTML =
-            `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>Error</h3><p>${escHtml(err.message)}</p></div>`;
+            `<div class="empty-state"><i class="fa fa-circle-exclamation" style="color:#fc8181"></i><p>${esc(e.message)}</p></div>`;
         document.getElementById('completedGrid').innerHTML = '';
     }
 }
 
-// ── Event listeners ────────────────────────────────
+/* Category tabs */
+document.getElementById('catFilter').addEventListener('click', e => {
+    const btn = e.target.closest('.filter-tab');
+    if (!btn) return;
+    document.querySelectorAll('#catFilter .filter-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeCat = btn.dataset.cat;
+    applyFilters();
+});
+
+/* Sidebar difficulty */
+function setDiff(diff, el) {
+    activeDiff = diff;
+    document.querySelectorAll('.sidebar a[id^="f-"]').forEach(a => a.classList.remove('active'));
+    el.classList.add('active');
+    applyFilters();
+}
+
+/* Search */
+let st;
 document.getElementById('searchInput').addEventListener('input', e => {
-    searchQuery = e.target.value;
-    applyFilters();
+    clearTimeout(st);
+    st = setTimeout(() => { searchQ = e.target.value.trim(); applyFilters(); }, 300);
 });
 
-document.getElementById('categoryFilter').addEventListener('click', e => {
-    const pill = e.target.closest('.filter-pill');
-    if (!pill) return;
-    document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
-    pill.classList.add('active');
-    currentCat = pill.dataset.cat;
-    applyFilters();
+/* Notifications */
+function toggleNotifDropdown() {
+    const dd = document.getElementById('notifDropdown');
+    const isOpen = dd.classList.contains('show');
+    document.getElementById('profileDropdown').classList.remove('open');
+    dd.classList.toggle('show', !isOpen);
+    if (!isOpen) {
+        fetch('api/notifications/mark-read.php', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': CSRF_TOKEN, 'Content-Type': 'application/json' }
+        }).then(() => {
+            const badge = document.getElementById('notifBadge');
+            if (badge) badge.remove();
+            document.querySelectorAll('.notif-item.unread').forEach(el => el.classList.remove('unread'));
+            document.querySelectorAll('.notif-dot:not(.read)').forEach(el => el.classList.add('read'));
+        }).catch(() => {});
+    }
+}
+function toggleDropdown() {
+    document.getElementById('profileDropdown').classList.toggle('open');
+    document.getElementById('notifDropdown').classList.remove('show');
+}
+document.addEventListener('click', e => {
+    const w  = document.getElementById('profileWrapper');
+    const nw = document.querySelector('.notif-dropdown-wrap');
+    if (w  && !w.contains(e.target))  document.getElementById('profileDropdown').classList.remove('open');
+    if (nw && !nw.contains(e.target)) document.getElementById('notifDropdown').classList.remove('show');
 });
 
-// ── Boot ───────────────────────────────────────────
-loadAssessments();
+/* Notification polling */
+let lastUnread = <?= $unreadCount ?>;
+function updateNotifBadge(count) {
+    let badge = document.getElementById('notifBadge');
+    if (count > 0) {
+        if (!badge) { badge = document.createElement('div'); badge.id='notifBadge'; badge.className='notif-badge'; document.querySelector('.notification-btn').appendChild(badge); }
+        badge.textContent = count > 99 ? '99+' : count;
+    } else { if (badge) badge.remove(); }
+}
+function pollNotifications() {
+    fetch('api/notifications/unread-count.php').then(r=>r.json()).then(d=>{
+        if (d.success && typeof d.count==='number') { updateNotifBadge(d.count); lastUnread=d.count; }
+    }).catch(()=>{});
+}
+setInterval(pollNotifications, 30000);
+
+document.getElementById('f-all').classList.add('active');
+load();
 </script>
 </body>
 </html>

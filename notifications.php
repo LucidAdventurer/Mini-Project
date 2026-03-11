@@ -635,6 +635,7 @@ body {
     <aside class="sidebar">
         <span class="sidebar-section">Navigation</span>
         <a href="student-dashboard.php"><i class="fa fa-home"></i> Dashboard</a>
+        <a href="student-assessments.php"><i class="fa fa-clipboard-list"></i> Assessments</a>
         <a href="student-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
         <a href="notifications.php" class="active" style="position:relative">
             <i class="fa fa-bell"></i> Notifications

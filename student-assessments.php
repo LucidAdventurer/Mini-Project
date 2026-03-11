@@ -218,16 +218,16 @@ function deadlineLabel(?string $until): string {
             display: flex; align-items: center; gap: 12px;
             color: white; text-decoration: none; font-weight: 700; font-size: 20px;
         }
-        .nav-search { flex: 1; max-width: 500px; margin: 0 30px; position: relative; }
-        .nav-search input {
-            width: 100%; padding: 10px 20px 10px 45px;
-            border: 2px solid #e2e8f0; border-radius: 10px;
-            font-family: inherit; font-size: 14px;
-            background: #f7fafc; color: #2d3748; outline: none;
-            transition: border-color .2s, box-shadow .2s;
-        }
-        .nav-search input:focus { border-color: #4facfe; box-shadow: 0 0 0 3px rgba(79,172,254,.15); }
-        .nav-search .sicon { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: #a0aec0; font-size: 14px; }
+        .nav-center { display: flex; align-items: center; gap: 10px; flex: 1; max-width: 750px; margin: 0 24px; }
+        .nav-search { display: flex; align-items: center; gap: 8px; background: #f7fafc; border: 2px solid #e2e8f0; border-radius: 10px; padding: 8px 14px; flex: 1; transition: border-color .2s, box-shadow .2s; }
+        .nav-search:focus-within { border-color: #4facfe; box-shadow: 0 0 0 3px rgba(79,172,254,.15); }
+        .nav-search .sicon { color: #a0aec0; font-size: 14px; flex-shrink: 0; }
+        .nav-search input[type="text"] { border: none; background: transparent; font-family: inherit; font-size: 14px; color: #2d3748; outline: none; width: 100%; }
+        .nav-date-box { display: flex; align-items: center; gap: 6px; background: #f7fafc; border: 2px solid #e2e8f0; border-radius: 10px; padding: 8px 12px; flex-shrink: 0; transition: border-color .2s, box-shadow .2s; }
+        .nav-date-box:focus-within { border-color: #4facfe; box-shadow: 0 0 0 3px rgba(79,172,254,.15); }
+        .nav-date-label { font-size: 11px; font-weight: 700; color: #a0aec0; text-transform: uppercase; letter-spacing: .05em; }
+        .nav-date-box input[type="date"] { border: none; background: transparent; font-family: inherit; font-size: 13px; color: #4a5568; outline: none; cursor: pointer; width: 120px; }
+        .nav-date-box input[type="date"]::-webkit-calendar-picker-indicator { opacity: 0.5; cursor: pointer; }
         .nav-profile { display: flex; align-items: center; gap: 15px; }
         .notification-icon {
             position: relative; width: 40px; height: 40px; background: #f7fafc;
@@ -304,7 +304,9 @@ function deadlineLabel(?string $until): string {
         .left-sidebar a:hover { background: rgba(35,76,106,.08); color: var(--primary); }
         .left-sidebar a.active { background: rgba(35,76,106,.12); color: var(--primary); font-weight: 600; }
         .left-sidebar a i { width: 18px; text-align: center; font-size: 15px; }
-        .logout-link { margin-top: auto; color: #e53e3e !important; }
+        .left-sidebar-section { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #718096; padding: 14px 12px 6px; }
+        .left-sidebar-bottom { margin-top: auto; padding-top: 8px; border-top: 1px solid rgba(35,76,106,.12); }
+        .logout-link { color: #e53e3e !important; }
         .logout-link:hover { background: rgba(229,62,62,.08) !important; }
 
         .page-content { flex: 1; min-width: 0; }
@@ -527,9 +529,21 @@ function deadlineLabel(?string $until): string {
             <span style="font-size:11px;font-weight:400;opacity:.85;font-style:italic">Placement Training Platform</span>
         </div>
     </a>
-    <div class="nav-search">
-        <i class="fa fa-search sicon"></i>
-        <input type="text" id="navSearchInput" placeholder="Search assessments..." autocomplete="off">
+    <div class="nav-center">
+        <div class="nav-search">
+            <i class="fa fa-search sicon"></i>
+            <input type="text" id="navSearchInput" placeholder="Search by title or teacher..." autocomplete="off">
+        </div>
+        <div class="nav-date-box">
+            <i class="fa fa-calendar-days" style="color:#a0aec0;font-size:13px"></i>
+            <span class="nav-date-label">From</span>
+            <input type="date" id="dateFrom">
+        </div>
+        <div class="nav-date-box">
+            <i class="fa fa-calendar-days" style="color:#a0aec0;font-size:13px"></i>
+            <span class="nav-date-label">To</span>
+            <input type="date" id="dateTo">
+        </div>
     </div>
     <div class="nav-profile">
         <!-- Notifications -->
@@ -596,7 +610,19 @@ function deadlineLabel(?string $until): string {
         <a href="student-assessments.php" class="active"><i class="fa fa-clipboard-list"></i> Assessments</a>
         <a href="student-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
         <a href="notifications.php"><i class="fa fa-bell"></i> Notifications</a>
-        <a href="logout.php" class="logout-link"><i class="fa fa-sign-out-alt"></i> Logout</a>
+
+        <span class="left-sidebar-section">Filter by Category</span>
+        <a href="#" id="cat-all"       onclick="setSidebarCat('all',this);return false;"><i class="fa fa-layer-group"></i> All Tests</a>
+        <a href="#" id="cat-aptitude"  onclick="setSidebarCat('aptitude',this);return false;"><i class="fa fa-calculator" style="color:#4facfe"></i> Aptitude</a>
+        <a href="#" id="cat-technical" onclick="setSidebarCat('technical',this);return false;"><i class="fa fa-microchip" style="color:#9f7aea"></i> Technical</a>
+        <a href="#" id="cat-coding"    onclick="setSidebarCat('coding',this);return false;"><i class="fa fa-code" style="color:#48bb78"></i> Coding</a>
+        <a href="#" id="cat-reasoning" onclick="setSidebarCat('reasoning',this);return false;"><i class="fa fa-brain" style="color:#ed8936"></i> Reasoning</a>
+        <a href="#" id="cat-english"   onclick="setSidebarCat('english',this);return false;"><i class="fa fa-book" style="color:#fc8181"></i> English</a>
+        <a href="#" id="cat-general"   onclick="setSidebarCat('general',this);return false;"><i class="fa fa-globe" style="color:#38b2ac"></i> General</a>
+
+        <div class="left-sidebar-bottom">
+            <a href="logout.php" class="logout-link"><i class="fa fa-sign-out-alt"></i> Logout</a>
+        </div>
     </aside>
 
     <div class="page-content">
@@ -645,13 +671,8 @@ function deadlineLabel(?string $until): string {
             </div>
         </div>
 
-        <!-- Toolbar -->
-        <div class="toolbar">
-            <div class="toolbar-search">
-                <i class="fa fa-search sicon"></i>
-                <input type="text" id="searchInput" placeholder="Search by title or teacher…" autocomplete="off">
-            </div>
-            <select class="toolbar-select" id="categorySelect">
+        <!-- hidden — kept for JS sync with sidebar category filter -->
+        <select id="categorySelect" style="display:none">
                 <option value="all">All Categories</option>
                 <option value="aptitude"  <?= $activeCategory === 'aptitude'  ? 'selected' : '' ?>>Aptitude</option>
                 <option value="technical" <?= $activeCategory === 'technical' ? 'selected' : '' ?>>Technical</option>
@@ -659,12 +680,6 @@ function deadlineLabel(?string $until): string {
                 <option value="reasoning" <?= $activeCategory === 'reasoning' ? 'selected' : '' ?>>Reasoning</option>
                 <option value="english"   <?= $activeCategory === 'english'   ? 'selected' : '' ?>>English</option>
                 <option value="general"   <?= $activeCategory === 'general'   ? 'selected' : '' ?>>General</option>
-            </select>
-            <select class="toolbar-select" id="sortSelect">
-                <option value="deadline">Sort: Deadline</option>
-                <option value="newest">Sort: Newest</option>
-                <option value="title">Sort: Title A–Z</option>
-                <option value="score">Sort: My Score</option>
             </select>
         </div>
 
@@ -744,6 +759,7 @@ function deadlineLabel(?string $until): string {
             ?>
             <div class="assessment-card <?= $cardClass ?>"
                  data-category="<?= $jsCategory ?>"
+                 data-difficulty="<?= htmlspecialchars($a['difficulty'] ?? '') ?>"
                  data-status="<?= $jsStatus ?>"
                  data-title="<?= $jsTitle ?>"
                  data-teacher="<?= $jsTeacher ?>"
@@ -860,7 +876,7 @@ function deadlineLabel(?string $until): string {
             <?php endforeach; endif ?>
 
             <!-- Empty state shown by JS when all cards are filtered out -->
-            <div class="state-message state-empty hidden" id="noResultsState">
+            <div class="state-message state-empty hidden" id="noResultsState" <?= $assessmentError ? 'style="display:none"' : '' ?>>
                 <div class="state-icon">🔍</div>
                 <h3>No assessments found</h3>
                 <p>Try adjusting your search or filter.</p>
@@ -874,6 +890,19 @@ function deadlineLabel(?string $until): string {
 
 <script>
     const CSRF_TOKEN = <?= json_encode($_SESSION['csrf_token']) ?>;
+
+    // ── Category filter (sidebar) ──
+    const sidebarCatIds = ['cat-all','cat-aptitude','cat-technical','cat-coding','cat-reasoning','cat-english','cat-general'];
+    function setSidebarCat(cat, el) {
+        currentCategory = cat;
+        sidebarCatIds.forEach(id => document.getElementById(id)?.classList.remove('active'));
+        el.classList.add('active');
+        // Keep the dropdown in sync
+        const sel = document.getElementById('categorySelect');
+        if (sel) sel.value = cat;
+        applyFilters();
+    }
+    document.getElementById('cat-all').classList.add('active');
 
     // ── Navigation ──
     function startAssessment(id) {
@@ -936,25 +965,23 @@ function deadlineLabel(?string $until): string {
     // ── Category select ──
     document.getElementById('categorySelect').addEventListener('change', function() {
         currentCategory = this.value;
-        applyFilters();
-    });
-
-    // ── Sort select ──
-    document.getElementById('sortSelect').addEventListener('change', function() {
-        currentSort = this.value;
+        // Sync sidebar highlight
+        sidebarCatIds.forEach(id => document.getElementById(id)?.classList.remove('active'));
+        const activeId = 'cat-' + (this.value === 'all' ? 'all' : this.value);
+        document.getElementById(activeId)?.classList.add('active');
         applyFilters();
     });
 
     // ── Search ──
-    function handleSearch(val) {
-        currentSearch = val.toLowerCase();
-        applyFilters();
-    }
-    document.getElementById('searchInput').addEventListener('input', e => handleSearch(e.target.value));
     document.getElementById('navSearchInput').addEventListener('input', e => {
-        document.getElementById('searchInput').value = e.target.value;
-        handleSearch(e.target.value);
+        currentSearch = e.target.value.toLowerCase();
+        applyFilters();
     });
+
+    // ── Date range filter ──
+    let dateFrom = '', dateTo = '';
+    document.getElementById('dateFrom').addEventListener('change', e => { dateFrom = e.target.value; applyFilters(); });
+    document.getElementById('dateTo').addEventListener('change',   e => { dateTo   = e.target.value; applyFilters(); });
 
     // ── Core filter + sort ──
     function applyFilters() {
@@ -971,6 +998,9 @@ function deadlineLabel(?string $until): string {
 
             const matchCat    = currentCategory === 'all' || cat === currentCategory;
             const matchSearch = !currentSearch || title.includes(currentSearch) || teacher.includes(currentSearch);
+            const cardDeadline = card.dataset.deadline > 0 ? new Date(card.dataset.deadline * 1000).toISOString().slice(0,10) : '';
+            const matchFrom   = !dateFrom || !cardDeadline || cardDeadline >= dateFrom;
+            const matchTo     = !dateTo   || !cardDeadline || cardDeadline <= dateTo;
 
             let matchFilter = true;
             if (currentFilter === 'pending')   matchFilter = status === 'pending';
@@ -978,7 +1008,7 @@ function deadlineLabel(?string $until): string {
             if (currentFilter === 'available') matchFilter = status === 'pending';
             if (currentFilter === 'expired')   matchFilter = status === 'expired';
 
-            const show = matchCat && matchSearch && matchFilter;
+            const show = matchCat && matchSearch && matchFilter && matchFrom && matchTo;
             card.classList.toggle('hidden', !show);
             if (show) visible++;
         });
