@@ -102,6 +102,17 @@ $dashboardLabel = match($userRole) {
     'admin'   => 'Admin Dashboard',
     default   => null,
 };
+
+// ── Auto-filter via ?category= query param (set by guest-dashboard links) ──
+// Whitelist against known categories so nothing unsanitised ever reaches JS.
+$validCategories = ['aptitude', 'verbal', 'logical', 'technical'];
+$initialCategory = 'all';
+if (!empty($_GET['category'])) {
+    $candidate = strtolower(trim($_GET['category']));
+    if (in_array($candidate, $validCategories, true)) {
+        $initialCategory = $candidate;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -557,11 +568,11 @@ $dashboardLabel = match($userRole) {
 
     <div class="filters-bar">
         <div class="filter-group">
-            <button class="filter-btn active" onclick="filterCategory('all', event)">All</button>
-            <button class="filter-btn" onclick="filterCategory('aptitude', event)">Aptitude</button>
-            <button class="filter-btn" onclick="filterCategory('verbal', event)">Verbal</button>
-            <button class="filter-btn" onclick="filterCategory('logical', event)">Logical</button>
-            <button class="filter-btn" onclick="filterCategory('technical', event)">Technical</button>
+            <button class="filter-btn <?php echo $initialCategory === 'all'       ? 'active' : ''; ?>" onclick="filterCategory('all', event)">All</button>
+            <button class="filter-btn <?php echo $initialCategory === 'aptitude'  ? 'active' : ''; ?>" onclick="filterCategory('aptitude', event)">Aptitude</button>
+            <button class="filter-btn <?php echo $initialCategory === 'verbal'    ? 'active' : ''; ?>" onclick="filterCategory('verbal', event)">Verbal</button>
+            <button class="filter-btn <?php echo $initialCategory === 'logical'   ? 'active' : ''; ?>" onclick="filterCategory('logical', event)">Logical</button>
+            <button class="filter-btn <?php echo $initialCategory === 'technical' ? 'active' : ''; ?>" onclick="filterCategory('technical', event)">Technical</button>
         </div>
         <div class="filter-group">
             <button class="filter-btn active" onclick="filterDifficulty('all', event)">All Levels</button>
@@ -670,9 +681,10 @@ $dashboardLabel = match($userRole) {
 
 <script>
     // Pass PHP role and DB-derived categories to JS
-    const USER_ROLE    = <?php echo json_encode($userRole); ?>;
-    const IS_LOGGED_IN = <?php echo json_encode($isLoggedIn); ?>;
-    const DASHBOARD_URL = <?php echo json_encode($dashboardUrl); ?>;
+    const USER_ROLE       = <?php echo json_encode($userRole); ?>;
+    const IS_LOGGED_IN    = <?php echo json_encode($isLoggedIn); ?>;
+    const DASHBOARD_URL   = <?php echo json_encode($dashboardUrl); ?>;
+    const INITIAL_CATEGORY = <?php echo json_encode($initialCategory); ?>;
     // Unique categories present in the loaded assessments (for filter buttons)
     const DB_CATEGORIES = <?php
         $cats = array_values(array_unique(array_filter(
@@ -708,7 +720,7 @@ $dashboardLabel = match($userRole) {
     }
 
     // ── Category filter ───────────────────────────────────────────────────
-    let activeCategory   = 'all';
+    let activeCategory   = INITIAL_CATEGORY; // seeded from ?category= param
     let activeDifficulty = 'all';
 
     function filterCategory(category, e) {
@@ -764,9 +776,16 @@ $dashboardLabel = match($userRole) {
         }
     });
 
-    // ── Animate cards on load ─────────────────────────────────────────────
+    // ── Animate cards on load & apply any incoming category filter ───────
     window.addEventListener('load', () => {
+        // Apply the ?category= filter before animating so hidden cards
+        // never flash visible then disappear.
+        if (INITIAL_CATEGORY !== 'all') {
+            applyFilters();
+        }
+
         document.querySelectorAll('.test-card').forEach((card, i) => {
+            if (card.style.display === 'none') return; // skip already-hidden cards
             card.style.opacity = '0';
             card.style.transform = 'translateY(10px)';
             card.style.transition = 'opacity 0.3s ease, transform 0.3s ease';

@@ -24,31 +24,10 @@ header('Content-Type: application/json');
 $currentUser = validateSession($conn, 'student');
 $studentId   = (int) $currentUser['user_id'];
 
-<<<<<<< HEAD
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);
     echo json_encode(['success' => false, 'error' => 'Method not allowed.']);
     exit;
-=======
-// ── Query params ──
-$status = trim($_GET['status'] ?? '');
-$search = trim($_GET['search'] ?? '');
-$page   = max(1, (int)($_GET['page']  ?? 1));
-$limit  = min(100, max(1, (int)($_GET['limit'] ?? 20)));
-$offset = ($page - 1) * $limit;
-
-$allowedStatuses = ['published', 'draft', 'archived'];
-
-// ── Build WHERE clause ──
-$conditions = ["a.created_by = ?"];
-$params     = [$teacherId];
-$types      = "i";
-
-if ($status !== '' && in_array($status, $allowedStatuses, true)) {
-    $conditions[] = "a.status = ?";
-    $params[]     = $status;
-    $types       .= "s";
->>>>>>> dafdde87a383a4cbe6b08b2832f5febf3ff798ec
 }
 
 // ── Fetch all active assessments that are currently available ──
@@ -65,18 +44,12 @@ $result = safePreparedQuery($conn,
         a.duration_minutes,
         a.total_marks,
         a.passing_marks,
-<<<<<<< HEAD
         a.max_attempts,
         a.show_results_immediately,
         a.available_from,
         a.available_until,
         a.instructions,
         a.is_public,
-=======
-        a.is_public,
-        a.start_time,
-        a.end_time,
->>>>>>> dafdde87a383a4cbe6b08b2832f5febf3ff798ec
         a.created_at,
 
         -- Question count
@@ -98,7 +71,6 @@ $result = safePreparedQuery($conn,
         -- Total attempts by student
         (SELECT COUNT(*) FROM assessment_attempts aa
          WHERE aa.assessment_id = a.assessment_id
-<<<<<<< HEAD
            AND aa.user_id = ?
            AND aa.status IN ('completed','timeout')) AS attempts_used,
 
@@ -175,46 +147,6 @@ if ($result['result']) {
             'attempts_used'            => (int) $row['attempts_used'],
             'in_progress_attempt_id'   => $row['in_progress_attempt_id'] ? (int) $row['in_progress_attempt_id'] : null,
             'can_attempt'              => ((int)$row['attempts_used'] < (int)$row['max_attempts']),
-=======
-           AND aa.status = 'submitted')                                        AS attempt_count,
-        (SELECT COUNT(DISTINCT aa2.user_id)
-         FROM assessment_attempts aa2
-         WHERE aa2.assessment_id = a.assessment_id
-           AND aa2.status = 'submitted'
-           AND aa2.user_id IS NOT NULL)                                        AS student_count,
-        (SELECT ROUND(AVG(aa3.percentage), 1)
-         FROM assessment_attempts aa3
-         WHERE aa3.assessment_id = a.assessment_id
-           AND aa3.status = 'submitted')                                       AS avg_score
-     FROM assessments a
-     WHERE $where
-     ORDER BY FIELD(a.status,'published','draft','archived'), a.updated_at DESC
-     LIMIT ? OFFSET ?",
-    $listTypes, $listParams
-);
-
-$assessments = [];
-if ($r['success'] && $r['result']) {
-    while ($row = $r['result']->fetch_assoc()) {
-        $assessments[] = [
-            'assessment_id'    => (int)$row['assessment_id'],
-            'title'            => $row['title'],
-            'category'         => $row['category'],
-            'difficulty'       => $row['difficulty'],
-            'status'           => $row['status'],
-            'duration_minutes' => (int)$row['duration_minutes'],
-            'total_marks'      => (int)$row['total_marks'],
-            'passing_marks'    => (int)$row['passing_marks'],
-            'is_public'        => (bool)$row['is_public'],
-            'start_time'       => $row['start_time'],
-            'end_time'         => $row['end_time'],
-            'created_at'       => $row['created_at'],
-            'updated_at'       => $row['updated_at'],
-            'question_count'   => (int)$row['question_count'],
-            'attempt_count'    => (int)$row['attempt_count'],
-            'student_count'    => (int)$row['student_count'],
-            'avg_score'        => (float)($row['avg_score'] ?? 0),
->>>>>>> dafdde87a383a4cbe6b08b2832f5febf3ff798ec
         ];
 
         // Has a completed attempt?
