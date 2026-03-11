@@ -9,20 +9,23 @@ require_once "db-guard.php";
 $user         = validateSession($conn, 'student');
 $userName     = $user['full_name'] ?? 'Student';
 $userEmail    = $user['email']     ?? '';
-$userDept     = $user['department'] ?? null;
+$userDept     = $user['department'] ?? '';
 $userInitials = strtoupper(substr($userName, 0, 2));
 $userId       = (int) $user['user_id'];
 
-// Ensure CSRF token exists (new config.php sets this, but guard here too)
+// Ensure CSRF token exists
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
+
 // ── Student statistics ──
+// status changed: 'submitted' → 'completed'
 $statsResult = safePreparedQuery($conn,
     "SELECT
         COUNT(DISTINCT attempt_id)   AS tests_completed,
         COALESCE(AVG(percentage), 0) AS avg_score
      FROM assessment_attempts
+     WHERE user_id = ? AND status = 'completed'",
      WHERE user_id = ? AND status = 'completed'",
     "i", [$userId]
 );
@@ -33,7 +36,7 @@ $avgScore       = 0;
 if ($statsResult['success'] && $statsResult['result']) {
     $stats          = $statsResult['result']->fetch_assoc();
     $testsCompleted = (int)   ($stats['tests_completed'] ?? 0);
-    $avgScore       = round((float)($stats['avg_score']      ?? 0));
+    $avgScore       = round((float)($stats['avg_score']  ?? 0));
     $statsResult['result']->free();
 }
 
@@ -48,7 +51,10 @@ if ($notifResult['success'] && $notifResult['result']) {
     $unreadCount = (int)($notifRow['cnt'] ?? 0);
     $notifResult['result']->free();
 }
-// Accessible = public OR explicitly allowed for this user/department
+
+// ── Available assessment count ──
+// status: 'published' → 'active'
+// start_time/end_time → available_from/available_until
 $availCountResult = safePreparedQuery($conn,
     "SELECT COUNT(DISTINCT a.assessment_id) AS cnt
      FROM assessments a
@@ -66,7 +72,9 @@ if ($availCountResult['success'] && $availCountResult['result']) {
 }
 
 // ── Fetch assessments for the dashboard list (latest 20) ──
-// Excludes assessments the student has already exhausted max_attempts on.
+// status: 'published' → 'active'
+// start_time/end_time → available_from/available_until
+// attempt status: 'submitted' → 'completed'
 $assessmentsResult = safePreparedQuery($conn,
     "SELECT
         a.assessment_id,
@@ -111,6 +119,7 @@ if ($assessmentsResult['success'] && $assessmentsResult['result']) {
 }
 
 // ── Recent activity (last 5 completed attempts) ──
+// status: 'submitted' → 'completed'
 $activityResult = safePreparedQuery($conn,
     "SELECT aa.attempt_id, aa.percentage, aa.submitted_at,
             a.title
@@ -969,8 +978,8 @@ function timeAgo(string $datetime): string {
                             $catClass     = htmlspecialchars(strtolower($a['category']));
                             $diff         = strtolower($a['difficulty']);
                             $diffLabel    = ucfirst($diff);
-                            $deadline     = $a['end_time']
-                                            ? date('d M Y, g:i A', strtotime($a['end_time']))
+                            $deadline     = $a['available_until']
+                                            ? date('d M Y, g:i A', strtotime($a['available_until']))
                                             : null;
                         ?>
                         <div class="assessment-card <?= $exhausted ? 'exhausted' : '' ?>" data-category="<?= $catClass ?>">
@@ -1057,8 +1066,6 @@ function timeAgo(string $datetime): string {
     </div><!-- /.page-content -->
     </div><!-- /.page-wrapper -->
 
-
-
     <script>
         const CSRF_TOKEN = <?= json_encode($_SESSION['csrf_token']) ?>;
 
@@ -1115,8 +1122,6 @@ function timeAgo(string $datetime): string {
             window.location.href = 'test-results.php?attempt_id=' + id;
         }
 
-
-
         // Filter tabs
         document.querySelectorAll('.filter-tab').forEach(tab => {
             tab.addEventListener('click', function() {
@@ -1160,7 +1165,6 @@ function timeAgo(string $datetime): string {
         let lastUnreadCount = <?= $unreadCount ?>;
 
         function updateNotifBadge(count) {
-            const wrap = document.querySelector('.notif-dropdown-wrap') || document.querySelector('.notification-icon').parentElement;
             let badge = document.querySelector('.notification-badge');
             if (count > 0) {
                 if (!badge) {
@@ -1175,10 +1179,6 @@ function timeAgo(string $datetime): string {
         }
 
         function pollNotifications() {
-            fetch('api/notifications/mark-read.php', { method: 'GET' })
-                .then(() => {}) .catch(() => {});
-
-            // Use a dedicated lightweight count endpoint
             fetch('api/notifications/unread-count.php')
                 .then(r => r.json())
                 .then(data => {
