@@ -75,7 +75,7 @@ define('DB_PORT', $_env['DB_PORT'] ?? '61000');
 define('DB_CONNECT_TIMEOUT', 10); // Shorter - fail fast if DB is down
 define('DB_READ_TIMEOUT', 30);     // Read timeout in seconds
 define('DB_WRITE_TIMEOUT', 30);    // Write timeout in seconds
-define('DB_MAX_RETRIES', 5);       // More retries for flaky remote DB
+define('DB_MAX_RETRIES', 2);       // Keep low - DB only allows 5 simultaneous connections
 
 // MariaDB detection and compatibility
 define('DB_TYPE', 'MariaDB'); // Set to 'MariaDB' or 'MySQL' if known
@@ -136,12 +136,6 @@ function createDatabaseConnection() {
             
             // MariaDB-compatible SQL mode
             $conn->query("SET SESSION sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO'");
-            
-            // Generous timeouts for flaky remote DB
-            $conn->query("SET SESSION wait_timeout = 300");
-            $conn->query("SET SESSION interactive_timeout = 300");
-            $conn->query("SET SESSION net_read_timeout = 60");
-            $conn->query("SET SESSION net_write_timeout = 60");
             
             error_log("✓ DB connected on attempt " . ($retryCount + 1));
             return $conn;

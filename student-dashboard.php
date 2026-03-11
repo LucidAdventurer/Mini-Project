@@ -23,7 +23,7 @@ $statsResult = safePreparedQuery($conn,
         COUNT(DISTINCT attempt_id)   AS tests_completed,
         COALESCE(AVG(percentage), 0) AS avg_score
      FROM assessment_attempts
-     WHERE user_id = ? AND status = 'submitted'",
+     WHERE user_id = ? AND status = 'completed'",
     "i", [$userId]
 );
 
@@ -52,30 +52,10 @@ if ($notifResult['success'] && $notifResult['result']) {
 $availCountResult = safePreparedQuery($conn,
     "SELECT COUNT(DISTINCT a.assessment_id) AS cnt
      FROM assessments a
-     WHERE a.status = 'published'
-       AND (a.start_time  IS NULL OR a.start_time  <= NOW())
-       AND (a.end_time IS NULL OR a.end_time >= NOW())
-       AND (
-           a.is_public = 1
-           OR EXISTS (
-               SELECT 1 FROM assessment_access ac
-               WHERE ac.assessment_id = a.assessment_id
-                 AND ac.access_type   = 'allow'
-                 AND (ac.user_id = ? OR ac.department = ?)
-           )
-           OR EXISTS (
-               SELECT 1 FROM assessment_groups ag
-               JOIN group_members gm ON gm.group_id = ag.group_id
-               WHERE ag.assessment_id = a.assessment_id
-                 AND gm.student_id = ?
-           )
-           OR EXISTS (
-               SELECT 1 FROM teacher_students ts
-               WHERE ts.student_id = ?
-                 AND ts.teacher_id = a.created_by
-           )
-       )",
-    "isii", [$userId, $userDept, $userId, $userId]
+     WHERE a.status = 'active'
+       AND (a.available_from  IS NULL OR a.available_from  <= NOW())
+       AND (a.available_until IS NULL OR a.available_until >= NOW())",
+    "", []
 );
 
 $availableTests = 0;
@@ -98,44 +78,24 @@ $assessmentsResult = safePreparedQuery($conn,
         a.total_marks,
         a.passing_marks,
         a.max_attempts,
-        a.end_time,
+        a.available_until AS end_time,
         (SELECT COUNT(*) FROM questions q WHERE q.assessment_id = a.assessment_id) AS question_count,
         (SELECT COUNT(*) FROM assessment_attempts aa
           WHERE aa.assessment_id = a.assessment_id
             AND aa.user_id = ?
-            AND aa.status  = 'submitted') AS attempts_used,
+            AND aa.status  = 'completed') AS attempts_used,
         (SELECT aa2.attempt_id FROM assessment_attempts aa2
           WHERE aa2.assessment_id = a.assessment_id
             AND aa2.user_id = ?
-            AND aa2.status  = 'submitted'
+            AND aa2.status  = 'completed'
           ORDER BY aa2.submitted_at DESC LIMIT 1) AS last_attempt_id
      FROM assessments a
-     WHERE a.status = 'published'
-       AND (a.start_time  IS NULL OR a.start_time  <= NOW())
-       AND (a.end_time IS NULL OR a.end_time >= NOW())
-       AND (
-           a.is_public = 1
-           OR EXISTS (
-               SELECT 1 FROM assessment_access ac
-               WHERE ac.assessment_id = a.assessment_id
-                 AND ac.access_type   = 'allow'
-                 AND (ac.user_id = ? OR ac.department = ?)
-           )
-           OR EXISTS (
-               SELECT 1 FROM assessment_groups ag
-               JOIN group_members gm ON gm.group_id = ag.group_id
-               WHERE ag.assessment_id = a.assessment_id
-                 AND gm.student_id = ?
-           )
-           OR EXISTS (
-               SELECT 1 FROM teacher_students ts
-               WHERE ts.student_id = ?
-                 AND ts.teacher_id = a.created_by
-           )
-       )
+     WHERE a.status = 'active'
+       AND (a.available_from  IS NULL OR a.available_from  <= NOW())
+       AND (a.available_until IS NULL OR a.available_until >= NOW())
      ORDER BY a.created_at DESC
      LIMIT 20",
-    "iiisii", [$userId, $userId, $userId, $userDept, $userId, $userId]
+    "ii", [$userId, $userId]
 );
 
 $assessments      = [];
@@ -156,7 +116,7 @@ $activityResult = safePreparedQuery($conn,
             a.title
      FROM assessment_attempts aa
      JOIN assessments a ON a.assessment_id = aa.assessment_id
-     WHERE aa.user_id = ? AND aa.status = 'submitted'
+     WHERE aa.user_id = ? AND aa.status = 'completed'
      ORDER BY aa.submitted_at DESC
      LIMIT 5",
     "i", [$userId]
@@ -172,7 +132,7 @@ if ($activityResult['success'] && $activityResult['result']) {
 
 // ── Latest 5 notifications for dropdown ──
 $notifDropResult = safePreparedQuery($conn,
-    "SELECT notification_id, title, message, notification_type, is_read, created_at
+    "SELECT notification_id, title, message, is_read, created_at
      FROM notifications WHERE user_id = ?
      ORDER BY created_at DESC LIMIT 5",
     "i", [$userId]
@@ -883,8 +843,7 @@ function timeAgo(string $datetime): string {
                             <div class="notif-empty">No notifications yet.</div>
                         <?php else: foreach ($notifItems as $n):
                             $isUnread = !$n['is_read'];
-                            $typeIcons = ['info'=>'ℹ️','success'=>'✅','warning'=>'⚠️','error'=>'❌','assessment'=>'📝','result'=>'🏆','material'=>'📚'];
-                            $icon = $typeIcons[$n['notification_type']] ?? '🔔';
+                            $icon = '🔔';
                         ?>
                         <div class="notif-item <?= $isUnread ? 'unread' : '' ?>">
                             <div class="notif-dot <?= $isUnread ? '' : 'read' ?>"></div>

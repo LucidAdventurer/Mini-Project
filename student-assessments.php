@@ -32,7 +32,7 @@ if ($notifResult['success'] && $notifResult['result']) {
 
 // ── Latest 5 notifications for dropdown ──
 $notifDropResult = safePreparedQuery($conn,
-    "SELECT notification_id, title, message, notification_type, is_read, created_at
+    "SELECT notification_id, title, message, is_read, created_at
      FROM notifications WHERE user_id = ?
      ORDER BY created_at DESC LIMIT 5",
     "i", [$userId]
@@ -52,13 +52,7 @@ $activeCategory = trim($_GET['category'] ?? 'all');
 $allowedCategories = ['all', 'aptitude', 'technical', 'coding', 'reasoning', 'english', 'general'];
 if (!in_array($activeCategory, $allowedCategories, true)) $activeCategory = 'all';
 
-// ── Fetch ALL assessments assigned to this student by their teacher(s) ──
-// Three assignment paths:
-//   1. Direct:     assessment_access WHERE user_id = $userId
-//   2. Department: assessment_access WHERE department = $userDept
-//   3. Group:      assessment_groups -> teacher_groups -> group_members WHERE student_id = $userId
-// We UNION all three, then JOIN back to assessments for full details.
-
+// ── Fetch all active public assessments available to this student ──
 $assignedResult = safePreparedQuery($conn,
     "SELECT DISTINCT
         a.assessment_id,
@@ -73,6 +67,7 @@ $assignedResult = safePreparedQuery($conn,
         a.available_from,
         a.available_until,
         a.show_results_immediately,
+        a.created_at,
         u.full_name AS teacher_name,
         (SELECT COUNT(*) FROM questions q WHERE q.assessment_id = a.assessment_id) AS question_count,
         (SELECT COUNT(*) FROM assessment_attempts aa
@@ -98,40 +93,14 @@ $assignedResult = safePreparedQuery($conn,
           WHERE aa5.assessment_id = a.assessment_id
             AND aa5.user_id = ?
             AND aa5.status  = 'in_progress'
-          ORDER BY aa5.start_time DESC LIMIT 1) AS in_progress_attempt_id
+          ORDER BY aa5.created_at DESC LIMIT 1) AS in_progress_attempt_id
      FROM assessments a
      JOIN users u ON u.user_id = a.created_by
      WHERE a.status IN ('active', 'scheduled')
-       AND (
-           /* Path 1: direct user assignment */
-           EXISTS (
-               SELECT 1 FROM assessment_access ac
-               WHERE ac.assessment_id = a.assessment_id
-                 AND ac.access_type   = 'allow'
-                 AND ac.user_id       = ?
-           )
-           OR
-           /* Path 2: department assignment */
-           EXISTS (
-               SELECT 1 FROM assessment_access ac2
-               WHERE ac2.assessment_id = a.assessment_id
-                 AND ac2.access_type   = 'allow'
-                 AND ac2.department    = ?
-           )
-           OR
-           /* Path 3: teacher group assignment */
-           EXISTS (
-               SELECT 1
-               FROM assessment_groups ag
-               JOIN teacher_groups    tg ON tg.group_id  = ag.group_id
-               JOIN group_members     gm ON gm.group_id  = tg.group_id
-               WHERE ag.assessment_id = a.assessment_id
-                 AND gm.student_id    = ?
-           )
-       )
+       AND a.is_public = 1
      ORDER BY a.available_from IS NULL ASC, a.available_from DESC, a.created_at DESC",
-    "iiiiiis i",
-    [$userId, $userId, $userId, $userId, $userId, $userId, $userDept ?? '', $userId]
+    "iiiii",
+    [$userId, $userId, $userId, $userId, $userId]
 );
 
 $assessments     = [];
