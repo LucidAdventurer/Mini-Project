@@ -26,7 +26,6 @@ $statsResult = safePreparedQuery($conn,
         COALESCE(AVG(percentage), 0) AS avg_score
      FROM assessment_attempts
      WHERE user_id = ? AND status = 'completed'",
-     WHERE user_id = ? AND status = 'completed'",
     "i", [$userId]
 );
 
@@ -1163,6 +1162,7 @@ function timeAgo(string $datetime): string {
 
         // ── Live notification badge polling ──
         let lastUnreadCount = <?= $unreadCount ?>;
+        let lastPollTime    = Date.now(); // track when we last actually hit the server
 
         function updateNotifBadge(count) {
             let badge = document.querySelector('.notification-badge');
@@ -1179,18 +1179,23 @@ function timeAgo(string $datetime): string {
         }
 
         function pollNotifications() {
+            // Only hit the server if tab is visible and 2 minutes have passed
+            if (document.hidden) return;
+            if (Date.now() - lastPollTime < 120000) return;
+
             fetch('api/notifications/unread-count.php')
                 .then(r => r.json())
                 .then(data => {
                     if (data.success && typeof data.count === 'number') {
                         updateNotifBadge(data.count);
                         lastUnreadCount = data.count;
+                        lastPollTime    = Date.now();
                     }
                 })
                 .catch(() => {});
         }
 
-        // Poll every 30 seconds
+        // Check every 30s but only fetch if 2 min have passed and tab is visible
         setInterval(pollNotifications, 30000);
     </script>
 </body>

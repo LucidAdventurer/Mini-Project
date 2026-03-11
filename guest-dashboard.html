@@ -10,14 +10,17 @@
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
         :root {
-            --ink:        #18181b;
-            --ink-muted:  #52525b;
-            --ink-faint:  #a1a1aa;
+            --ink:        #0f4c4c;
+            --ink-muted:  #2d7a72;
+            --ink-faint:  #7ab8b2;
             --surface:    #ffffff;
-            --surface-2:  #fafafa;
-            --surface-3:  #f4f4f5;
-            --line:       #e4e4e7;
-            --accent-bg:  #eff6ff;
+            --surface-2:  #f0faf9;
+            --surface-3:  #e0f5f2;
+            --line:       #b2ddd9;
+            --accent-bg:  #e0f5f2;
+            --teal:       #0d9488;
+            --teal-dark:  #0f766e;
+            --teal-light: #ccfbf1;
             --serif: 'Instrument Serif', Georgia, serif;
             --sans:  'DM Sans', system-ui, sans-serif;
             --r: 10px;
@@ -40,13 +43,15 @@
         .brand {
             display: flex; align-items: center; gap: 10px;
             text-decoration: none; color: var(--ink);
-            font-weight: 600; font-size: 15px; letter-spacing: -0.01em;
+            font-weight: 700; font-size: 16px; letter-spacing: 0.01em;
         }
         .brand-mark {
-            width: 32px; height: 32px; background: var(--ink); border-radius: 8px;
-            display: grid; place-items: center; color: #fff;
-            font-size: 13px; font-weight: 700; font-family: var(--serif); font-style: italic;
+            width: 36px; height: 36px; display: grid; place-items: center;
         }
+        .brand-mark img { width: 36px; height: 36px; object-fit: contain; display: block; }
+        .brand-name { display: flex; flex-direction: column; line-height: 1.2; }
+        .brand-name-main { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; color: var(--ink); }
+        .brand-name-sub { font-size: 10px; font-weight: 400; color: var(--ink-muted); letter-spacing: 0.02em; }
         .nav-links { display: flex; align-items: center; gap: 6px; }
         .nav-link {
             padding: 7px 14px; border-radius: 8px; font-size: 14px; font-weight: 500;
@@ -59,8 +64,8 @@
         }
         .nav-btn.outline { border: 1px solid var(--line); color: var(--ink); background: var(--surface); }
         .nav-btn.outline:hover { background: var(--surface-3); }
-        .nav-btn.solid { background: var(--ink); color: #fff; border: 1px solid var(--ink); }
-        .nav-btn.solid:hover { background: #27272a; }
+        .nav-btn.solid { background: var(--teal); color: #fff; border: 1px solid var(--teal); }
+        .nav-btn.solid:hover { background: var(--teal-dark); }
         .hamburger {
             display: none; flex-direction: column; gap: 4px;
             background: none; border: none; cursor: pointer; padding: 6px;
@@ -105,10 +110,10 @@
         /* Buttons */
         .btn-primary {
             display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px;
-            border-radius: var(--r); background: var(--ink); color: #fff;
+            border-radius: var(--r); background: var(--teal); color: #fff;
             font-size: 14px; font-weight: 600; text-decoration: none; transition: 0.15s; font-family: var(--sans);
         }
-        .btn-primary:hover { background: #27272a; transform: translateY(-1px); }
+        .btn-primary:hover { background: var(--teal-dark); transform: translateY(-1px); }
         .btn-secondary {
             display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px;
             border-radius: var(--r); background: var(--surface); color: var(--ink);
@@ -132,12 +137,12 @@
         /* Notice */
         .notice-wrap { padding: 48px 28px 0; max-width: 1080px; margin: 0 auto; }
         .notice {
-            background: var(--accent-bg); border: 1px solid #bfdbfe; border-radius: var(--r);
+            background: var(--accent-bg); border: 1px solid #99d6d0; border-radius: var(--r);
             padding: 14px 18px; display: flex; align-items: start; gap: 12px;
-            font-size: 14px; color: #1e40af; line-height: 1.5;
+            font-size: 14px; color: var(--teal-dark); line-height: 1.5;
         }
         .notice-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
-        .notice a { color: #1e40af; font-weight: 600; }
+        .notice a { color: var(--teal-dark); font-weight: 600; }
 
         /* Sections */
         .section { padding: 76px 28px; max-width: 1080px; margin: 0 auto; }
@@ -174,7 +179,7 @@
             padding: 24px 22px 44px; text-decoration: none; color: var(--ink);
             transition: 0.15s; position: relative; overflow: hidden;
         }
-        .category-card:hover { border-color: var(--ink); transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.07); }
+        .category-card:hover { border-color: var(--teal); transform: translateY(-2px); box-shadow: 0 4px 16px rgba(13,148,136,0.12); }
         .cat-label { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 8px; }
         .cat-name { font-family: var(--serif); font-size: 21px; font-weight: 400; margin-bottom: 6px; }
         .cat-count { font-size: 13px; color: var(--ink-muted); }
@@ -199,7 +204,8 @@
         .footer-outer { border-top: 1px solid var(--line); }
         footer { padding: 28px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; max-width: 1080px; margin: 0 auto; }
         .footer-brand { font-size: 14px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 8px; text-decoration: none; }
-        .footer-bm { width: 22px; height: 22px; background: var(--ink); border-radius: 5px; display:grid; place-items:center; color:#fff; font-size:9px; font-family: var(--serif); font-style:italic; }
+        .footer-bm { width: 22px; height: 22px; display:grid; place-items:center; }
+        .footer-bm img { width: 22px; height: 22px; object-fit: contain; }
         .footer-links { display: flex; gap: 20px; flex-wrap: wrap; }
         .footer-link { font-size: 13px; color: var(--ink-muted); text-decoration: none; transition: color 0.15s; }
         .footer-link:hover { color: var(--ink); }
@@ -225,7 +231,7 @@
             cursor: pointer; transition: 0.15s; font-family: var(--sans);
         }
         .res-tab:hover { background: var(--surface-3); color: var(--ink); }
-        .res-tab.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+        .res-tab.active { background: var(--teal); color: #fff; border-color: var(--teal); }
 
         .resources-grid {
             display: grid;
@@ -238,7 +244,7 @@
             display: flex; flex-direction: column; gap: 10px;
             transition: border-color 0.15s, box-shadow 0.15s;
         }
-        .resource-card:hover { border-color: var(--ink); box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+        .resource-card:hover { border-color: var(--teal); box-shadow: 0 4px 16px rgba(13,148,136,0.1); }
         .resource-card-head { display: flex; align-items: center; gap: 12px; }
         .resource-type-icon {
             width: 38px; height: 38px; border-radius: 8px; flex-shrink: 0;
@@ -271,7 +277,7 @@
             text-decoration: none; background: var(--surface-3); color: var(--ink);
             border: 1px solid var(--line); transition: 0.15s; font-family: var(--sans);
         }
-        .resource-open-btn:hover { background: var(--ink); color: #fff; border-color: var(--ink); }
+        .resource-open-btn:hover { background: var(--teal); color: #fff; border-color: var(--teal); }
 
         .resources-empty {
             grid-column: 1/-1; text-align: center; padding: 52px 0;
@@ -300,8 +306,11 @@
 
 <nav class="navbar">
     <a href="#" class="brand">
-        <div class="brand-mark">PT</div>
-        Placement & Training
+        <div class="brand-mark"><img src="prepaura-logo.png" alt="Prepaura"></div>
+        <div class="brand-name">
+            <span class="brand-name-main">PREPAURA</span>
+            <span class="brand-name-sub">Placement Training Platform</span>
+        </div>
     </a>
     <div class="nav-links desktop-links">
         <a href="#features" class="nav-link">Features</a>
@@ -485,8 +494,8 @@
 <div class="footer-outer">
     <footer>
         <a href="#" class="footer-brand">
-            <div class="footer-bm">PT</div>
-            Placement & Training
+            <div class="footer-bm"><img src="prepaura-logo.png" alt="Prepaura"></div>
+            PREPAURA
         </a>
         <div class="footer-links">
             <a href="#" class="footer-link">Privacy</a>
