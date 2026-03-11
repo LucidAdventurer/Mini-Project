@@ -203,7 +203,7 @@ function safePreparedQuery(mysqli &$conn, string $query, string $types = "", arr
 function getUserData(mysqli &$conn, int $userId): ?array {
     $result = safePreparedQuery(
         $conn,
-        "SELECT user_id, full_name, email, user_type, department,
+        "SELECT user_id, full_name, email, role, department,
                 registration_number, is_verified, is_active
          FROM users WHERE user_id = ?",
         "i",
@@ -232,11 +232,11 @@ function getSessionUserId(): int {
 
 /**
  * Resolve the logged-in user's role from session.
- * Supports both $_SESSION['role'] and $_SESSION['user_type'].
+ * Supports both $_SESSION['role'] and legacy $_SESSION['user_type'].
  */
 function getSessionRole(): string {
     if (!empty($_SESSION['role']))      return $_SESSION['role'];
-    if (!empty($_SESSION['user_type'])) return $_SESSION['user_type'];
+    if (!empty($_SESSION['user_type'])) return $_SESSION['user_type']; // legacy fallback
     return '';
 }
 
@@ -285,6 +285,9 @@ function validateSession(mysqli &$conn, ?string $requiredRole = null): array {
         sessionAbort(403, 'Your account has been deactivated.',
             'index.html?error=account_deactivated');
     }
+
+    // Ensure session reflects current DB role
+    $_SESSION['role'] = $user['role'];
 
     return $user;
 }

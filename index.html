@@ -463,7 +463,7 @@
 
         /* ========================================
            ROLE SELECTOR
-           Database field: users.user_type (ENUM: 'student', 'teacher', 'admin')
+           Database field: users.role (ENUM: 'student', 'teacher', 'admin')
            Note: Admin login may be handled separately
            ======================================== */
         .role-selector {
@@ -929,7 +929,7 @@
 
             <!-- ========================================
                  ROLE SELECTOR
-                 Database: users.user_type ENUM('student','teacher','admin')
+                 Database: users.role ENUM('student','teacher','admin')
                  This value is sent as hidden input with form
                  ======================================== -->
             <div class="role-selector">
@@ -951,7 +951,7 @@
                  Form Fields Mapping to Database:
                  - email → users.email (VARCHAR 100, UNIQUE, NOT NULL)
                  - password → verified against users.password_hash (VARCHAR 255)
-                 - role → users.user_type ENUM('student','teacher','admin')
+                 - role → users.role ENUM('student','teacher','admin')
                  - remember → Can extend session timeout or set cookie
                  
                  Security Notes:

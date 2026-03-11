@@ -62,12 +62,7 @@ set_exception_handler(function (Throwable $e) {
      SMTP_USER = 'postmaster@mg.yourdomain.com'
      SMTP_PASS = 'your-mailgun-smtp-password'
    ======================================== */
-define('SMTP_HOST',      'smtp.example.com');   // ← your SMTP host
-define('SMTP_PORT',      587);                  // 587 = TLS (recommended), 465 = SSL
-define('SMTP_USER',      'you@example.com');    // ← your SMTP username
-define('SMTP_PASS',      'your-smtp-password'); // ← your SMTP password
-define('SMTP_FROM',      'you@example.com');    // ← from address
-define('SMTP_FROM_NAME', 'PTA Platform');       // ← from name shown in inbox
+// SMTP constants are defined in config.php via env.php — do not redefine here.
 
 /* ========================================
    CONSTANTS
@@ -292,7 +287,7 @@ try {
     $email           = sanitizeInput($_POST['email']               ?? '');
     $password        = $_POST['password']         ?? '';
     $confirmPassword = $_POST['confirm_password'] ?? '';
-    $userType        = sanitizeInput($_POST['user_type']           ?? '');
+    $role            = sanitizeInput($_POST['role']                ?? '');
     $regNumber       = sanitizeInput($_POST['registration_number'] ?? '');
     $department      = sanitizeInput($_POST['department']          ?? '');
 
@@ -300,8 +295,8 @@ try {
         sendResponse(false, 'Full name, email, password, and confirm password are required');
     }
 
-    if (!in_array($userType, ['student', 'teacher'], true)) {
-        sendResponse(false, 'Invalid user type');
+    if (!in_array($role, ['student', 'teacher'], true)) {
+        sendResponse(false, 'Invalid user role');
     }
 
     if ($password !== $confirmPassword) {
@@ -325,7 +320,7 @@ try {
         sendResponse(false, 'Please select a valid department');
     }
 
-    if ($userType === 'student') {
+    if ($role === 'student') {
         if (empty($regNumber)) {
             sendResponse(false, 'Registration number is required for students');
         }
@@ -353,7 +348,7 @@ try {
     try {
         $stmt = $conn->prepare(
             "INSERT INTO users
-                (full_name, email, password_hash, user_type, department, registration_number, is_verified, is_active)
+                (full_name, email, password_hash, role, department, registration_number, is_verified, is_active)
              VALUES (?, ?, ?, ?, ?, ?, FALSE, TRUE)"
         );
 
@@ -361,7 +356,7 @@ try {
             throw new RuntimeException("Database prepare failed: " . $conn->error);
         }
 
-        $stmt->bind_param('ssssss', $fullName, $email, $passwordHash, $userType, $department, $regNumber);
+        $stmt->bind_param('ssssss', $fullName, $email, $passwordHash, $role, $department, $regNumber);
 
         if (!$stmt->execute()) {
             if ($stmt->errno === 1062) {

@@ -9,7 +9,7 @@
      2. Guard: already verified → redirect to login
      3. Rate-limit: block if a fresh token was issued in last 5 minutes
      4. Invalidate all old tokens for this user
-     5. Generate new token, store hash, queue email
+     5. Generate new token, store hash, send email via PHPMailer
      6. Render confirmation page
    ======================================== */
 
@@ -154,17 +154,7 @@ try {
     $host             = $_SERVER['HTTP_HOST'] ?? 'localhost';
     $verificationLink = $protocol . '://' . $host . '/verify-email.php?token=' . $rawToken;
 
-    $subject = 'Verify Your Email - PTA Platform';
-    $body    = "Hello {$user['full_name']},\n\n"
-             . "You requested a new email verification link.\n\n"
-             . "Please verify your email address by clicking the link below:\n"
-             . "$verificationLink\n\n"
-             . "This link will expire in 24 hours.\n\n"
-             . "If you did not request this, please ignore this email.\n\n"
-             . "Best regards,\nPTA Platform Team";
-
-    // queueEmail() defined in register.php — replicate inline here to keep files independent
-    queueVerificationEmail($conn, $user['email'], $user['full_name'], $subject, $body);
+    sendVerificationEmail($user['email'], $user['full_name'], $verificationLink);
 
     error_log("Resent verification email to user_id={$user['user_id']} ({$user['email']})");
 
@@ -177,35 +167,108 @@ try {
 }
 
 /* ========================================
-   HELPER: queue email (self-contained, no dependency on register.php)
+   HELPER: send verification email via PHPMailer
+   Self-contained — no dependency on register.php
    ======================================== */
-function queueVerificationEmail(
-    mysqli $conn,
-    string $email,
-    string $name,
-    string $subject,
-    string $body
-): void {
-    // Check table exists first
-    $check = $conn->query("SHOW TABLES LIKE 'email_queue'");
-    if (!$check || $check->num_rows === 0) {
-        error_log("email_queue table missing — verification email not queued for $email");
-        return;
+function sendVerificationEmail(
+    string $toEmail,
+    string $toName,
+    string $verificationLink
+): bool {
+    $autoload = __DIR__ . '/vendor/autoload.php';
+    if (!file_exists($autoload)) {
+        error_log("PHPMailer not found — run: composer require phpmailer/phpmailer");
+        return false;
     }
+    require_once $autoload;
 
-    $stmt = $conn->prepare(
-        "INSERT INTO email_queue (recipient_email, recipient_name, subject, body, email_type)
-         VALUES (?, ?, ?, ?, 'verification')"
-    );
-    if (!$stmt) {
-        error_log("queueVerificationEmail prepare failed: " . $conn->error);
-        return;
+    try {
+        $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+
+        $mail->isSMTP();
+        $mail->Host       = SMTP_HOST;
+        $mail->SMTPAuth   = true;
+        $mail->Username   = SMTP_USER;
+        $mail->Password   = SMTP_PASS;
+        $mail->SMTPSecure = 'tls';
+        $mail->Port       = SMTP_PORT;
+
+        $mail->setFrom(SMTP_FROM, SMTP_FROM_NAME);
+        $mail->addAddress($toEmail, $toName);
+        $mail->addReplyTo(SMTP_FROM, SMTP_FROM_NAME);
+
+        $mail->isHTML(true);
+        $mail->Subject = 'Verify Your Email - PTA Platform';
+
+        $mail->AltBody = "Hello $toName,\n\n"
+                       . "You requested a new email verification link.\n\n"
+                       . "Please verify your email address by visiting:\n"
+                       . "$verificationLink\n\n"
+                       . "This link expires in 24 hours.\n\n"
+                       . "If you did not request this, ignore this email.\n\n"
+                       . "PTA Platform Team";
+
+        $nameEsc = htmlspecialchars($toName, ENT_QUOTES, 'UTF-8');
+        $linkEsc = htmlspecialchars($verificationLink, ENT_QUOTES, 'UTF-8');
+        $mail->Body = <<<HTML
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f4f6f9;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:40px 16px;">
+      <table width="480" cellpadding="0" cellspacing="0"
+             style="background:#fff;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,.1);overflow:hidden;">
+        <tr>
+          <td style="background:linear-gradient(135deg,#1a56db,#1e429f);padding:28px 32px;text-align:center;">
+            <h1 style="margin:0;color:#fff;font-size:20px;">PTA Platform</h1>
+            <p style="margin:4px 0 0;color:#bfdbfe;font-size:12px;">Placement Training &amp; Assessment</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:36px 32px;">
+            <p style="margin:0 0 8px;font-size:15px;color:#374151;">Hi <strong>{$nameEsc}</strong>,</p>
+            <p style="margin:0 0 16px;font-size:14px;color:#6b7280;line-height:1.6;">
+              You requested a new verification link. Click below to verify your email address.
+            </p>
+            <p style="text-align:center;margin:24px 0;">
+              <a href="{$linkEsc}"
+                 style="display:inline-block;padding:12px 32px;background:#1a56db;color:#fff;
+                        text-decoration:none;border-radius:6px;font-size:15px;font-weight:600;">
+                Verify Email Address
+              </a>
+            </p>
+            <p style="margin:0 0 8px;font-size:13px;color:#9ca3af;">
+              Or copy this link into your browser:
+            </p>
+            <p style="margin:0 0 24px;font-size:12px;color:#6b7280;word-break:break-all;">
+              {$linkEsc}
+            </p>
+            <p style="margin:0;font-size:13px;color:#9ca3af;">
+              This link expires in <strong>24 hours</strong>. If you did not request this, ignore this email.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:16px 32px;background:#f9fafb;text-align:center;
+                     font-size:12px;color:#9ca3af;border-top:1px solid #e5e7eb;">
+            © PTA Platform. This is an automated message — please do not reply.
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>
+HTML;
+
+        $mail->send();
+        return true;
+
+    } catch (Throwable $e) {
+        error_log("PHPMailer resend failed to $toEmail: " . $e->getMessage());
+        return false;
     }
-    $stmt->bind_param('ssss', $email, $name, $subject, $body);
-    if (!$stmt->execute()) {
-        error_log("queueVerificationEmail execute failed: " . $stmt->error);
-    }
-    $stmt->close();
 }
 
 /* ========================================

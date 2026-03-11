@@ -631,7 +631,7 @@ class SystemSettings {
     private function userIsAdmin(int $userId): bool {
         try {
             $stmt = $this->conn->prepare(
-                "SELECT user_type FROM users WHERE user_id = ? AND is_active = 1 LIMIT 1"
+                "SELECT role FROM users WHERE user_id = ? AND is_active = 1 LIMIT 1"
             );
             if (!$stmt) {
                 return false;
@@ -642,7 +642,7 @@ class SystemSettings {
             $row    = $result->fetch_assoc();
             $stmt->close();
 
-            return isset($row['user_type']) && $row['user_type'] === 'admin';
+            return isset($row['role']) && $row['role'] === 'admin';
         } catch (Exception $e) {
             error_log("SystemSettings userIsAdmin error: " . $e->getMessage());
             return false;
