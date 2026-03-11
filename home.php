@@ -119,8 +119,8 @@ if (!empty($_GET['category'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Free Online Practice Tests - Placement Portal">
-    <title>Practice Tests – Placement Portal</title>
+    <meta name="description" content="Free Online Practice Tests - PREPAURA Placement Training Platform">
+    <title>Practice Tests – PREPAURA</title>
     <style>
         :root {
             --color-primary:      #0D7377;
@@ -164,14 +164,26 @@ if (!empty($_GET['category'])) {
         .navbar-brand {
             display: flex; align-items: center; gap: 12px;
             text-decoration: none; color: var(--color-text);
-            font-size: 20px; font-weight: 700;
         }
         .brand-logo {
-            width: 36px; height: 36px;
-            background: var(--color-primary);
-            border-radius: 8px;
+            width: 40px; height: 40px;
             display: flex; align-items: center; justify-content: center;
-            color: white; font-size: 20px; font-weight: 700;
+            flex-shrink: 0;
+        }
+        .brand-logo img {
+            width: 40px; height: 40px;
+            object-fit: contain;
+        }
+        .brand-text {
+            display: flex; flex-direction: column; gap: 1px;
+        }
+        .brand-name {
+            font-size: 18px; font-weight: 800; letter-spacing: 0.5px;
+            color: var(--color-primary); line-height: 1.1;
+        }
+        .brand-tagline {
+            font-size: 10px; font-weight: 500;
+            color: var(--color-text-light); letter-spacing: 0.2px; line-height: 1;
         }
         .nav-search {
             flex: 1; max-width: 400px; margin: 0 32px; position: relative;
@@ -431,8 +443,13 @@ if (!empty($_GET['category'])) {
 <nav class="navbar">
     <div class="nav-container">
         <a href="home.php" class="navbar-brand">
-            <div class="brand-logo">P</div>
-            <span>Placement Portal</span>
+            <div class="brand-logo">
+                <img src="prepaura-logo.png" alt="PREPAURA Logo">
+            </div>
+            <div class="brand-text">
+                <span class="brand-name">PREPAURA</span>
+                <span class="brand-tagline">Placement Training Platform</span>
+            </div>
         </a>
 
         <div class="nav-search">
@@ -675,7 +692,7 @@ if (!empty($_GET['category'])) {
         </div>
     </div>
     <div class="footer-bottom">
-        <p>© 2024 Placement Portal. All rights reserved.</p>
+        <p>© 2024 PREPAURA – Placement Training Platform. All rights reserved.</p>
     </div>
 </footer>
 
