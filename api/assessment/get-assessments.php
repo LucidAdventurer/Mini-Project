@@ -23,7 +23,7 @@ $page   = max(1, (int)($_GET['page']  ?? 1));
 $limit  = min(100, max(1, (int)($_GET['limit'] ?? 20)));
 $offset = ($page - 1) * $limit;
 
-$allowedStatuses = ['active', 'draft', 'archived', 'scheduled'];
+$allowedStatuses = ['published', 'draft', 'archived'];
 
 // ── Build WHERE clause ──
 $conditions = ["a.created_by = ?"];
@@ -75,8 +75,8 @@ $r = safePreparedQuery($conn,
         a.total_marks,
         a.passing_marks,
         a.is_public,
-        a.available_from,
-        a.available_until,
+        a.start_time,
+        a.end_time,
         a.created_at,
         a.updated_at,
         (SELECT COUNT(*)
@@ -85,19 +85,19 @@ $r = safePreparedQuery($conn,
         (SELECT COUNT(*)
          FROM assessment_attempts aa
          WHERE aa.assessment_id = a.assessment_id
-           AND aa.status = 'completed')                                        AS attempt_count,
+           AND aa.status = 'submitted')                                        AS attempt_count,
         (SELECT COUNT(DISTINCT aa2.user_id)
          FROM assessment_attempts aa2
          WHERE aa2.assessment_id = a.assessment_id
-           AND aa2.status = 'completed'
+           AND aa2.status = 'submitted'
            AND aa2.user_id IS NOT NULL)                                        AS student_count,
         (SELECT ROUND(AVG(aa3.percentage), 1)
          FROM assessment_attempts aa3
          WHERE aa3.assessment_id = a.assessment_id
-           AND aa3.status = 'completed')                                       AS avg_score
+           AND aa3.status = 'submitted')                                       AS avg_score
      FROM assessments a
      WHERE $where
-     ORDER BY FIELD(a.status,'active','scheduled','draft','archived'), a.updated_at DESC
+     ORDER BY FIELD(a.status,'published','draft','archived'), a.updated_at DESC
      LIMIT ? OFFSET ?",
     $listTypes, $listParams
 );
@@ -115,8 +115,8 @@ if ($r['success'] && $r['result']) {
             'total_marks'      => (int)$row['total_marks'],
             'passing_marks'    => (int)$row['passing_marks'],
             'is_public'        => (bool)$row['is_public'],
-            'available_from'   => $row['available_from'],
-            'available_until'  => $row['available_until'],
+            'start_time'       => $row['start_time'],
+            'end_time'         => $row['end_time'],
             'created_at'       => $row['created_at'],
             'updated_at'       => $row['updated_at'],
             'question_count'   => (int)$row['question_count'],

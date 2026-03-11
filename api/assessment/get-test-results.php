@@ -67,7 +67,7 @@ $attemptResult = safePreparedQuery($conn,
      JOIN assessments a ON a.assessment_id = aa.assessment_id
      WHERE aa.attempt_id = ?
        AND aa.user_id    = ?
-       AND aa.status     = 'completed'",
+       AND aa.status     = 'submitted'",
     "ii", [$attemptId, $userId]
 );
 
@@ -97,7 +97,7 @@ $percentileResult = safePreparedQuery($conn,
         SUM(CASE WHEN score < ? THEN 1 ELSE 0 END) AS below_count
      FROM assessment_attempts
      WHERE assessment_id = ?
-       AND status        = 'completed'
+       AND status        = 'submitted'
        AND user_id IS NOT NULL",
     "di", [(float)$attempt['score'], (int)$attempt['assessment_id']]
 );

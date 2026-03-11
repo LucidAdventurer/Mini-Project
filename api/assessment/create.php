@@ -7,8 +7,8 @@
 // POST JSON {
 //   title, description, instructions,
 //   category, difficulty, duration_minutes, total_marks,
-//   passing_marks, max_attempts, available_from,
-//   available_until, show_results_immediately,
+//   passing_marks, max_attempts, start_time,
+//   end_time, show_results_immediately,
 //   show_correct_answers, randomize_questions,
 //   randomize_options, is_public, status
 // }
@@ -93,25 +93,25 @@ $maxAttempts  = max(1, (int)($body['max_attempts'] ?? 1));
 // ── Datetime fields ──
 // strtotime() handles all ISO-8601 variants the browser may send:
 // "2025-03-06T14:30", "2025-03-06T14:30:00", "2025-03-06 14:30:00", etc.
-$availableFrom  = null;
-$availableUntil = null;
+$startTime  = null;
+$endTime    = null;
 
-if (!empty($body['available_from'])) {
-    $ts = strtotime($body['available_from']);
+if (!empty($body['start_time'])) {
+    $ts = strtotime($body['start_time']);
     if ($ts !== false) {
-        $availableFrom = date('Y-m-d H:i:s', $ts);
+        $startTime = date('Y-m-d H:i:s', $ts);
     }
 }
-if (!empty($body['available_until'])) {
-    $ts = strtotime($body['available_until']);
+if (!empty($body['end_time'])) {
+    $ts = strtotime($body['end_time']);
     if ($ts !== false) {
-        $availableUntil = date('Y-m-d H:i:s', $ts);
+        $endTime = date('Y-m-d H:i:s', $ts);
     }
 }
 
-if ($availableFrom && $availableUntil && $availableFrom >= $availableUntil) {
+if ($startTime && $endTime && $startTime >= $endTime) {
     http_response_code(400);
-    echo json_encode(['success' => false, 'error' => '"Available Until" must be after "Available From".']);
+    echo json_encode(['success' => false, 'error' => '"End Time" must be after "Start Time".']);
     exit;
 }
 
@@ -122,19 +122,18 @@ $randomizeQuestions     = !empty($body['randomize_questions'])      ? 1 : 0;
 $randomizeOptions       = !empty($body['randomize_options'])        ? 1 : 0;
 $isPublic               = !empty($body['is_public'])                ? 1 : 0;
 
-// Status — only allow draft or active
+// Status — only allow draft or published
 $status = trim($body['status'] ?? 'draft');
-if (!in_array($status, ['draft', 'active'], true)) {
+if (!in_array($status, ['draft', 'published'], true)) {
     $status = 'draft';
 }
 
 // ── Insert ──
-// Type string: s s s s s  i i i i  s s  i i i i i  s i  = 18 chars
 $result = safePreparedQuery($conn,
     "INSERT INTO assessments
         (title, description, instructions, category, difficulty,
          duration_minutes, total_marks, passing_marks, max_attempts,
-         available_from, available_until,
+         start_time, end_time,
          show_results_immediately, show_correct_answers,
          randomize_questions, randomize_options, is_public,
          status, created_by, created_at, updated_at)
@@ -149,7 +148,7 @@ $result = safePreparedQuery($conn,
     [
         $title, $description, $instructions, $category, $difficulty,
         $duration, $totalMarks, $passingMarks, $maxAttempts,
-        $availableFrom, $availableUntil,
+        $startTime, $endTime,
         $showResultsImmediately, $showCorrectAnswers,
         $randomizeQuestions, $randomizeOptions, $isPublic,
         $status, $teacherId,

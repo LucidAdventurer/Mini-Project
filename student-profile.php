@@ -62,7 +62,7 @@ $statsQuery = "
         COALESCE(SUM(a.correct_answers), 0)      AS total_correct,
         COALESCE(SUM(a.wrong_answers), 0)        AS total_wrong
     FROM assessment_attempts a
-    WHERE a.user_id = ? AND a.status = 'completed'
+    WHERE a.user_id = ? AND a.status = 'submitted'
 ";
 $statsResult    = safePreparedQuery($conn, $statsQuery, "i", [$userId]);
 $testsCompleted = 0; $avgScore = 0; $bestScore = 0;
@@ -96,7 +96,7 @@ $recentQuery = "
         t.difficulty
     FROM assessment_attempts a
     JOIN assessments t ON t.assessment_id = a.assessment_id
-    WHERE a.user_id = ? AND a.status = 'completed'
+    WHERE a.user_id = ? AND a.status = 'submitted'
     ORDER BY a.submitted_at DESC
     LIMIT 10
 ";
@@ -120,7 +120,7 @@ $categoryQuery = "
         COALESCE(SUM(a.total_questions), 0)  AS questions_total
     FROM assessment_attempts a
     JOIN assessments t ON t.assessment_id = a.assessment_id
-    WHERE a.user_id = ? AND a.status = 'completed'
+    WHERE a.user_id = ? AND a.status = 'submitted'
       AND t.category IS NOT NULL AND t.category != ''
     GROUP BY t.category
     ORDER BY avg_score DESC

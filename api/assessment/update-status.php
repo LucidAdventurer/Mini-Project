@@ -2,9 +2,8 @@
 // ============================================================
 // api/assessment/update-status.php
 //
-// Toggles an assessment's status between 'active' and 'draft'.
-// Also allows 'archived' and 'scheduled' as valid targets so
-// a future admin panel can reuse this endpoint.
+// Toggles an assessment's status between 'published' and 'draft'.
+// Also allows 'archived' as a valid target.
 //
 // POST JSON { assessment_id: int, status: string }
 // Returns   { success: bool, status?: string, error?: string }
@@ -41,10 +40,10 @@ if ($assessmentId <= 0) {
     exit;
 }
 
-$allowedStatuses = ['active', 'draft', 'archived', 'scheduled'];
+$allowedStatuses = ['published', 'draft', 'archived'];
 if (!in_array($newStatus, $allowedStatuses, true)) {
     http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Invalid status value. Allowed: active, draft, archived, scheduled.']);
+    echo json_encode(['success' => false, 'error' => 'Invalid status value. Allowed: published, draft, archived.']);
     exit;
 }
 
