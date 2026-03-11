@@ -8,8 +8,10 @@
 // GET (no params)
 // Returns {
 //   success,
-//   stats: { total_users, active_assessments, total_attempts, failed_logins_today },
-//   user_distribution: { students, teachers, admins, unverified, inactive },
+//   stats: { total_users, active_assessments, total_attempts,
+//             failed_logins_today, suspicious_ips_today },
+//   user_distribution: { students, teachers, admins, unverified, inactive,
+//                        student_pct, teacher_pct, unverified_pct, inactive_pct },
 //   dept_breakdown: [{ department, count, pct }],
 //   recent_activity: [...],
 //   assessment_summary: [...],
@@ -82,12 +84,11 @@ if ($r2['success'] && $r2['result']) {
     $r2['result']->free();
 }
 
-$totalActive = $dist['student'] + $dist['teacher'];
-// Compute percentages for donut chart
-$dist['student_pct']    = $totalActive > 0 ? round($dist['student']    / max($stats['total_users'], 1) * 100) : 0;
-$dist['teacher_pct']    = $totalActive > 0 ? round($dist['teacher']    / max($stats['total_users'], 1) * 100) : 0;
-$dist['unverified_pct'] = round($dist['unverified'] / max($stats['total_users'], 1) * 100);
-$dist['inactive_pct']   = round($dist['inactive']   / max($stats['total_users'], 1) * 100);
+$totalUsers = $stats['total_users'];
+$dist['student_pct']    = $totalUsers > 0 ? round($dist['student']    / $totalUsers * 100) : 0;
+$dist['teacher_pct']    = $totalUsers > 0 ? round($dist['teacher']    / $totalUsers * 100) : 0;
+$dist['unverified_pct'] = $totalUsers > 0 ? round($dist['unverified'] / $totalUsers * 100) : 0;
+$dist['inactive_pct']   = $totalUsers > 0 ? round($dist['inactive']   / $totalUsers * 100) : 0;
 
 // ── 3. Department breakdown ──
 $depts = [];
@@ -117,7 +118,7 @@ if ($r3['success'] && $r3['result']) {
     $r3['result']->free();
 }
 
-// ── 4. Recent activity (from audit_logs + login_activity) ──
+// ── 4. Recent activity (from audit_logs) ──
 $activity = [];
 $r4 = safePreparedQuery($conn,
     "SELECT al.action, al.entity_type, al.created_at,
@@ -145,9 +146,13 @@ if ($r4['success'] && $r4['result']) {
 $assessments = [];
 $r5 = safePreparedQuery($conn,
     "SELECT a.title, a.category, a.difficulty, a.duration_minutes, a.status,
-            COUNT(DISTINCT aa.attempt_id)             AS attempt_count,
-            ROUND(AVG(CASE WHEN aa.status='completed' AND aa.percentage >= a.passing_marks/a.total_marks*100
-                           THEN 1.0 ELSE 0 END) * 100, 0) AS pass_rate
+            COUNT(DISTINCT aa.attempt_id) AS attempt_count,
+            ROUND(
+                SUM(CASE WHEN aa.status = 'completed'
+                         AND aa.percentage >= (a.passing_marks / a.total_marks * 100)
+                    THEN 1.0 ELSE 0 END)
+                / NULLIF(SUM(CASE WHEN aa.status = 'completed' THEN 1 ELSE 0 END), 0) * 100
+            , 0) AS pass_rate
      FROM assessments a
      LEFT JOIN assessment_attempts aa ON aa.assessment_id = a.assessment_id
      GROUP BY a.assessment_id
@@ -170,16 +175,26 @@ if ($r5['success'] && $r5['result']) {
     $r5['result']->free();
 }
 
-// ── 6. DB table counts ──
-$dbCounts = [];
-$tables   = ['users', 'assessments', 'assessment_attempts', 'notifications', 'audit_logs'];
-foreach ($tables as $table) {
-    $rc = safeQuery($conn, "SELECT COUNT(*) AS cnt FROM `$table`");
-    if ($rc) {
-        $row             = $rc->fetch_assoc();
-        $key             = $table === 'assessment_attempts' ? 'attempts' : $table;
-        $dbCounts[$key]  = (int)($row['cnt'] ?? 0);
-        $rc->free();
+// ── 6. DB table counts (use safePreparedQuery — safeQuery removed) ──
+$dbCounts = [
+    'users'         => 0,
+    'assessments'   => 0,
+    'attempts'      => 0,
+    'notifications' => 0,
+    'audit_logs'    => 0,
+];
+$countMap = [
+    'users'         => "SELECT COUNT(*) AS cnt FROM users",
+    'assessments'   => "SELECT COUNT(*) AS cnt FROM assessments",
+    'attempts'      => "SELECT COUNT(*) AS cnt FROM assessment_attempts",
+    'notifications' => "SELECT COUNT(*) AS cnt FROM notifications",
+    'audit_logs'    => "SELECT COUNT(*) AS cnt FROM audit_logs",
+];
+foreach ($countMap as $key => $sql) {
+    $rc = safePreparedQuery($conn, $sql, "", []);
+    if ($rc['success'] && $rc['result']) {
+        $dbCounts[$key] = (int)($rc['result']->fetch_assoc()['cnt'] ?? 0);
+        $rc['result']->free();
     }
 }
 

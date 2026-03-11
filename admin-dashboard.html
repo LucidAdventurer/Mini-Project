@@ -2090,21 +2090,21 @@
                     <div class="card">
                         <div class="card-header">
                             <h3>Security Configuration</h3>
-                            <p>OTP, session, and lockout settings</p>
+                            <p>Login, session, and lockout settings</p>
                         </div>
                         <div class="card-body">
                             <div class="settings-grid">
-                                <div class="setting-group"><label>OTP Expiry (minutes)</label><input
-                                        class="setting-input" type="number" value="15" data-key="otp_expiry_minutes" />
-                                </div>
                                 <div class="setting-group"><label>Max Login Attempts</label><input class="setting-input"
                                         type="number" value="5" data-key="max_login_attempts" /></div>
                                 <div class="setting-group"><label>Lockout Duration (minutes)</label><input
-                                        class="setting-input" type="number" value="30"
+                                        class="setting-input" type="number" value="15"
                                         data-key="lockout_duration_minutes" /></div>
                                 <div class="setting-group"><label>Session Timeout (minutes)</label><input
                                         class="setting-input" type="number" value="60"
                                         data-key="session_timeout_minutes" /></div>
+                                <div class="setting-group"><label>Default Assessment Duration (minutes)</label><input
+                                        class="setting-input" type="number" value="60"
+                                        data-key="default_assessment_duration" /></div>
                             </div>
                         </div>
                     </div>
@@ -2125,26 +2125,34 @@
                             </div>
                             <div class="toggle-row">
                                 <div class="toggle-info">
-                                    <h4>Allow Guest Tests</h4>
-                                    <p>Public access to assessments</p>
+                                    <h4>Allow Guest Attempts</h4>
+                                    <p>Public access to assessments without login</p>
                                 </div>
-                                <label class="toggle"><input type="checkbox" checked data-key="allow_guest_tests"><span
+                                <label class="toggle"><input type="checkbox" checked data-key="allow_guest_attempts"><span
                                         class="toggle-slider"></span></label>
                             </div>
                             <div class="toggle-row">
                                 <div class="toggle-info">
-                                    <h4>Enable Proctoring</h4>
-                                    <p>Camera/screen monitoring during tests</p>
+                                    <h4>Email Verification Required</h4>
+                                    <p>Require email verification before login</p>
                                 </div>
-                                <label class="toggle"><input type="checkbox" data-key="enable_proctoring"><span
+                                <label class="toggle"><input type="checkbox" checked data-key="email_verification_required"><span
                                         class="toggle-slider"></span></label>
                             </div>
                             <div class="toggle-row">
                                 <div class="toggle-info">
-                                    <h4>SMTP Configured</h4>
-                                    <p>Email delivery status</p>
+                                    <h4>Email Notifications</h4>
+                                    <p>Send system emails to users</p>
                                 </div>
-                                <label class="toggle"><input type="checkbox" data-key="smtp_configured"><span
+                                <label class="toggle"><input type="checkbox" checked data-key="email_notifications_enabled"><span
+                                        class="toggle-slider"></span></label>
+                            </div>
+                            <div class="toggle-row">
+                                <div class="toggle-info">
+                                    <h4>Demo Mode</h4>
+                                    <p>Disable destructive operations</p>
+                                </div>
+                                <label class="toggle"><input type="checkbox" data-key="demo_mode"><span
                                         class="toggle-slider"></span></label>
                             </div>
                         </div>
@@ -2156,11 +2164,11 @@
                         </div>
                         <div class="card-body">
                             <div class="settings-grid">
-                                <div class="setting-group"><label>Max File Size (MB)</label><input class="setting-input"
-                                        type="number" value="10" data-key="max_file_size_mb" /></div>
-                                <div class="setting-group"><label>Results Retention (days)</label><input
-                                        class="setting-input" type="number" value="365"
-                                        data-key="results_retention_days" /></div>
+                                <div class="setting-group"><label>Max Upload Size (MB)</label><input class="setting-input"
+                                        type="number" value="25" data-key="max_upload_size_mb" /></div>
+                                <div class="setting-group"><label>Log Retention (days)</label><input
+                                        class="setting-input" type="number" value="90"
+                                        data-key="log_retention_days" /></div>
                             </div>
                         </div>
                     </div>
@@ -3478,7 +3486,7 @@
                 return `<div class="log-entry">
                         <span class="log-time">${esc(log.created_at)}</span>
                         <span class="log-level">${levelBadge}</span>
-                        <span class="log-user">${esc(log.email || log.actor_email || '—')}</span>
+                        <span class="log-user">${esc(log.email || log.user_name || '—')}</span>
                         <span class="log-msg">${esc(log.message)}</span>
                         <span class="log-ip">${esc(log.ip_address || '')}</span>
                     </div>`;
