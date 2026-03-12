@@ -549,6 +549,7 @@ data-notif-id="<?= (int)$n['notification_id'] ?>">
 <div class="dropdown-menu">
 <a href="teacher-profile.php" class="dropdown-item">👤 My Profile</a>
 <a href="teacher-dashboard.php" class="dropdown-item">📊 Dashboard</a>
+<a href="manage-groups.php" class="dropdown-item">👥 Manage Groups</a>
 <a href="help.html" target="_blank" rel="noopener" class="dropdown-item">❓ Help & Support</a>
 <div class="dropdown-divider"></div>
 <a onclick="handleLogout()" class="dropdown-item">🚪 Logout</a>
@@ -595,6 +596,17 @@ data-notif-id="<?= (int)$n['notification_id'] ?>">
 <div class="stat-change none">No new attempts this week</div>
 <?php endif; ?>
 </div>
+</div>
+<!-- Quick links -->
+<div style="margin-bottom:28px;display:flex;gap:12px;flex-wrap:wrap;">
+    <a href="manage-groups.php" style="display:inline-flex;align-items:center;gap:8px;padding:10px 18px;background:white;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;font-weight:600;color:var(--color-text);text-decoration:none;box-shadow:var(--shadow-sm);transition:var(--transition);"
+       onmouseover="this.style.borderColor='var(--color-teacher-secondary)'" onmouseout="this.style.borderColor='#e2e8f0'">
+        👥 Manage Groups
+    </a>
+    <a href="create-assessment.php" style="display:inline-flex;align-items:center;gap:8px;padding:10px 18px;background:white;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;font-weight:600;color:var(--color-text);text-decoration:none;box-shadow:var(--shadow-sm);transition:var(--transition);"
+       onmouseover="this.style.borderColor='var(--color-teacher-secondary)'" onmouseout="this.style.borderColor='#e2e8f0'">
+        📝 New Assessment
+    </a>
 </div>
 <!-- Assessments section -->
 <div class="section-header">
