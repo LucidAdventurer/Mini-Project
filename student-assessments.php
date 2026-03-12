@@ -348,50 +348,43 @@ function deadlineLabel(?string $until): string {
         .filter-tab:hover { border-color: var(--primary); color: var(--primary); }
         .filter-tab.active { background: var(--primary); border-color: var(--primary); color: white; }
 
-        /* ── ASSESSMENT GRID ── */
+        /* ── ASSESSMENT LIST ── */
         .assessments-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-            gap: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
         }
 
         /* ── ASSESSMENT CARD ── */
         .assessment-card {
-            background: white; border-radius: 16px;
-            padding: 22px 24px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-            border: 2px solid #e2e8f0; cursor: default;
-            transition: box-shadow .2s, border-color .2s, transform .15s;
-            display: flex; flex-direction: column; gap: 14px;
-            position: relative; overflow: hidden;
+            background: white; border-radius: 15px;
+            padding: 20px 24px; border: 2px solid #e2e8f0;
+            display: flex; flex-direction: column; gap: 12px;
+            transition: border-color .2s, box-shadow .2s;
+            width: 100%;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
         }
-        .assessment-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.1); border-color: #cbd5e0; transform: translateY(-2px); }
+        .assessment-card:hover { border-color: #4facfe; box-shadow: 0 4px 15px rgba(79,172,254,0.15); }
         .assessment-card.exhausted { opacity: 0.72; }
-        .assessment-card.exhausted:hover { transform: none; box-shadow: 0 2px 10px rgba(0,0,0,0.05); border-color: #e2e8f0; }
         .assessment-card.expired  { opacity: 0.65; }
         .assessment-card.in-progress { border-color: #4facfe; }
-        .assessment-card.in-progress::before {
-            content: '';
-            position: absolute; top: 0; left: 0; right: 0; height: 3px;
-            background: linear-gradient(90deg, #4facfe, #00f2fe);
-        }
 
         /* Card header */
         .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
         .card-title-group { flex: 1; }
-        .card-title { font-size: 16px; font-weight: 700; color: #2d3748; margin-bottom: 4px; line-height: 1.3; }
-        .card-teacher { font-size: 12px; color: #718096; display: flex; align-items: center; gap: 5px; }
-        .card-teacher i { color: var(--primary); }
+        .card-title { font-size: 18px; font-weight: 700; color: #2d3748; margin-bottom: 5px; line-height: 1.3; }
+        .card-teacher { font-size: 13px; color: #718096; }
         .card-badges { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
 
         /* Badges */
         .badge {
-            padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+            padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;
             text-transform: capitalize; white-space: nowrap;
         }
-        .badge-easy     { background: #f0fff4; color: #276749; }
-        .badge-medium   { background: #fffbeb; color: #7b5c00; }
-        .badge-hard     { background: #fff5f5; color: #9b2c2c; }
-        .badge-category { background: #ebf8ff; color: #2b6cb0; }
+        .badge-easy     { background: #c6f6d5; color: #22543d; }
+        .badge-medium   { background: #feebc8; color: #744210; }
+        .badge-hard     { background: #fed7d7; color: #742a2a; }
+        .badge-category { background: #e9f4ff; color: #2b6cb0; }
         .badge-status-pending    { background: #ebf8ff; color: #2b6cb0; }
         .badge-status-done       { background: #f0fff4; color: #276749; }
         .badge-status-progress   { background: #fef3c7; color: #92400e; }
@@ -399,14 +392,13 @@ function deadlineLabel(?string $until): string {
         .badge-status-exhausted  { background: #f7fafc; color: #718096; }
 
         /* Meta row */
-        .card-meta { display: flex; flex-wrap: wrap; gap: 12px; }
-        .meta-item { display: flex; align-items: center; gap: 5px; font-size: 13px; color: #4a5568; }
-        .meta-item i { color: #a0aec0; font-size: 12px; width: 14px; text-align: center; }
+        .card-meta { display: flex; flex-wrap: wrap; gap: 20px; }
+        .meta-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #718096; }
 
         /* Deadline strip */
         .deadline-strip {
-            display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600;
-            padding: 7px 12px; border-radius: 8px;
+            display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 600;
+            padding: 3px 10px; border-radius: 20px;
         }
         .deadline-strip.urgent  { background: #fff5f5; color: #c53030; }
         .deadline-strip.soon    { background: #fffbeb; color: #7b5c00; }
@@ -435,32 +427,36 @@ function deadlineLabel(?string $until): string {
         .attempts-text { font-size: 12px; color: #a0aec0; }
 
         /* Action buttons */
-        .card-actions { display: flex; gap: 10px; margin-top: 2px; }
+        .card-actions { display: flex; gap: 10px; }
         .btn-start {
-            flex: 1; padding: 10px 18px; border-radius: 10px; border: none;
-            background: linear-gradient(90deg, #4facfe, #00f2fe);
+            flex: 1; padding: 10px 0; border-radius: 8px; border: none;
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
             color: white; font-weight: 700; font-size: 14px; cursor: pointer;
             transition: opacity .2s, transform .15s; font-family: inherit;
+            display: flex; align-items: center; justify-content: center; gap: 6px;
         }
-        .btn-start:hover { opacity: .88; transform: translateY(-1px); }
+        .btn-start:hover { opacity: .9; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(79,172,254,0.4); }
         .btn-resume {
-            flex: 1; padding: 10px 18px; border-radius: 10px; border: none;
-            background: linear-gradient(90deg, #f6d365, #fda085);
+            flex: 1; padding: 10px 0; border-radius: 8px; border: none;
+            background: linear-gradient(135deg, #f6ad55, #ed8936);
             color: white; font-weight: 700; font-size: 14px; cursor: pointer;
             transition: opacity .2s, transform .15s; font-family: inherit;
+            display: flex; align-items: center; justify-content: center; gap: 6px;
         }
-        .btn-resume:hover { opacity: .88; transform: translateY(-1px); }
+        .btn-resume:hover { opacity: .9; transform: translateY(-2px); }
         .btn-results {
-            flex: 1; padding: 10px 18px; border-radius: 10px;
-            border: 2px solid var(--primary); background: white;
-            color: var(--primary); font-weight: 700; font-size: 14px; cursor: pointer;
-            transition: background .2s, transform .15s; font-family: inherit;
+            flex: 1; padding: 10px 0; border-radius: 8px;
+            border: 2px solid #4facfe; background: white;
+            color: #4facfe; font-weight: 700; font-size: 14px; cursor: pointer;
+            transition: background .2s, color .2s; font-family: inherit;
+            display: flex; align-items: center; justify-content: center; gap: 6px;
         }
-        .btn-results:hover { background: rgba(35,76,106,.07); transform: translateY(-1px); }
+        .btn-results:hover { background: #4facfe; color: white; }
         .btn-disabled {
-            flex: 1; padding: 10px 18px; border-radius: 10px; border: 2px solid #e2e8f0;
+            flex: 1; padding: 10px 0; border-radius: 8px; border: 2px solid #e2e8f0;
             background: #f7fafc; color: #a0aec0; font-weight: 600; font-size: 14px;
             cursor: not-allowed; font-family: inherit;
+            display: flex; align-items: center; justify-content: center; gap: 6px;
         }
 
         /* State messages */
@@ -481,7 +477,7 @@ function deadlineLabel(?string $until): string {
 
         /* ── RESPONSIVE ── */
         @media (max-width: 1100px) { .summary-row { grid-template-columns: repeat(2, 1fr); } }
-        @media (max-width: 900px)  { .assessments-grid { grid-template-columns: 1fr; } .nav-search { display: none; } }
+        @media (max-width: 900px)  { .nav-search { display: none; } }
         @media (max-width: 768px)  { .container { padding: 15px; } .left-sidebar { display: none; } .profile-name { display: none; } }
     </style>
 </head>
@@ -671,6 +667,7 @@ function deadlineLabel(?string $until): string {
                 $id          = (int) $a['assessment_id'];
                 $attemptsUsed = (int) $a['attempts_used'];
                 $maxAttempts  = (int) $a['max_attempts'];
+                $attemptsLeft = $maxAttempts - $attemptsUsed;
                 $isExhausted  = $attemptsUsed >= $maxAttempts;
                 $isExpired    = !empty($a['end_time']) && strtotime($a['end_time']) < time();
                 $isAvailable  = !empty($a['start_time'])  && strtotime($a['start_time'])  > time();
@@ -734,42 +731,24 @@ function deadlineLabel(?string $until): string {
                  data-deadline="<?= $jsDeadline ?>"
                  data-created="<?= $jsCreated ?>">
 
-                <!-- Header: title + badges -->
+                <!-- Header: title + difficulty badge -->
                 <div class="card-header">
                     <div class="card-title-group">
                         <div class="card-title"><?= htmlspecialchars($a['title']) ?></div>
-                        <div class="card-teacher">
-                            <i class="fa fa-chalkboard-teacher"></i>
-                            <?= htmlspecialchars($a['teacher_name'] ?? 'Teacher') ?>
-                        </div>
+                        <div class="card-teacher"><?= htmlspecialchars($a['teacher_name'] ?? 'Teacher') ?></div>
                     </div>
-                    <div class="card-badges">
-                        <span class="badge badge-<?= htmlspecialchars($a['difficulty'] ?? 'medium') ?>">
-                            <?= htmlspecialchars(ucfirst($a['difficulty'] ?? 'medium')) ?>
-                        </span>
-                        <span class="badge badge-category"><?= htmlspecialchars(ucfirst($a['category'] ?? '')) ?></span>
-                        <span class="badge <?= $statusClass ?>"><?= $statusLabel ?></span>
-                    </div>
+                    <span class="badge badge-<?= htmlspecialchars($a['difficulty'] ?? 'medium') ?>">
+                        <?= htmlspecialchars(ucfirst($a['difficulty'] ?? 'medium')) ?>
+                    </span>
                 </div>
 
-                <!-- Meta: questions, duration, marks -->
+                <!-- Meta: questions, duration, marks, attempts -->
                 <div class="card-meta">
-                    <div class="meta-item"><i class="fa fa-question-circle"></i><?= (int)$a['question_count'] ?> Questions</div>
-                    <div class="meta-item"><i class="fa fa-clock"></i><?= (int)$a['duration_minutes'] ?> Min</div>
-                    <div class="meta-item"><i class="fa fa-star"></i><?= (int)$a['total_marks'] ?> Marks</div>
-                    <div class="meta-item"><i class="fa fa-check-circle"></i>Pass: <?= $passPct ?>%</div>
+                    <div class="meta-item"><span>❓</span><?= (int)$a['question_count'] ?> Questions</div>
+                    <div class="meta-item"><span>⏱️</span><?= (int)$a['duration_minutes'] ?> Minutes</div>
+                    <div class="meta-item"><span>🏆</span><?= (int)$a['total_marks'] ?> Points</div>
+                    <div class="meta-item"><span>🔄</span><?= $attemptsLeft > 0 ? $attemptsLeft . ' attempt(s) left' : 'No attempts left' ?></div>
                 </div>
-
-                <!-- Deadline strip -->
-                <?php if ($dLabel !== ''): ?>
-                <div class="deadline-strip <?= $dClass ?>">
-                    <i class="fa fa-calendar-alt"></i>
-                    <?= htmlspecialchars($dLabel) ?>
-                    <?php if (!empty($a['end_time']) && strtotime($a['end_time']) > time()): ?>
-                        &nbsp;·&nbsp;<?= date('d M Y, h:i A', strtotime($a['end_time'])) ?>
-                    <?php endif ?>
-                </div>
-                <?php endif ?>
 
                 <!-- Score bar (only when attempted) -->
                 <?php if ($lastScore !== null): ?>
@@ -790,26 +769,14 @@ function deadlineLabel(?string $until): string {
                 </div>
                 <?php endif ?>
 
-                <!-- Attempts indicator -->
-                <div class="attempts-row">
-                    <div class="attempts-dots">
-                        <?php for ($d = 0; $d < $maxAttempts; $d++): ?>
-                        <div class="attempt-dot <?= $d < $attemptsUsed ? 'used' : '' ?>"></div>
-                        <?php endfor ?>
-                    </div>
-                    <div class="attempts-text">
-                        <?= $attemptsUsed ?> / <?= $maxAttempts ?> attempt<?= $maxAttempts > 1 ? 's' : '' ?> used
-                    </div>
-                </div>
-
                 <!-- Action buttons -->
                 <div class="card-actions">
                     <?php if ($inProgress): ?>
                         <button class="btn-resume" onclick="startAssessment(<?= $id ?>)">
-                            <i class="fa fa-play-circle"></i> Resume Test
+                            ▶ Resume Test
                         </button>
                         <?php if (!empty($a['last_attempt_id'])): ?>
-                        <button class="btn-results" onclick="viewResults(<?= (int)$a['last_attempt_id'] ?>)">Results</button>
+                        <button class="btn-results" onclick="viewResults(<?= (int)$a['last_attempt_id'] ?>)">View Results</button>
                         <?php endif ?>
 
                     <?php elseif ($isExpired && $attemptsUsed === 0): ?>
@@ -817,21 +784,21 @@ function deadlineLabel(?string $until): string {
 
                     <?php elseif ($isAvailable): ?>
                         <button class="btn-disabled" disabled>
-                            <i class="fa fa-lock"></i> Opens <?= date('d M', strtotime($a['start_time'])) ?>
+                            🔒 Opens <?= date('d M', strtotime($a['start_time'])) ?>
                         </button>
 
                     <?php elseif (!$isExhausted): ?>
                         <button class="btn-start" onclick="startAssessment(<?= $id ?>)">
-                            <i class="fa fa-play"></i> <?= $attemptsUsed > 0 ? 'Retry Test' : 'Start Test' ?>
+                            ▶ <?= $attemptsUsed > 0 ? 'Retry Test' : 'Start Test' ?>
                         </button>
                         <?php if ($attemptsUsed > 0 && !empty($a['last_attempt_id'])): ?>
-                        <button class="btn-results" onclick="viewResults(<?= (int)$a['last_attempt_id'] ?>)">Results</button>
+                        <button class="btn-results" onclick="viewResults(<?= (int)$a['last_attempt_id'] ?>)">View Results</button>
                         <?php endif ?>
 
                     <?php else: ?>
                         <?php if (!empty($a['last_attempt_id'])): ?>
-                        <button class="btn-results" onclick="viewResults(<?= (int)$a['last_attempt_id'] ?>)" style="flex:1">
-                            <i class="fa fa-chart-bar"></i> View Results
+                        <button class="btn-results" onclick="viewResults(<?= (int)$a['last_attempt_id'] ?>)">
+                            View Results
                         </button>
                         <?php else: ?>
                         <button class="btn-disabled" disabled>No Attempts Remaining</button>
@@ -873,9 +840,7 @@ function deadlineLabel(?string $until): string {
 
     // ── Navigation ──
     function startAssessment(id) {
-        if (confirm('Are you ready to start this assessment?')) {
-            window.location.href = 'test-preview.php?id=' + id;
-        }
+        window.location.href = 'test-preview.php?id=' + id;
     }
     function viewResults(attemptId) {
         window.location.href = 'test-results.php?attempt_id=' + attemptId;

@@ -1016,8 +1016,8 @@ function timeAgo(string $datetime): string {
                             $catClass     = htmlspecialchars(strtolower($a['category']));
                             $diff         = strtolower($a['difficulty']);
                             $diffLabel    = ucfirst($diff);
-                            $deadline     = $a['available_until']
-                                            ? date('d M Y, g:i A', strtotime($a['available_until']))
+                            $deadline     = ($a['end_time'] ?? null)
+                                            ? date('d M Y, g:i A', strtotime($a['end_time']))
                                             : null;
                         ?>
                         <div class="assessment-card <?= $exhausted ? 'exhausted' : '' ?>" data-category="<?= $catClass ?>">
@@ -1045,7 +1045,7 @@ function timeAgo(string $datetime): string {
                             <?php if (!$exhausted): ?>
                             <div class="assessment-actions">
                                 <button class="btn-start" onclick="startAssessment(<?= $id ?>)">Start Test</button>
-                                <button class="btn-details" onclick="viewDetails(<?= $id ?>)">View Details</button>
+
                             </div>
                             <?php else: ?>
                             <div class="assessment-actions">

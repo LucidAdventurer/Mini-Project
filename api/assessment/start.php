@@ -39,7 +39,7 @@ $asmResult = safePreparedQuery($conn,
     "SELECT assessment_id, max_attempts
      FROM assessments
      WHERE assessment_id = ?
-       AND status = 'active'
+       AND status = 'published'
        AND (start_time IS NULL OR start_time <= NOW())
        AND (end_time   IS NULL OR end_time   >= NOW())
        AND (

@@ -255,6 +255,14 @@ body {
 .attempt-info { font-size: 12px; color: #718096; display: flex; align-items: center; gap: 4px; }
 .attempt-info strong { color: #4a5568; }
 
+/* ── DASHBOARD-STYLE PENDING CARD ── */
+.dash-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
+.dash-card-title { font-size: 17px; font-weight: 700; color: #2d3748; margin-bottom: 4px; }
+.dash-card-category { font-size: 13px; color: #718096; }
+.dash-card-meta { display: flex; gap: 18px; flex-wrap: wrap; margin: 10px 0; }
+.dash-meta-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #718096; }
+.dash-card-actions { display: flex; gap: 10px; margin-top: 4px; }
+
 /* ── EMPTY STATE ── */
 .empty-state { text-align: center; padding: 50px 24px; color: #a0aec0; grid-column: 1/-1; }
 .empty-state i { font-size: 3rem; margin-bottom: 16px; display: block; opacity: .4; }
@@ -479,45 +487,35 @@ function toast(msg) {
 }
 
 function buildPendingCard(a) {
-    const resume     = !!a.in_progress_attempt_id;
-    const canAttempt = a.can_attempt;
-    const deadline   = a.available_until
-        ? `<span class="deadline-chip"><i class="fa fa-clock"></i> Ends ${esc(fmtDate(a.available_until))}</span>` : '';
-    const inprog     = resume
-        ? `<span class="inprogress-chip"><i class="fa fa-circle-play"></i> In Progress</span>` : '';
+    const resume       = !!a.in_progress_attempt_id;
+    const canAttempt   = a.can_attempt;
+    const attemptsLeft = a.max_attempts - a.attempts_used;
 
     let btn = '';
     if (resume) {
-        btn = `<a class="btn-start resume" href="take-assessment.php?id=${a.assessment_id}&attempt=${a.in_progress_attempt_id}"><i class="fa fa-play"></i> Resume</a>`;
+        btn = `<a class="btn-start resume" href="take-assessment.php?id=${a.assessment_id}&attempt=${a.in_progress_attempt_id}">Resume Test</a>`;
     } else if (canAttempt) {
-        btn = `<a class="btn-start" href="take-assessment.php?id=${a.assessment_id}"><i class="fa fa-play"></i> Start</a>`;
+        btn = `<a class="btn-start" href="take-assessment.php?id=${a.assessment_id}">Start Test</a>`;
     } else {
-        btn = `<button class="btn-start" disabled><i class="fa fa-ban"></i> No Attempts Left</button>`;
+        btn = `<button class="btn-start" disabled>No Attempts Left</button>`;
     }
 
     return `
     <div class="assessment-card">
-        <div class="card-top">
-            <div class="aicon ai-pending"><i class="fa fa-clipboard-list"></i></div>
-            <div style="flex:1;min-width:0">
-                <div class="card-title" title="${esc(a.title)}">${esc(a.title)}</div>
-                <div class="card-badges">
-                    <span class="badge-cat">${esc(capFirst(a.category))}</span>
-                    <span class="badge-diff ${esc(a.difficulty)}">${esc(capFirst(a.difficulty))}</span>
-                </div>
+        <div class="dash-card-header">
+            <div>
+                <div class="dash-card-title">${esc(a.title)}</div>
+                <div class="dash-card-category">${esc(capFirst(a.category))}</div>
             </div>
+            <span class="badge-diff ${esc(a.difficulty)}">${esc(capFirst(a.difficulty))}</span>
         </div>
-        ${a.description ? `<div class="card-desc">${esc(a.description)}</div>` : ''}
-        <div class="card-meta">
-            <span><i class="fa fa-clock"></i>${esc(fmtDuration(a.duration_minutes))}</span>
-            <span><i class="fa fa-circle-question"></i>${a.question_count} Questions</span>
-            <span><i class="fa fa-star"></i>${a.total_marks} Marks</span>
-            <span><i class="fa fa-user"></i>${esc(a.created_by_name)}</span>
+        <div class="dash-card-meta">
+            <div class="dash-meta-item"><span>❓</span><span>${a.question_count} Questions</span></div>
+            <div class="dash-meta-item"><span>⏱️</span><span>${esc(fmtDuration(a.duration_minutes))}</span></div>
+            <div class="dash-meta-item"><span>🏆</span><span>${a.total_marks} Points</span></div>
+            <div class="dash-meta-item"><span>🔄</span><span>${attemptsLeft > 0 ? attemptsLeft + ' attempt(s) left' : 'No attempts left'}</span></div>
         </div>
-        ${(deadline||inprog) ? `<div style="display:flex;gap:6px;flex-wrap:wrap">${deadline}${inprog}</div>` : ''}
-        <div class="card-divider"></div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-            <span class="attempt-info"><i class="fa fa-rotate-right"></i>&nbsp;<strong>${a.attempts_used}</strong>/${a.max_attempts} used</span>
+        <div class="dash-card-actions">
             ${btn}
         </div>
     </div>`;

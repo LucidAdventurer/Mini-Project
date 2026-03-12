@@ -202,6 +202,8 @@ width: 44px; height: 44px;
 border-radius: 10px;
 object-fit: contain;
 flex-shrink: 0;
+background: white;
+padding: 4px;
         }
 .brand-text-group { display: flex; flex-direction: column; line-height: 1; }
 .brand-name { font-size: 19px; font-weight: 800; color: white; letter-spacing: 1px; }
@@ -312,7 +314,7 @@ transition: var(--transition);
 .notif-time  { font-size: 11px; color: #a0aec0; margin-top: 4px; }
 .notif-empty { padding: 30px 20px; text-align: center; color: var(--color-text-light); font-size: 14px; }
 /* ── CONTAINER ── */
-.container { max-width: 1400px; margin: 0 auto; padding: 30px 20px; }
+.container { max-width: 100%; padding: 0; }
 /* ── DB ERROR BANNER ── */
 .db-error-banner {
 background: #fff5f5; border: 2px solid var(--color-error);
@@ -321,9 +323,17 @@ display: flex; align-items: center; gap: 12px;
 color: #c53030; font-weight: 600; font-size: 14px;
         }
 /* ── WELCOME ── */
-.welcome-section { margin-bottom: 28px; }
-.welcome-title { font-size: 28px; font-weight: 700; color: var(--color-text); margin-bottom: 6px; }
-.welcome-subtitle { font-size: 15px; color: var(--color-text-light); }
+.welcome-section {
+    background: white; border-radius: 20px; padding: 30px;
+    margin-bottom: 28px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    display: flex; justify-content: space-between; align-items: center;
+}
+.welcome-content h1 { font-size: 32px; font-weight: 700; color: var(--color-text); margin-bottom: 8px; }
+.welcome-subtitle { font-size: 16px; color: var(--color-text-light); }
+.quick-stats { display: flex; gap: 30px; }
+.stat-item { text-align: center; }
+.stat-number { font-size: 28px; font-weight: 700; color: var(--color-teacher-primary); display: block; }
+.stat-label { font-size: 13px; color: var(--color-text-light); }
 /* ── STATS ── */
 .stats-grid {
 display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -353,16 +363,34 @@ margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
 .section-title { font-size: 22px; font-weight: 700; color: var(--color-text); }
 .filter-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
 .filter-tab {
-padding: 7px 16px; background: white; border: 2px solid var(--color-border);
-border-radius: 8px; font-size: 13px; font-weight: 600;
-color: var(--color-text-light); cursor: pointer; transition: var(--transition);
+padding: 8px 18px; background: white; border: 2px solid #e2e8f0;
+border-radius: 8px; font-size: 13px; font-weight: 500;
+color: #4a5568; cursor: pointer; transition: all .18s; font-family: inherit;
         }
 .filter-tab:hover { border-color: var(--color-teacher-secondary); color: var(--color-teacher-secondary); }
 .filter-tab.active {
 background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
-border-color: transparent; color: white;
+border-color: transparent; color: white; font-weight: 600;
         }
-/* ── EMPTY STATE ── */
+/* ── PAGE LAYOUT ── */
+.page-wrapper { display: flex; min-height: calc(100vh - 71px); }
+.left-sidebar {
+    width: 220px; flex-shrink: 0; padding: 24px 12px;
+    display: flex; flex-direction: column; gap: 2px;
+    background: transparent; min-height: calc(100vh - 71px);
+    position: sticky; top: 71px; align-self: flex-start;
+}
+.left-sidebar-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #718096; padding: 14px 12px 6px; }
+.left-sidebar a { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; text-decoration: none; font-size: 14px; font-weight: 500; color: #4a5568; transition: background .15s, color .15s; }
+.left-sidebar a:hover { background: rgba(46,7,63,.08); color: var(--color-teacher-primary); }
+.left-sidebar a.active { background: rgba(46,7,63,.12); color: var(--color-teacher-primary); font-weight: 600; }
+.left-sidebar a i { width: 18px; text-align: center; font-size: 15px; }
+.left-sidebar-bottom { margin-top: auto; padding-top: 12px; border-top: 1px solid rgba(46,7,63,.12); }
+.left-sidebar-bottom button { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; font-size: 14px; font-weight: 500; color: #e53e3e; background: none; border: none; cursor: pointer; width: 100%; transition: background .15s; font-family: inherit; }
+.left-sidebar-bottom button:hover { background: rgba(229,62,62,.08); }
+.left-sidebar-bottom button i { width: 18px; text-align: center; font-size: 15px; }
+.page-content { flex: 1; min-width: 0; padding: 30px 30px 30px 0; }
+@media (max-width: 900px) { .left-sidebar { display: none; } .page-content { padding: 30px; } }
 .empty-state {
 background: white; border-radius: var(--radius-lg); padding: 60px 30px;
 text-align: center; box-shadow: var(--shadow-sm);
@@ -487,7 +515,7 @@ font-weight: 700; cursor: pointer; transition: var(--transition);
         }
 @media (max-width: 480px) {
             .stats-grid { grid-template-columns: 1fr; }
-.welcome-title { font-size: 22px; }
+.welcome-content h1 { font-size: 22px; }
         }
 </style>
 </head>
@@ -563,6 +591,23 @@ data-notif-id="<?= (int)$n['notification_id'] ?>">
 </div>
 </nav>
 <!-- ── MAIN ── -->
+<div class="page-wrapper">
+<aside class="left-sidebar">
+    <span class="left-sidebar-label">Navigation</span>
+    <a href="teacher-dashboard.php" class="active"><i class="fa fa-home"></i> Dashboard</a>
+    <a href="teacher-assessments.php"><i class="fa fa-clipboard-list"></i> Assessments</a>
+    <a href="teacher-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
+    <a href="notifications.php" style="position:relative">
+        <i class="fa fa-bell"></i> Notifications
+        <?php if ($unreadCount > 0): ?>
+        <span style="margin-left:auto;background:#e53e3e;color:white;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;min-width:20px;text-align:center;"><?= $unreadCount ?></span>
+        <?php endif; ?>
+    </a>
+    <div class="left-sidebar-bottom">
+        <button onclick="handleLogout()"><i class="fa fa-sign-out-alt"></i> Logout</button>
+    </div>
+</aside>
+<div class="page-content">
 <div class="container">
 <?php if ($dbError): ?>
 <div class="db-error-banner">
@@ -571,8 +616,24 @@ data-notif-id="<?= (int)$n['notification_id'] ?>">
 <?php endif; ?>
 <!-- Welcome -->
 <div class="welcome-section">
-<h1 class="welcome-title">Welcome back, <?= $userName ?>! 👋</h1>
-<p class="welcome-subtitle">Here's what's happening with your assessments today.</p>
+    <div class="welcome-content">
+        <h1>Welcome back, <?= $userName ?>! 👋</h1>
+        <p class="welcome-subtitle">Here's what's happening with your assessments today.</p>
+    </div>
+    <div class="quick-stats">
+        <div class="stat-item">
+            <span class="stat-number"><?= $totalAssessments ?></span>
+            <span class="stat-label">Total Assessments</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-number"><?= $activeStudents ?></span>
+            <span class="stat-label">Active Students</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-number"><?= $newThisMonth ?></span>
+            <span class="stat-label">New This Month</span>
+        </div>
+    </div>
 </div>
 <!-- Stats -->
 <div class="stats-grid">
@@ -604,12 +665,12 @@ data-notif-id="<?= (int)$n['notification_id'] ?>">
 <!-- Assessments section -->
 <div class="section-header">
 <h2 class="section-title">My Assessments</h2>
-<div class="filter-tabs" role="tablist">
+</div>
+<div class="filter-tabs" role="tablist" style="margin-bottom:20px;">
 <button class="filter-tab active" data-filter="all"      role="tab">All</button>
 <button class="filter-tab"         data-filter="active"   role="tab">Active</button>
 <button class="filter-tab"         data-filter="draft"    role="tab">Draft</button>
 <button class="filter-tab"         data-filter="archived" role="tab">Completed</button>
-</div>
 </div>
 <?php if (empty($assessments)): ?>
 <div class="empty-state">
@@ -680,6 +741,8 @@ if ($status === 'active' && $a['end_time']) {
 </div>
 <?php endif; ?>
 </div><!-- /container -->
+</div><!-- /page-content -->
+</div><!-- /page-wrapper -->
 <!-- FAB -->
 <div class="fab-container">
 <a href="create-assessment.php" class="fab-button" title="Create New Assessment">+</a>
