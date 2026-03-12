@@ -7,8 +7,8 @@
 // POST JSON {
 //   title, description, instructions,
 //   category, difficulty, duration_minutes, total_marks,
-//   passing_marks, max_attempts, available_from,
-//   available_until, show_results_immediately,
+//   passing_marks, max_attempts, start_time,
+//   end_time, show_results_immediately,
 //   show_correct_answers, randomize_questions,
 //   randomize_options, is_public, status
 // }
@@ -93,7 +93,7 @@ $maxAttempts  = max(1, (int)($body['max_attempts'] ?? 1));
 // ── Datetime fields ──
 // strtotime() handles all ISO-8601 variants the browser may send:
 // "2025-03-06T14:30", "2025-03-06T14:30:00", "2025-03-06 14:30:00", etc.
-$availableFrom  = null;
+$availableFrom = null;
 $availableUntil = null;
 
 if (!empty($body['available_from'])) {
@@ -111,7 +111,7 @@ if (!empty($body['available_until'])) {
 
 if ($availableFrom && $availableUntil && $availableFrom >= $availableUntil) {
     http_response_code(400);
-    echo json_encode(['success' => false, 'error' => '"Available Until" must be after "Available From".']);
+    echo json_encode(['success' => false, 'error' => '"End Time" must be after "Start Time".']);
     exit;
 }
 
@@ -122,14 +122,13 @@ $randomizeQuestions     = !empty($body['randomize_questions'])      ? 1 : 0;
 $randomizeOptions       = !empty($body['randomize_options'])        ? 1 : 0;
 $isPublic               = !empty($body['is_public'])                ? 1 : 0;
 
-// Status — only allow draft or active
+// Status — only allow draft or published
 $status = trim($body['status'] ?? 'draft');
 if (!in_array($status, ['draft', 'active'], true)) {
     $status = 'draft';
 }
 
 // ── Insert ──
-// Type string: s s s s s  i i i i  s s  i i i i i  s i  = 18 chars
 $result = safePreparedQuery($conn,
     "INSERT INTO assessments
         (title, description, instructions, category, difficulty,

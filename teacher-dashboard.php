@@ -92,7 +92,7 @@ LEFT JOIN assessment_attempts aa
 ON aa.assessment_id = a.assessment_id
 AND aa.status = 'completed'
 WHERE a.created_by = ?
-GROUP BY a.assessment_id
+GROUP BY a.assessment_id, a.title, a.category, a.difficulty, a.status, a.duration_minutes, a.total_marks, a.passing_marks, a.available_from, a.available_until, a.created_at, a.updated_at
 ORDER BY
         FIELD(a.status, 'active', 'scheduled', 'draft', 'archived') ASC,
         a.updated_at DESC",
@@ -130,10 +130,10 @@ return date('M j, Y', strtotime($dt));
 // ── Helper: status label map ──
 function statusLabel(string $status): string {
 return match($status) {
-'active'   => 'Active',
+'active' => 'Active',
+'scheduled' => 'Scheduled',
 'draft'    => 'Draft',
 'archived' => 'Completed',
-'scheduled'=> 'Scheduled',
 default    => ucfirst($status),
     };
 }
@@ -416,9 +416,8 @@ padding: 5px 12px; border-radius: 6px;
 font-size: 12px; font-weight: 600; margin-bottom: 14px;
         }
 .status-badge.active    { background: #d1fae5; color: #065f46; }
-.status-badge.draft     { background: #fef3c7; color: #92400e; }
-.status-badge.archived  { background: #dbeafe; color: #1e40af; }
-.status-badge.scheduled { background: #e0e7ff; color: #3730a3; }
+.status-badge.draft        { background: #fef3c7; color: #92400e; }
+.status-badge.archived     { background: #dbeafe; color: #1e40af; }
 .assessment-actions { display: flex; gap: 8px; }
 .btn {
 padding: 9px 14px; border: none; border-radius: 8px;
@@ -552,7 +551,7 @@ data-notif-id="<?= (int)$n['notification_id'] ?>">
 <a href="teacher-dashboard.php" class="dropdown-item">📊 Dashboard</a>
 <a href="help.html" target="_blank" rel="noopener" class="dropdown-item">❓ Help & Support</a>
 <div class="dropdown-divider"></div>
-<a onclick="handleLogout()" class="dropdown-item"> 🚪 Logout</a>
+<a onclick="handleLogout()" class="dropdown-item">🚪 Logout</a>
 </div>
 </div>
 </button>
@@ -601,11 +600,10 @@ data-notif-id="<?= (int)$n['notification_id'] ?>">
 <div class="section-header">
 <h2 class="section-title">My Assessments</h2>
 <div class="filter-tabs" role="tablist">
-<button class="filter-tab active" data-filter="all"       role="tab">All</button>
-<button class="filter-tab"         data-filter="active"    role="tab">Active</button>
-<button class="filter-tab"         data-filter="draft"     role="tab">Draft</button>
-<button class="filter-tab"         data-filter="scheduled" role="tab">Scheduled</button>
-<button class="filter-tab"         data-filter="archived"  role="tab">Completed</button>
+<button class="filter-tab active" data-filter="all"      role="tab">All</button>
+<button class="filter-tab"         data-filter="active"   role="tab">Active</button>
+<button class="filter-tab"         data-filter="draft"    role="tab">Draft</button>
+<button class="filter-tab"         data-filter="archived" role="tab">Completed</button>
 </div>
 </div>
 <?php if (empty($assessments)): ?>
@@ -624,14 +622,12 @@ $qCount   = (int)$a['question_count'];
 $attempts = (int)$a['attempt_count'];
 $students = (int)$a['student_count'];
 if ($status === 'active' && $a['available_until']) {
-$dateLabel = 'Due: ' . fmtDate($a['available_until']);
-                } elseif ($status === 'scheduled' && $a['available_from']) {
-$dateLabel = 'Starts: ' . fmtDate($a['available_from']);
-                } elseif ($status === 'archived') {
-$dateLabel = 'Completed: ' . fmtDate($a['updated_at']);
-                } else {
-$dateLabel = 'Created: ' . fmtDate($a['created_at']);
-                }
+    $dateLabel = 'Due: ' . fmtDate($a['available_until']);
+} elseif ($status === 'archived') {
+    $dateLabel = 'Completed: ' . fmtDate($a['updated_at']);
+} else {
+    $dateLabel = 'Created: ' . fmtDate($a['created_at']);
+}
 ?>
 <div class="assessment-card" data-status="<?= htmlspecialchars($status) ?>" data-id="<?= $aid ?>">
 <h3 class="assessment-title"><?= htmlspecialchars($a['title']) ?></h3>
@@ -670,9 +666,6 @@ $dateLabel = 'Created: ' . fmtDate($a['created_at']);
 <?php elseif ($status === 'active' || $status === 'archived'): ?>
 <a href="assessment-results.php?id=<?= $aid ?>" class="btn btn-primary">View Results</a>
 <a href="edit-assessment.php?id=<?= $aid ?>" class="btn btn-secondary">Edit</a>
-<?php elseif ($status === 'scheduled'): ?>
-<a href="edit-assessment.php?id=<?= $aid ?>" class="btn btn-secondary">Edit</a>
-<button class="btn btn-danger" onclick="confirmDelete(<?= $aid ?>, '<?= htmlspecialchars(addslashes($a['title'])) ?>')">Delete</button>
 <?php else: ?>
 <a href="edit-assessment.php?id=<?= $aid ?>" class="btn btn-secondary">Edit</a>
 <?php endif; ?>

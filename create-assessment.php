@@ -50,7 +50,7 @@ if (isset($_GET['edit']) && (int)$_GET['edit'] > 0) {
     }
 
     // Only allow editing drafts (and scheduled — teacher may want to adjust before it goes live)
-    if (!in_array($assessment['status'], ['draft', 'scheduled'], true)) {
+    if ($assessment['status'] !== 'draft' && $assessment['status'] !== 'scheduled') {
         // Active/archived assessments go to edit-assessment.php instead
         header('Location: edit-assessment.php?id=' . $assessmentId);
         exit;
@@ -1022,8 +1022,8 @@ function collectBasicData() {
         total_marks             : parseInt(document.getElementById('totalMarks').value, 10) || 0,
         passing_marks           : parseInt(document.getElementById('passingMarks').value, 10) || 0,
         max_attempts            : parseInt(document.getElementById('maxAttempts').value, 10) || 1,
-        available_from          : document.getElementById('availableFrom').value || null,
-        available_until         : document.getElementById('availableUntil').value || null,
+        available_from      : document.getElementById('availableFrom').value || null,
+        available_until     : document.getElementById('availableUntil').value || null,
         show_results_immediately: document.getElementById('showResults').checked ? 1 : 0,
         show_correct_answers    : document.getElementById('showAnswers').checked ? 1 : 0,
         randomize_questions     : document.getElementById('randQ').checked ? 1 : 0,
@@ -1109,7 +1109,7 @@ async function publish() {
         const result = await res.json();
 
         if (result.success) {
-            showToast('🎉 Assessment published!');
+            showToast('🎉 Assessment published and active!');
             setTimeout(() => { window.location.href = 'teacher-dashboard.php'; }, 1200);
         } else {
             showToast(result.error || 'Publish failed.', 'error');

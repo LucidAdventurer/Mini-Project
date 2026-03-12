@@ -4,7 +4,11 @@
 // Admin-only. Returns all system settings grouped by category.
 //
 // GET (no params)
-// Returns { success, settings: { category: [{key,value,type,description,is_editable,immutable}] } }
+// Returns {
+//   success,
+//   settings: { "Category": [{key, value, type, description, is_editable}] },
+//   db_counts: { users, assessments, attempts, notifications, audit_logs }
+// }
 // ============================================================
 
 require_once __DIR__ . '/../../config.php';
@@ -17,25 +21,54 @@ validateSession($conn, 'admin');
 $settings = SystemSettings::getInstance();
 $all      = $settings->getAll();
 
-// Group keys into UI categories
+// ── Groups mapped to actual keys present in the new system_settings table ──
 $groups = [
-    'Authentication'  => ['max_login_attempts','lockout_duration_minutes','session_timeout_minutes',
-                          'remember_me_duration_days','force_password_change_days'],
-    'Verification'    => ['otp_expiry_minutes','otp_length','email_verification_expiry_hours',
-                          'resend_otp_cooldown_seconds','require_email_verification'],
-    'Assessments'     => ['allow_guest_tests','max_assessment_duration_minutes',
-                          'auto_submit_on_timeout','show_results_immediately',
-                          'allow_review_after_submission'],
-    'Proctoring'      => ['enable_proctoring','proctoring_tab_switch_limit','proctoring_strict_mode'],
-    'File Uploads'    => ['max_file_size_mb','allowed_file_types','enable_file_virus_scan'],
-    'Email / SMTP'    => ['smtp_configured','smtp_from_email','smtp_from_name',
-                          'enable_email_notifications','enable_push_notifications'],
-    'Data Retention'  => ['results_retention_days','login_activity_retention_days',
-                          'audit_log_retention_days','notification_retention_days'],
-    'System'          => ['maintenance_mode','allow_registration','default_user_timezone',
-                          'items_per_page','max_items_per_page'],
-    'Performance'     => ['enable_query_cache','cache_expiry_seconds','enable_compression'],
-    'Analytics'       => ['track_user_activity','enable_advanced_analytics','analytics_retention_days'],
+    'Authentication'   => [
+        'max_login_attempts',
+        'lockout_duration_minutes',
+        'session_timeout_minutes',
+        'email_verification_required',
+    ],
+    'Assessments'      => [
+        'default_assessment_duration',
+        'default_max_attempts',
+        'allow_negative_marking',
+        'shuffle_questions_default',
+        'shuffle_options_default',
+        'allow_guest_attempts',
+    ],
+    'Results'          => [
+        'show_results_immediately',
+        'show_correct_answers',
+        'leaderboard_enabled',
+    ],
+    'File Uploads'     => [
+        'max_upload_size_mb',
+        'allowed_file_types',
+        'max_resource_downloads_per_day',
+    ],
+    'Email'            => [
+        'email_notifications_enabled',
+        'system_notifications_enabled',
+        'reminder_email_hours_before',
+        'disable_email_sending',
+    ],
+    'Data Retention'   => [
+        'log_retention_days',
+    ],
+    'Materials'        => [
+        'materials_public_by_default',
+        'track_material_progress',
+        'material_view_increment',
+    ],
+    'System'           => [
+        'maintenance_mode',
+        'demo_mode',
+    ],
+    'Analytics'        => [
+        'analytics_enabled',
+        'track_user_activity',
+    ],
 ];
 
 $result = [];
@@ -43,14 +76,20 @@ foreach ($groups as $groupName => $keys) {
     $result[$groupName] = [];
     foreach ($keys as $key) {
         if (!isset($all[$key])) continue;
+        $entry = $all[$key];
         $result[$groupName][] = [
             'key'         => $key,
-            'value'       => $all[$key]['value'],
-            'type'        => $all[$key]['type'],
-            'description' => $all[$key]['description'] ?? ucwords(str_replace('_', ' ', $key)),
-            'is_editable' => !($all[$key]['immutable'] ?? false),
-            'immutable'   => $all[$key]['immutable'] ?? false,
+            'value'       => $entry['value'],
+            'type'        => $entry['type'],
+            'description' => $entry['description'] ?? ucwords(str_replace('_', ' ', $key)),
+            // New schema uses is_editable (tinyint), not 'immutable'
+            'is_editable' => (bool)($entry['is_editable'] ?? true),
+            'immutable'   => !(bool)($entry['is_editable'] ?? true),
         ];
+    }
+    // Drop empty groups
+    if (empty($result[$groupName])) {
+        unset($result[$groupName]);
     }
 }
 
@@ -79,4 +118,8 @@ foreach ($countQueries as $key => $sql) {
     }
 }
 
-echo json_encode(['success' => true, 'settings' => $result, 'db_counts' => $dbCounts]);
+echo json_encode([
+    'success'   => true,
+    'settings'  => $result,
+    'db_counts' => $dbCounts,
+]);

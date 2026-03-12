@@ -6,7 +6,7 @@
 // teachers, with question count, attempt count, pass rate,
 // and the creating teacher's name.
 //
-// GET ?status=active|draft|archived|scheduled  (optional)
+// GET ?status=published|draft|archived  (optional)
 //     ?search=keyword                           (optional — searches title, category, teacher name)
 //     ?category=aptitude|technical|...          (optional)
 //     ?page=1&limit=20                          (optional)
@@ -77,7 +77,7 @@ $rsStats = safePreparedQuery($conn,
         COUNT(*)                                                              AS total,
         SUM(CASE WHEN a.status = 'active'    THEN 1 ELSE 0 END)             AS active,
         SUM(CASE WHEN a.status = 'draft'     THEN 1 ELSE 0 END)             AS drafts,
-        SUM(CASE WHEN a.status = 'scheduled' THEN 1 ELSE 0 END)             AS scheduled,
+        SUM(CASE WHEN a.status = 'archived' THEN 1 ELSE 0 END)             AS archived,
         ROUND(
             AVG(
                 CASE WHEN aa_stats.completed > 0
@@ -111,7 +111,7 @@ if ($rsStats['success'] && $rsStats['result']) {
             'total'         => (int)($row['total']         ?? 0),
             'active'        => (int)($row['active']        ?? 0),
             'drafts'        => (int)($row['drafts']        ?? 0),
-            'scheduled'     => (int)($row['scheduled']     ?? 0),
+            'scheduled'     => (int)($row['archived']      ?? 0),
             'avg_pass_rate' => (float)($row['avg_pass_rate'] ?? 0),
         ];
     }
@@ -195,8 +195,8 @@ if ($r['success'] && $r['result']) {
             'total_marks'      => (int)$row['total_marks'],
             'passing_marks'    => (int)$row['passing_marks'],
             'is_public'        => (bool)$row['is_public'],
-            'available_from'   => $row['available_from'],
-            'available_until'  => $row['available_until'],
+            'available_from'  => $row['available_from'],
+            'available_until' => $row['available_until'],
             'created_at'       => $row['created_at'],
             'updated_at'       => $row['updated_at'],
             'teacher_name'     => $row['teacher_name'],

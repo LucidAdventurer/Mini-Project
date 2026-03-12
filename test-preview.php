@@ -37,8 +37,8 @@ $asmResult = safePreparedQuery($conn,
         a.total_marks,
         a.passing_marks,
         a.max_attempts,
-        a.available_from,
-        a.available_until,
+        a.start_time,
+        a.end_time,
         a.show_results_immediately,
         a.show_correct_answers,
         a.randomize_questions,
@@ -52,9 +52,9 @@ $asmResult = safePreparedQuery($conn,
         ) AS max_negative_marks
      FROM assessments a
      WHERE a.assessment_id = ?
-       AND a.status = 'active'
-       AND (a.available_from  IS NULL OR a.available_from  <= NOW())
-       AND (a.available_until IS NULL OR a.available_until >= NOW())
+       AND a.status = 'published'
+       AND (a.start_time  IS NULL OR a.start_time  <= NOW())
+       AND (a.end_time IS NULL OR a.end_time >= NOW())
        AND (
            a.is_public = 1
            OR EXISTS (
@@ -78,7 +78,7 @@ $asmResult['result']->free();
 $prevResult = safePreparedQuery($conn,
     "SELECT score, percentage, submitted_at
      FROM assessment_attempts
-     WHERE assessment_id = ? AND user_id = ? AND status = 'completed'
+     WHERE assessment_id = ? AND user_id = ? AND status = 'submitted'
      ORDER BY submitted_at DESC",
     "ii", [$assessmentId, $userId]
 );
@@ -469,8 +469,8 @@ function fmtDt(?string $dt): string {
                 <div>
                     <div class="info-row-label">Available From</div>
                     <div class="info-row-value">
-                        <?= $a['available_from']
-                            ? fmtDt($a['available_from'])
+                        <?= $a['start_time']
+                            ? fmtDt($a['start_time'])
                             : '<span style="color:#48bb78;font-weight:600">Open</span>' ?>
                     </div>
                 </div>
@@ -481,8 +481,8 @@ function fmtDt(?string $dt): string {
                 <div>
                     <div class="info-row-label">Deadline</div>
                     <div class="info-row-value">
-                        <?= $a['available_until']
-                            ? fmtDt($a['available_until'])
+                        <?= $a['end_time']
+                            ? fmtDt($a['end_time'])
                             : '<span style="color:#48bb78;font-weight:600">No deadline</span>' ?>
                     </div>
                 </div>

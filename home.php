@@ -18,14 +18,16 @@ $userEmail    = '';
 $userInitials = '';
 
 if (!empty($_SESSION['user_id']) && !empty($_SESSION['user_type'])) {
-    // Verify the session is still valid in the DB
-    $sid    = (int)$_SESSION['user_id'];
-    $stype  = $_SESSION['user_type'];
+    // Verify the session is still valid in the DB.
+    // New schema: users table has user_id, full_name, email, user_type, is_active — unchanged.
+    $sid   = (int)$_SESSION['user_id'];
+    $stype = $_SESSION['user_type'];
 
     $chk = safePreparedQuery(
         $conn,
         "SELECT user_id, full_name, email, user_type, is_active
-         FROM users WHERE user_id = ? AND user_type = ? AND is_active = 1",
+         FROM users
+         WHERE user_id = ? AND user_type = ? AND is_active = 1",
         "is", [$sid, $stype]
     );
 
@@ -35,15 +37,56 @@ if (!empty($_SESSION['user_id']) && !empty($_SESSION['user_type'])) {
 
         if ($row) {
             $isLoggedIn   = true;
-            $userRole     = $row['user_type'];       // student | teacher | admin
+            $userRole     = $row['user_type'];   // student | teacher | admin
             $userName     = $row['full_name'];
             $userEmail    = $row['email'];
             $userInitials = strtoupper(substr($userName, 0, 2));
         } else {
-            // Session exists but user deactivated or role mismatch — clear it
+            // Session exists but user is deactivated or role mismatch — clear it
             session_destroy();
         }
     }
+}
+
+// ── Fetch public active assessments from DB ───────────────────────────────
+// Respects: is_public = 1, status = 'active', optional availability window.
+// New schema columns used: assessment_id, title, description, category,
+//   difficulty, duration_minutes, total_marks, passing_marks,
+//   available_from, available_until, is_public, status.
+// questions_per_attempt is used to show the displayed question count —
+//   falls back to COUNT(*) of actual questions when NULL.
+$assessments = [];
+
+$aQuery = safePreparedQuery(
+    $conn,
+    "SELECT a.assessment_id,
+            a.title,
+            a.description,
+            a.category,
+            a.difficulty,
+            a.duration_minutes,
+            a.total_marks,
+            a.passing_marks,
+            a.questions_per_attempt,
+            COUNT(q.question_id) AS question_count
+     FROM assessments a
+     LEFT JOIN questions q ON q.assessment_id = a.assessment_id
+     WHERE a.is_public = 1
+       AND a.status    = 'active'
+       AND (a.available_from  IS NULL OR a.available_from  <= NOW())
+       AND (a.available_until IS NULL OR a.available_until >= NOW())
+     GROUP BY a.assessment_id
+     ORDER BY a.created_at DESC",
+    "", []
+);
+
+if ($aQuery['success'] && $aQuery['result']) {
+    while ($row = $aQuery['result']->fetch_assoc()) {
+        // questions_per_attempt overrides actual count when set
+        $row['display_q_count'] = $row['questions_per_attempt'] ?? $row['question_count'];
+        $assessments[] = $row;
+    }
+    $aQuery['result']->free();
 }
 
 // ── Role → dashboard mapping ──────────────────────────────────────────────
@@ -59,14 +102,25 @@ $dashboardLabel = match($userRole) {
     'admin'   => 'Admin Dashboard',
     default   => null,
 };
+
+// ── Auto-filter via ?category= query param (set by guest-dashboard links) ──
+// Whitelist against known categories so nothing unsanitised ever reaches JS.
+$validCategories = ['aptitude', 'verbal', 'logical', 'technical'];
+$initialCategory = 'all';
+if (!empty($_GET['category'])) {
+    $candidate = strtolower(trim($_GET['category']));
+    if (in_array($candidate, $validCategories, true)) {
+        $initialCategory = $candidate;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Free Online Practice Tests - Placement Portal">
-    <title>Practice Tests – Placement Portal</title>
+    <meta name="description" content="Free Online Practice Tests - PREPAURA Placement Training Platform">
+    <title>Practice Tests – PREPAURA</title>
     <style>
         :root {
             --color-primary:      #0D7377;
@@ -110,14 +164,26 @@ $dashboardLabel = match($userRole) {
         .navbar-brand {
             display: flex; align-items: center; gap: 12px;
             text-decoration: none; color: var(--color-text);
-            font-size: 20px; font-weight: 700;
         }
         .brand-logo {
-            width: 36px; height: 36px;
-            background: var(--color-primary);
-            border-radius: 8px;
+            width: 40px; height: 40px;
             display: flex; align-items: center; justify-content: center;
-            color: white; font-size: 20px; font-weight: 700;
+            flex-shrink: 0;
+        }
+        .brand-logo img {
+            width: 40px; height: 40px;
+            object-fit: contain;
+        }
+        .brand-text {
+            display: flex; flex-direction: column; gap: 1px;
+        }
+        .brand-name {
+            font-size: 18px; font-weight: 800; letter-spacing: 0.5px;
+            color: var(--color-primary); line-height: 1.1;
+        }
+        .brand-tagline {
+            font-size: 10px; font-weight: 500;
+            color: var(--color-text-light); letter-spacing: 0.2px; line-height: 1;
         }
         .nav-search {
             flex: 1; max-width: 400px; margin: 0 32px; position: relative;
@@ -377,8 +443,13 @@ $dashboardLabel = match($userRole) {
 <nav class="navbar">
     <div class="nav-container">
         <a href="home.php" class="navbar-brand">
-            <div class="brand-logo">P</div>
-            <span>Placement Portal</span>
+            <div class="brand-logo">
+                <img src="prepaura-logo.png" alt="PREPAURA Logo">
+            </div>
+            <div class="brand-text">
+                <span class="brand-name">PREPAURA</span>
+                <span class="brand-tagline">Placement Training Platform</span>
+            </div>
         </a>
 
         <div class="nav-search">
@@ -514,11 +585,11 @@ $dashboardLabel = match($userRole) {
 
     <div class="filters-bar">
         <div class="filter-group">
-            <button class="filter-btn active" onclick="filterCategory('all', event)">All</button>
-            <button class="filter-btn" onclick="filterCategory('aptitude', event)">Aptitude</button>
-            <button class="filter-btn" onclick="filterCategory('verbal', event)">Verbal</button>
-            <button class="filter-btn" onclick="filterCategory('logical', event)">Logical</button>
-            <button class="filter-btn" onclick="filterCategory('technical', event)">Technical</button>
+            <button class="filter-btn <?php echo $initialCategory === 'all'       ? 'active' : ''; ?>" onclick="filterCategory('all', event)">All</button>
+            <button class="filter-btn <?php echo $initialCategory === 'aptitude'  ? 'active' : ''; ?>" onclick="filterCategory('aptitude', event)">Aptitude</button>
+            <button class="filter-btn <?php echo $initialCategory === 'verbal'    ? 'active' : ''; ?>" onclick="filterCategory('verbal', event)">Verbal</button>
+            <button class="filter-btn <?php echo $initialCategory === 'logical'   ? 'active' : ''; ?>" onclick="filterCategory('logical', event)">Logical</button>
+            <button class="filter-btn <?php echo $initialCategory === 'technical' ? 'active' : ''; ?>" onclick="filterCategory('technical', event)">Technical</button>
         </div>
         <div class="filter-group">
             <button class="filter-btn active" onclick="filterDifficulty('all', event)">All Levels</button>
@@ -530,177 +601,59 @@ $dashboardLabel = match($userRole) {
 
     <div class="tests-grid" id="testsGrid">
 
-        <div class="test-card" data-category="aptitude" data-difficulty="easy">
+        <?php if (empty($assessments)): ?>
+        <div style="grid-column:1/-1; text-align:center; padding:60px 20px; color:var(--color-text-light);">
+            <p style="font-size:18px; margin-bottom:8px;">No tests available right now.</p>
+            <p style="font-size:14px;">Check back soon — new tests are added regularly.</p>
+        </div>
+        <?php else: ?>
+        <?php foreach ($assessments as $a):
+            $cat      = strtolower(htmlspecialchars($a['category'] ?? 'general'));
+            $diff     = strtolower(htmlspecialchars($a['difficulty'] ?? 'medium'));
+            $id       = (int)$a['assessment_id'];
+            $title    = htmlspecialchars($a['title']);
+            $desc     = htmlspecialchars($a['description'] ?? '');
+            $duration = (int)$a['duration_minutes'];
+            $qCount   = (int)$a['display_q_count'];
+            $marks    = (int)$a['total_marks'];
+            // Map category to CSS class; fall back to a neutral style for unknown categories
+            $catClass = in_array($cat, ['aptitude','verbal','logical','technical'])
+                        ? 'category-' . $cat : 'category-aptitude';
+        ?>
+        <div class="test-card" data-category="<?php echo $cat; ?>" data-difficulty="<?php echo $diff; ?>">
             <div class="test-header">
-                <span class="test-category category-aptitude">Aptitude</span>
-                <span class="difficulty-badge difficulty-easy">Easy</span>
+                <span class="test-category <?php echo $catClass; ?>"><?php echo ucfirst($cat); ?></span>
+                <span class="difficulty-badge difficulty-<?php echo $diff; ?>"><?php echo ucfirst($diff); ?></span>
             </div>
-            <h3 class="test-title">Basic Quantitative Aptitude</h3>
-            <p class="test-description">Foundation test covering arithmetic, percentages, ratios, and basic algebra</p>
+            <h3 class="test-title"><?php echo $title; ?></h3>
+            <?php if ($desc): ?>
+            <p class="test-description"><?php echo $desc; ?></p>
+            <?php endif; ?>
             <div class="test-meta">
-                <span class="meta-item">⏱️ 30 mins</span>
-                <span class="meta-item">📝 25 questions</span>
-                <span class="meta-item">⭐ 100 marks</span>
+                <span class="meta-item">⏱️ <?php echo $duration; ?> mins</span>
+                <span class="meta-item">📝 <?php echo $qCount; ?> questions</span>
+                <span class="meta-item">⭐ <?php echo $marks; ?> marks</span>
             </div>
             <div class="test-actions">
-                <button class="btn-start" onclick="startTest(1)">Start Test</button>
-                <button class="btn-details" onclick="viewDetails(1)">Details</button>
+                <button class="btn-start"   onclick="startTest(<?php echo $id; ?>)">Start Test</button>
+                <button class="btn-details" onclick="viewDetails(<?php echo $id; ?>)">Details</button>
             </div>
         </div>
-
-        <div class="test-card" data-category="verbal" data-difficulty="medium">
-            <div class="test-header">
-                <span class="test-category category-verbal">Verbal</span>
-                <span class="difficulty-badge difficulty-medium">Medium</span>
-            </div>
-            <h3 class="test-title">English Comprehension</h3>
-            <p class="test-description">Reading comprehension, grammar, vocabulary, and sentence correction</p>
-            <div class="test-meta">
-                <span class="meta-item">⏱️ 40 mins</span>
-                <span class="meta-item">📝 30 questions</span>
-                <span class="meta-item">⭐ 120 marks</span>
-            </div>
-            <div class="test-actions">
-                <button class="btn-start" onclick="startTest(2)">Start Test</button>
-                <button class="btn-details" onclick="viewDetails(2)">Details</button>
-            </div>
-        </div>
-
-        <div class="test-card" data-category="logical" data-difficulty="hard">
-            <div class="test-header">
-                <span class="test-category category-logical">Logical</span>
-                <span class="difficulty-badge difficulty-hard">Hard</span>
-            </div>
-            <h3 class="test-title">Advanced Logical Reasoning</h3>
-            <p class="test-description">Complex patterns, puzzles, analytical reasoning, and critical thinking</p>
-            <div class="test-meta">
-                <span class="meta-item">⏱️ 45 mins</span>
-                <span class="meta-item">📝 35 questions</span>
-                <span class="meta-item">⭐ 140 marks</span>
-            </div>
-            <div class="test-actions">
-                <button class="btn-start" onclick="startTest(3)">Start Test</button>
-                <button class="btn-details" onclick="viewDetails(3)">Details</button>
-            </div>
-        </div>
-
-        <div class="test-card" data-category="technical" data-difficulty="medium">
-            <div class="test-header">
-                <span class="test-category category-technical">Technical</span>
-                <span class="difficulty-badge difficulty-medium">Medium</span>
-            </div>
-            <h3 class="test-title">Data Structures Fundamentals</h3>
-            <p class="test-description">Arrays, linked lists, stacks, queues, trees, and basic algorithms</p>
-            <div class="test-meta">
-                <span class="meta-item">⏱️ 50 mins</span>
-                <span class="meta-item">📝 40 questions</span>
-                <span class="meta-item">⭐ 150 marks</span>
-            </div>
-            <div class="test-actions">
-                <button class="btn-start" onclick="startTest(4)">Start Test</button>
-                <button class="btn-details" onclick="viewDetails(4)">Details</button>
-            </div>
-        </div>
-
-        <div class="test-card" data-category="aptitude" data-difficulty="medium">
-            <div class="test-header">
-                <span class="test-category category-aptitude">Aptitude</span>
-                <span class="difficulty-badge difficulty-medium">Medium</span>
-            </div>
-            <h3 class="test-title">Advanced Mathematics</h3>
-            <p class="test-description">Probability, permutations, combinations, geometry, and calculus basics</p>
-            <div class="test-meta">
-                <span class="meta-item">⏱️ 60 mins</span>
-                <span class="meta-item">📝 50 questions</span>
-                <span class="meta-item">⭐ 200 marks</span>
-            </div>
-            <div class="test-actions">
-                <button class="btn-start" onclick="startTest(5)">Start Test</button>
-                <button class="btn-details" onclick="viewDetails(5)">Details</button>
-            </div>
-        </div>
-
-        <div class="test-card" data-category="verbal" data-difficulty="easy">
-            <div class="test-header">
-                <span class="test-category category-verbal">Verbal</span>
-                <span class="difficulty-badge difficulty-easy">Easy</span>
-            </div>
-            <h3 class="test-title">Basic Grammar & Vocabulary</h3>
-            <p class="test-description">Essential grammar rules, common vocabulary, and sentence formation</p>
-            <div class="test-meta">
-                <span class="meta-item">⏱️ 25 mins</span>
-                <span class="meta-item">📝 20 questions</span>
-                <span class="meta-item">⭐ 80 marks</span>
-            </div>
-            <div class="test-actions">
-                <button class="btn-start" onclick="startTest(6)">Start Test</button>
-                <button class="btn-details" onclick="viewDetails(6)">Details</button>
-            </div>
-        </div>
-
-        <div class="test-card" data-category="logical" data-difficulty="easy">
-            <div class="test-header">
-                <span class="test-category category-logical">Logical</span>
-                <span class="difficulty-badge difficulty-easy">Easy</span>
-            </div>
-            <h3 class="test-title">Basic Pattern Recognition</h3>
-            <p class="test-description">Simple patterns, sequences, and logical deduction exercises</p>
-            <div class="test-meta">
-                <span class="meta-item">⏱️ 30 mins</span>
-                <span class="meta-item">📝 25 questions</span>
-                <span class="meta-item">⭐ 100 marks</span>
-            </div>
-            <div class="test-actions">
-                <button class="btn-start" onclick="startTest(7)">Start Test</button>
-                <button class="btn-details" onclick="viewDetails(7)">Details</button>
-            </div>
-        </div>
-
-        <div class="test-card" data-category="technical" data-difficulty="hard">
-            <div class="test-header">
-                <span class="test-category category-technical">Technical</span>
-                <span class="difficulty-badge difficulty-hard">Hard</span>
-            </div>
-            <h3 class="test-title">Advanced Algorithms</h3>
-            <p class="test-description">Dynamic programming, graph algorithms, sorting, and optimization</p>
-            <div class="test-meta">
-                <span class="meta-item">⏱️ 75 mins</span>
-                <span class="meta-item">📝 45 questions</span>
-                <span class="meta-item">⭐ 180 marks</span>
-            </div>
-            <div class="test-actions">
-                <button class="btn-start" onclick="startTest(8)">Start Test</button>
-                <button class="btn-details" onclick="viewDetails(8)">Details</button>
-            </div>
-        </div>
-
-        <div class="test-card" data-category="aptitude" data-difficulty="hard">
-            <div class="test-header">
-                <span class="test-category category-aptitude">Aptitude</span>
-                <span class="difficulty-badge difficulty-hard">Hard</span>
-            </div>
-            <h3 class="test-title">Problem Solving & Analytics</h3>
-            <p class="test-description">Complex word problems, data interpretation, and analytical reasoning</p>
-            <div class="test-meta">
-                <span class="meta-item">⏱️ 60 mins</span>
-                <span class="meta-item">📝 40 questions</span>
-                <span class="meta-item">⭐ 160 marks</span>
-            </div>
-            <div class="test-actions">
-                <button class="btn-start" onclick="startTest(9)">Start Test</button>
-                <button class="btn-details" onclick="viewDetails(9)">Details</button>
-            </div>
-        </div>
+        <?php endforeach; ?>
+        <?php endif; ?>
 
     </div><!-- /tests-grid -->
 
+    <?php
+    // Simple pagination — only rendered when there are enough tests to warrant it.
+    // JS-side filtering (category/difficulty/search) operates within the loaded page.
+    // Full server-side pagination can be wired in later by adding LIMIT/OFFSET to the query.
+    $totalTests = count($assessments);
+    if ($totalTests > 9): ?>
     <div class="pagination">
-        <button class="page-btn" onclick="changePage(0)" disabled>‹</button>
-        <button class="page-btn active" onclick="changePage(1)">1</button>
-        <button class="page-btn" onclick="changePage(2)">2</button>
-        <button class="page-btn" onclick="changePage(3)">3</button>
-        <button class="page-btn" onclick="changePage(2)">›</button>
+        <button class="page-btn active">1</button>
     </div>
+    <?php endif; ?>
 </main>
 
 <footer class="footer">
@@ -739,15 +692,23 @@ $dashboardLabel = match($userRole) {
         </div>
     </div>
     <div class="footer-bottom">
-        <p>© 2024 Placement Portal. All rights reserved.</p>
+        <p>© 2024 PREPAURA – Placement Training Platform. All rights reserved.</p>
     </div>
 </footer>
 
 <script>
-    // Pass PHP role to JS so startTest() can gate guests
-    const USER_ROLE    = <?php echo json_encode($userRole); ?>;
-    const IS_LOGGED_IN = <?php echo json_encode($isLoggedIn); ?>;
-    const DASHBOARD_URL = <?php echo json_encode($dashboardUrl); ?>;
+    // Pass PHP role and DB-derived categories to JS
+    const USER_ROLE       = <?php echo json_encode($userRole); ?>;
+    const IS_LOGGED_IN    = <?php echo json_encode($isLoggedIn); ?>;
+    const DASHBOARD_URL   = <?php echo json_encode($dashboardUrl); ?>;
+    const INITIAL_CATEGORY = <?php echo json_encode($initialCategory); ?>;
+    // Unique categories present in the loaded assessments (for filter buttons)
+    const DB_CATEGORIES = <?php
+        $cats = array_values(array_unique(array_filter(
+            array_map(fn($a) => strtolower($a['category'] ?? ''), $assessments)
+        )));
+        echo json_encode($cats);
+    ?>;
 
     // ── Dropdown ──────────────────────────────────────────────────────────
     function toggleDropdown() {
@@ -776,7 +737,7 @@ $dashboardLabel = match($userRole) {
     }
 
     // ── Category filter ───────────────────────────────────────────────────
-    let activeCategory   = 'all';
+    let activeCategory   = INITIAL_CATEGORY; // seeded from ?category= param
     let activeDifficulty = 'all';
 
     function filterCategory(category, e) {
@@ -832,9 +793,16 @@ $dashboardLabel = match($userRole) {
         }
     });
 
-    // ── Animate cards on load ─────────────────────────────────────────────
+    // ── Animate cards on load & apply any incoming category filter ───────
     window.addEventListener('load', () => {
+        // Apply the ?category= filter before animating so hidden cards
+        // never flash visible then disappear.
+        if (INITIAL_CATEGORY !== 'all') {
+            applyFilters();
+        }
+
         document.querySelectorAll('.test-card').forEach((card, i) => {
+            if (card.style.display === 'none') return; // skip already-hidden cards
             card.style.opacity = '0';
             card.style.transform = 'translateY(10px)';
             card.style.transition = 'opacity 0.3s ease, transform 0.3s ease';

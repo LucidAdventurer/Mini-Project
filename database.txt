@@ -791,3 +791,73 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
 --   expires_at : 1-hour window; expired tokens are rejected.
 --   is_used    : Single-use enforcement — token is invalidated after one successful reset.
 --   request_ip : Abuse detection and audit trail.
+
+-- =====================================================
+-- RESOURCES
+-- Standalone downloadable/linkable study documents
+-- uploaded by admins and browsable by guests & students.
+-- Separate from training_materials (which are course-
+-- linked). These are the public-facing resource cards
+-- shown on guest-dashboard.html and filterable by
+-- the four placement categories.
+-- =====================================================
+
+CREATE TABLE resources (
+    resource_id          INT           PRIMARY KEY AUTO_INCREMENT,
+
+    -- Display
+    title                VARCHAR(200)  NOT NULL,
+    description          TEXT,
+
+    -- Classification — must be one of the four guest-dashboard filter tabs
+    -- plus 'general' as a catch-all for anything that spans categories.
+    category             ENUM('aptitude','verbal','logical','technical','general')
+                                       NOT NULL DEFAULT 'general',
+
+    -- Type drives the icon shown on the card and whether file_* or external_url is used.
+    resource_type        ENUM('pdf','video','link','article','quiz')
+                                       NOT NULL DEFAULT 'pdf',
+
+    -- File metadata (populated when resource_type is pdf / video / quiz)
+    file_path            VARCHAR(500)  DEFAULT NULL,   -- Cloudinary secure_url
+    cloudinary_public_id VARCHAR(512)  DEFAULT NULL,   -- for future deletion via Cloudinary API
+    file_size            BIGINT        DEFAULT NULL,   -- bytes
+
+    -- Used when resource_type is link / article (or as fallback CDN URL for files)
+    external_url         VARCHAR(500)  DEFAULT NULL,
+
+    -- Engagement counters
+    views                INT           NOT NULL DEFAULT 0,
+    downloads            INT           NOT NULL DEFAULT 0,
+
+    -- Visibility: is_public = 0 means only admin can see it (draft/hidden)
+    is_public            TINYINT(1)    NOT NULL DEFAULT 1,
+
+    -- Who uploaded it — NULL-safe so rows survive user deletion
+    uploaded_by          INT           DEFAULT NULL,
+
+    -- Audit
+    created_at           TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
+    updated_at           TIMESTAMP     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (uploaded_by) REFERENCES users(user_id) ON DELETE SET NULL,
+
+    INDEX idx_category      (category),
+    INDEX idx_resource_type (resource_type),
+    INDEX idx_is_public     (is_public),
+    INDEX idx_uploaded_by   (uploaded_by),
+    INDEX idx_created_at    (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Why this table exists vs training_materials:
+--   training_materials are course-scoped (tied to a teacher's syllabus,
+--   have prerequisites, progress tracking, etc.).
+--   resources are lightweight public documents — think "cheat sheets and
+--   practice PDFs" — intended for any guest to browse and download.
+--
+-- Why each column exists:
+--   category             : drives the filter tabs on guest-dashboard (aptitude/verbal/logical/technical).
+--   resource_type        : controls card icon + whether a file or URL is shown.
+--   cloudinary_public_id : retained so the admin can delete from Cloudinary via API later.
+--   is_public            : lets admin save a draft resource before publishing it.
+--   uploaded_by SET NULL : keeps resource rows intact even if the admin account is removed.

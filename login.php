@@ -204,10 +204,10 @@ if ($isJson) {
     // Admin login: accept email OR registration_number
     $stmt = $conn->prepare(
         "SELECT user_id, full_name, email, password_hash,
-                user_type, department, registration_number,
+                role, department, registration_number,
                 is_verified, is_active, profile_image
          FROM users
-         WHERE (email = ? OR registration_number = ?) AND user_type = 'admin'
+         WHERE (email = ? OR registration_number = ?) AND role = 'admin'
          LIMIT 1"
     );
     if (!$stmt) failLogin($isJson, 'database_error', 'Database error.', 500);
@@ -215,10 +215,10 @@ if ($isJson) {
 } else {
     $stmt = $conn->prepare(
         "SELECT user_id, full_name, email, password_hash,
-                user_type, department, registration_number,
+                role, department, registration_number,
                 is_verified, is_active, profile_image
          FROM users
-         WHERE email = ? AND user_type = ?
+         WHERE email = ? AND role = ?
          LIMIT 1"
     );
     if (!$stmt) failLogin($isJson, 'database_error', 'Database error.', 500);
@@ -264,7 +264,7 @@ if (!$user) {
     // Run a probe to distinguish "wrong role" from "user not found" for the form path
     $reason = 'user_not_found';
     if (!$isJson) {
-        $probe = $conn->prepare("SELECT user_type FROM users WHERE email = ? LIMIT 1");
+        $probe = $conn->prepare("SELECT role FROM users WHERE email = ? LIMIT 1");
         if ($probe) {
             $probe->bind_param("s", $identifier);
             $probe->execute();
@@ -341,7 +341,7 @@ if (password_needs_rehash($user['password_hash'], PASSWORD_DEFAULT)) {
 // Regenerate session ID exactly once, here after auth is confirmed
 session_regenerate_id(true);
 
-error_log("Login successful — user_id: {$user['user_id']}, Role: {$user['user_type']}");
+error_log("Login successful — user_id: {$user['user_id']}, Role: {$user['role']}");
 logLoginAttempt($conn, (int) $user['user_id'], $clientIp, $userAgent, true, null);
 updateLastLogin($conn, $user['user_id']);
 
@@ -353,8 +353,8 @@ $_SESSION['user_id']       = (int) $user['user_id'];
 $_SESSION['name']          = $user['full_name'];
 $_SESSION['full_name']     = $user['full_name'];
 $_SESSION['email']         = $user['email'];
-$_SESSION['role']          = $user['user_type'];
-$_SESSION['user_type']     = $user['user_type'];
+$_SESSION['role']          = $user['role'];
+$_SESSION['user_type']     = $user['role'];   // legacy alias for any code still reading user_type
 $_SESSION['department']    = $user['department']         ?? '';
 $_SESSION['profile_image'] = $user['profile_image']      ?? '';
 $_SESSION['login_time']    = time();
@@ -397,10 +397,10 @@ $redirectMap = [
     'teacher' => $base . '/teacher-dashboard.php',
     'admin'   => $base . '/admin-dashboard.html',
 ];
-$redirectUrl = $redirectMap[$user['user_type']] ?? null;
+$redirectUrl = $redirectMap[$user['role']] ?? null;
 
 if ($redirectUrl === null) {
-    logLoginAttempt($conn, (int) $user['user_id'], $clientIp, $userAgent, false, 'invalid_user_type');
+    logLoginAttempt($conn, (int) $user['user_id'], $clientIp, $userAgent, false, 'invalid_role');
     failLogin($isJson, 'invalid_role', 'Invalid role.', 403);
 }
 

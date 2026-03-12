@@ -100,7 +100,7 @@ $rs = safePreparedQuery($conn,
     "SELECT
         COUNT(*) AS total_attempts,
         ROUND(AVG(percentage), 1) AS avg_score,
-        ROUND(AVG(TIMESTAMPDIFF(MINUTE, start_time, submitted_at)), 0) AS avg_time,
+        ROUND(AVG(TIMESTAMPDIFF(MINUTE, aa.start_time, aa.submitted_at)), 0) AS avg_time,
         ROUND(
             100.0 * SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0),
             1
@@ -658,9 +658,9 @@ function fmtDate(?string $dt): string {
             </div>
         </div>
         <div class="status-toggle">
-            <span class="toggle-label">Active Status</span>
+            <span class="toggle-label">Published Status</span>
             <div class="toggle-switch <?= $assessment['status'] === 'active' ? 'active' : '' ?>"
-                 id="statusToggle" onclick="toggleStatus()" title="Toggle active/draft">
+                 id="statusToggle" onclick="toggleStatus()" title="Toggle published/draft">
                 <div class="toggle-slider"></div>
             </div>
         </div>
@@ -1275,8 +1275,8 @@ async function saveAll() {
         total_marks             : marks,
         passing_marks           : passing,
         max_attempts            : parseInt(document.getElementById('maxAttempts').value, 10) || 1,
-        available_from          : document.getElementById('availableFrom').value || null,
-        available_until         : document.getElementById('availableUntil').value || null,
+        available_from      : document.getElementById('availableFrom').value || null,
+        available_until     : document.getElementById('availableUntil').value || null,
         show_results_immediately: document.getElementById('showResultsImmediately').checked ? 1 : 0,
         show_correct_answers    : document.getElementById('showCorrectAnswers').checked ? 1 : 0,
         randomize_questions     : document.getElementById('randomizeQuestions').checked ? 1 : 0,
