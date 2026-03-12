@@ -20,6 +20,9 @@ require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
+$conn = createDatabaseConnection();
+if (!$conn) { http_response_code(503); echo json_encode(['success'=>false,'error'=>'Database unavailable.']); exit; }
+
 $currentUser = validateSession($conn, 'teacher');
 $teacherId   = (int) $currentUser['user_id'];
 
@@ -118,11 +121,25 @@ if (!in_array($visibility, ['public', 'private'], true)) {
     $visibility = 'private';
 }
 
-// ── Status — only draft or active ──
+// ── Targets (for private assessments) ──
+// Array of { type: 'group'|'student', id: int }
+$targets = [];
+if (!empty($body['targets']) && is_array($body['targets'])) {
+    foreach ($body['targets'] as $t) {
+        $ttype = trim($t['type'] ?? '');
+        $tid   = (int)($t['id'] ?? 0);
+        if (in_array($ttype, ['group', 'student'], true) && $tid > 0) {
+            $targets[] = ['type' => $ttype, 'id' => $tid];
+        }
+    }
+}
+
+// ── Status — DB enum uses 'published' not 'active' ──
 $status = trim($body['status'] ?? 'draft');
 if (!in_array($status, ['draft', 'active'], true)) {
     $status = 'draft';
 }
+if ($status === 'active') $status = 'published';
 
 // ── Insert ──
 $result = safePreparedQuery($conn,
@@ -150,7 +167,19 @@ $result = safePreparedQuery($conn,
 );
 
 if ($result['success'] && $result['insert_id'] > 0) {
-    echo json_encode(['success' => true, 'assessment_id' => $result['insert_id']]);
+    $newId = $result['insert_id'];
+
+    // Sync assessment_targets for private assessments
+    if (!empty($targets)) {
+        foreach ($targets as $t) {
+            safePreparedQuery($conn,
+                "INSERT IGNORE INTO assessment_targets (assessment_id, target_type, target_id) VALUES (?, ?, ?)",
+                "isi", [$newId, $t['type'], $t['id']]
+            );
+        }
+    }
+
+    echo json_encode(['success' => true, 'assessment_id' => $newId]);
 } else {
     error_log("create assessment failed for teacher_id=$teacherId: " . ($result['error'] ?? 'unknown'));
     http_response_code(500);

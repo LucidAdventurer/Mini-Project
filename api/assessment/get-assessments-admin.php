@@ -23,6 +23,9 @@ require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
+$conn = createDatabaseConnection();
+if (!$conn) { http_response_code(503); echo json_encode(['success'=>false,'error'=>'Database unavailable.']); exit; }
+
 validateSession($conn, 'admin');
 
 // ── Query params ──
@@ -69,7 +72,7 @@ $where = implode(' AND ', $conditions);
 $rsStats = safePreparedQuery($conn,
     "SELECT
         COUNT(*)                                                    AS total,
-        SUM(CASE WHEN a.status = 'active'   THEN 1 ELSE 0 END)    AS active,
+        SUM(CASE WHEN a.status = 'published' THEN 1 ELSE 0 END)    AS active,
         SUM(CASE WHEN a.status = 'draft'    THEN 1 ELSE 0 END)    AS drafts,
         SUM(CASE WHEN a.status = 'archived' THEN 1 ELSE 0 END)    AS archived,
         ROUND(
@@ -162,7 +165,7 @@ $r = safePreparedQuery($conn,
      LEFT JOIN assessment_attempts aa ON aa.assessment_id = a.assessment_id
      WHERE $where
      GROUP BY a.assessment_id, u.full_name, u.user_id
-     ORDER BY FIELD(a.status,'active','draft','archived'), a.updated_at DESC
+     ORDER BY FIELD(a.status,'published','draft','archived'), a.updated_at DESC
      LIMIT ? OFFSET ?",
     $listTypes, $listParams
 );
@@ -179,7 +182,7 @@ if ($r['success'] && $r['result']) {
             'title'            => $row['title'],
             'category'         => $row['category'],
             'difficulty'       => $row['difficulty'],
-            'status'           => $row['status'],
+            'status'           => ($row['status'] === 'published' ? 'active' : $row['status']),
             'duration_minutes' => (int)$row['duration_minutes'],
             'total_marks'      => (int)$row['total_marks'],
             'passing_marks'    => (int)$row['passing_marks'],

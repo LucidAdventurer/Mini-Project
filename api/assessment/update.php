@@ -123,11 +123,25 @@ if (!in_array($visibility, ['public', 'private'], true)) {
     $visibility = 'private';
 }
 
-// ── Status — no 'scheduled' in live schema ──
+// ── Targets (for private assessments) ──
+$targets = [];
+if (isset($body['targets']) && is_array($body['targets'])) {
+    foreach ($body['targets'] as $t) {
+        $ttype = trim($t['type'] ?? '');
+        $tid   = (int)($t['id'] ?? 0);
+        if (in_array($ttype, ['group', 'student'], true) && $tid > 0) {
+            $targets[] = ['type' => $ttype, 'id' => $tid];
+        }
+    }
+}
+
+// ── Status — DB enum uses 'published' not 'active' ──
 $status = trim($body['status'] ?? 'draft');
 if (!in_array($status, ['draft', 'active', 'archived'], true)) {
     $status = 'draft';
 }
+// Translate JS-side 'active' to DB-side 'published'
+if ($status === 'active') $status = 'published';
 
 // ── Verify ownership ──
 $check = safePreparedQuery($conn,
@@ -140,8 +154,6 @@ if (!$check['success'] || !$check['result'] || $check['result']->num_rows === 0)
     echo json_encode(['success' => false, 'error' => 'Assessment not found or access denied.']);
     exit;
 }
-$check['result']->free();
-
 // ── Update ──
 $result = safePreparedQuery($conn,
     "UPDATE assessments SET
@@ -173,9 +185,20 @@ $result = safePreparedQuery($conn,
 );
 
 if ($result['success'] && $result['affected_rows'] >= 0) {
+    // Sync assessment_targets: delete existing, re-insert
+    safePreparedQuery($conn,
+        "DELETE FROM assessment_targets WHERE assessment_id = ?",
+        "i", [$assessmentId]
+    );
+    foreach ($targets as $t) {
+        safePreparedQuery($conn,
+            "INSERT INTO assessment_targets (assessment_id, target_type, target_id) VALUES (?, ?, ?)",
+            "isi", [$assessmentId, $t['type'], $t['id']]
+        );
+    }
+
     echo json_encode(['success' => true]);
 } else {
-    error_log("update assessment failed for assessment_id=$assessmentId teacher_id=$teacherId");
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'Update failed. Please try again.']);
 }

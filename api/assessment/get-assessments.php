@@ -18,6 +18,9 @@ require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
+$conn = createDatabaseConnection();
+if (!$conn) { http_response_code(503); echo json_encode(['success'=>false,'error'=>'Database unavailable.']); exit; }
+
 $currentUser = validateSession($conn, 'student');
 $studentId   = (int) $currentUser['user_id'];
 
@@ -93,13 +96,11 @@ $result = safePreparedQuery($conn,
                WHERE aa2.assessment_id = aa.assessment_id
                  AND aa2.user_id       = aa.user_id
                  AND aa2.status        = 'submitted'
-                 AND aa2.user_id       = aa.user_id
-                 AND aa2.status        = 'submitted'
            )
          GROUP BY aa.assessment_id
      ) best ON best.assessment_id = a.assessment_id
 
-     WHERE a.status = 'active'
+     WHERE a.status = 'published'
        AND (a.start_time IS NULL OR a.start_time <= ?)
        AND (a.end_time   IS NULL OR a.end_time   >= ?)
        AND (
@@ -134,9 +135,6 @@ $attended    = [];
 
 if ($result['result']) {
     while ($row = $result['result']->fetch_assoc()) {
-        $attemptsUsed = (int)$row['attempts_used'];
-        $maxAttempts  = (int)$row['max_attempts'];
-
         $assessment = [
             'assessment_id'          => (int) $row['assessment_id'],
             'title'                  => $row['title'],

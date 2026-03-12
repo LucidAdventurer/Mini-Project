@@ -2,11 +2,8 @@
 // ============================================================
 // api/assessment/update-status.php
 //
-// Toggles an assessment's status between 'published' and 'draft'.
-// Also allows 'archived' as a valid target.
-//
-// When status transitions TO 'published' for the first time,
-// notifies all eligible students via notifyAssessmentPublished().
+// Toggles an assessment's status.
+// Valid values: 'draft', 'active', 'archived'
 //
 // POST JSON { assessment_id: int, status: string }
 // Returns   { success: bool, status?: string, error?: string }
@@ -14,9 +11,11 @@
 
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
-require_once __DIR__ . '/../notify-helpers.php';
 
 header('Content-Type: application/json');
+
+$conn = createDatabaseConnection();
+if (!$conn) { http_response_code(503); echo json_encode(['success'=>false,'error'=>'Database unavailable.']); exit; }
 
 $currentUser = validateSession($conn, 'teacher');
 $teacherId   = (int) $currentUser['user_id'];
@@ -44,15 +43,16 @@ if ($assessmentId <= 0) {
     exit;
 }
 
-// 'scheduled' does not exist in the live schema
-$allowedStatuses = ['active', 'draft', 'archived'];
+// DB enum uses 'published' not 'active' — translate on the way in
+if ($newStatus === 'active') $newStatus = 'published';
+$allowedStatuses = ['published', 'draft', 'archived'];
 if (!in_array($newStatus, $allowedStatuses, true)) {
     http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Invalid status. Allowed: published, draft, archived.']);
+    echo json_encode(['success' => false, 'error' => 'Invalid status.']);
     exit;
 }
 
-// ── Verify ownership + fetch current status ──
+// ── Verify ownership ──
 $check = safePreparedQuery($conn,
     "SELECT assessment_id, status FROM assessments WHERE assessment_id = ? AND created_by = ?",
     "ii", [$assessmentId, $teacherId]
@@ -72,24 +72,15 @@ if ($oldStatus === $newStatus) {
     exit;
 }
 
-// ── Update status ──
+// ── Update ──
 $result = safePreparedQuery($conn,
     "UPDATE assessments SET status = ?, updated_at = NOW() WHERE assessment_id = ? AND created_by = ?",
     "sii", [$newStatus, $assessmentId, $teacherId]
 );
 
-if (!$result['success'] || $result['affected_rows'] === 0) {
+if ($result['success'] && $result['affected_rows'] > 0) {
+    echo json_encode(['success' => true, 'status' => $newStatus]);
+} else {
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'Status update failed. Please try again.']);
-    exit;
 }
-
-// ── Notify students when assessment is published ──
-// Only fires on transition TO 'published'.
-// Uses INSERT IGNORE so toggling published→draft→published
-// does not send duplicate notifications.
-if ($newStatus === 'published' && $oldStatus !== 'published') {
-    notifyAssessmentPublished($conn, $assessmentId);
-}
-
-echo json_encode(['success' => true, 'status' => $newStatus]);

@@ -30,6 +30,9 @@ require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
+$conn = createDatabaseConnection();
+if (!$conn) { http_response_code(503); echo json_encode(['success'=>false,'error'=>'Database unavailable.']); exit; }
+
 /* Support GET ?attempt_id=X for server-side timeout redirect */
 $user   = validateSession($conn, 'student');
 $userId = (int) $user['user_id'];
@@ -80,10 +83,7 @@ $attempt      = $aResult['result']->fetch_assoc();
 $aResult['result']->free();
 $assessmentId = (int)$attempt['assessment_id'];
 
-/* ── Save any final answers sent with this request ──
- * Option-based answers (MCQ/TF/multiple_select): stored in selected_option_id
- * Text answers (short_answer): stored in text_answer
- */
+/* ── Save any final answers sent with this request ── */
 if (!empty($answers) && is_array($answers)) {
     foreach ($answers as $questionId => $answer) {
         $questionId = (int)$questionId;
@@ -109,13 +109,12 @@ if (!empty($answers) && is_array($answers)) {
     }
 }
 
-/* ── Load all questions with their correct option IDs ── */
+/* ── Load all questions for this assessment ── */
 $qResult = safePreparedQuery($conn,
     "SELECT question_id, question_type, marks, negative_marks
      FROM questions WHERE assessment_id = ?",
     "i", [$assessmentId]
 );
-
 $questions = [];
 if ($qResult['success'] && $qResult['result']) {
     while ($row = $qResult['result']->fetch_assoc()) {
