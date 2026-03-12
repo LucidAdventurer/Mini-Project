@@ -234,7 +234,7 @@ $timeTakenSeconds = min($timeTakenSeconds, $maxSeconds);
 /* ── Mark attempt as completed ── */
 safePreparedQuery($conn,
     "UPDATE assessment_attempts SET
-        status          = 'submitted',
+        status          = 'completed',
         submitted_at    = NOW(),
         end_time        = NOW(),
         score           = ?,

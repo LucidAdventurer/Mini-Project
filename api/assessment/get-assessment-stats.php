@@ -54,12 +54,12 @@ $passingPct  = $aRow['total_marks'] > 0
 $rs = safePreparedQuery($conn,
     "SELECT
         COUNT(*)                                                         AS total_attempts,
-        SUM(CASE WHEN status='submitted' THEN 1 ELSE 0 END)             AS completed,
-        ROUND(AVG(CASE WHEN status='submitted' THEN percentage END), 1)  AS avg_score,
+        SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END)             AS completed,
+        ROUND(AVG(CASE WHEN status='completed' THEN percentage END), 1)  AS avg_score,
         ROUND(MAX(percentage), 1)                                        AS highest_score,
-        ROUND(MIN(CASE WHEN status='submitted' THEN percentage END), 1)  AS lowest_score,
-        SUM(CASE WHEN status='submitted' AND percentage >= ? THEN 1 ELSE 0 END) AS pass_count,
-        ROUND(AVG(CASE WHEN status='submitted'
+        ROUND(MIN(CASE WHEN status='completed' THEN percentage END), 1)  AS lowest_score,
+        SUM(CASE WHEN status='completed' AND percentage >= ? THEN 1 ELSE 0 END) AS pass_count,
+        ROUND(AVG(CASE WHEN status='completed'
                   THEN TIMESTAMPDIFF(MINUTE, start_time, submitted_at) END), 0) AS avg_time,
         COUNT(DISTINCT user_id)                                          AS unique_students
      FROM assessment_attempts
@@ -69,7 +69,7 @@ $rs = safePreparedQuery($conn,
 
 $stats = [
     'total_attempts'   => 0,
-    'submitted'        => 0,
+    'completed'        => 0,
     'avg_score'        => 0,
     'highest_score'    => 0,
     'lowest_score'     => 0,
@@ -86,7 +86,7 @@ if ($rs['success'] && $rs['result']) {
         $passCount = (int)($row['pass_count'] ?? 0);
         $stats = [
             'total_attempts'   => (int)($row['total_attempts']   ?? 0),
-            'submitted'        => $completed,
+            'completed'        => $completed,
             'avg_score'        => (float)($row['avg_score']      ?? 0),
             'highest_score'    => (float)($row['highest_score']  ?? 0),
             'lowest_score'     => (float)($row['lowest_score']   ?? 0),

@@ -93,23 +93,23 @@ $maxAttempts  = max(1, (int)($body['max_attempts'] ?? 1));
 // ── Datetime fields ──
 // strtotime() handles all ISO-8601 variants the browser may send:
 // "2025-03-06T14:30", "2025-03-06T14:30:00", "2025-03-06 14:30:00", etc.
-$startTime  = null;
-$endTime    = null;
+$availableFrom = null;
+$availableUntil = null;
 
-if (!empty($body['start_time'])) {
-    $ts = strtotime($body['start_time']);
+if (!empty($body['available_from'])) {
+    $ts = strtotime($body['available_from']);
     if ($ts !== false) {
-        $startTime = date('Y-m-d H:i:s', $ts);
+        $availableFrom = date('Y-m-d H:i:s', $ts);
     }
 }
-if (!empty($body['end_time'])) {
-    $ts = strtotime($body['end_time']);
+if (!empty($body['available_until'])) {
+    $ts = strtotime($body['available_until']);
     if ($ts !== false) {
-        $endTime = date('Y-m-d H:i:s', $ts);
+        $availableUntil = date('Y-m-d H:i:s', $ts);
     }
 }
 
-if ($startTime && $endTime && $startTime >= $endTime) {
+if ($availableFrom && $availableUntil && $availableFrom >= $availableUntil) {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => '"End Time" must be after "Start Time".']);
     exit;
@@ -124,7 +124,7 @@ $isPublic               = !empty($body['is_public'])                ? 1 : 0;
 
 // Status — only allow draft or published
 $status = trim($body['status'] ?? 'draft');
-if (!in_array($status, ['draft', 'published'], true)) {
+if (!in_array($status, ['draft', 'active'], true)) {
     $status = 'draft';
 }
 
@@ -133,7 +133,7 @@ $result = safePreparedQuery($conn,
     "INSERT INTO assessments
         (title, description, instructions, category, difficulty,
          duration_minutes, total_marks, passing_marks, max_attempts,
-         start_time, end_time,
+         available_from, available_until,
          show_results_immediately, show_correct_answers,
          randomize_questions, randomize_options, is_public,
          status, created_by, created_at, updated_at)
@@ -148,7 +148,7 @@ $result = safePreparedQuery($conn,
     [
         $title, $description, $instructions, $category, $difficulty,
         $duration, $totalMarks, $passingMarks, $maxAttempts,
-        $startTime, $endTime,
+        $availableFrom, $availableUntil,
         $showResultsImmediately, $showCorrectAnswers,
         $randomizeQuestions, $randomizeOptions, $isPublic,
         $status, $teacherId,
