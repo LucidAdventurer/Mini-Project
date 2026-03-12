@@ -2,15 +2,21 @@
 // ============================================================
 // api/assessment/update-question.php
 //
-// Saves edits to an existing question.
+// Saves edits to an existing question and replaces its options.
 // Verifies the question belongs to an assessment owned by the
 // logged-in teacher before writing any changes.
 //
 // POST JSON {
-//   question_id, assessment_id,
-//   question_text, correct_answer,
-//   option_a?, option_b?, option_c?, option_d?,
-//   marks, negative_marks, topic?, explanation?
+//   question_id:    int,
+//   assessment_id:  int,
+//   question_text:  string,
+//   marks:          int,
+//   negative_marks: float,
+//   explanation?:   string,
+//   options: [
+//     { option_text: string, is_correct: bool, option_order: int },
+//     ...
+//   ]
 // }
 // Returns { success: bool, error?: string }
 // ============================================================
@@ -41,7 +47,7 @@ if (!is_array($body)) {
 $questionId   = (int)($body['question_id']   ?? 0);
 $assessmentId = (int)($body['assessment_id'] ?? 0);
 $questionText = trim($body['question_text']  ?? '');
-$correctAnswer = trim($body['correct_answer'] ?? '');
+$options      = $body['options']             ?? [];
 
 if ($questionId <= 0 || $assessmentId <= 0) {
     http_response_code(400);
@@ -53,37 +59,56 @@ if ($questionText === '') {
     echo json_encode(['success' => false, 'error' => 'Question text is required.']);
     exit;
 }
-if ($correctAnswer === '') {
+if (!is_array($options) || count($options) < 2) {
     http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Correct answer is required.']);
+    echo json_encode(['success' => false, 'error' => 'At least 2 options are required.']);
     exit;
 }
 
 // ── Numeric fields ──
-$marks       = max(1, (int)($body['marks']          ?? 1));
-$negMarks    = max(0, (float)($body['negative_marks'] ?? 0));
-$negMarks    = round($negMarks, 2);
+$marks    = max(1, (int)($body['marks']            ?? 1));
+$negMarks = max(0, (float)($body['negative_marks'] ?? 0));
+$negMarks = round($negMarks, 2);
 
 // ── Optional fields ──
-$optionA     = isset($body['option_a']) ? trim($body['option_a']) : null;
-$optionB     = isset($body['option_b']) ? trim($body['option_b']) : null;
-$optionC     = isset($body['option_c']) && $body['option_c'] !== '' ? trim($body['option_c']) : null;
-$optionD     = isset($body['option_d']) && $body['option_d'] !== '' ? trim($body['option_d']) : null;
-$topic       = trim($body['topic']       ?? '');
-$explanation = trim($body['explanation'] ?? '');
+$explanation = trim($body['explanation'] ?? '') ?: null;
 
-// Normalise correct_answer to uppercase for MCQ types
-// (could be a single letter or comma-separated list for multiple_select)
-$correctAnswer = strtoupper($correctAnswer);
+// ── Validate options ──
+$correctCount = 0;
+$cleanOptions = [];
+foreach ($options as $idx => $opt) {
+    $text      = trim($opt['option_text'] ?? '');
+    $isCorrect = !empty($opt['is_correct']) ? 1 : 0;
+    $order     = (int)($opt['option_order'] ?? ($idx + 1));
 
-// ── Verify this question belongs to an assessment owned by this teacher ──
+    if ($text === '') {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => "Option $order text is required."]);
+        exit;
+    }
+
+    $cleanOptions[] = [
+        'option_text'  => $text,
+        'is_correct'   => $isCorrect,
+        'option_order' => $order,
+    ];
+    if ($isCorrect) $correctCount++;
+}
+
+if ($correctCount === 0) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'error' => 'At least one option must be marked correct.']);
+    exit;
+}
+
+// ── Verify ownership ──
 $check = safePreparedQuery($conn,
     "SELECT q.question_id, q.question_type
      FROM questions q
      JOIN assessments a ON a.assessment_id = q.assessment_id
-     WHERE q.question_id = ?
+     WHERE q.question_id   = ?
        AND q.assessment_id = ?
-       AND a.created_by = ?",
+       AND a.created_by    = ?",
     "iii", [$questionId, $assessmentId, $teacherId]
 );
 
@@ -92,79 +117,83 @@ if (!$check['success'] || !$check['result'] || $check['result']->num_rows === 0)
     echo json_encode(['success' => false, 'error' => 'Question not found or access denied.']);
     exit;
 }
-$qRow      = $check['result']->fetch_assoc();
-$qType     = $qRow['question_type'];
+$qRow  = $check['result']->fetch_assoc();
+$qType = $qRow['question_type'];
 $check['result']->free();
 
-// ── Type-specific validation ──
-$mcqTypes = ['mcq', 'true_false', 'multiple_select'];
-
-if (in_array($qType, $mcqTypes, true)) {
-    if ($optionA === null || $optionA === '' || $optionB === null || $optionB === '') {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Options A and B are required for this question type.']);
-        exit;
-    }
-
-    if ($qType === 'multiple_select') {
-        // Correct answer is comma-separated letters e.g. "A,C"
-        $letters = array_filter(array_map('trim', explode(',', $correctAnswer)));
-        $valid   = array_filter($letters, fn($l) => in_array($l, ['A','B','C','D'], true));
-        if (count($valid) === 0) {
-            http_response_code(400);
-            echo json_encode(['success' => false, 'error' => 'Correct answer must be one or more of A, B, C, D separated by commas.']);
-            exit;
-        }
-        $correctAnswer = implode(',', array_unique($valid));
-    } elseif ($qType === 'true_false') {
-        if (!in_array($correctAnswer, ['A', 'B'], true)) {
-            http_response_code(400);
-            echo json_encode(['success' => false, 'error' => 'Correct answer for True/False must be A or B.']);
-            exit;
-        }
-    } else {
-        // mcq
-        if (!in_array($correctAnswer, ['A', 'B', 'C', 'D'], true)) {
-            http_response_code(400);
-            echo json_encode(['success' => false, 'error' => 'Correct answer must be A, B, C, or D.']);
-            exit;
-        }
-    }
+// Type-specific correct-count enforcement
+if (in_array($qType, ['mcq', 'true_false'], true) && $correctCount !== 1) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'error' => 'Exactly one correct option is required for this question type.']);
+    exit;
 }
 
-// ── Update question ──
-$result = safePreparedQuery($conn,
-    "UPDATE questions SET
-        question_text  = ?,
-        correct_answer = ?,
-        option_a       = ?,
-        option_b       = ?,
-        option_c       = ?,
-        option_d       = ?,
-        marks          = ?,
-        negative_marks = ?,
-        topic          = ?,
-        explanation    = ?
-     WHERE question_id = ? AND assessment_id = ?",
-    "ssssssidssii",
-    [
-        $questionText, $correctAnswer,
-        $optionA, $optionB, $optionC, $optionD,
-        $marks, $negMarks,
-        $topic ?: null,
-        $explanation ?: null,
-        $questionId, $assessmentId,
-    ]
-);
+// ── Update question + options in a transaction ──
+$conn->begin_transaction();
 
-if ($result['success'] && $result['affected_rows'] >= 0) {
-    // Also update assessment's updated_at so the dashboard reflects a change
-    safePreparedQuery($conn,
-        "UPDATE assessments SET updated_at = NOW() WHERE assessment_id = ? AND created_by = ?",
-        "ii", [$assessmentId, $teacherId]
+try {
+    // Update question row — no option columns, no correct_answer, no topic
+    $stmt = $conn->prepare(
+        "UPDATE questions SET
+            question_text  = ?,
+            marks          = ?,
+            negative_marks = ?,
+            explanation    = ?
+         WHERE question_id = ? AND assessment_id = ?"
     );
+    if (!$stmt) throw new Exception("Prepare question update failed: " . $conn->error);
+    $stmt->bind_param("sidsii",
+        $questionText,
+        $marks,
+        $negMarks,
+        $explanation,
+        $questionId,
+        $assessmentId
+    );
+    $stmt->execute();
+    $stmt->close();
+
+    // Replace options: delete existing, re-insert fresh set.
+    // Existing answers referencing old option_ids will have their
+    // selected_option_id set NULL via FK ON DELETE SET NULL.
+    $del = $conn->prepare("DELETE FROM question_options WHERE question_id = ?");
+    if (!$del) throw new Exception("Prepare delete options failed: " . $conn->error);
+    $del->bind_param("i", $questionId);
+    $del->execute();
+    $del->close();
+
+    $optStmt = $conn->prepare(
+        "INSERT INTO question_options (question_id, option_text, is_correct, option_order)
+         VALUES (?, ?, ?, ?)"
+    );
+    if (!$optStmt) throw new Exception("Prepare insert options failed: " . $conn->error);
+
+    foreach ($cleanOptions as $opt) {
+        $optText      = $opt['option_text'];
+        $optIsCorrect = $opt['is_correct'];
+        $optOrder     = $opt['option_order'];
+        $optStmt->bind_param("isii", $questionId, $optText, $optIsCorrect, $optOrder);
+        $optStmt->execute();
+    }
+    $optStmt->close();
+
+    // Touch assessment updated_at
+    $stmt = $conn->prepare(
+        "UPDATE assessments SET updated_at = NOW() WHERE assessment_id = ? AND created_by = ?"
+    );
+    if ($stmt) {
+        $stmt->bind_param("ii", $assessmentId, $teacherId);
+        $stmt->execute();
+        $stmt->close();
+    }
+
+    $conn->commit();
+
     echo json_encode(['success' => true]);
-} else {
+
+} catch (Exception $e) {
+    $conn->rollback();
+    error_log("update-question transaction failed: " . $e->getMessage());
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'Question update failed. Please try again.']);
 }

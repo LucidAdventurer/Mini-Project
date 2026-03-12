@@ -274,10 +274,11 @@ function buildToUnicodeCMap(array $rawStreams): array {
 // This prevents zip-bomb style PDFs from spiking CPU/memory.
 // The 10MB raw upload limit is enforced before this is ever called.
 // ============================================================
+// Decompression cap — generous for any text-based MCQ PDF.
+// Defined here (file scope) so tryDecompress() can be called multiple times safely.
+const MAX_DECOMPRESSED_BYTES = 5 * 1024 * 1024;  // 5MB per stream
+
 function tryDecompress(string $stream): ?string {
-    // 5MB decompressed cap — generous for any text-based MCQ PDF
-    define('MAX_UPLOAD_BYTES',       2 * 1024 * 1024);  // 2MB raw file
-    define('MAX_DECOMPRESSED_BYTES', 5 * 1024 * 1024);  // 5MB per stream
     if (strlen($stream) === 0) return null;
 
     $b0 = ord($stream[0]);

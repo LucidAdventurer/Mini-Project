@@ -2,26 +2,25 @@
 /* ============================================================
  * api/assessment/submit.php
  *
- * Final submission endpoint. Grades every answer, calculates
- * score/percentage, and marks the attempt as 'submitted'.
+ * Final submission. Grades every answer via question_options.is_correct,
+ * computes score/percentage, marks the attempt as 'submitted'.
  *
- * Schema notes:
- * - answers columns: answer_id, attempt_id, question_id,
- *   selected_option_id, text_answer, marks_awarded
- * - questions columns: question_id, assessment_id, question_text,
- *   question_type, marks, negative_marks, explanation, question_order
- * - question_options columns: option_id, question_id, option_text,
- *   is_correct, option_order
- * - assessment_attempts has NO: end_time, total_questions,
- *   correct_answers, wrong_answers, unanswered — these are
- *   derived at read-time from the answers table.
- * - attempt status enum: 'in_progress','submitted','timeout'
+ * answers table schema:
+ *   answer_id, attempt_id, question_id,
+ *   selected_option_id (FK → question_options, nullable),
+ *   text_answer        (for short_answer/fill_blank),
+ *   marks_awarded
+ *
+ * assessment_attempts columns written here:
+ *   status = 'submitted', submitted_at, score, percentage
  *
  * POST JSON {
  *   attempt_id:     int,
- *   answers:        { "questionId": optionId | "text", ... },
- *   time_remaining: int,   (optional — kept for backwards compat)
- *   auto_submit:    bool   (optional — set true on timeout)
+ *   answers: {
+ *     "<question_id>": { option_id?: int, text?: string },
+ *     ...
+ *   },
+ *   auto_submit?: bool   (set true on timeout)
  * }
  * Returns { success: bool, attempt_id: int, error?: string }
  * ============================================================ */
@@ -31,30 +30,28 @@ require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
-/* ── Auth ── */
+/* Support GET ?attempt_id=X for server-side timeout redirect */
 $user   = validateSession($conn, 'student');
 $userId = (int) $user['user_id'];
 
-/* Support GET ?attempt_id=X&auto=1 for server-side timeout redirect */
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $attemptId  = (int)($_GET['attempt_id'] ?? 0);
     $answers    = [];
     $autoSubmit = true;
-} else {
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        http_response_code(405);
-        echo json_encode(['success' => false, 'error' => 'Method not allowed.']);
-        exit;
-    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $body = json_decode(file_get_contents('php://input'), true);
     if (!is_array($body)) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'Invalid JSON.']);
         exit;
     }
-    $attemptId  = (int)($body['attempt_id']    ?? 0);
-    $answers    = $body['answers']             ?? [];
+    $attemptId  = (int)($body['attempt_id'] ?? 0);
+    $answers    = $body['answers']          ?? [];
     $autoSubmit = !empty($body['auto_submit']);
+} else {
+    http_response_code(405);
+    echo json_encode(['success' => false, 'error' => 'Method not allowed.']);
+    exit;
 }
 
 if ($attemptId <= 0) {
@@ -63,9 +60,9 @@ if ($attemptId <= 0) {
     exit;
 }
 
-/* ── Fetch attempt — must be in_progress/timeout and belong to this student ── */
+/* ── Fetch attempt — must be in_progress or timeout, belong to this student ── */
 $aResult = safePreparedQuery($conn,
-    "SELECT aa.attempt_id, aa.assessment_id, aa.attempt_number, aa.start_time,
+    "SELECT aa.attempt_id, aa.assessment_id, aa.start_time,
             a.total_marks, a.passing_marks, a.duration_minutes
      FROM assessment_attempts aa
      JOIN assessments a ON a.assessment_id = aa.assessment_id
@@ -92,44 +89,30 @@ if (!empty($answers) && is_array($answers)) {
         $questionId = (int)$questionId;
         if ($questionId <= 0) continue;
 
-        if (is_numeric($answer) && (int)$answer > 0) {
-            /* Option-based answer */
-            $optionId = (int)$answer;
-            safePreparedQuery($conn,
-                "INSERT INTO answers (attempt_id, question_id, selected_option_id, text_answer)
-                 VALUES (?, ?, ?, NULL)
-                 ON DUPLICATE KEY UPDATE
-                    selected_option_id = VALUES(selected_option_id),
-                    text_answer        = NULL",
-                "iii", [$attemptId, $questionId, $optionId]
-            );
-        } else {
-            /* Text answer */
-            $textAnswer = mb_substr(trim((string)$answer), 0, 500);
-            if ($textAnswer === '') continue;
-            safePreparedQuery($conn,
-                "INSERT INTO answers (attempt_id, question_id, selected_option_id, text_answer)
-                 VALUES (?, ?, NULL, ?)
-                 ON DUPLICATE KEY UPDATE
-                    selected_option_id = NULL,
-                    text_answer        = VALUES(text_answer)",
-                "iis", [$attemptId, $questionId, $textAnswer]
-            );
-        }
+        $optionId = isset($answer['option_id']) && $answer['option_id'] !== null
+                        ? (int)$answer['option_id']
+                        : null;
+        $textAns  = isset($answer['text']) && (string)$answer['text'] !== ''
+                        ? mb_substr(trim((string)$answer['text']), 0, 1000)
+                        : null;
+
+        if ($optionId === null && $textAns === null) continue;
+
+        safePreparedQuery($conn,
+            "INSERT INTO answers (attempt_id, question_id, selected_option_id, text_answer, marks_awarded)
+             VALUES (?, ?, ?, ?, 0)
+             ON DUPLICATE KEY UPDATE
+                selected_option_id = VALUES(selected_option_id),
+                text_answer        = VALUES(text_answer)",
+            "iiis", [$attemptId, $questionId, $optionId, $textAns]
+        );
     }
 }
 
 /* ── Load all questions with their correct option IDs ── */
 $qResult = safePreparedQuery($conn,
-    "SELECT q.question_id, q.question_type, q.marks, q.negative_marks,
-            GROUP_CONCAT(
-                CASE WHEN qo.is_correct = 1 THEN qo.option_id END
-                ORDER BY qo.option_id
-            ) AS correct_option_ids
-     FROM questions q
-     LEFT JOIN question_options qo ON qo.question_id = q.question_id
-     WHERE q.assessment_id = ?
-     GROUP BY q.question_id, q.question_type, q.marks, q.negative_marks",
+    "SELECT question_id, question_type, marks, negative_marks
+     FROM questions WHERE assessment_id = ?",
     "i", [$assessmentId]
 );
 
@@ -147,93 +130,138 @@ if (empty($questions)) {
     exit;
 }
 
+/* ── Load correct option sets per question ──
+ * For each question, collect the set of option_ids that are marked correct.
+ */
+$qids      = implode(',', array_keys($questions));
+$optsResult = $conn->query(
+    "SELECT question_id, option_id, is_correct
+     FROM question_options
+     WHERE question_id IN ($qids)"
+);
+$correctOptionSets = []; // question_id => [option_id, ...]
+if ($optsResult) {
+    while ($row = $optsResult->fetch_assoc()) {
+        $qid = (int)$row['question_id'];
+        if ((int)$row['is_correct'] === 1) {
+            $correctOptionSets[$qid][] = (int)$row['option_id'];
+        }
+    }
+    $optsResult->free();
+}
+
 /* ── Load all saved answers for this attempt ── */
 $savedResult = safePreparedQuery($conn,
     "SELECT question_id, selected_option_id, text_answer
      FROM answers WHERE attempt_id = ?",
     "i", [$attemptId]
 );
-$savedAnswers = [];
+$savedAnswers = []; // question_id => ['option_id' => int|null, 'text' => string|null]
 if ($savedResult['success'] && $savedResult['result']) {
     while ($row = $savedResult['result']->fetch_assoc()) {
-        $savedAnswers[(int)$row['question_id']] = $row;
+        $savedAnswers[(int)$row['question_id']] = [
+            'option_id' => $row['selected_option_id'] !== null ? (int)$row['selected_option_id'] : null,
+            'text'      => $row['text_answer'],
+        ];
     }
     $savedResult['result']->free();
 }
 
 /* ── Grade every question ── */
-$rawScore = 0.0;
+$rawScore  = 0.0;
+$totalMark = (int)$attempt['total_marks'];
 
 foreach ($questions as $qid => $q) {
-    $qType    = $q['question_type'];
-    $marks    = (int)$q['marks'];
-    $negMarks = (float)$q['negative_marks'];
-    $saved    = $savedAnswers[$qid] ?? null;
+    $qType         = $q['question_type'];
+    $marks         = (int)$q['marks'];
+    $negMarks      = (float)$q['negative_marks'];
+    $saved         = $savedAnswers[$qid] ?? null;
+    $marksAwarded  = 0.0;
 
     if ($saved === null) {
-        /* No answer row at all — skip */
-        continue;
-    }
-
-    $marksAwarded = 0.0;
-
-    if ($qType === 'short_answer') {
-        /* Short answer: requires teacher grading — leave marks_awarded = 0 */
+        // Unanswered — 0 marks, no penalty
         $marksAwarded = 0.0;
-    } else {
-        /* Option-based: compare selected_option_id against correct options */
-        $correctIds = $q['correct_option_ids']
-            ? array_map('intval', explode(',', $q['correct_option_ids']))
-            : [];
-
-        $selectedId = $saved['selected_option_id'] !== null
-            ? (int)$saved['selected_option_id']
-            : null;
-
-        if ($selectedId !== null) {
-            $isCorrect    = in_array($selectedId, $correctIds, true);
-            $marksAwarded = $isCorrect ? (float)$marks : -(float)$negMarks;
-
-            if ($isCorrect) {
-                $rawScore += $marks;
+    } elseif (in_array($qType, ['short_answer', 'fill_blank'], true)) {
+        // Text answer: compare against the correct option's text (case-insensitive trim).
+        // The correct option row holds the expected answer in option_text.
+        // For now: mark correct if the student's text matches any correct option_text.
+        $textAns = trim(strtolower((string)($saved['text'] ?? '')));
+        if ($textAns === '') {
+            $marksAwarded = 0.0;
+        } else {
+            // Fetch correct option texts for this question
+            $correctTexts = [];
+            if (!empty($correctOptionSets[$qid])) {
+                $correctIds = implode(',', array_map('intval', $correctOptionSets[$qid]));
+                $tr = $conn->query(
+                    "SELECT option_text FROM question_options
+                     WHERE question_id = $qid AND option_id IN ($correctIds)"
+                );
+                if ($tr) {
+                    while ($r = $tr->fetch_assoc()) {
+                        $correctTexts[] = trim(strtolower($r['option_text']));
+                    }
+                    $tr->free();
+                }
+            }
+            if (in_array($textAns, $correctTexts, true)) {
+                $marksAwarded = $marks;
+                $rawScore    += $marks;
             } else {
-                $rawScore -= $negMarks;
+                $marksAwarded = -$negMarks;
+                $rawScore    -= $negMarks;
+            }
+        }
+    } else {
+        // Option-based question
+        $selectedOptionId = $saved['option_id'] ?? null;
+        if ($selectedOptionId === null) {
+            $marksAwarded = 0.0;
+        } else {
+            $correctSet = $correctOptionSets[$qid] ?? [];
+            if (in_array($selectedOptionId, $correctSet, true)) {
+                $marksAwarded = $marks;
+                $rawScore    += $marks;
+            } else {
+                $marksAwarded = -$negMarks;
+                $rawScore    -= $negMarks;
             }
         }
     }
 
-    /* Update the answer row with marks */
+    // Write marks_awarded back to the answer row
     safePreparedQuery($conn,
-        "UPDATE answers SET marks_awarded = ?
-         WHERE attempt_id = ? AND question_id = ?",
-        "dii", [$marksAwarded, $attemptId, $qid]
+        "INSERT INTO answers (attempt_id, question_id, selected_option_id, text_answer, marks_awarded)
+         VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE marks_awarded = VALUES(marks_awarded)",
+        "iiisf",
+        [
+            $attemptId,
+            $qid,
+            $saved['option_id'] ?? null,
+            $saved['text']      ?? null,
+            $marksAwarded,
+        ]
     );
 }
 
-/* ── Clamp score and compute percentage ── */
-$finalScore = max(0, round($rawScore, 2));
-$totalMarks = (int)$attempt['total_marks'];
-$percentage = $totalMarks > 0 ? round(($finalScore / $totalMarks) * 100, 2) : 0;
-
-/* ── Time taken — derived from DB timestamps ── */
-$startTime        = $attempt['start_time'] ? new DateTime($attempt['start_time']) : null;
-$now              = new DateTime();
-$timeTakenSeconds = $startTime ? max(0, $now->getTimestamp() - $startTime->getTimestamp()) : 0;
-$maxSeconds       = (int)$attempt['duration_minutes'] * 60;
-$timeTakenSeconds = min($timeTakenSeconds, $maxSeconds);
+/* Clamp score to >= 0 */
+$finalScore = max(0.0, round($rawScore, 2));
+$percentage = $totalMark > 0 ? round(($finalScore / $totalMark) * 100, 2) : 0.0;
 
 /* ── Mark attempt as submitted ── */
 safePreparedQuery($conn,
-    "UPDATE assessment_attempts
-     SET status       = 'submitted',
-         submitted_at = NOW(),
-         score        = ?,
-         percentage   = ?
+    "UPDATE assessment_attempts SET
+        status       = 'submitted',
+        submitted_at = NOW(),
+        score        = ?,
+        percentage   = ?
      WHERE attempt_id = ? AND user_id = ?",
-    "ddii", [$finalScore, $percentage, $attemptId, $userId]
+    "ddii",
+    [$finalScore, $percentage, $attemptId, $userId]
 );
 
-/* ── For GET (timeout redirect), go straight to results ── */
+/* ── Timeout redirect (GET) ── */
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     header("Location: ../../test-results.php?attempt_id=$attemptId");
     exit;

@@ -5,20 +5,22 @@
 // Returns full result data for one assessment attempt.
 // Only the student who owns the attempt may view it.
 //
-// Schema notes:
-// - assessment_attempts: no end_time, total_questions,
-//   correct_answers, wrong_answers, unanswered — all derived
-//   from answers + questions tables at read-time.
-// - answers columns: answer_id, attempt_id, question_id,
-//   selected_option_id, text_answer, marks_awarded
-// - questions columns: question_id, assessment_id, question_text,
-//   question_type, marks, negative_marks, explanation, question_order
-// - question_options columns: option_id, question_id, option_text,
-//   is_correct, option_order
-// - assessments has NO: show_correct_answers, show_results_immediately
-// - attempt status enum: 'in_progress','submitted','timeout'
+// Stats (correct/wrong/unanswered) are derived from the answers
+// table — assessment_attempts no longer stores those columns.
 //
-// GET  ?attempt_id=int
+// Questions + options are only returned if the assessment's
+// category allows it (there's no show_correct_answers flag in
+// the current schema — we always return them to the student
+// who completed the attempt; restrict in future if needed).
+//
+// GET ?attempt_id=int
+// Returns {
+//   success, testName, completedAt, score, totalMarks,
+//   passingMarks, percentage, passed, timeTakenSeconds,
+//   durationMinutes, totalQuestions, correctAnswers,
+//   wrongAnswers, unanswered, percentile,
+//   categoryPerformance: [...], questions: [...]
+// }
 // ============================================================
 
 require_once __DIR__ . '/../../config.php';
@@ -75,7 +77,7 @@ $attempt = $attemptResult['result']->fetch_assoc();
 $attemptResult['result']->free();
 $assessmentId = (int)$attempt['assessment_id'];
 
-// ── 2. Calculate time taken from DB timestamps ──
+// ── 2. Time taken from DB timestamps ──
 $timeTakenSeconds = 0;
 if ($attempt['start_time'] && $attempt['submitted_at']) {
     $start     = new DateTime($attempt['start_time']);
@@ -126,10 +128,11 @@ $unanswered = max(0, $totalQuestions - $correctAnswers - $wrongAnswers);
 // ── 4. Percentile ──
 $percentileResult = safePreparedQuery($conn,
     "SELECT
-        COUNT(*) AS total_attempts,
-        SUM(CASE WHEN score < ? THEN 1 ELSE 0 END) AS below_count
+        COUNT(*)                                            AS total_attempts,
+        SUM(CASE WHEN score < ? THEN 1 ELSE 0 END)         AS below_count
      FROM assessment_attempts
      WHERE assessment_id = ?
+       AND status        = 'submitted'
        AND status        = 'submitted'
        AND user_id IS NOT NULL",
     "di", [(float)$attempt['score'], $assessmentId]
@@ -144,115 +147,162 @@ if ($percentileResult['success'] && $percentileResult['result']) {
     }
 }
 
-// ── 5. Category performance breakdown (using assessments.category) ──
-// Since questions have no topic column, we group by the assessment category
+// ── 4. Load all questions for this assessment ──
+$qResult = safePreparedQuery($conn,
+    "SELECT question_id, question_text, question_type, marks, negative_marks, explanation, question_order
+     FROM questions
+     WHERE assessment_id = ?
+     ORDER BY question_order ASC",
+    "i", [$assessmentId]
+);
+$questions = [];
+$questionIds = [];
+if ($qResult['success'] && $qResult['result']) {
+    while ($row = $qResult['result']->fetch_assoc()) {
+        $qid           = (int)$row['question_id'];
+        $questions[$qid] = $row;
+        $questionIds[]   = $qid;
+    }
+    $qResult['result']->free();
+}
+
+$totalQuestions = count($questionIds);
+
+// ── 5. Load all options for these questions ──
+$optionsByQuestion = []; // question_id => [option_id => [...], ...]
+if (!empty($questionIds)) {
+    $qidList   = implode(',', $questionIds);
+    $optsResult = $conn->query(
+        "SELECT option_id, question_id, option_text, is_correct, option_order
+         FROM question_options
+         WHERE question_id IN ($qidList)
+         ORDER BY option_order ASC"
+    );
+    if ($optsResult) {
+        while ($row = $optsResult->fetch_assoc()) {
+            $qid = (int)$row['question_id'];
+            $optionsByQuestion[$qid][(int)$row['option_id']] = [
+                'option_id'    => (int)$row['option_id'],
+                'option_text'  => $row['option_text'],
+                'is_correct'   => (bool)$row['is_correct'],
+                'option_order' => (int)$row['option_order'],
+            ];
+        }
+        $optsResult->free();
+    }
+}
+
+// ── 6. Load answers for this attempt ──
+$answersByQuestion = []; // question_id => ['option_id' => int|null, 'text' => string|null, 'marks_awarded' => float]
+$answersResult = safePreparedQuery($conn,
+    "SELECT question_id, selected_option_id, text_answer, marks_awarded
+     FROM answers WHERE attempt_id = ?",
+    "i", [$attemptId]
+);
+if ($answersResult['success'] && $answersResult['result']) {
+    while ($row = $answersResult['result']->fetch_assoc()) {
+        $qid = (int)$row['question_id'];
+        $answersByQuestion[$qid] = [
+            'option_id'    => $row['selected_option_id'] !== null ? (int)$row['selected_option_id'] : null,
+            'text'         => $row['text_answer'],
+            'marks_awarded' => (float)$row['marks_awarded'],
+        ];
+    }
+    $answersResult['result']->free();
+}
+
+// ── 7. Compute correct/wrong/unanswered ──
+$correctCount    = 0;
+$wrongCount      = 0;
+$unansweredCount = 0;
+
+foreach ($questionIds as $qid) {
+    $ans = $answersByQuestion[$qid] ?? null;
+    if ($ans === null) {
+        $unansweredCount++;
+    } elseif ($ans['marks_awarded'] > 0) {
+        $correctCount++;
+    } else {
+        // marks_awarded == 0 could be unanswered text q or wrong; check if option/text was set
+        $hasAnswer = ($ans['option_id'] !== null) || ($ans['text'] !== null && $ans['text'] !== '');
+        if ($hasAnswer) {
+            $wrongCount++;
+        } else {
+            $unansweredCount++;
+        }
+    }
+}
+
+// ── 8. Category performance — group by question_type as proxy for topic ──
+// The schema has no topic column on questions; group by question_type instead.
 $categoryPerformance = [];
-if (!empty($attempt['category'])) {
+$categoryMap = []; // type => ['correct' => 0, 'total' => 0]
+foreach ($questionIds as $qid) {
+    $qType = $questions[$qid]['question_type'] ?? 'mcq';
+    if (!isset($categoryMap[$qType])) {
+        $categoryMap[$qType] = ['correct' => 0, 'total' => 0];
+    }
+    $categoryMap[$qType]['total']++;
+    $ans = $answersByQuestion[$qid] ?? null;
+    if ($ans !== null && $ans['marks_awarded'] > 0) {
+        $categoryMap[$qType]['correct']++;
+    }
+}
+foreach ($categoryMap as $type => $counts) {
     $categoryPerformance[] = [
-        'topic'   => $attempt['category'],
-        'correct' => $correctAnswers,
-        'total'   => $totalQuestions,
+        'topic'   => $type,
+        'correct' => $counts['correct'],
+        'total'   => $counts['total'],
     ];
 }
 
-// ── 6. Questions + answers ──
-// Always return questions with student's answers and marks.
-// Correct option is shown via is_correct on question_options.
-$qResult = safePreparedQuery($conn,
-    "SELECT
-        q.question_id,
-        q.question_text,
-        q.question_type,
-        q.marks,
-        q.negative_marks,
-        q.explanation,
-        q.question_order,
-        ans.selected_option_id,
-        ans.text_answer,
-        ans.marks_awarded
-     FROM questions q
-     LEFT JOIN answers ans ON ans.question_id  = q.question_id
-                           AND ans.attempt_id   = ?
-     WHERE q.assessment_id = ?
-     ORDER BY q.question_order ASC, q.question_id ASC",
-    "ii", [$attemptId, $assessmentId]
-);
+// ── 9. Build questions list with student's answer and correct options ──
+$questionList = [];
+$qNum = 1;
+foreach ($questionIds as $qid) {
+    $q    = $questions[$qid];
+    $ans  = $answersByQuestion[$qid] ?? null;
+    $opts = $optionsByQuestion[$qid] ?? [];
 
-$questions = null;
-
-if ($qResult['success'] && $qResult['result']) {
-    $questions = [];
-    $qNum      = 1;
-    $qRows     = [];
-
-    while ($row = $qResult['result']->fetch_assoc()) {
-        $qRows[] = $row;
+    // Build options array for the response
+    $optionsOut = [];
+    foreach ($opts as $opt) {
+        $optionsOut[] = [
+            'option_id'   => $opt['option_id'],
+            'option_text' => $opt['option_text'],
+            'is_correct'  => $opt['is_correct'],
+        ];
     }
-    $qResult['result']->free();
 
-    if (!empty($qRows)) {
-        // Fetch all options for these questions in one query
-        $qIds        = implode(',', array_map(fn($r) => (int)$r['question_id'], $qRows));
-        $optResult   = safePreparedQuery($conn,
-            "SELECT option_id, question_id, option_text, is_correct, option_order
-             FROM question_options
-             WHERE question_id IN ($qIds)
-             ORDER BY question_id, option_order ASC",
-            "", []
-        );
+    $selectedOptionId = $ans['option_id'] ?? null;
+    $textAnswer       = $ans['text']       ?? null;
+    $marksAwarded     = $ans['marks_awarded'] ?? 0.0;
 
-        $optionsByQuestion = [];
-        if ($optResult['success'] && $optResult['result']) {
-            while ($opt = $optResult['result']->fetch_assoc()) {
-                $optionsByQuestion[(int)$opt['question_id']][] = $opt;
-            }
-            $optResult['result']->free();
-        }
-
-        foreach ($qRows as $row) {
-            $qid     = (int)$row['question_id'];
-            $opts    = $optionsByQuestion[$qid] ?? [];
-            $options = [];
-            $correctOptionId = null;
-
-            foreach ($opts as $opt) {
-                $options[] = [
-                    'optionId'  => (int)$opt['option_id'],
-                    'text'      => $opt['option_text'],
-                    'isCorrect' => (bool)$opt['is_correct'],
-                ];
-                if ((int)$opt['is_correct'] === 1) {
-                    $correctOptionId = (int)$opt['option_id'];
-                }
-            }
-
-            $marksAwarded   = $row['marks_awarded'] !== null ? (float)$row['marks_awarded'] : null;
-            $selectedOption = $row['selected_option_id'] !== null ? (int)$row['selected_option_id'] : null;
-            $isCorrect      = null;
-            if ($marksAwarded !== null) {
-                $isCorrect = $marksAwarded > 0;
-            }
-
-            $questions[] = [
-                'questionNumber'   => $qNum++,
-                'questionId'       => $qid,
-                'text'             => $row['question_text'],
-                'type'             => $row['question_type'],
-                'options'          => $options,
-                'correctOptionId'  => $correctOptionId,
-                'selectedOptionId' => $selectedOption,
-                'textAnswer'       => $row['text_answer'],
-                'isCorrect'        => $isCorrect,
-                'marksAwarded'     => $marksAwarded,
-                'marks'            => (int)$row['marks'],
-                'negativeMarks'    => (float)$row['negative_marks'],
-                'explanation'      => $row['explanation'],
-            ];
-        }
+    // Is the selected option correct?
+    $isCorrect = false;
+    if ($selectedOptionId !== null && isset($opts[$selectedOptionId])) {
+        $isCorrect = $opts[$selectedOptionId]['is_correct'];
+    } elseif ($textAnswer !== null && $marksAwarded > 0) {
+        $isCorrect = true;
     }
+
+    $questionList[] = [
+        'questionNumber'  => $qNum++,
+        'questionId'      => $qid,
+        'text'            => $q['question_text'],
+        'type'            => $q['question_type'],
+        'marks'           => (int)$q['marks'],
+        'negativeMarks'   => (float)$q['negative_marks'],
+        'explanation'     => $q['explanation'],
+        'options'         => $optionsOut,
+        'selectedOptionId' => $selectedOptionId,
+        'textAnswer'      => $textAnswer,
+        'isCorrect'       => $isCorrect,
+        'marksAwarded'    => $marksAwarded,
+    ];
 }
 
-// ── 7. Build response ──
+// ── 10. Build response ──
 $passed = (float)$attempt['score'] >= (float)$attempt['passing_marks'];
 
 echo json_encode([
@@ -269,11 +319,11 @@ echo json_encode([
     'timeTakenSeconds'    => $timeTakenSeconds,
     'durationMinutes'     => (int) $attempt['duration_minutes'],
     'totalQuestions'      => $totalQuestions,
-    'correctAnswers'      => $correctAnswers,
-    'wrongAnswers'        => $wrongAnswers,
-    'unanswered'          => $unanswered,
+    'correctAnswers'      => $correctCount,
+    'wrongAnswers'        => $wrongCount,
+    'unanswered'          => $unansweredCount,
     'percentile'          => $percentile,
     'category'            => $attempt['category'],
     'categoryPerformance' => $categoryPerformance,
-    'questions'           => $questions,
+    'questions'           => $questionList,
 ]);

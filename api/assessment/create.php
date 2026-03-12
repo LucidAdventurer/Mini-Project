@@ -2,15 +2,15 @@
 // ============================================================
 // api/assessment/create.php
 //
-// Creates a new assessment (draft or active) for the logged-in teacher.
+// Creates a new assessment for the logged-in teacher.
 //
 // POST JSON {
-//   title, description, instructions,
-//   category, difficulty, duration_minutes, total_marks,
-//   passing_marks, max_attempts, start_time,
-//   end_time, show_results_immediately,
-//   show_correct_answers, randomize_questions,
-//   randomize_options, is_public, status
+//   title, description, category, difficulty,
+//   duration_minutes, total_marks, passing_marks,
+//   max_attempts, start_time?, end_time?,
+//   randomize_questions?, randomize_options?,
+//   visibility?: 'public'|'private',
+//   status?: 'draft'|'active'
 // }
 // Returns { success: bool, assessment_id?: int, error?: string }
 // ============================================================
@@ -86,43 +86,39 @@ if ($passingMarks < 0 || $passingMarks > $totalMarks) {
 }
 
 // ── Optional fields ──
-$description  = trim($body['description']  ?? '');
-$instructions = trim($body['instructions'] ?? '');
-$maxAttempts  = max(1, (int)($body['max_attempts'] ?? 1));
+$description = trim($body['description'] ?? '');
+$maxAttempts = max(1, (int)($body['max_attempts'] ?? 1));
 
 // ── Datetime fields ──
-// strtotime() handles all ISO-8601 variants the browser may send:
-// "2025-03-06T14:30", "2025-03-06T14:30:00", "2025-03-06 14:30:00", etc.
-$availableFrom = null;
-$availableUntil = null;
+$startTime = null;
+$endTime   = null;
 
-if (!empty($body['available_from'])) {
-    $ts = strtotime($body['available_from']);
-    if ($ts !== false) {
-        $availableFrom = date('Y-m-d H:i:s', $ts);
-    }
+if (!empty($body['start_time'])) {
+    $ts = strtotime($body['start_time']);
+    if ($ts !== false) $startTime = date('Y-m-d H:i:s', $ts);
 }
-if (!empty($body['available_until'])) {
-    $ts = strtotime($body['available_until']);
-    if ($ts !== false) {
-        $availableUntil = date('Y-m-d H:i:s', $ts);
-    }
+if (!empty($body['end_time'])) {
+    $ts = strtotime($body['end_time']);
+    if ($ts !== false) $endTime = date('Y-m-d H:i:s', $ts);
 }
 
-if ($availableFrom && $availableUntil && $availableFrom >= $availableUntil) {
+if ($startTime && $endTime && $startTime >= $endTime) {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => '"End Time" must be after "Start Time".']);
     exit;
 }
 
-// Boolean flags
-$showResultsImmediately = !empty($body['show_results_immediately']) ? 1 : 0;
-$showCorrectAnswers     = !empty($body['show_correct_answers'])     ? 1 : 0;
-$randomizeQuestions     = !empty($body['randomize_questions'])      ? 1 : 0;
-$randomizeOptions       = !empty($body['randomize_options'])        ? 1 : 0;
-$isPublic               = !empty($body['is_public'])                ? 1 : 0;
+// ── Boolean flags ──
+$randomizeQuestions = !empty($body['randomize_questions']) ? 1 : 0;
+$randomizeOptions   = !empty($body['randomize_options'])   ? 1 : 0;
 
-// Status — only allow draft or published
+// ── Visibility ──
+$visibility = trim($body['visibility'] ?? 'private');
+if (!in_array($visibility, ['public', 'private'], true)) {
+    $visibility = 'private';
+}
+
+// ── Status — only draft or active ──
 $status = trim($body['status'] ?? 'draft');
 if (!in_array($status, ['draft', 'active'], true)) {
     $status = 'draft';
@@ -131,27 +127,25 @@ if (!in_array($status, ['draft', 'active'], true)) {
 // ── Insert ──
 $result = safePreparedQuery($conn,
     "INSERT INTO assessments
-        (title, description, instructions, category, difficulty,
+        (created_by, title, description, category, difficulty,
          duration_minutes, total_marks, passing_marks, max_attempts,
-         available_from, available_until,
-         show_results_immediately, show_correct_answers,
-         randomize_questions, randomize_options, is_public,
-         status, created_by, created_at, updated_at)
+         start_time, end_time,
+         randomize_questions, randomize_options, visibility,
+         status, created_at, updated_at)
      VALUES
         (?, ?, ?, ?, ?,
          ?, ?, ?, ?,
          ?, ?,
-         ?, ?,
          ?, ?, ?,
-         ?, ?, NOW(), NOW())",
-    "sssssiiiissiiiiisi",
+         ?, NOW(), NOW())",
+    "issssiiiissiiss",
     [
-        $title, $description, $instructions, $category, $difficulty,
+        $teacherId,
+        $title, $description, $category, $difficulty,
         $duration, $totalMarks, $passingMarks, $maxAttempts,
-        $availableFrom, $availableUntil,
-        $showResultsImmediately, $showCorrectAnswers,
-        $randomizeQuestions, $randomizeOptions, $isPublic,
-        $status, $teacherId,
+        $startTime, $endTime,
+        $randomizeQuestions, $randomizeOptions, $visibility,
+        $status,
     ]
 );
 

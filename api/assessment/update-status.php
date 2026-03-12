@@ -44,7 +44,8 @@ if ($assessmentId <= 0) {
     exit;
 }
 
-$allowedStatuses = ['published', 'draft', 'archived'];
+// 'scheduled' does not exist in the live schema
+$allowedStatuses = ['active', 'draft', 'archived'];
 if (!in_array($newStatus, $allowedStatuses, true)) {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => 'Invalid status. Allowed: published, draft, archived.']);
