@@ -16,6 +16,7 @@ require_once 'db-guard.php';
 $currentUser  = validateSession($conn, 'teacher');
 $teacherId    = (int) $currentUser['user_id'];
 $userName     = htmlspecialchars($currentUser['full_name'] ?? 'Teacher');
+$userEmail    = htmlspecialchars($currentUser['email'] ?? '');
 $userInitials = strtoupper(substr($currentUser['full_name'] ?? 'T', 0, 2));
 
 $editMode     = false;
@@ -185,23 +186,71 @@ function sel(?array $a, string $key, string $value, string $default = ''): strin
             display: flex; align-items: center; gap: 12px;
             font-size: 20px; font-weight: 700; color: white; text-decoration: none;
         }
-        .brand-logo {
+        .brand-logo-img {
             width: 44px; height: 44px;
-            background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
             border-radius: 10px;
+            object-fit: contain;
+            flex-shrink: 0;
+            background: white;
+            padding: 4px;
+        }
+        .brand-text-group {
+            display: flex; flex-direction: column; line-height: 1.1; color: white;
+        }
+        .brand-name    { font-size: 18px; font-weight: 800; letter-spacing: .5px; }
+        .brand-tagline { font-size: 11px; font-weight: 400; opacity: .85; font-style: italic; }
+        .nav-center {
+            flex: 1; max-width: 500px; margin: 0 30px; position: relative;
+        }
+        .nav-search-input {
+            width: 100%; padding: 10px 20px 10px 40px;
+            border: 2px solid #e2e8f0; border-radius: 10px;
+            font-size: 14px; background: #f7fafc; color: #2d3748;
+            outline: none; transition: border-color .2s;
+        }
+        .nav-search-input:focus { border-color: var(--color-teacher-secondary); }
+        .nav-search-icon {
+            position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+            color: #a0aec0; font-size: 14px;
+        }
+        .nav-profile-btn {
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 14px; background: rgba(255,255,255,0.1);
+            border: none; border-radius: 10px; cursor: pointer;
+            transition: background .2s; color: white;
+        }
+        .nav-profile-btn:hover { background: rgba(255,255,255,0.2); }
+        .nav-avatar {
+            width: 34px; height: 34px;
+            background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
+            border: 2px solid rgba(255,255,255,0.4);
+            border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
-            color: white; font-weight: 700; font-size: 16px;
+            color: white; font-weight: 700; font-size: 13px;
         }
-        .nav-right { display: flex; align-items: center; gap: 12px; }
-        .btn-back {
-            padding: 9px 20px;
-            background: rgba(255,255,255,0.15);
-            color: white; border: 2px solid rgba(255,255,255,0.4);
-            border-radius: var(--radius); font-weight: 600; font-size: 14px;
-            text-decoration: none; display: flex; align-items: center; gap: 8px;
-            transition: var(--transition);
+        .profile-dropdown {
+            position: absolute; top: calc(100% + 12px); right: 0;
+            background: white; border-radius: 10px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15); min-width: 220px;
+            opacity: 0; visibility: hidden; transform: translateY(-8px);
+            transition: all 0.3s ease; z-index: 1001;
         }
-        .btn-back:hover { background: rgba(255,255,255,0.25); }
+        .profile-dropdown.open { opacity: 1; visibility: visible; transform: translateY(0); }
+        .dropdown-header { padding: 16px 20px; border-bottom: 1px solid #e2e8f0; }
+        .dropdown-name  { font-weight: 700; font-size: 14px; color: #2d3748; }
+        .dropdown-email { font-size: 12px; color: #718096; margin-top: 2px; }
+        .dropdown-menu  { padding: 6px 0; }
+        .dropdown-item {
+            display: flex; align-items: center; gap: 12px;
+            padding: 11px 20px; color: #2d3748;
+            text-decoration: none; font-size: 14px; transition: all 0.2s;
+            cursor: pointer; border: none; background: none; width: 100%; text-align: left;
+            font-family: inherit;
+        }
+        .dropdown-item:hover { background: #f5f7fa; }
+        .dropdown-item.danger { color: #f56565; }
+        .dropdown-item.danger:hover { background: #fff5f5; }
+        .dropdown-divider { height: 1px; background: #e2e8f0; margin: 4px 0; }
 
         .container { max-width: 960px; margin: 0 auto; padding: 30px 20px 60px; }
 
@@ -564,12 +613,36 @@ function sel(?array $a, string $key, string $value, string $default = ''): strin
 <body>
 
 <nav class="navbar">
-    <a href="teacher-dashboard.php" class="navbar-brand">
-        <div class="brand-logo">PT</div>
-        <span>Placement Portal</span>
+    <a href="teacher-dashboard.php" class="navbar-brand" style="flex-shrink:0;">
+        <img src="prepaura-logo.png" alt="PREPAURA Logo" class="brand-logo-img">
+        <div class="brand-text-group">
+            <span class="brand-name">PREPAURA</span>
+            <span class="brand-tagline">Placement Training Platform</span>
+        </div>
     </a>
-    <div class="nav-right">
-        <a href="teacher-dashboard.php" class="btn-back">← Dashboard</a>
+    <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;position:relative;">
+        <button class="nav-profile-btn" id="profileBtn">
+            <div class="nav-avatar"><?= $userInitials ?></div>
+            <span style="font-weight:600;font-size:14px;"><?= $userName ?></span>
+            <span style="font-size:10px;opacity:.7;">▼</span>
+        </button>
+        <div class="profile-dropdown" id="profileDropdown">
+            <div class="dropdown-header">
+                <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;">
+                    <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--color-teacher-primary),var(--color-teacher-secondary));display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:16px;flex-shrink:0;"><?= $userInitials ?></div>
+                    <div>
+                        <div class="dropdown-name"><?= $userName ?></div>
+                        <div class="dropdown-email"><?= $userEmail ?></div>
+                    </div>
+                </div>
+            </div>
+            <div class="dropdown-menu">
+                <a href="teacher-profile.php" class="dropdown-item">👤 My Profile</a>
+                <a href="help.html" target="_blank" rel="noopener" class="dropdown-item">❓ Help & Support</a>
+                <div class="dropdown-divider"></div>
+                <button onclick="handleLogout()" class="dropdown-item danger">🚪 Logout</button>
+            </div>
+        </div>
     </div>
 </nav>
 
@@ -1707,6 +1780,23 @@ async function importParsedQuestions() {
 document.addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveDraft(); }
 });
+
+// ── Profile dropdown ──
+const profileBtn  = document.getElementById('profileBtn');
+const profileDrop = document.getElementById('profileDropdown');
+profileBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    profileDrop.classList.toggle('open');
+});
+document.addEventListener('click', () => {
+    profileDrop.classList.remove('open');
+});
+
+function handleLogout() {
+    if (confirm('Are you sure you want to logout?')) {
+        window.location.href = 'logout.php';
+    }
+}
 
 // ── Init ──
 <?php if ($editMode && count($questions) > 0): ?>

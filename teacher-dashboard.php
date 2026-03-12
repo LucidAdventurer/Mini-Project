@@ -131,7 +131,6 @@ return date('M j, Y', strtotime($dt));
 function statusLabel(string $status): string {
 return match($status) {
 'active' => 'Active',
-// no 'scheduled' status in schema
 'draft'    => 'Draft',
 'archived' => 'Completed',
 default    => ucfirst($status),
@@ -156,6 +155,7 @@ default      => 'ℹ️',
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Teacher Dashboard - Placement Portal</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 <style>
 :root {
 --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -197,19 +197,22 @@ box-shadow: 0 2px 10px rgba(0,0,0,0.15);
 display: flex; align-items: center; gap: 12px;
 font-size: 20px; font-weight: 700; color: white; text-decoration: none;
         }
-.brand-logo {
+.brand-logo-img {
 width: 44px; height: 44px;
-background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
 border-radius: 10px;
-<<<<<<< HEAD
 object-fit: contain;
 flex-shrink: 0;
 background: white;
 padding: 4px;
-=======
-display: flex; align-items: center; justify-content: center;
-color: white; font-weight: 700; font-size: 16px;
->>>>>>> 9f09450a1edcfb68757dd176ccd1cefb2bfd1788
+        }
+.brand-text-group {
+display: flex; flex-direction: column; line-height: 1.1; color: white;
+        }
+.brand-name {
+font-size: 18px; font-weight: 800; letter-spacing: .5px;
+        }
+.brand-tagline {
+font-size: 11px; font-weight: 400; opacity: .85; font-style: italic;
         }
 .nav-search {
 flex: 1; max-width: 500px; margin: 0 30px; position: relative;
@@ -349,7 +352,7 @@ transition: var(--transition);
         }
 .stat-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
 .stat-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-.stat-label { font-size: 12px; font-weight: 600; color: var(--color-text-light); text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-label { font-size: 15px; font-weight: 700; color: var(--color-text); text-transform: uppercase; letter-spacing: 0.5px; }
 .stat-icon {
 width: 38px; height: 38px; border-radius: 10px; font-size: 18px;
 background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
@@ -449,8 +452,8 @@ padding: 5px 12px; border-radius: 6px;
 font-size: 12px; font-weight: 600; margin-bottom: 14px;
         }
 .status-badge.active    { background: #d1fae5; color: #065f46; }
-.status-badge.draft        { background: #fef3c7; color: #92400e; }
-.status-badge.archived     { background: #dbeafe; color: #1e40af; }
+.status-badge.draft     { background: #fef3c7; color: #92400e; }
+.status-badge.archived  { background: #dbeafe; color: #1e40af; }
 .assessment-actions { display: flex; gap: 8px; }
 .btn {
 padding: 9px 14px; border: none; border-radius: 8px;
@@ -525,252 +528,252 @@ font-weight: 700; cursor: pointer; transition: var(--transition);
 <body>
 <!-- ── NAVIGATION ── -->
 <nav class="navbar">
-<a href="teacher-dashboard.php" class="navbar-brand">
-<div class="brand-logo">PT</div>
-<span>Placement Portal</span>
-</a>
-<div class="nav-search">
-<input type="text" class="search-input" id="searchInput" placeholder="Search assessments..." autocomplete="off">
-<span class="search-icon">🔍</span>
-</div>
-<div class="nav-profile" style="position:relative;">
-<!-- Notification bell -->
-<button class="notification-btn" id="notifBtn" title="Notifications">
+    <a href="teacher-dashboard.php" class="navbar-brand">
+        <img src="prepaura-logo.png" alt="PREPAURA Logo" class="brand-logo-img">
+        <div class="brand-text-group">
+            <span class="brand-name">PREPAURA</span>
+            <span class="brand-tagline">Placement Training Platform</span>
+        </div>
+    </a>
+    <div class="nav-search">
+        <input type="text" class="search-input" id="searchInput" placeholder="Search assessments..." autocomplete="off">
+        <span class="search-icon">🔍</span>
+    </div>
+    <div class="nav-profile" style="position:relative;">
+        <!-- Notification bell -->
+        <button class="notification-btn" id="notifBtn" title="Notifications">
             🔔
-<?php if ($unreadCount > 0): ?>
-<span class="notif-badge"><?= $unreadCount > 9 ? '9+' : $unreadCount ?></span>
-<?php endif; ?>
-</button>
-<!-- Notification panel -->
-<div class="notif-panel" id="notifPanel">
-<div class="notif-panel-header">
-<span>Notifications</span>
-<?php if (!empty($notifications)): ?>
-<button class="notif-mark-all" onclick="markAllRead()">Mark all read</button>
-<?php endif; ?>
-</div>
-<?php if (empty($notifications)): ?>
-<div class="notif-empty">🎉 You're all caught up!</div>
-<?php else: ?>
-<?php foreach ($notifications as $n): ?>
-<a class="notif-item"
-href="<?= htmlspecialchars('#') ?>"
-data-notif-id="<?= (int)$n['notification_id'] ?>">
-<div class="notif-icon"><?= notifIcon($n['type']) ?></div>
-<div>
-<div class="notif-title"><?= htmlspecialchars($n['title']) ?></div>
-<?php if ($n['message']): ?>
-<div class="notif-msg"><?= htmlspecialchars(mb_strimwidth($n['message'], 0, 80, '…')) ?></div>
-<?php endif; ?>
-<div class="notif-time"><?= fmtDate($n['created_at']) ?></div>
-</div>
-</a>
-<?php endforeach; ?>
-<?php endif; ?>
-</div>
-<!-- Profile button + dropdown -->
-<button class="profile-button" id="profileBtn">
-<div class="profile-avatar"><?= $userInitials ?></div>
-<span class="profile-name"><?= $userName ?></span>
-<span class="profile-caret">▼</span>
-<div class="profile-dropdown" id="profileDropdown">
-<div class="dropdown-header">
-<div class="dropdown-name"><?= $userName ?></div>
-<div class="dropdown-email"><?= $userEmail ?></div>
-<span class="dropdown-role">Teacher</span>
-</div>
-<div class="dropdown-menu">
-<a href="teacher-profile.php" class="dropdown-item">👤 My Profile</a>
-<a href="teacher-dashboard.php" class="dropdown-item">📊 Dashboard</a>
-<a href="manage-groups.php" class="dropdown-item">👥 Manage Groups</a>
-<a href="help.html" target="_blank" rel="noopener" class="dropdown-item">❓ Help & Support</a>
-<div class="dropdown-divider"></div>
-<a onclick="handleLogout()" class="dropdown-item">🚪 Logout</a>
-</div>
-</div>
-</button>
-</div>
+            <?php if ($unreadCount > 0): ?>
+            <span class="notif-badge"><?= $unreadCount > 9 ? '9+' : $unreadCount ?></span>
+            <?php endif; ?>
+        </button>
+        <!-- Notification panel -->
+        <div class="notif-panel" id="notifPanel">
+            <div class="notif-panel-header">
+                <span>Notifications</span>
+                <?php if (!empty($notifications)): ?>
+                <button class="notif-mark-all" onclick="markAllRead()">Mark all read</button>
+                <?php endif; ?>
+            </div>
+            <?php if (empty($notifications)): ?>
+            <div class="notif-empty">🎉 You're all caught up!</div>
+            <?php else: ?>
+            <?php foreach ($notifications as $n): ?>
+            <a class="notif-item"
+               href="<?= htmlspecialchars('#') ?>"
+               data-notif-id="<?= (int)$n['notification_id'] ?>">
+                <div class="notif-icon"><?= notifIcon($n['type']) ?></div>
+                <div>
+                    <div class="notif-title"><?= htmlspecialchars($n['title']) ?></div>
+                    <?php if ($n['message']): ?>
+                    <div class="notif-msg"><?= htmlspecialchars(mb_strimwidth($n['message'], 0, 80, '…')) ?></div>
+                    <?php endif; ?>
+                    <div class="notif-time"><?= fmtDate($n['created_at']) ?></div>
+                </div>
+            </a>
+            <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+        <!-- Profile button + dropdown -->
+        <button class="profile-button" id="profileBtn">
+            <div class="profile-avatar"><?= $userInitials ?></div>
+            <span class="profile-name"><?= $userName ?></span>
+            <span class="profile-caret">▼</span>
+            <div class="profile-dropdown" id="profileDropdown">
+                <div class="dropdown-header">
+                    <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;">
+                        <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--color-teacher-primary),var(--color-teacher-secondary));display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:16px;flex-shrink:0;"><?= $userInitials ?></div>
+                        <div>
+                            <div class="dropdown-name"><?= $userName ?></div>
+                            <div class="dropdown-email"><?= $userEmail ?></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="dropdown-menu">
+                    <a href="teacher-profile.php" class="dropdown-item">👤 My Profile</a>
+                    <a href="help.html" target="_blank" rel="noopener" class="dropdown-item">❓ Help & Support</a>
+                    <div class="dropdown-divider"></div>
+                    <a onclick="handleLogout()" class="dropdown-item danger">🚪 Logout</a>
+                </div>
+            </div>
+        </button>
+    </div>
 </nav>
 <!-- ── MAIN ── -->
 <div class="page-wrapper">
-<aside class="left-sidebar">
-    <span class="left-sidebar-label">Navigation</span>
-    <a href="teacher-dashboard.php" class="active"><i class="fa fa-home"></i> Dashboard</a>
-    <a href="teacher-assessments.php"><i class="fa fa-clipboard-list"></i> Assessments</a>
-    <a href="teacher-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
-    <a href="notifications.php" style="position:relative">
-        <i class="fa fa-bell"></i> Notifications
-        <?php if ($unreadCount > 0): ?>
-        <span style="margin-left:auto;background:#e53e3e;color:white;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;min-width:20px;text-align:center;"><?= $unreadCount ?></span>
-        <?php endif; ?>
-    </a>
-    <div class="left-sidebar-bottom">
-        <button onclick="handleLogout()"><i class="fa fa-sign-out-alt"></i> Logout</button>
-    </div>
-</aside>
-<div class="page-content">
-<div class="container">
-<?php if ($dbError): ?>
-<div class="db-error-banner">
-        ⚠️ Some data could not be loaded. Please report this to your administrator.
-</div>
-<?php endif; ?>
-<!-- Welcome -->
-<div class="welcome-section">
-    <div class="welcome-content">
-        <h1>Welcome back, <?= $userName ?>! 👋</h1>
-        <p class="welcome-subtitle">Here's what's happening with your assessments today.</p>
-    </div>
-    <div class="quick-stats">
-        <div class="stat-item">
-            <span class="stat-number"><?= $totalAssessments ?></span>
-            <span class="stat-label">Total Assessments</span>
+    <aside class="left-sidebar">
+        <span class="left-sidebar-label">Navigation</span>
+        <a href="teacher-dashboard.php" class="active"><i class="fa fa-home"></i> Dashboard</a>
+        <a href="teacher-assessments.php"><i class="fa fa-clipboard-list"></i> Assessments</a>
+        <a href="manage-groups.php"><i class="fa fa-users"></i> Manage Groups</a>
+        <a href="teacher-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
+        <a href="notifications.php" style="position:relative">
+            <i class="fa fa-bell"></i> Notifications
+            <?php if ($unreadCount > 0): ?>
+            <span style="margin-left:auto;background:#e53e3e;color:white;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;min-width:20px;text-align:center;"><?= $unreadCount ?></span>
+            <?php endif; ?>
+        </a>
+        <div class="left-sidebar-bottom">
+            <button onclick="handleLogout()"><i class="fa fa-sign-out-alt"></i> Logout</button>
         </div>
-        <div class="stat-item">
-            <span class="stat-number"><?= $activeStudents ?></span>
-            <span class="stat-label">Active Students</span>
-        </div>
-        <div class="stat-item">
-            <span class="stat-number"><?= $newThisMonth ?></span>
-            <span class="stat-label">New This Month</span>
-        </div>
-    </div>
-</div>
-<!-- Stats -->
-<div class="stats-grid">
-<div class="stat-card">
-<div class="stat-header">
-<span class="stat-label">Total Assessments</span>
-<div class="stat-icon">📝</div>
-</div>
-<div class="stat-value"><?= $totalAssessments ?></div>
-<?php if ($newThisMonth > 0): ?>
-<div class="stat-change">↑ <?= $newThisMonth ?> new this month</div>
-<?php else: ?>
-<div class="stat-change none">No new assessments this month</div>
-<?php endif; ?>
-</div>
-<div class="stat-card">
-<div class="stat-header">
-<span class="stat-label">Students Attempted</span>
-<div class="stat-icon">👥</div>
-</div>
-<div class="stat-value"><?= $activeStudents ?></div>
-<?php if ($newStudentsWeek > 0): ?>
-<div class="stat-change">↑ <?= $newStudentsWeek ?> this week</div>
-<?php else: ?>
-<div class="stat-change none">No new attempts this week</div>
-<?php endif; ?>
-</div>
-</div>
-<!-- Quick links -->
-<div style="margin-bottom:28px;display:flex;gap:12px;flex-wrap:wrap;">
-    <a href="manage-groups.php" style="display:inline-flex;align-items:center;gap:8px;padding:10px 18px;background:white;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;font-weight:600;color:var(--color-text);text-decoration:none;box-shadow:var(--shadow-sm);transition:var(--transition);"
-       onmouseover="this.style.borderColor='var(--color-teacher-secondary)'" onmouseout="this.style.borderColor='#e2e8f0'">
-        👥 Manage Groups
-    </a>
-    <a href="create-assessment.php" style="display:inline-flex;align-items:center;gap:8px;padding:10px 18px;background:white;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;font-weight:600;color:var(--color-text);text-decoration:none;box-shadow:var(--shadow-sm);transition:var(--transition);"
-       onmouseover="this.style.borderColor='var(--color-teacher-secondary)'" onmouseout="this.style.borderColor='#e2e8f0'">
-        📝 New Assessment
-    </a>
-</div>
-<!-- Assessments section -->
-<div class="section-header">
-<h2 class="section-title">My Assessments</h2>
-</div>
-<div class="filter-tabs" role="tablist" style="margin-bottom:20px;">
-<button class="filter-tab active" data-filter="all"      role="tab">All</button>
-<button class="filter-tab"         data-filter="active"   role="tab">Active</button>
-<button class="filter-tab"         data-filter="draft"    role="tab">Draft</button>
-<button class="filter-tab"         data-filter="archived" role="tab">Completed</button>
-</div>
-<?php if (empty($assessments)): ?>
-<div class="empty-state">
-<div class="empty-icon">📋</div>
-<div class="empty-title">No assessments yet</div>
-<div class="empty-subtitle">Create your first assessment to get started.</div>
-<a href="create-assessment.php" class="btn-create">+ Create Assessment</a>
-</div>
-<?php else: ?>
-<div class="assessments-grid" id="assessmentsGrid">
-<?php foreach ($assessments as $a):
-$aid      = (int)$a['assessment_id'];
-$status   = $a['status'];
-$qCount   = (int)$a['question_count'];
-$attempts = (int)$a['attempt_count'];
-$students = (int)$a['student_count'];
-if (in_array($status, ['active','published']) && $a['end_time']) {
-    $dateLabel = 'Due: ' . fmtDate($a['end_time']);
-} elseif ($status === 'archived') {
-    $dateLabel = 'Completed: ' . fmtDate($a['updated_at']);
-} else {
-    $dateLabel = 'Created: ' . fmtDate($a['created_at']);
-}
-?>
-<div class="assessment-card" data-status="<?= htmlspecialchars($status) ?>" data-id="<?= $aid ?>">
-<h3 class="assessment-title"><?= htmlspecialchars($a['title']) ?></h3>
-<span class="assessment-category"><?= htmlspecialchars(ucfirst($a['category'] ?? 'General')) ?></span>
-<div class="assessment-meta">
-<div class="meta-item">
-<span class="meta-icon">📅</span>
-<span><?= $dateLabel ?></span>
-</div>
-<div class="meta-item">
-<span class="meta-icon">⏱️</span>
-<span><?= (int)$a['duration_minutes'] ?> minutes</span>
-</div>
-<div class="meta-item">
-<span class="meta-icon">📝</span>
-<span><?= $qCount ?> question<?= $qCount !== 1 ? 's' : '' ?></span>
-</div>
-<div class="meta-item">
-<span class="meta-icon">👥</span>
-<?php if ($status === 'draft'): ?>
-<span>Not published yet</span>
-<?php elseif ($attempts === 0): ?>
-<span>No attempts yet</span>
-<?php else: ?>
-<span><?= $students ?> student<?= $students !== 1 ? 's' : '' ?> · <?= $attempts ?> attempt<?= $attempts !== 1 ? 's' : '' ?></span>
-<?php endif; ?>
-</div>
-</div>
-<span class="status-badge <?= $status ?>">
-                    ● <?= statusLabel($status) ?>
-</span>
-<div class="assessment-actions">
-<?php if ($status === 'draft'): ?>
-<a href="create-assessment.php?edit=<?= $aid ?>" class="btn btn-primary">Continue Editing</a>
-<button class="btn btn-danger" onclick="confirmDelete(<?= $aid ?>, '<?= htmlspecialchars(addslashes($a['title'])) ?>')">Delete</button>
-<?php elseif (in_array($status, ['active','published']) || $status === 'archived'): ?>
-<a href="assessment-results.php?id=<?= $aid ?>" class="btn btn-primary">View Results</a>
-<a href="edit-assessment.php?id=<?= $aid ?>" class="btn btn-secondary">Edit</a>
-<?php else: ?>
-<a href="edit-assessment.php?id=<?= $aid ?>" class="btn btn-secondary">Edit</a>
-<?php endif; ?>
-</div>
-</div>
-<?php endforeach; ?>
-</div>
-<?php endif; ?>
-</div><!-- /container -->
-</div><!-- /page-content -->
+    </aside>
+    <div class="page-content">
+        <div class="container">
+            <?php if ($dbError): ?>
+            <div class="db-error-banner">
+                ⚠️ Some data could not be loaded. Please report this to your administrator.
+            </div>
+            <?php endif; ?>
+            <!-- Welcome -->
+            <div class="welcome-section">
+                <div class="welcome-content">
+                    <h1>Welcome back, <?= $userName ?>! 👋</h1>
+                    <p class="welcome-subtitle">Here's what's happening with your assessments today.</p>
+                </div>
+                <div class="quick-stats">
+                    <div class="stat-item">
+                        <span class="stat-number"><?= $totalAssessments ?></span>
+                        <span class="stat-label">Total Assessments</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number"><?= $activeStudents ?></span>
+                        <span class="stat-label">Active Students</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number"><?= $newThisMonth ?></span>
+                        <span class="stat-label">New This Month</span>
+                    </div>
+                </div>
+            </div>
+            <!-- Stats -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">Total Assessments</span>
+                        <div class="stat-icon">📝</div>
+                    </div>
+                    <div class="stat-value"><?= $totalAssessments ?></div>
+                    <?php if ($newThisMonth > 0): ?>
+                    <div class="stat-change">↑ <?= $newThisMonth ?> new this month</div>
+                    <?php else: ?>
+                    <div class="stat-change none">No new assessments this month</div>
+                    <?php endif; ?>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">Students Attempted</span>
+                        <div class="stat-icon">👥</div>
+                    </div>
+                    <div class="stat-value"><?= $activeStudents ?></div>
+                    <?php if ($newStudentsWeek > 0): ?>
+                    <div class="stat-change">↑ <?= $newStudentsWeek ?> this week</div>
+                    <?php else: ?>
+                    <div class="stat-change none">No new attempts this week</div>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <!-- Assessments section -->
+            <div class="section-header" style="justify-content:space-between;">
+                <div style="display:flex;align-items:center;gap:16px;">
+                    <h2 class="section-title">My Assessments</h2>
+                    <a href="create-assessment.php" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));color:white;border-radius:10px;font-size:14px;font-weight:700;text-decoration:none;transition:opacity .2s,transform .15s;" onmouseover="this.style.opacity='.88';this.style.transform='translateY(-1px)'" onmouseout="this.style.opacity='1';this.style.transform='translateY(0)'">
+                        + Create Assessment
+                    </a>
+                </div>
+                <a href="teacher-assessments.php" style="color:var(--color-teacher-secondary);font-weight:600;font-size:14px;text-decoration:none;" onmouseover="this.style.opacity='.7'" onmouseout="this.style.opacity='1'">
+                    ← view all
+                </a>
+            </div>
+            <div class="filter-tabs" role="tablist" style="margin-bottom:20px;">
+                <button class="filter-tab active" data-filter="all"      role="tab">All</button>
+                <button class="filter-tab"         data-filter="active"   role="tab">Active</button>
+                <button class="filter-tab"         data-filter="draft"    role="tab">Draft</button>
+                <button class="filter-tab"         data-filter="archived" role="tab">Completed</button>
+            </div>
+            <?php if (empty($assessments)): ?>
+            <div class="empty-state">
+                <div class="empty-icon">📋</div>
+                <div class="empty-title">No assessments yet</div>
+                <div class="empty-subtitle">Create your first assessment to get started.</div>
+                <a href="create-assessment.php" class="btn-create">+ Create Assessment</a>
+            </div>
+            <?php else: ?>
+            <div class="assessments-grid" id="assessmentsGrid">
+                <?php foreach ($assessments as $a):
+                    $aid      = (int)$a['assessment_id'];
+                    $status   = $a['status'];
+                    $qCount   = (int)$a['question_count'];
+                    $attempts = (int)$a['attempt_count'];
+                    $students = (int)$a['student_count'];
+                    if (in_array($status, ['active','published']) && $a['end_time']) {
+                        $dateLabel = 'Due: ' . fmtDate($a['end_time']);
+                    } elseif ($status === 'archived') {
+                        $dateLabel = 'Completed: ' . fmtDate($a['updated_at']);
+                    } else {
+                        $dateLabel = 'Created: ' . fmtDate($a['created_at']);
+                    }
+                ?>
+                <div class="assessment-card" data-status="<?= htmlspecialchars($status) ?>" data-id="<?= $aid ?>">
+                    <h3 class="assessment-title"><?= htmlspecialchars($a['title']) ?></h3>
+                    <span class="assessment-category"><?= htmlspecialchars(ucfirst($a['category'] ?? 'General')) ?></span>
+                    <div class="assessment-meta">
+                        <div class="meta-item">
+                            <span class="meta-icon">📅</span>
+                            <span><?= $dateLabel ?></span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-icon">⏱️</span>
+                            <span><?= (int)$a['duration_minutes'] ?> minutes</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-icon">📝</span>
+                            <span><?= $qCount ?> question<?= $qCount !== 1 ? 's' : '' ?></span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-icon">👥</span>
+                            <?php if ($status === 'draft'): ?>
+                            <span>Not published yet</span>
+                            <?php elseif ($attempts === 0): ?>
+                            <span>No attempts yet</span>
+                            <?php else: ?>
+                            <span><?= $students ?> student<?= $students !== 1 ? 's' : '' ?> · <?= $attempts ?> attempt<?= $attempts !== 1 ? 's' : '' ?></span>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <span class="status-badge <?= $status ?>">
+                        ● <?= statusLabel($status) ?>
+                    </span>
+                    <div class="assessment-actions">
+                        <?php if ($status === 'draft'): ?>
+                        <a href="create-assessment.php?edit=<?= $aid ?>" class="btn btn-primary">Continue Editing</a>
+                        <button class="btn btn-danger" onclick="confirmDelete(<?= $aid ?>, '<?= htmlspecialchars(addslashes($a['title'])) ?>')">Delete</button>
+                        <?php elseif (in_array($status, ['active','published']) || $status === 'archived'): ?>
+                        <a href="assessment-results.php?id=<?= $aid ?>" class="btn btn-primary">View Results</a>
+                        <a href="edit-assessment.php?id=<?= $aid ?>" class="btn btn-secondary">Edit</a>
+                        <?php else: ?>
+                        <a href="edit-assessment.php?id=<?= $aid ?>" class="btn btn-secondary">Edit</a>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
+        </div><!-- /container -->
+    </div><!-- /page-content -->
 </div><!-- /page-wrapper -->
-<!-- FAB -->
-<div class="fab-container">
-<a href="create-assessment.php" class="fab-button" title="Create New Assessment">+</a>
-</div>
+
 <!-- Delete Confirm Modal -->
 <div class="modal-overlay" id="deleteModal">
-<div class="modal">
-<div class="modal-title">Delete Assessment?</div>
-<div class="modal-body" id="deleteModalBody">
+    <div class="modal">
+        <div class="modal-title">Delete Assessment?</div>
+        <div class="modal-body" id="deleteModalBody">
             This will permanently delete the assessment and all associated questions and student attempts. This cannot be undone.
-</div>
-<div class="modal-actions">
-<button class="btn-cancel" onclick="closeDeleteModal()">Cancel</button>
-<button class="btn-confirm-delete" id="confirmDeleteBtn">Delete</button>
-</div>
-</div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeDeleteModal()">Cancel</button>
+            <button class="btn-confirm-delete" id="confirmDeleteBtn">Delete</button>
+        </div>
+    </div>
 </div>
 <script>
 // ── CSRF token — fetched once on page load, reused for all POST requests ──

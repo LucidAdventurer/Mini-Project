@@ -317,19 +317,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             text-decoration: none;
         }
 
-        .brand-logo {
+        .brand-logo-img {
             width: 44px;
             height: 44px;
-            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
             border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--color-white);
-            font-weight: 700;
-            font-size: 18px;
-            border: 2px solid rgba(255,255,255,0.3);
+            object-fit: contain;
+            flex-shrink: 0;
+            background: white;
+            padding: 4px;
         }
+        .brand-text-group {
+            display: flex; flex-direction: column; line-height: 1.1; color: white;
+        }
+        .brand-name    { font-size: 18px; font-weight: 800; letter-spacing: .5px; }
+        .brand-tagline { font-size: 11px; font-weight: 400; opacity: .85; font-style: italic; }
 
         .nav-profile {
             display: flex;
@@ -479,9 +480,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         /* ============================================
            PAGE LAYOUT
            ============================================ */
+        .page-wrapper { display: flex; min-height: calc(100vh - 71px); }
+        .page-content { flex: 1; min-width: 0; padding: 30px 30px 30px 0; }
         .container {
             max-width: 1100px;
-            margin: 24px auto 40px;
+            margin: 0 auto;
             padding: 0 20px;
             display: grid;
             grid-template-columns: 300px 1fr;
@@ -898,7 +901,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         /* ============================================
            RESPONSIVE
            ============================================ */
+        .left-sidebar {
+            width: 220px; flex-shrink: 0; padding: 24px 12px;
+            display: flex; flex-direction: column; gap: 2px;
+            background: transparent;
+            position: sticky; top: 71px; align-self: flex-start;
+            min-height: calc(100vh - 71px);
+        }
+        .left-sidebar-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #718096; padding: 14px 12px 6px; }
+        .left-sidebar a { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; text-decoration: none; font-size: 14px; font-weight: 500; color: #4a5568; transition: background .15s, color .15s; }
+        .left-sidebar a:hover { background: rgba(46,7,63,.08); color: var(--color-teacher-primary); }
+        .left-sidebar a.active { background: rgba(46,7,63,.12); color: var(--color-teacher-primary); font-weight: 600; }
+        .left-sidebar a i { width: 18px; text-align: center; font-size: 15px; }
+        .left-sidebar-bottom { margin-top: auto; padding-top: 12px; border-top: 1px solid rgba(46,7,63,.12); }
+        .left-sidebar-bottom button { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; font-size: 14px; font-weight: 500; color: #e53e3e; background: none; border: none; cursor: pointer; width: 100%; transition: background .15s; font-family: inherit; }
+        .left-sidebar-bottom button:hover { background: rgba(229,62,62,.08); }
+        .left-sidebar-bottom button i { width: 18px; text-align: center; font-size: 15px; }
         @media (max-width: 900px) {
+            .left-sidebar { display: none; }
+            .page-content { padding: 30px; }
             .container {
                 grid-template-columns: 1fr;
             }
@@ -921,6 +942,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             .navbar { padding: 12px 16px; }
         }
     </style>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
 
@@ -929,8 +951,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
      ================================================ -->
 <nav class="navbar">
     <a href="teacher-dashboard.php" class="navbar-brand">
-        <div class="brand-logo">PT</div>
-        <span>Placement Portal</span>
+        <img src="prepaura-logo.png" alt="PREPAURA Logo" class="brand-logo-img">
+        <div class="brand-text-group">
+            <span class="brand-name">PREPAURA</span>
+            <span class="brand-tagline">Placement Training Platform</span>
+        </div>
     </a>
 
     <div class="nav-profile">
@@ -991,7 +1016,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 <!-- ================================================
      MAIN LAYOUT
      ================================================ -->
-<div class="container">
+<div class="page-wrapper">
+    <aside class="left-sidebar">
+        <span class="left-sidebar-label">Navigation</span>
+        <a href="teacher-dashboard.php"><i class="fa fa-home"></i> Dashboard</a>
+        <a href="teacher-assessments.php"><i class="fa fa-clipboard-list"></i> Assessments</a>
+        <a href="manage-groups.php"><i class="fa fa-users"></i> Manage Groups</a>
+        <a href="teacher-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
+        <a href="notifications.php"><i class="fa fa-bell"></i> Notifications</a>
+        <div class="left-sidebar-bottom">
+            <button onclick="handleLogout()"><i class="fa fa-sign-out-alt"></i> Logout</button>
+        </div>
+    </aside>
+    <div class="page-content">
+    <div class="container">
 
     <!-- ── LEFT: Profile Card ── -->
     <aside>
@@ -1251,7 +1289,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         </div>
 
     </main>
-</div>
+</div><!-- /container -->
+    </div><!-- /page-content -->
+</div><!-- /page-wrapper -->
 
 <script>
     /* ============================================
