@@ -24,7 +24,7 @@ if ($materialId <= 0) {
 }
 
 $r = safePreparedQuery($conn,
-    "SELECT material_id, title, material_type, is_public FROM training_materials WHERE material_id = ?",
+    "SELECT material_id, title, cloudinary_public_id, external_url, visibility FROM materials WHERE material_id = ?",
     "i", [$materialId]
 );
 
@@ -37,15 +37,16 @@ if (!$r['success'] || !$r['result'] || $r['result']->num_rows === 0) {
 $material = $r['result']->fetch_assoc();
 $r['result']->free();
 
-if ($role === 'student' && !$material['is_public']) {
+if ($role === 'student' && $material['visibility'] === 'private') {
     http_response_code(403);
     echo "Access denied.";
     exit;
 }
 
 $title   = htmlspecialchars($material['title']);
-$type    = $material['material_type'];
-$isVideo = $type === 'video';
+// Derive type: external_url = link, cloudinary = file/document
+$type    = !empty($material['external_url']) ? 'link' : 'file';
+$isVideo = false; // video detection requires cloudinary resource_type; default to document viewer
 
 // Both URLs hit serve-resource.php which handles auth + Cloudinary fetch
 $serveUrl = 'serve-resource.php?material_id=' . $materialId . '&action=view';

@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $r = safePreparedQuery($conn,
-    "UPDATE notifications SET is_read = 1, read_at = NOW() WHERE user_id = ? AND is_read = 0",
+    "UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0",
     "i", [$userId]
 );
 

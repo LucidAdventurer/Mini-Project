@@ -5,21 +5,20 @@
 // Returns full result data for one assessment attempt.
 // Only the student who owns the attempt may view it.
 //
-// FIXES:
-// 1. Removed `ans.time_taken_seconds` from the questions query —
-//    that column is not written by autosave.php or submit.php,
-//    causing a column-not-found error on most installs.
-// 2. time_taken_seconds on the top-level response now uses
-//    DB timestamps (start_time vs submitted_at) not client data.
+// Schema notes:
+// - assessment_attempts: no end_time, total_questions,
+//   correct_answers, wrong_answers, unanswered — all derived
+//   from answers + questions tables at read-time.
+// - answers columns: answer_id, attempt_id, question_id,
+//   selected_option_id, text_answer, marks_awarded
+// - questions columns: question_id, assessment_id, question_text,
+//   question_type, marks, negative_marks, explanation, question_order
+// - question_options columns: option_id, question_id, option_text,
+//   is_correct, option_order
+// - assessments has NO: show_correct_answers, show_results_immediately
+// - attempt status enum: 'in_progress','submitted','timeout'
 //
 // GET  ?attempt_id=int
-// Returns {
-//   success, testName, completedAt, score, totalMarks,
-//   passingMarks, percentage, passed, timeTakenSeconds,
-//   durationMinutes, correctAnswers, wrongAnswers, unanswered,
-//   totalQuestions, percentile, showCorrectAnswers,
-//   categoryPerformance: [...], questions: [...] | null
-// }
 // ============================================================
 
 require_once __DIR__ . '/../../config.php';
@@ -50,10 +49,6 @@ $attemptResult = safePreparedQuery($conn,
         aa.assessment_id,
         aa.score,
         aa.percentage,
-        aa.total_questions,
-        aa.correct_answers,
-        aa.wrong_answers,
-        aa.unanswered,
         aa.start_time,
         aa.submitted_at,
         aa.status,
@@ -61,13 +56,12 @@ $attemptResult = safePreparedQuery($conn,
         a.total_marks,
         a.passing_marks,
         a.duration_minutes,
-        a.show_correct_answers,
         a.category
      FROM assessment_attempts aa
      JOIN assessments a ON a.assessment_id = aa.assessment_id
      WHERE aa.attempt_id = ?
        AND aa.user_id    = ?
-       AND aa.status     = 'completed'",
+       AND aa.status     = 'submitted'",
     "ii", [$attemptId, $userId]
 );
 
@@ -79,10 +73,9 @@ if (!$attemptResult['success'] || !$attemptResult['result'] || $attemptResult['r
 
 $attempt = $attemptResult['result']->fetch_assoc();
 $attemptResult['result']->free();
+$assessmentId = (int)$attempt['assessment_id'];
 
 // ── 2. Calculate time taken from DB timestamps ──
-// Use actual start_time → submitted_at so the value is always
-// accurate regardless of what the client reported during submit.
 $timeTakenSeconds = 0;
 if ($attempt['start_time'] && $attempt['submitted_at']) {
     $start     = new DateTime($attempt['start_time']);
@@ -90,16 +83,56 @@ if ($attempt['start_time'] && $attempt['submitted_at']) {
     $timeTakenSeconds = max(0, $submitted->getTimestamp() - $start->getTimestamp());
 }
 
-// ── 3. Percentile ──
+// ── 3. Derive answer stats from answers table ──
+// Count answered questions: has selected_option_id OR non-empty text_answer
+// Count correct: marks_awarded >= marks of that question (positive)
+$statsResult = safePreparedQuery($conn,
+    "SELECT
+        COUNT(*)                                                      AS total_answered,
+        SUM(CASE WHEN ans.marks_awarded > 0 THEN 1 ELSE 0 END)       AS correct_count,
+        SUM(CASE WHEN ans.marks_awarded <= 0
+                  AND (ans.selected_option_id IS NOT NULL
+                       OR (ans.text_answer IS NOT NULL AND ans.text_answer != ''))
+                  THEN 1 ELSE 0 END)                                  AS wrong_count
+     FROM answers ans
+     WHERE ans.attempt_id = ?",
+    "i", [$attemptId]
+);
+
+$totalQuestions  = count([]);  // filled below from questions query
+$correctAnswers  = 0;
+$wrongAnswers    = 0;
+$unanswered      = 0;
+
+if ($statsResult['success'] && $statsResult['result']) {
+    $sRow           = $statsResult['result']->fetch_assoc();
+    $correctAnswers = (int)($sRow['correct_count'] ?? 0);
+    $wrongAnswers   = (int)($sRow['wrong_count']   ?? 0);
+    $statsResult['result']->free();
+}
+
+// Get total question count for this assessment
+$qCountResult = safePreparedQuery($conn,
+    "SELECT COUNT(*) AS cnt FROM questions WHERE assessment_id = ?",
+    "i", [$assessmentId]
+);
+if ($qCountResult['success'] && $qCountResult['result']) {
+    $qcRow          = $qCountResult['result']->fetch_assoc();
+    $totalQuestions = (int)($qcRow['cnt'] ?? 0);
+    $qCountResult['result']->free();
+}
+$unanswered = max(0, $totalQuestions - $correctAnswers - $wrongAnswers);
+
+// ── 4. Percentile ──
 $percentileResult = safePreparedQuery($conn,
     "SELECT
         COUNT(*) AS total_attempts,
         SUM(CASE WHEN score < ? THEN 1 ELSE 0 END) AS below_count
      FROM assessment_attempts
      WHERE assessment_id = ?
-       AND status        = 'completed'
+       AND status        = 'submitted'
        AND user_id IS NOT NULL",
-    "di", [(float)$attempt['score'], (int)$attempt['assessment_id']]
+    "di", [(float)$attempt['score'], $assessmentId]
 );
 
 $percentile = 0;
@@ -111,105 +144,121 @@ if ($percentileResult['success'] && $percentileResult['result']) {
     }
 }
 
-// ── 4. Category/topic performance breakdown ──
-$categoryResult = safePreparedQuery($conn,
-    "SELECT
-        COALESCE(q.topic, 'General')   AS topic,
-        COUNT(*)                        AS total,
-        SUM(CASE WHEN ans.is_correct = 1 THEN 1 ELSE 0 END) AS correct
-     FROM answers ans
-     JOIN questions q ON q.question_id = ans.question_id
-     WHERE ans.attempt_id = ?
-     GROUP BY COALESCE(q.topic, 'General')",
-    "i", [$attemptId]
-);
-
+// ── 5. Category performance breakdown (using assessments.category) ──
+// Since questions have no topic column, we group by the assessment category
 $categoryPerformance = [];
-if ($categoryResult['success'] && $categoryResult['result']) {
-    while ($row = $categoryResult['result']->fetch_assoc()) {
-        $categoryPerformance[] = [
-            'topic'   => $row['topic'],
-            'correct' => (int) $row['correct'],
-            'total'   => (int) $row['total'],
-        ];
-    }
-    $categoryResult['result']->free();
+if (!empty($attempt['category'])) {
+    $categoryPerformance[] = [
+        'topic'   => $attempt['category'],
+        'correct' => $correctAnswers,
+        'total'   => $totalQuestions,
+    ];
 }
 
-// ── 5. Questions + answers (only if teacher allowed it) ──
-// NOTE: time_taken_seconds is NOT selected here because submit.php
-// does not write it to the answers table. Remove it from the query
-// to avoid a column-not-found error.
+// ── 6. Questions + answers ──
+// Always return questions with student's answers and marks.
+// Correct option is shown via is_correct on question_options.
+$qResult = safePreparedQuery($conn,
+    "SELECT
+        q.question_id,
+        q.question_text,
+        q.question_type,
+        q.marks,
+        q.negative_marks,
+        q.explanation,
+        q.question_order,
+        ans.selected_option_id,
+        ans.text_answer,
+        ans.marks_awarded
+     FROM questions q
+     LEFT JOIN answers ans ON ans.question_id  = q.question_id
+                           AND ans.attempt_id   = ?
+     WHERE q.assessment_id = ?
+     ORDER BY q.question_order ASC, q.question_id ASC",
+    "ii", [$attemptId, $assessmentId]
+);
+
 $questions = null;
 
-if ((int)$attempt['show_correct_answers'] === 1) {
-    $qResult = safePreparedQuery($conn,
-        "SELECT
-            q.question_id,
-            q.question_text,
-            q.question_type,
-            q.option_a,
-            q.option_b,
-            q.option_c,
-            q.option_d,
-            q.correct_answer,
-            q.explanation,
-            q.topic,
-            q.marks,
-            q.negative_marks,
-            ans.selected_answer,
-            ans.is_correct,
-            ans.marks_obtained,
-            ans.time_taken_seconds
-         FROM answers ans
-         JOIN questions q ON q.question_id = ans.question_id
-         WHERE ans.attempt_id = ?
-         ORDER BY ans.answer_id ASC",
-        "i", [$attemptId]
-    );
+if ($qResult['success'] && $qResult['result']) {
+    $questions = [];
+    $qNum      = 1;
+    $qRows     = [];
 
-    if ($qResult['success'] && $qResult['result']) {
-        $questions = [];
-        $qNum      = 1;
+    while ($row = $qResult['result']->fetch_assoc()) {
+        $qRows[] = $row;
+    }
+    $qResult['result']->free();
 
-        while ($row = $qResult['result']->fetch_assoc()) {
+    if (!empty($qRows)) {
+        // Fetch all options for these questions in one query
+        $qIds        = implode(',', array_map(fn($r) => (int)$r['question_id'], $qRows));
+        $optResult   = safePreparedQuery($conn,
+            "SELECT option_id, question_id, option_text, is_correct, option_order
+             FROM question_options
+             WHERE question_id IN ($qIds)
+             ORDER BY question_id, option_order ASC",
+            "", []
+        );
+
+        $optionsByQuestion = [];
+        if ($optResult['success'] && $optResult['result']) {
+            while ($opt = $optResult['result']->fetch_assoc()) {
+                $optionsByQuestion[(int)$opt['question_id']][] = $opt;
+            }
+            $optResult['result']->free();
+        }
+
+        foreach ($qRows as $row) {
+            $qid     = (int)$row['question_id'];
+            $opts    = $optionsByQuestion[$qid] ?? [];
             $options = [];
-            $labels  = ['A', 'B', 'C', 'D'];
-            $fields  = ['option_a', 'option_b', 'option_c', 'option_d'];
-            foreach ($fields as $idx => $field) {
-                if ($row[$field] !== null && $row[$field] !== '') {
-                    $options[$labels[$idx]] = $row[$field];
+            $correctOptionId = null;
+
+            foreach ($opts as $opt) {
+                $options[] = [
+                    'optionId'  => (int)$opt['option_id'],
+                    'text'      => $opt['option_text'],
+                    'isCorrect' => (bool)$opt['is_correct'],
+                ];
+                if ((int)$opt['is_correct'] === 1) {
+                    $correctOptionId = (int)$opt['option_id'];
                 }
             }
 
+            $marksAwarded   = $row['marks_awarded'] !== null ? (float)$row['marks_awarded'] : null;
+            $selectedOption = $row['selected_option_id'] !== null ? (int)$row['selected_option_id'] : null;
+            $isCorrect      = null;
+            if ($marksAwarded !== null) {
+                $isCorrect = $marksAwarded > 0;
+            }
+
             $questions[] = [
-                'questionNumber' => $qNum++,
-                'questionId'     => (int) $row['question_id'],
-                'text'           => $row['question_text'],
-                'type'           => $row['question_type'],
-                'options'        => $options,
-                'correctAnswer'  => $row['correct_answer'],
-                'userAnswer'     => $row['selected_answer'],
-                'isCorrect'      => (bool) $row['is_correct'],
-                'marksObtained'  => (float) $row['marks_obtained'],
-                'marks'          => (int) $row['marks'],
-                'negativeMarks'  => (float) $row['negative_marks'],
-                'explanation'    => $row['explanation'],
-                'topic'          => $row['topic'],
-                'timeTakenSeconds' => (int) $row['time_taken_seconds'],
+                'questionNumber'   => $qNum++,
+                'questionId'       => $qid,
+                'text'             => $row['question_text'],
+                'type'             => $row['question_type'],
+                'options'          => $options,
+                'correctOptionId'  => $correctOptionId,
+                'selectedOptionId' => $selectedOption,
+                'textAnswer'       => $row['text_answer'],
+                'isCorrect'        => $isCorrect,
+                'marksAwarded'     => $marksAwarded,
+                'marks'            => (int)$row['marks'],
+                'negativeMarks'    => (float)$row['negative_marks'],
+                'explanation'      => $row['explanation'],
             ];
         }
-        $qResult['result']->free();
     }
 }
 
-// ── 6. Build response ──
+// ── 7. Build response ──
 $passed = (float)$attempt['score'] >= (float)$attempt['passing_marks'];
 
 echo json_encode([
     'success'             => true,
     'attemptId'           => (int) $attempt['attempt_id'],
-    'assessmentId'        => (int) $attempt['assessment_id'],
+    'assessmentId'        => $assessmentId,
     'testName'            => $attempt['test_name'],
     'completedAt'         => $attempt['submitted_at'],
     'score'               => (float) $attempt['score'],
@@ -219,12 +268,11 @@ echo json_encode([
     'passed'              => $passed,
     'timeTakenSeconds'    => $timeTakenSeconds,
     'durationMinutes'     => (int) $attempt['duration_minutes'],
-    'totalQuestions'      => (int) $attempt['total_questions'],
-    'correctAnswers'      => (int) $attempt['correct_answers'],
-    'wrongAnswers'        => (int) $attempt['wrong_answers'],
-    'unanswered'          => (int) $attempt['unanswered'],
+    'totalQuestions'      => $totalQuestions,
+    'correctAnswers'      => $correctAnswers,
+    'wrongAnswers'        => $wrongAnswers,
+    'unanswered'          => $unanswered,
     'percentile'          => $percentile,
-    'showCorrectAnswers'  => (bool) $attempt['show_correct_answers'],
     'category'            => $attempt['category'],
     'categoryPerformance' => $categoryPerformance,
     'questions'           => $questions,

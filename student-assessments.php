@@ -52,7 +52,7 @@ $activeCategory = trim($_GET['category'] ?? 'all');
 $allowedCategories = ['all', 'aptitude', 'technical', 'coding', 'reasoning', 'english', 'general'];
 if (!in_array($activeCategory, $allowedCategories, true)) $activeCategory = 'all';
 
-// ── Fetch all active public assessments available to this student ──
+// ── Fetch all published assessments available to this student ──
 $assignedResult = safePreparedQuery($conn,
     "SELECT DISTINCT
         a.assessment_id,
@@ -64,30 +64,29 @@ $assignedResult = safePreparedQuery($conn,
         a.total_marks,
         a.passing_marks,
         a.max_attempts,
-        a.available_from,
-        a.available_until,
-        a.show_results_immediately,
+        a.start_time,
+        a.end_time,
         a.created_at,
         u.full_name AS teacher_name,
         (SELECT COUNT(*) FROM questions q WHERE q.assessment_id = a.assessment_id) AS question_count,
         (SELECT COUNT(*) FROM assessment_attempts aa
           WHERE aa.assessment_id = a.assessment_id
             AND aa.user_id = ?
-            AND aa.status  = 'completed') AS attempts_used,
+            AND aa.status  = 'submitted') AS attempts_used,
         (SELECT aa2.attempt_id FROM assessment_attempts aa2
           WHERE aa2.assessment_id = a.assessment_id
             AND aa2.user_id = ?
-            AND aa2.status  = 'completed'
+            AND aa2.status  = 'submitted'
           ORDER BY aa2.submitted_at DESC LIMIT 1) AS last_attempt_id,
         (SELECT aa3.percentage FROM assessment_attempts aa3
           WHERE aa3.assessment_id = a.assessment_id
             AND aa3.user_id = ?
-            AND aa3.status  = 'completed'
+            AND aa3.status  = 'submitted'
           ORDER BY aa3.submitted_at DESC LIMIT 1) AS last_score,
         (SELECT aa4.submitted_at FROM assessment_attempts aa4
           WHERE aa4.assessment_id = a.assessment_id
             AND aa4.user_id = ?
-            AND aa4.status  = 'completed'
+            AND aa4.status  = 'submitted'
           ORDER BY aa4.submitted_at DESC LIMIT 1) AS last_submitted_at,
         (SELECT aa5.attempt_id FROM assessment_attempts aa5
           WHERE aa5.assessment_id = a.assessment_id
@@ -96,9 +95,8 @@ $assignedResult = safePreparedQuery($conn,
           ORDER BY aa5.created_at DESC LIMIT 1) AS in_progress_attempt_id
      FROM assessments a
      JOIN users u ON u.user_id = a.created_by
-     WHERE a.status IN ('active', 'scheduled')
-       AND a.is_public = 1
-     ORDER BY a.available_from IS NULL ASC, a.available_from DESC, a.created_at DESC",
+     WHERE a.status = 'published'
+     ORDER BY a.start_time IS NULL ASC, a.start_time DESC, a.created_at DESC",
     "iiiii",
     [$userId, $userId, $userId, $userId, $userId]
 );
@@ -122,7 +120,7 @@ $totalDone     = 0;
 $totalExpired  = 0;
 
 foreach ($assessments as $a) {
-    $isExpired   = !empty($a['available_until']) && strtotime($a['available_until']) < time();
+    $isExpired   = !empty($a['end_time']) && strtotime($a['end_time']) < time();
     $isExhausted = ((int)$a['attempts_used'] >= (int)$a['max_attempts']);
     if ((int)$a['attempts_used'] > 0) $totalDone++;
     if ($isExpired && (int)$a['attempts_used'] === 0) $totalExpired++;
@@ -674,8 +672,8 @@ function deadlineLabel(?string $until): string {
                 $attemptsUsed = (int) $a['attempts_used'];
                 $maxAttempts  = (int) $a['max_attempts'];
                 $isExhausted  = $attemptsUsed >= $maxAttempts;
-                $isExpired    = !empty($a['available_until']) && strtotime($a['available_until']) < time();
-                $isAvailable  = !empty($a['available_from'])  && strtotime($a['available_from'])  > time();
+                $isExpired    = !empty($a['end_time']) && strtotime($a['end_time']) < time();
+                $isAvailable  = !empty($a['start_time'])  && strtotime($a['start_time'])  > time();
                 $inProgress   = !empty($a['in_progress_attempt_id']);
                 $lastScore    = $a['last_score'] !== null ? round((float)$a['last_score']) : null;
                 $passing      = (int)$a['passing_marks'];
@@ -710,7 +708,7 @@ function deadlineLabel(?string $until): string {
                 }
 
                 // Deadline display
-                $dLabel    = deadlineLabel($a['available_until'] ?? null);
+                $dLabel    = deadlineLabel($a['end_time'] ?? null);
                 $dClass    = '';
                 if ($dLabel === 'Expired') $dClass = 'expired';
                 elseif (str_contains($dLabel, 'min') || str_contains($dLabel, 'hr')) $dClass = 'urgent';
@@ -723,7 +721,7 @@ function deadlineLabel(?string $until): string {
                 $jsTitle     = htmlspecialchars(strtolower($a['title']));
                 $jsTeacher   = htmlspecialchars(strtolower($a['teacher_name'] ?? ''));
                 $jsScore     = $lastScore ?? -1;
-                $jsDeadline  = !empty($a['available_until']) ? strtotime($a['available_until']) : 9999999999;
+                $jsDeadline  = !empty($a['end_time']) ? strtotime($a['end_time']) : 9999999999;
                 $jsCreated   = !empty($a['created_at'])      ? strtotime($a['created_at'])      : 0;
             ?>
             <div class="assessment-card <?= $cardClass ?>"
@@ -767,8 +765,8 @@ function deadlineLabel(?string $until): string {
                 <div class="deadline-strip <?= $dClass ?>">
                     <i class="fa fa-calendar-alt"></i>
                     <?= htmlspecialchars($dLabel) ?>
-                    <?php if (!empty($a['available_until']) && strtotime($a['available_until']) > time()): ?>
-                        &nbsp;·&nbsp;<?= date('d M Y, h:i A', strtotime($a['available_until'])) ?>
+                    <?php if (!empty($a['end_time']) && strtotime($a['end_time']) > time()): ?>
+                        &nbsp;·&nbsp;<?= date('d M Y, h:i A', strtotime($a['end_time'])) ?>
                     <?php endif ?>
                 </div>
                 <?php endif ?>
@@ -819,7 +817,7 @@ function deadlineLabel(?string $until): string {
 
                     <?php elseif ($isAvailable): ?>
                         <button class="btn-disabled" disabled>
-                            <i class="fa fa-lock"></i> Opens <?= date('d M', strtotime($a['available_from'])) ?>
+                            <i class="fa fa-lock"></i> Opens <?= date('d M', strtotime($a['start_time'])) ?>
                         </button>
 
                     <?php elseif (!$isExhausted): ?>

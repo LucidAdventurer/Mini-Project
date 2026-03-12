@@ -29,9 +29,9 @@ $limit      = min(50, max(1, (int)($_GET['limit'] ?? 20)));
 $whereClause = $unreadOnly ? "WHERE user_id = ? AND is_read = 0" : "WHERE user_id = ?";
 
 $r = safePreparedQuery($conn,
-    "SELECT notification_id, title, message, notification_type,
+    "SELECT notification_id, title, message, type,
             related_entity_type, related_entity_id,
-            is_read, read_at, action_url, created_at
+            is_read, created_at
      FROM notifications
      $whereClause
      ORDER BY created_at DESC
@@ -46,11 +46,10 @@ if ($r['success'] && $r['result']) {
             'notification_id'     => (int)$row['notification_id'],
             'title'               => $row['title'],
             'message'             => $row['message'],
-            'notification_type'   => $row['notification_type'],
+            'type'               => $row['type'],
             'related_entity_type' => $row['related_entity_type'],
             'related_entity_id'   => $row['related_entity_id'] ? (int)$row['related_entity_id'] : null,
             'is_read'             => (bool)$row['is_read'],
-            'action_url'          => $row['action_url'],
             'created_at'          => $row['created_at'],
             'time_ago'            => timeAgo($row['created_at']),
         ];

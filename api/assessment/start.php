@@ -41,24 +41,30 @@ if ($assessmentId <= 0) {
     exit;
 }
 
-// ── Verify assessment is active, in window, and accessible ──
+// ── Verify assessment is published, in window, and accessible ──
+// Visibility: public = all students; group = via assessment_targets;
+// private = teacher only (blocked here).
 $asmResult = safePreparedQuery($conn,
     "SELECT assessment_id, max_attempts
      FROM assessments
      WHERE assessment_id = ?
-       AND status = 'active'
-       AND (available_from IS NULL OR available_from <= NOW())
-       AND (available_until IS NULL OR available_until >= NOW())
+       AND status = 'published'
+       AND (start_time IS NULL OR start_time <= NOW())
+       AND (end_time   IS NULL OR end_time   >= NOW())
        AND (
-           is_public = 1
-           OR EXISTS (
-               SELECT 1 FROM assessment_access ac
-               WHERE ac.assessment_id = assessments.assessment_id
-                 AND ac.access_type   = 'allow'
-                 AND (ac.user_id = ? OR ac.department = ?)
-           )
+           visibility = 'public'
+           OR (visibility = 'group' AND EXISTS (
+               SELECT 1 FROM assessment_targets at2
+               WHERE at2.assessment_id = assessments.assessment_id
+                 AND (
+                     (at2.target_type = 'student' AND at2.target_id = ?)
+                     OR (at2.target_type = 'group' AND at2.target_id IN (
+                         SELECT gm.group_id FROM group_members gm WHERE gm.student_id = ?
+                     ))
+                 )
+           ))
        )",
-    "iis", [$assessmentId, $userId, $userDept]
+    "iii", [$assessmentId, $userId, $userId]
 );
 
 if (!$asmResult['success'] || !$asmResult['result'] || $asmResult['result']->num_rows === 0) {
@@ -99,7 +105,7 @@ if ($existingResult['result']) {
 $countResult = safePreparedQuery($conn,
     "SELECT COUNT(*) AS cnt
      FROM assessment_attempts
-     WHERE assessment_id = ? AND user_id = ? AND status IN ('completed','timeout')",
+     WHERE assessment_id = ? AND user_id = ? AND status IN ('submitted','timeout')",
     "ii", [$assessmentId, $userId]
 );
 

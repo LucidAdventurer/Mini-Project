@@ -36,7 +36,7 @@ if ($unreadResult['success'] && $unreadResult['result']) {
 
 // ── Latest 5 for navbar dropdown ──
 $notifDropResult = safePreparedQuery($conn,
-    "SELECT notification_id, title, message, notification_type, is_read, created_at
+    "SELECT notification_id, title, message, type, is_read, created_at
      FROM notifications WHERE user_id = ?
      ORDER BY created_at DESC LIMIT 5",
     "i", [$userId]
@@ -63,23 +63,19 @@ $statsQuery = "
         COUNT(DISTINCT a.attempt_id)             AS tests_completed,
         COALESCE(AVG(a.percentage), 0)           AS avg_score,
         COALESCE(MAX(a.percentage), 0)           AS best_score,
-        COUNT(DISTINCT DATE(a.submitted_at))     AS active_days,
-        COALESCE(SUM(a.correct_answers), 0)      AS total_correct,
-        COALESCE(SUM(a.wrong_answers), 0)        AS total_wrong
+        COUNT(DISTINCT DATE(a.submitted_at))     AS active_days
     FROM assessment_attempts a
     WHERE a.user_id = ? AND a.status = 'submitted'
 ";
 $statsResult    = safePreparedQuery($conn, $statsQuery, "i", [$userId]);
 $testsCompleted = 0; $avgScore = 0; $bestScore = 0;
-$activeDays     = 0; $totalCorrect = 0; $totalWrong = 0;
+$activeDays     = 0;
 if ($statsResult['success'] && $statsResult['result']) {
     $s              = $statsResult['result']->fetch_assoc();
     $testsCompleted = (int)   ($s['tests_completed'] ?? 0);
     $avgScore       = (int) round($s['avg_score']    ?? 0);
     $bestScore      = (int) round($s['best_score']   ?? 0);
     $activeDays     = (int)   ($s['active_days']     ?? 0);
-    $totalCorrect   = (int)   ($s['total_correct']   ?? 0);
-    $totalWrong     = (int)   ($s['total_wrong']     ?? 0);
     $statsResult['result']->free();
 }
 
@@ -89,12 +85,8 @@ $recentQuery = "
         a.attempt_id,
         a.percentage,
         a.score,
-        a.correct_answers,
-        a.wrong_answers,
-        a.unanswered,
-        a.total_questions,
         a.submitted_at,
-        TIMESTAMPDIFF(MINUTE, a.start_time, a.end_time) AS time_taken_minutes,
+        TIMESTAMPDIFF(MINUTE, a.start_time, a.submitted_at) AS time_taken_minutes,
         t.title      AS test_title,
         t.category,
         t.total_marks,
@@ -120,9 +112,7 @@ $categoryQuery = "
         t.category,
         COUNT(a.attempt_id)                  AS attempts,
         COALESCE(AVG(a.percentage), 0)       AS avg_score,
-        COALESCE(MAX(a.percentage), 0)       AS best_score,
-        COALESCE(SUM(a.correct_answers), 0)  AS correct_total,
-        COALESCE(SUM(a.total_questions), 0)  AS questions_total
+        COALESCE(MAX(a.percentage), 0)       AS best_score
     FROM assessment_attempts a
     JOIN assessments t ON t.assessment_id = a.assessment_id
     WHERE a.user_id = ? AND a.status = 'submitted'
@@ -195,11 +185,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 if ($upResult['success']) {
                     $updateMessage = 'Password changed successfully.';
                     $updateType    = 'success';
-                    safePreparedQuery(
-                        $conn,
-                        "INSERT INTO audit_logs (user_id, action, entity_type, entity_id, ip_address) VALUES (?, 'password_change', 'user', ?, ?)",
-                        "iis", [$userId, $userId, $_SERVER['REMOTE_ADDR'] ?? '']
-                    );
                 } else {
                     $updateMessage = 'Failed to change password.';
                     $updateType    = 'error';
@@ -797,7 +782,7 @@ function parseUA(string $ua): string {
                     <?php else: foreach ($notifItems as $n):
                         $isU = !$n['is_read'];
                         $typeIcons = ['info'=>'ℹ️','success'=>'✅','warning'=>'⚠️','error'=>'❌','assessment'=>'📝','result'=>'🏆','material'=>'📚'];
-                        $ico = $typeIcons[$n['notification_type']] ?? '🔔';
+                        $ico = $typeIcons[$n['type']] ?? '🔔';
                     ?>
                     <div class="notif-dd-item <?= $isU ? 'unread' : '' ?>">
                         <div class="notif-dd-dot <?= $isU ? '' : 'read' ?>"></div>
@@ -1101,9 +1086,8 @@ function parseUA(string $ua): string {
                             <?php foreach ($recentAttempts as $a):
                                 $pct  = (int)round($a['percentage'] ?? 0);
                                 $mins = $a['time_taken_minutes'] ?? 0;
-                                $cor  = $a['correct_answers']    ?? 0;
-                                $wrg  = $a['wrong_answers']      ?? 0;
-                                $unans= $a['unanswered']         ?? 0;
+                                $scored = number_format($a['score'] ?? 0, 1);
+                                $total  = $a['total_marks'] ?? '—';
                             ?>
                             <tr>
                                 <td>
@@ -1118,13 +1102,12 @@ function parseUA(string $ua): string {
                                         <?php echo $pct; ?>%
                                     </span>
                                     <div style="font-size:11px;color:var(--color-text-light);margin-top:3px;">
-                                        <?php echo number_format($a['score'] ?? 0, 1); ?> / <?php echo $a['total_marks'] ?? '—'; ?> marks
+                                        <?php echo $scored; ?> / <?php echo $total; ?> marks
                                     </div>
                                 </td>
                                 <td style="font-size:12px;">
-                                    <span style="color:#22543d;font-weight:700;">✓<?php echo $cor; ?></span>&nbsp;
-                                    <span style="color:#c53030;font-weight:700;">✗<?php echo $wrg; ?></span>&nbsp;
-                                    <span style="color:var(--color-text-light);">–<?php echo $unans; ?></span>
+                                    <span style="color:#22543d;font-weight:700;"><?php echo $scored; ?></span>&nbsp;/&nbsp;
+                                    <span style="color:var(--color-text-light);"><?php echo $total; ?> marks</span>
                                 </td>
                                 <td style="font-size:12px;color:var(--color-text-light);">
                                     <?php echo $mins ? $mins . ' min' : '—'; ?>
