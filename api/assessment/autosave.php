@@ -5,9 +5,6 @@
  * Called periodically by take-test.php while a student is
  * taking a test. Saves/updates each answer so progress is
  * never lost on a page refresh or connection drop.
- * Called periodically by take-test.php while a student is
- * taking a test. Saves/updates each answer so progress is
- * never lost on a page refresh or connection drop.
  *
  * The answers table schema:
  *   answer_id, attempt_id, question_id,
@@ -37,6 +34,9 @@ require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
+
+$conn = createDatabaseConnection();
+if (!$conn) { http_response_code(503); echo json_encode(['success'=>false,'error'=>'Database unavailable.']); exit; }
 
 $user   = validateSession($conn, 'student');
 $userId = (int) $user['user_id'];

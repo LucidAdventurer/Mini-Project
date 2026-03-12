@@ -46,7 +46,7 @@ if (isset($_GET['edit']) && (int)$_GET['edit'] > 0) {
     }
 
     // Only allow editing drafts here; active/archived go to edit-assessment.php
-    if ($assessment['status'] === 'active' || $assessment['status'] === 'archived') {
+    if ($assessment['status'] === 'published' || $assessment['status'] === 'active' || $assessment['status'] === 'archived') {
         header('Location: edit-assessment.php?id=' . $assessmentId);
         exit;
     }
@@ -89,6 +89,38 @@ if (isset($_GET['edit']) && (int)$_GET['edit'] > 0) {
         }
     }
     $questions = array_values($questions);
+}
+
+// ── Load teacher's groups ──
+$teacherGroups = [];
+$rg = safePreparedQuery($conn,
+    "SELECT g.group_id, g.name, COUNT(gm.student_id) AS member_count
+     FROM groups g
+     LEFT JOIN group_members gm ON gm.group_id = g.group_id
+     WHERE g.teacher_id = ?
+     GROUP BY g.group_id ORDER BY g.name ASC",
+    "i", [$teacherId]
+);
+if ($rg['success'] && $rg['result']) {
+    while ($row = $rg['result']->fetch_assoc()) {
+        $teacherGroups[] = $row;
+    }
+    $rg['result']->free();
+}
+
+// ── Load existing targets (edit mode) ──
+$existingTargets = [];
+if ($assessmentId > 0) {
+    $rt = safePreparedQuery($conn,
+        "SELECT target_type, target_id FROM assessment_targets WHERE assessment_id = ?",
+        "i", [$assessmentId]
+    );
+    if ($rt['success'] && $rt['result']) {
+        while ($row = $rt['result']->fetch_assoc()) {
+            $existingTargets[] = ['type' => $row['target_type'], 'id' => (int)$row['target_id']];
+        }
+        $rt['result']->free();
+    }
 }
 
 function toDatetimeLocal(?string $dt): string {
@@ -263,6 +295,39 @@ function sel(?array $a, string $key, string $value, string $default = ''): strin
         }
         .checkbox-label:hover { border-color: var(--color-teacher-secondary); }
         .checkbox-label input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--color-teacher-secondary); }
+        .group-picker { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; }
+        .group-pick-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 14px; border-radius: 8px;
+            border: 1.5px solid #e5e7eb; cursor: pointer;
+            transition: border-color .15s, background .15s;
+        }
+        .group-pick-item:has(input:checked) { border-color: var(--color-teacher-secondary); background: rgba(109,40,217,.06); }
+        .group-pick-item input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--color-teacher-secondary); flex-shrink: 0; }
+        .group-pick-name { flex: 1; font-size: 14px; font-weight: 500; }
+        .group-pick-count { font-size: 12px; color: #6b7280; }
+        .target-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+        .target-tab {
+            padding: 6px 16px; border-radius: 6px; border: 1.5px solid #e5e7eb;
+            background: #fff; font-size: 13px; font-weight: 500; cursor: pointer;
+            transition: all .15s;
+        }
+        .target-tab.active { border-color: var(--color-teacher-secondary); background: rgba(109,40,217,.08); color: var(--color-teacher-secondary); }
+        .student-chip {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 4px 10px; border-radius: 99px;
+            background: rgba(109,40,217,.1); color: var(--color-teacher-secondary);
+            font-size: 13px; font-weight: 500;
+        }
+        .student-chip button { background: none; border: none; cursor: pointer; font-size: 15px; line-height: 1; color: inherit; padding: 0; }
+        .student-result-item {
+            padding: 10px 14px; cursor: pointer; font-size: 13px;
+            border-bottom: 1px solid #f3f4f6; transition: background .1s;
+        }
+        .student-result-item:hover { background: #f9fafb; }
+        .student-result-item:last-child { border-bottom: none; }
+        .student-result-name { font-weight: 500; }
+        .student-result-meta { font-size: 11px; color: #6b7280; margin-top: 2px; }
 
         /* ── QUESTIONS LIST ── */
         .q-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
@@ -637,9 +702,84 @@ function sel(?array $a, string $key, string $value, string $default = ''): strin
                 </label>
                 <label class="checkbox-label">
                     <input type="checkbox" id="isPublic"
-                           <?= ($assessment['visibility'] ?? '') === 'public' ? 'checked' : '' ?>>
+                           <?= ($assessment['visibility'] ?? '') === 'public' ? 'checked' : '' ?>
+                           onchange="toggleGroupPicker()">
                     Public (allow guest access)
                 </label>
+            </div>
+        </div>
+
+        <!-- Group / Student Targeting (shown when not public) -->
+        <div class="form-group" id="targetingBlock" style="<?= ($assessment['visibility'] ?? 'public') === 'public' ? 'display:none' : '' ?>">
+            <label class="form-label">Restrict Access To</label>
+            <p style="font-size:13px;color:#6b7280;margin:0 0 10px;">
+                Choose groups or individual students. Leave both empty to block all access.
+            </p>
+
+            <!-- Tabs -->
+            <div class="target-tabs">
+                <button type="button" class="target-tab active" onclick="switchTargetTab('groups',this)">👥 Groups</button>
+                <button type="button" class="target-tab" onclick="switchTargetTab('students',this)">🎓 Students</button>
+            </div>
+
+            <!-- Groups tab -->
+            <div id="targetTabGroups">
+                <?php if (empty($teacherGroups)): ?>
+                    <p style="font-size:13px;color:#f59e0b;padding:10px 0;">⚠ You have no groups yet. <a href="teacher-dashboard.php" style="color:var(--primary);">Create a group</a> first.</p>
+                <?php else: ?>
+                <div class="group-picker" id="groupPicker">
+                    <?php foreach ($teacherGroups as $g): ?>
+                    <label class="group-pick-item">
+                        <input type="checkbox" class="group-pick-cb"
+                               value="<?= $g['group_id'] ?>"
+                               <?php
+                               foreach ($existingTargets as $t) {
+                                   if ($t['type'] === 'group' && $t['id'] === (int)$g['group_id']) {
+                                       echo 'checked'; break;
+                                   }
+                               }
+                               ?>>
+                        <span class="group-pick-name"><?= htmlspecialchars($g['name']) ?></span>
+                        <span class="group-pick-count"><?= (int)$g['member_count'] ?> student<?= $g['member_count'] != 1 ? 's' : '' ?></span>
+                    </label>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+            </div>
+
+            <!-- Students tab -->
+            <div id="targetTabStudents" style="display:none;">
+                <div style="position:relative;margin-bottom:10px;">
+                    <input type="text" id="studentSearchInput" class="form-input"
+                           placeholder="Search by name, email or reg. number…"
+                           oninput="debounceStudentSearch(this.value)">
+                    <div id="studentSearchResults" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.1);z-index:50;max-height:220px;overflow-y:auto;"></div>
+                </div>
+                <!-- Selected students chips -->
+                <div id="selectedStudentsChips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:32px;">
+                    <?php foreach ($existingTargets as $t): ?>
+                    <?php if ($t['type'] === 'student'): ?>
+                    <?php
+                        // Load student name for pre-selected students
+                        $rs = safePreparedQuery($conn,
+                            "SELECT user_id, full_name, email FROM users WHERE user_id = ?",
+                            "i", [$t['id']]);
+                        $su = null;
+                        if ($rs['success'] && $rs['result']) {
+                            $su = $rs['result']->fetch_assoc();
+                            $rs['result']->free();
+                        }
+                    ?>
+                    <?php if ($su): ?>
+                    <span class="student-chip" data-id="<?= $su['user_id'] ?>">
+                        <?= htmlspecialchars($su['full_name']) ?>
+                        <button type="button" onclick="removeStudentChip(<?= $su['user_id'] ?>)">&times;</button>
+                    </span>
+                    <input type="hidden" class="student-pick-hidden" name="student_target" value="<?= $su['user_id'] ?>">
+                    <?php endif; ?>
+                    <?php endif; ?>
+                    <?php endforeach; ?>
+                </div>
             </div>
         </div>
 
@@ -998,6 +1138,117 @@ function switchTab(n) {
     }
 }
 
+// ── Group / Student targeting ──
+function toggleGroupPicker() {
+    const isPublic = document.getElementById('isPublic').checked;
+    const block    = document.getElementById('targetingBlock');
+    if (block) block.style.display = isPublic ? 'none' : '';
+}
+
+function switchTargetTab(tab, btn) {
+    document.querySelectorAll('.target-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('targetTabGroups').style.display   = tab === 'groups'   ? '' : 'none';
+    document.getElementById('targetTabStudents').style.display = tab === 'students' ? '' : 'none';
+}
+
+function collectTargets() {
+    const targets = [];
+    // Groups
+    document.querySelectorAll('.group-pick-cb:checked').forEach(cb => {
+        targets.push({ type: 'group', id: parseInt(cb.value) });
+    });
+    // Individual students
+    document.querySelectorAll('.student-pick-hidden').forEach(inp => {
+        targets.push({ type: 'student', id: parseInt(inp.value) });
+    });
+    return targets;
+}
+
+// Student search
+let _studentSearchTimer = null;
+function debounceStudentSearch(val) {
+    clearTimeout(_studentSearchTimer);
+    if (val.length < 2) {
+        closeStudentResults(); return;
+    }
+    _studentSearchTimer = setTimeout(() => searchStudents(val), 300);
+}
+
+async function searchStudents(q) {
+    try {
+        const token = await getCsrfToken();
+        const res   = await fetch('api/students/search-students.php?q=' + encodeURIComponent(q), {
+            credentials: 'same-origin',
+            headers: { 'X-CSRF-Token': token },
+        });
+        const data = await res.json();
+        if (!data.success) return;
+
+        const box = document.getElementById('studentSearchResults');
+        if (!data.students.length) {
+            box.innerHTML = '<div class="student-result-item" style="color:#6b7280;">No students found.</div>';
+        } else {
+            box.innerHTML = data.students.map(s => {
+                const alreadyAdded = document.querySelector(`.student-pick-hidden[value="${s.user_id}"]`);
+                if (alreadyAdded) return '';
+                const meta = [s.registration_number, s.department].filter(Boolean).join(' · ');
+                return `<div class="student-result-item" onclick="addStudentTarget(${s.user_id}, ${JSON.stringify(s.full_name)})">
+                    <div class="student-result-name">${escHtml(s.full_name)}</div>
+                    <div class="student-result-meta">${escHtml(s.email)}${meta ? ' · ' + escHtml(meta) : ''}</div>
+                </div>`;
+            }).join('');
+        }
+        box.style.display = 'block';
+
+        // Close on outside click
+        document.addEventListener('click', closeStudentResultsOutside, { once: true });
+    } catch(e) { console.error(e); }
+}
+
+function closeStudentResultsOutside(e) {
+    const box = document.getElementById('studentSearchResults');
+    if (box && !box.contains(e.target)) closeStudentResults();
+}
+
+function closeStudentResults() {
+    const box = document.getElementById('studentSearchResults');
+    if (box) box.style.display = 'none';
+}
+
+function addStudentTarget(userId, fullName) {
+    // Avoid duplicates
+    if (document.querySelector(`.student-pick-hidden[value="${userId}"]`)) {
+        closeStudentResults();
+        document.getElementById('studentSearchInput').value = '';
+        return;
+    }
+    const chips = document.getElementById('selectedStudentsChips');
+    const chip  = document.createElement('span');
+    chip.className       = 'student-chip';
+    chip.dataset.id      = userId;
+    chip.innerHTML       = `${escHtml(fullName)} <button type="button" onclick="removeStudentChip(${userId})">&times;</button>`;
+    const hidden         = document.createElement('input');
+    hidden.type          = 'hidden';
+    hidden.className     = 'student-pick-hidden';
+    hidden.value         = userId;
+    chips.appendChild(chip);
+    chips.appendChild(hidden);
+    closeStudentResults();
+    document.getElementById('studentSearchInput').value = '';
+}
+
+function removeStudentChip(userId) {
+    const chip   = document.querySelector(`.student-chip[data-id="${userId}"]`);
+    const hidden = document.querySelector(`.student-pick-hidden[value="${userId}"]`);
+    if (chip)   chip.remove();
+    if (hidden) hidden.remove();
+}
+
+function escHtml(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 // ── Collect form data ──
 function collectBasicData() {
     return {
@@ -1015,6 +1266,7 @@ function collectBasicData() {
         randomize_questions : document.getElementById('randQ').checked ? 1 : 0,
         randomize_options   : document.getElementById('randO').checked ? 1 : 0,
         visibility          : document.getElementById('isPublic').checked ? 'public' : 'private',
+        targets             : collectTargets(),
         status              : 'draft',
     };
 }

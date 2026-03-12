@@ -616,7 +616,7 @@ function fmtDate(?string $dt): string {
         </div>
         <div class="status-toggle">
             <span class="toggle-label">Published Status</span>
-            <div class="toggle-switch <?= $assessment['status'] === 'active' ? 'active' : '' ?>"
+            <div class="toggle-switch <?= in_array($assessment['status'], ['active','published']) ? 'active' : '' ?>"
                  id="statusToggle" onclick="toggleStatus()" title="Toggle active/draft">
                 <div class="toggle-slider"></div>
             </div>

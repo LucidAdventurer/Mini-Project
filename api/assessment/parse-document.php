@@ -17,6 +17,9 @@
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
 
+$conn = createDatabaseConnection();
+if (!$conn) { http_response_code(503); echo json_encode(['success'=>false,'error'=>'Database unavailable.']); exit; }
+
 validateSession($conn, 'teacher');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {

@@ -20,6 +20,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+$conn = createDatabaseConnection();
+if (!$conn) { http_response_code(503); echo json_encode(['success'=>false,'error'=>'Database unavailable.']); exit; }
+
 $user         = validateSession($conn, 'student');
 $userId       = (int) $user['user_id'];
 

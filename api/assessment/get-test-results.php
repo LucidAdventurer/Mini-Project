@@ -28,6 +28,9 @@ require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
+$conn = createDatabaseConnection();
+if (!$conn) { http_response_code(503); echo json_encode(['success'=>false,'error'=>'Database unavailable.']); exit; }
+
 $currentUser = validateSession($conn, 'student');
 $userId      = (int) $currentUser['user_id'];
 
@@ -85,54 +88,13 @@ if ($attempt['start_time'] && $attempt['submitted_at']) {
     $timeTakenSeconds = max(0, $submitted->getTimestamp() - $start->getTimestamp());
 }
 
-// ── 3. Derive answer stats from answers table ──
-// Count answered questions: has selected_option_id OR non-empty text_answer
-// Count correct: marks_awarded >= marks of that question (positive)
-$statsResult = safePreparedQuery($conn,
-    "SELECT
-        COUNT(*)                                                      AS total_answered,
-        SUM(CASE WHEN ans.marks_awarded > 0 THEN 1 ELSE 0 END)       AS correct_count,
-        SUM(CASE WHEN ans.marks_awarded <= 0
-                  AND (ans.selected_option_id IS NOT NULL
-                       OR (ans.text_answer IS NOT NULL AND ans.text_answer != ''))
-                  THEN 1 ELSE 0 END)                                  AS wrong_count
-     FROM answers ans
-     WHERE ans.attempt_id = ?",
-    "i", [$attemptId]
-);
-
-$totalQuestions  = count([]);  // filled below from questions query
-$correctAnswers  = 0;
-$wrongAnswers    = 0;
-$unanswered      = 0;
-
-if ($statsResult['success'] && $statsResult['result']) {
-    $sRow           = $statsResult['result']->fetch_assoc();
-    $correctAnswers = (int)($sRow['correct_count'] ?? 0);
-    $wrongAnswers   = (int)($sRow['wrong_count']   ?? 0);
-    $statsResult['result']->free();
-}
-
-// Get total question count for this assessment
-$qCountResult = safePreparedQuery($conn,
-    "SELECT COUNT(*) AS cnt FROM questions WHERE assessment_id = ?",
-    "i", [$assessmentId]
-);
-if ($qCountResult['success'] && $qCountResult['result']) {
-    $qcRow          = $qCountResult['result']->fetch_assoc();
-    $totalQuestions = (int)($qcRow['cnt'] ?? 0);
-    $qCountResult['result']->free();
-}
-$unanswered = max(0, $totalQuestions - $correctAnswers - $wrongAnswers);
-
-// ── 4. Percentile ──
+// ── 3. Percentile ──
 $percentileResult = safePreparedQuery($conn,
     "SELECT
         COUNT(*)                                            AS total_attempts,
         SUM(CASE WHEN score < ? THEN 1 ELSE 0 END)         AS below_count
      FROM assessment_attempts
      WHERE assessment_id = ?
-       AND status        = 'submitted'
        AND status        = 'submitted'
        AND user_id IS NOT NULL",
     "di", [(float)$attempt['score'], $assessmentId]
