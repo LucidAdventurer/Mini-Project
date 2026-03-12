@@ -1864,7 +1864,7 @@
                 <!-- Status filter tabs -->
                 <div class="tabs">
                     <button class="tab active" onclick="filterByStatus('all',this)">All</button>
-                    <button class="tab" onclick="filterByStatus('active',this)">Active</button>
+                    <button class="tab" onclick="filterByStatus('published',this)">Published</button>
                     <button class="tab" onclick="filterByStatus('draft',this)">Draft</button>
                     <button class="tab" onclick="filterByStatus('scheduled',this)">Scheduled</button>
                     <button class="tab" onclick="filterByStatus('archived',this)">Archived</button>
@@ -2000,8 +2000,8 @@
 
                 <div class="tabs">
                     <button class="tab active" onclick="setTab(this)">Login Activity</button>
-                    <button class="tab" onclick="setTab(this)">Audit Logs</button>
-                    <button class="tab" onclick="setTab(this)">Email Queue</button>
+
+
                 </div>
 
                 <div class="card">
@@ -2223,7 +2223,7 @@
                                     <div class="bar-val" id="dbNotifications">—</div>
                                 </div>
                                 <div class="bar-row">
-                                    <div class="bar-label">audit_logs</div>
+                                    <div class="bar-label">materials</div>
                                     <div class="bar-track">
                                         <div class="bar-fill" id="dbAuditLogsBar" style="width:0%"></div>
                                     </div>
@@ -2695,7 +2695,7 @@
           <td>${a.duration_minutes} min</td>
           <td>${fmtNum(a.attempt_count)}</td>
           <td>${a.pass_rate !== null ? a.pass_rate + '%' : '—'}</td>
-          <td><span class="badge ${a.status === 'active' ? 'published' : a.status}">${esc(a.status)}</span></td>
+          <td><span class="badge ${a.status}">${esc(a.status)}</span></td>
         </tr>`).join('');
             }
 
@@ -2705,7 +2705,7 @@
                 setEl('dbAssessments', fmtNum(d.db_counts.assessments || 0));
                 setEl('dbAttempts', fmtNum(d.db_counts.attempts || 0));
                 setEl('dbNotifications', fmtNum(d.db_counts.notifications || 0));
-                setEl('dbAuditLogs', fmtNum(d.db_counts.audit_logs || 0));
+                setEl('dbAuditLogs', fmtNum(d.db_counts.materials || 0));
 
                 // Update sidebar badge
                 const badge = document.getElementById('sidebarUserCount');
@@ -2713,7 +2713,7 @@
 
                 // Scale bar widths relative to the largest count
                 const counts = [d.db_counts.users, d.db_counts.assessments, d.db_counts.attempts,
-                d.db_counts.notifications, d.db_counts.audit_logs].map(v => v || 0);
+                d.db_counts.notifications, d.db_counts.materials].map(v => v || 0);
                 const maxVal = Math.max(...counts, 1);
                 const barIds = ['dbUsers', 'dbAssessments', 'dbAttempts', 'dbNotifications', 'dbAuditLogs'];
                 const barBarIds = [null, 'dbAssessmentsBar', 'dbAttemptsBar', 'dbNotificationsBar', 'dbAuditLogsBar'];
@@ -3034,7 +3034,7 @@
             const status = u.is_active
                 ? `<span class="badge active">Active</span>`
                 : `<span class="badge inactive">Inactive</span>`;
-            const roleBadge = `<span class="badge ${u.user_type === 'admin' ? 'admin-b' : u.user_type}">${ucwords(u.user_type)}</span>`;
+            const roleBadge = `<span class="badge ${u.role === 'admin' ? 'admin-b' : u.role}">${ucwords(u.role)}</span>`;
             const blockBtn = u.is_active
                 ? `<button class="btn btn-danger btn-sm" onclick="toggleStatus(${u.user_id},'block')">Block</button>`
                 : `<button class="btn btn-primary btn-sm" onclick="toggleStatus(${u.user_id},'activate')">Activate</button>`;
@@ -3058,7 +3058,7 @@
     <td>
       <div style="display:flex;gap:6px;">
         <button class="btn btn-ghost btn-sm" onclick="openEditUserModal(${JSON.stringify(u).replace(/"/g, '&quot;')})">Edit</button>
-        ${u.user_type !== 'admin' ? blockBtn : ''}
+        ${u.role !== 'admin' ? blockBtn : ''}
       </div>
     </td>
   </tr>`;
@@ -3101,7 +3101,7 @@
             document.getElementById('editUserId').value = u.user_id;
             document.getElementById('fFullName').value = u.full_name;
             document.getElementById('fEmail').value = u.email;
-            document.getElementById('fRole').value = u.user_type;
+            document.getElementById('fRole').value = u.role;
             document.getElementById('fDept').value = u.department || '';
             document.getElementById('fRegNo').value = u.registration_number || '';
             document.getElementById('fPassword').value = '';
@@ -3136,7 +3136,7 @@
 
             try {
                 const payload = {
-                    full_name: fullName, email, user_type: role,
+                    full_name: fullName, email, role,
                     department: dept || undefined, registration_number: regNo || undefined,
                     is_verified: verified, is_active: active,
                 };
@@ -3174,7 +3174,7 @@
 
                 const header = ['ID', 'Name', 'Email', 'Role', 'Department', 'Reg No', 'Verified', 'Active', 'Last Login'];
                 const rows = d.users.map(u => [
-                    u.user_id, u.full_name, u.email, u.user_type,
+                    u.user_id, u.full_name, u.email, u.role,
                     u.department || '', u.registration_number || '',
                     u.is_verified ? 'Yes' : 'No', u.is_active ? 'Yes' : 'No', u.last_login || ''
                 ]);
@@ -3257,7 +3257,7 @@
 
             // Tab counts
             const tabs = document.querySelectorAll('#page-tests .tab');
-            const sKeys = ['all', 'active', 'draft', 'scheduled', 'archived'];
+            const sKeys = ['all', 'published', 'draft', 'archived'];
             const sLabel = ['All', 'Active', 'Draft', 'Scheduled', 'Archived'];
             tabs.forEach((tab, i) => {
                 const cnt = d.counts[sKeys[i]];
@@ -3275,7 +3275,7 @@
 
         function renderTestRow(t) {
             const diffBadge = `<span class="badge ${t.difficulty}">${esc(t.difficulty)}</span>`;
-            const statusClass = t.status === 'active' ? 'published' : t.status;
+            const statusClass = t.status;
             const statusBadge = `<span class="badge ${statusClass}">${esc(t.status)}</span>`;
             const passRate = t.pass_rate !== null ? t.pass_rate + '%' : '—';
             const avgScore = t.avg_score ? t.avg_score + '%' : '—';
@@ -3284,13 +3284,13 @@
             let actions = `<button class="btn btn-ghost btn-sm" onclick="viewQuestions(${t.assessment_id})">Questions</button>`;
 
             if (t.status === 'draft') {
-                actions += ` <button class="btn btn-primary btn-sm" onclick="changeTestStatus(${t.assessment_id},'active')">Publish</button>`;
+                actions += ` <button class="btn btn-primary btn-sm" onclick="changeTestStatus(${t.assessment_id},'published')">Publish</button>`;
                 actions += ` <button class="btn btn-danger btn-sm" onclick="deleteTest(${t.assessment_id},'${esc(t.title)}')">Delete</button>`;
-            } else if (t.status === 'active') {
+            } else if (t.status === 'published') {
                 actions += ` <button class="btn btn-ghost btn-sm" onclick="changeTestStatus(${t.assessment_id},'draft')">Unpublish</button>`;
                 actions += ` <button class="btn btn-danger btn-sm" onclick="changeTestStatus(${t.assessment_id},'archived')">Archive</button>`;
             } else if (t.status === 'archived') {
-                actions += ` <button class="btn btn-primary btn-sm" onclick="changeTestStatus(${t.assessment_id},'active')">Restore</button>`;
+                actions += ` <button class="btn btn-primary btn-sm" onclick="changeTestStatus(${t.assessment_id},'published')">Restore</button>`;
                 actions += ` <button class="btn btn-danger btn-sm" onclick="deleteTest(${t.assessment_id},'${esc(t.title)}')">Delete</button>`;
             } else if (t.status === 'scheduled') {
                 actions += ` <button class="btn btn-ghost btn-sm" onclick="changeTestStatus(${t.assessment_id},'draft')">Unschedule</button>`;
@@ -3441,7 +3441,7 @@
         // ════════════════════════════════════════
         function wireLogTabs() {
             const tabs = document.querySelectorAll('#page-logs .tab');
-            const types = ['login', 'audit', 'email'];
+            const types = ['login'];
             tabs.forEach((tab, i) => {
                 tab.addEventListener('click', () => {
                     logType = types[i] || 'login';
@@ -3465,7 +3465,7 @@
             }
             if (!PageCache.isStale(cacheKey) && cached) return;
 
-            const titleMap = { login: 'Login Activity', audit: 'Audit Logs', email: 'Email Queue' };
+            const titleMap = { login: 'Login Activity' };
             setEl('logsCardTitle', titleMap[logType] || 'Logs');
 
             try {
@@ -3482,7 +3482,7 @@
         function renderLogs(d, logDiv) {
             if (!logDiv) logDiv = document.getElementById('logsContainer');
             if (!logDiv) return;
-            const titleMap = { login: 'Login Activity', audit: 'Audit Logs', email: 'Email Queue' };
+            const titleMap = { login: 'Login Activity' };
             setEl('logsCardTitle', titleMap[logType] || 'Logs');
 
             // Alert badge
@@ -3563,7 +3563,7 @@
                 { label: 'dbAssessments', bar: 'dbAssessmentsBar', val: counts.assessments },
                 { label: 'dbAttempts', bar: 'dbAttemptsBar', val: counts.attempts },
                 { label: 'dbNotifications', bar: 'dbNotificationsBar', val: counts.notifications },
-                { label: 'dbAuditLogs', bar: 'dbAuditLogsBar', val: counts.audit_logs },
+                { label: 'dbAuditLogs', bar: 'dbAuditLogsBar', val: counts.materials },
             ];
             const maxVal = Math.max(1, ...rows.map(r => r.val || 0));
             rows.forEach(({ label, bar, val }) => {

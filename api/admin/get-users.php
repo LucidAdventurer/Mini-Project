@@ -2,27 +2,19 @@
 // ============================================================
 // api/admin/get-users.php
 //
-// Returns paginated user list for admin user management.
+// Returns paginated user list.
+// `role` replaces `user_type`; attempts status 'submitted' replaces 'completed'
 //
-// GET ?role=all|student|teacher|admin  (default: all)
-//     ?search=keyword                  (name, email, reg_no)
+// GET ?role=all|student|teacher|admin
+//     ?search=keyword
 //     ?page=1&limit=20
 //     ?status=active|inactive|unverified
-//
-// Returns {
-//   success, users:[...], total, page, pages,
-//   counts: { all, student, teacher, admin }
-// }
 // ============================================================
-
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
-
 header('Content-Type: application/json');
-
 validateSession($conn, 'admin');
 
-// ── Query params ──
 $role   = trim($_GET['role']   ?? 'all');
 $search = trim($_GET['search'] ?? '');
 $status = trim($_GET['status'] ?? '');
@@ -30,105 +22,56 @@ $page   = max(1, (int)($_GET['page']  ?? 1));
 $limit  = min(100, max(1, (int)($_GET['limit'] ?? 20)));
 $offset = ($page - 1) * $limit;
 
-$allowedRoles   = ['all', 'student', 'teacher', 'admin'];
-$allowedStatuses = ['active', 'inactive', 'unverified'];
+if (!in_array($role, ['all','student','teacher','admin'], true))       $role   = 'all';
+if (!in_array($status, ['active','inactive','unverified'], true))      $status = '';
 
-if (!in_array($role, $allowedRoles, true))     $role   = 'all';
-if (!in_array($status, $allowedStatuses, true)) $status = '';
-
-// ── Build WHERE ──
-$conditions = [];
-$params     = [];
-$types      = '';
-
-if ($role !== 'all') {
-    $conditions[] = 'u.user_type = ?';
-    $params[]     = $role;
-    $types       .= 's';
-}
-
+// WHERE — `role` replaces `user_type`
+$conditions = []; $params = []; $types = '';
+if ($role !== 'all') { $conditions[] = 'u.role = ?'; $params[] = $role; $types .= 's'; }
 if ($search !== '') {
+    $like = '%'.$search.'%';
     $conditions[] = '(u.full_name LIKE ? OR u.email LIKE ? OR u.registration_number LIKE ?)';
-    $like         = '%' . $search . '%';
-    $params[]     = $like;
-    $params[]     = $like;
-    $params[]     = $like;
-    $types       .= 'sss';
+    $params[] = $like; $params[] = $like; $params[] = $like; $types .= 'sss';
 }
+if ($status === 'active')       $conditions[] = 'u.is_active=1 AND u.is_verified=1';
+elseif ($status === 'inactive')  $conditions[] = 'u.is_active=0';
+elseif ($status === 'unverified')$conditions[] = 'u.is_verified=0 AND u.is_active=1';
+$where = $conditions ? 'WHERE '.implode(' AND ',$conditions) : '';
 
-if ($status === 'active') {
-    $conditions[] = 'u.is_active = 1 AND u.is_verified = 1';
-} elseif ($status === 'inactive') {
-    $conditions[] = 'u.is_active = 0';
-} elseif ($status === 'unverified') {
-    $conditions[] = 'u.is_verified = 0 AND u.is_active = 1';
-}
-
-$where = $conditions ? 'WHERE ' . implode(' AND ', $conditions) : '';
-
-// ── Tab counts (all / student / teacher / admin) ──
-$counts = ['all' => 0, 'student' => 0, 'teacher' => 0, 'admin' => 0];
-
-$searchConditions = [];
-$searchParams     = [];
-$searchTypes      = '';
-
+// Tab counts — GROUP BY role
+$counts = ['all'=>0,'student'=>0,'teacher'=>0,'admin'=>0];
+$sCond = []; $sP = []; $sT = '';
 if ($search !== '') {
-    $searchConditions[] = '(u.full_name LIKE ? OR u.email LIKE ? OR u.registration_number LIKE ?)';
-    $like               = '%' . $search . '%';
-    $searchParams[]     = $like;
-    $searchParams[]     = $like;
-    $searchParams[]     = $like;
-    $searchTypes       .= 'sss';
+    $like = '%'.$search.'%';
+    $sCond[] = '(u.full_name LIKE ? OR u.email LIKE ? OR u.registration_number LIKE ?)';
+    $sP[] = $like; $sP[] = $like; $sP[] = $like; $sT .= 'sss';
 }
-
-$searchWhere = $searchConditions ? 'WHERE ' . implode(' AND ', $searchConditions) : '';
-
-$rc = safePreparedQuery($conn,
-    "SELECT user_type, COUNT(*) AS cnt FROM users u $searchWhere GROUP BY user_type",
-    $searchTypes, $searchParams
-);
+$sWhere = $sCond ? 'WHERE '.implode(' AND ',$sCond) : '';
+$rc = safePreparedQuery($conn, "SELECT role, COUNT(*) AS cnt FROM users u $sWhere GROUP BY role", $sT, $sP);
 if ($rc['success'] && $rc['result']) {
     while ($row = $rc['result']->fetch_assoc()) {
-        $counts[$row['user_type']] = (int)$row['cnt'];
+        if (isset($counts[$row['role']])) $counts[$row['role']] = (int)$row['cnt'];
         $counts['all'] += (int)$row['cnt'];
     }
     $rc['result']->free();
 }
 
-// ── Total count for current filter ──
+// Total
 $total = 0;
-$rc = safePreparedQuery($conn,
-    "SELECT COUNT(*) AS cnt FROM users u $where",
-    $types, $params
-);
-if ($rc['success'] && $rc['result']) {
-    $row   = $rc['result']->fetch_assoc();
-    $total = (int)($row['cnt'] ?? 0);
-    $rc['result']->free();
-}
+$rc = safePreparedQuery($conn, "SELECT COUNT(*) AS cnt FROM users u $where", $types, $params);
+if ($rc['success'] && $rc['result']) { $total=(int)($rc['result']->fetch_assoc()['cnt']??0); $rc['result']->free(); }
 
-// ── Fetch page ──
-$listTypes  = $types . 'ii';
-$listParams = array_merge($params, [$limit, $offset]);
-
+// Fetch — `role` replaces `user_type`; attempts status 'submitted' replaces 'completed'
 $r = safePreparedQuery($conn,
-    "SELECT
-        u.user_id, u.full_name, u.email, u.user_type,
-        u.department, u.registration_number,
-        u.is_verified, u.is_active,
-        u.created_at, u.last_login, u.profile_image,
-        (SELECT COUNT(*) FROM assessment_attempts aa
-         WHERE aa.user_id = u.user_id AND aa.status = 'completed') AS attempts_count
-     FROM users u
-     $where
-     ORDER BY
-        CASE WHEN u.last_login IS NOT NULL THEN 0 ELSE 1 END,
-        u.last_login DESC,
-        u.created_at DESC
+    "SELECT u.user_id, u.full_name, u.email, u.role,
+            u.department, u.registration_number,
+            u.is_verified, u.is_active, u.created_at, u.last_login, u.profile_image,
+            (SELECT COUNT(*) FROM assessment_attempts aa
+             WHERE aa.user_id=u.user_id AND aa.status='submitted') AS attempts_count
+     FROM users u $where
+     ORDER BY CASE WHEN u.last_login IS NOT NULL THEN 0 ELSE 1 END, u.last_login DESC, u.created_at DESC
      LIMIT ? OFFSET ?",
-    $listTypes, $listParams
-);
+    $types.'ii', array_merge($params, [$limit, $offset]));
 
 $users = [];
 if ($r['success'] && $r['result']) {
@@ -137,7 +80,7 @@ if ($r['success'] && $r['result']) {
             'user_id'             => (int)$row['user_id'],
             'full_name'           => $row['full_name'],
             'email'               => $row['email'],
-            'user_type'           => $row['user_type'],
+            'role'                => $row['role'],
             'department'          => $row['department'] ?? '',
             'registration_number' => $row['registration_number'] ?? '',
             'is_verified'         => (bool)$row['is_verified'],
@@ -148,43 +91,25 @@ if ($r['success'] && $r['result']) {
             'profile_image'       => $row['profile_image'] ?? '',
             'attempts_count'      => (int)$row['attempts_count'],
             'initials'            => getInitials($row['full_name']),
-            'avatar_color'        => getAvatarColor($row['user_type']),
+            'avatar_color'        => getAvatarColor($row['role']),
         ];
     }
     $r['result']->free();
 }
 
-echo json_encode([
-    'success' => true,
-    'users'   => $users,
-    'total'   => $total,
-    'page'    => $page,
-    'pages'   => max(1, (int)ceil($total / $limit)),
-    'counts'  => $counts,
-]);
+echo json_encode(['success'=>true,'users'=>$users,'total'=>$total,'page'=>$page,
+                  'pages'=>max(1,(int)ceil($total/$limit)),'counts'=>$counts]);
 
-// ── Helpers ──
-function timeAgo(string $datetime): string {
-    $diff = time() - strtotime($datetime);
-    if ($diff < 60)      return 'just now';
-    if ($diff < 3600)    return floor($diff / 60) . ' min ago';
-    if ($diff < 86400)   return floor($diff / 3600) . ' hr ago';
-    if ($diff < 2592000) return floor($diff / 86400) . ' days ago';
-    return date('M j, Y', strtotime($datetime));
+function timeAgo(string $dt): string {
+    $d = time() - strtotime($dt);
+    if ($d<60) return 'just now'; if ($d<3600) return floor($d/60).' min ago';
+    if ($d<86400) return floor($d/3600).' hr ago'; if ($d<2592000) return floor($d/86400).' days ago';
+    return date('M j, Y', strtotime($dt));
 }
-
 function getInitials(string $name): string {
-    $parts = array_filter(explode(' ', trim($name)));
-    if (count($parts) >= 2) {
-        return strtoupper(substr($parts[0], 0, 1) . substr(end($parts), 0, 1));
-    }
-    return strtoupper(substr($name, 0, 2));
+    $p = array_filter(explode(' ', trim($name)));
+    return count($p)>=2 ? strtoupper(substr($p[0],0,1).substr(end($p),0,1)) : strtoupper(substr($name,0,2));
 }
-
 function getAvatarColor(string $role): string {
-    return match($role) {
-        'teacher' => 'green',
-        'admin'   => 'red',
-        default   => 'blue',
-    };
+    return match($role) { 'teacher'=>'green','admin'=>'red',default=>'blue' };
 }

@@ -15,8 +15,10 @@ $error   = '';
 // ── Handle form submissions ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
+    // Fix 1: Verify all admin accounts
+    // Column is now `role` (enum: 'admin','teacher','student'), not `user_type`
     if ($action === 'fix_verify') {
-        $stmt = $conn->prepare("UPDATE users SET is_verified=1, is_active=1 WHERE user_type='admin'");
+        $stmt = $conn->prepare("UPDATE users SET is_verified=1, is_active=1 WHERE role='admin'");
         if ($stmt && $stmt->execute()) {
             $message = "✅ All admin accounts set to verified + active. ({$stmt->affected_rows} row(s) updated)";
             $stmt->close();
@@ -25,19 +27,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Fix 2: Create remember_tokens table
+    // DDL matches new schema exactly: PK is `id`, selector/token_hash/expires_at nullable,
+    // no created_at column, collation utf8mb4_general_ci
     if ($action === 'create_table') {
         $sql = "CREATE TABLE IF NOT EXISTS remember_tokens (
-            token_id   INT PRIMARY KEY AUTO_INCREMENT,
-            user_id    INT NOT NULL,
-            selector   VARCHAR(24)  NOT NULL,
-            token_hash VARCHAR(64)  NOT NULL,
-            expires_at DATETIME     NOT NULL,
-            created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-            UNIQUE KEY  unique_selector (selector),
-            INDEX idx_user    (user_id),
-            INDEX idx_expires (expires_at)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+            id         INT          NOT NULL AUTO_INCREMENT,
+            user_id    INT          NOT NULL,
+            selector   VARCHAR(24)  DEFAULT NULL,
+            token_hash VARCHAR(64)  DEFAULT NULL,
+            expires_at DATETIME     DEFAULT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_selector (selector),
+            KEY idx_user (user_id),
+            CONSTRAINT remember_tokens_ibfk_1
+                FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci";
+
         if ($conn->query($sql)) {
             $message = "✅ remember_tokens table created (or already existed).";
         } else {
@@ -45,10 +51,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Fix 3: Create or reset admin account
+    // Column is now `role`, not `user_type`
     if ($action === 'create_admin') {
         $email    = trim($_POST['email']    ?? '');
         $name     = trim($_POST['name']     ?? '');
         $password = trim($_POST['password'] ?? '');
+
         if (!$email || !$name || !$password) {
             $error = "All fields required.";
         } elseif (strlen($password) < 8) {
@@ -56,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $hash = password_hash($password, PASSWORD_DEFAULT);
             $stmt = $conn->prepare(
-                "INSERT INTO users (full_name, email, password_hash, user_type, is_verified, is_active)
+                "INSERT INTO users (full_name, email, password_hash, role, is_verified, is_active)
                  VALUES (?, ?, ?, 'admin', 1, 1)
                  ON DUPLICATE KEY UPDATE
                      password_hash = VALUES(password_hash),
@@ -66,7 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($stmt) {
                 $stmt->bind_param("sss", $name, $email, $hash);
                 $stmt->execute();
-                $message = "✅ Admin account saved. You can now log in with: <strong>$email</strong>";
+                $message = "✅ Admin account saved. You can now log in with: <strong>" . htmlspecialchars($email) . "</strong>";
                 $stmt->close();
             } else {
                 $error = "❌ " . $conn->error;
@@ -76,8 +85,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ── Fetch current admin accounts ──
+// `role` replaces `user_type`; `last_login` still exists
 $admins = [];
-$res = $conn->query("SELECT user_id, full_name, email, is_verified, is_active, last_login FROM users WHERE user_type='admin'");
+$res = $conn->query("SELECT user_id, full_name, email, is_verified, is_active, last_login FROM users WHERE role='admin'");
 if ($res) { while ($r = $res->fetch_assoc()) $admins[] = $r; }
 ?>
 <!DOCTYPE html>
@@ -146,7 +156,7 @@ if ($res) { while ($r = $res->fetch_assoc()) $admins[] = $r; }
 <!-- Fix 2: Create remember_tokens table -->
 <div class="card">
   <h2>Fix 2 — Create missing <code>remember_tokens</code> table</h2>
-  <p>This table is required by login.php but was missing from the schema.</p>
+  <p>Required by <code>login.php</code> for "remember me" sessions. Safe to run if the table already exists.</p>
   <form method="POST">
     <input type="hidden" name="action" value="create_table">
     <button type="submit">🗄️ Create remember_tokens table</button>

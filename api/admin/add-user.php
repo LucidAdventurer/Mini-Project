@@ -6,7 +6,7 @@
 // Admin only. Password is auto-hashed.
 //
 // POST JSON {
-//   full_name, email, password, user_type,
+//   full_name, email, password, role,
 //   department?, registration_number?, is_verified?
 // }
 // Returns { success, user_id?, error? }
@@ -17,7 +17,6 @@ require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
-// validateSession enforces role, session existence, and CSRF on POST automatically
 $adminUser = validateSession($conn, 'admin');
 $adminId   = (int) $adminUser['user_id'];
 
@@ -35,14 +34,14 @@ if (!is_array($body)) {
 }
 
 // ── Required fields ──
-$fullName  = trim($body['full_name']  ?? '');
-$email     = trim($body['email']      ?? '');
-$password  = $body['password']        ?? '';
-$userType  = trim($body['user_type']  ?? '');
+$fullName = trim($body['full_name'] ?? '');
+$email    = trim($body['email']     ?? '');
+$password = $body['password']       ?? '';
+$role     = trim($body['role']      ?? '');   // column is now `role`
 
-if ($fullName === '' || $email === '' || $password === '' || $userType === '') {
+if ($fullName === '' || $email === '' || $password === '' || $role === '') {
     http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'full_name, email, password, and user_type are required.']);
+    echo json_encode(['success' => false, 'error' => 'full_name, email, password, and role are required.']);
     exit;
 }
 
@@ -52,10 +51,10 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     exit;
 }
 
-$allowedTypes = ['student', 'teacher', 'admin'];
-if (!in_array($userType, $allowedTypes, true)) {
+$allowedRoles = ['student', 'teacher', 'admin'];
+if (!in_array($role, $allowedRoles, true)) {
     http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Invalid user_type.']);
+    echo json_encode(['success' => false, 'error' => 'Invalid role. Must be student, teacher, or admin.']);
     exit;
 }
 
@@ -71,10 +70,7 @@ $registrationNumber = trim($body['registration_number'] ?? '') ?: null;
 $isVerified         = isset($body['is_verified']) ? (int)(bool)$body['is_verified'] : 1;
 
 // ── Check email uniqueness ──
-$dup = safePreparedQuery($conn,
-    "SELECT user_id FROM users WHERE email = ? LIMIT 1",
-    "s", [$email]
-);
+$dup = safePreparedQuery($conn, "SELECT user_id FROM users WHERE email = ? LIMIT 1", "s", [$email]);
 if ($dup['success'] && $dup['result'] && $dup['result']->num_rows > 0) {
     $dup['result']->free();
     http_response_code(409);
@@ -86,9 +82,7 @@ if ($dup['result']) $dup['result']->free();
 // ── Check registration_number uniqueness ──
 if ($registrationNumber !== null) {
     $dupReg = safePreparedQuery($conn,
-        "SELECT user_id FROM users WHERE registration_number = ? LIMIT 1",
-        "s", [$registrationNumber]
-    );
+        "SELECT user_id FROM users WHERE registration_number = ? LIMIT 1", "s", [$registrationNumber]);
     if ($dupReg['success'] && $dupReg['result'] && $dupReg['result']->num_rows > 0) {
         $dupReg['result']->free();
         http_response_code(409);
@@ -99,34 +93,20 @@ if ($registrationNumber !== null) {
 }
 
 // ── Hash password & insert ──
+// Column is `role` not `user_type`
 $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
 $result = safePreparedQuery($conn,
     "INSERT INTO users
-        (full_name, email, password_hash, user_type, department,
+        (full_name, email, password_hash, role, department,
          registration_number, is_verified, is_active)
      VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
     "ssssssi",
-    [$fullName, $email, $passwordHash, $userType, $department,
-     $registrationNumber, $isVerified]
+    [$fullName, $email, $passwordHash, $role, $department, $registrationNumber, $isVerified]
 );
 
 if ($result['success'] && $result['insert_id'] > 0) {
-    $newUserId = $result['insert_id'];
-
-    safePreparedQuery($conn,
-        "INSERT INTO audit_logs (user_id, action, entity_type, entity_id, new_values, ip_address)
-         VALUES (?, 'create_user', 'user', ?, ?, ?)",
-        "iiss",
-        [
-            $adminId,
-            $newUserId,
-            json_encode(['email' => $email, 'user_type' => $userType]),
-            $_SERVER['REMOTE_ADDR'] ?? '',
-        ]
-    );
-
-    echo json_encode(['success' => true, 'user_id' => $newUserId]);
+    echo json_encode(['success' => true, 'user_id' => $result['insert_id']]);
 } else {
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'Failed to create user. Please try again.']);
