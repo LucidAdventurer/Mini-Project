@@ -78,8 +78,8 @@ $r4 = safePreparedQuery($conn,
         a.duration_minutes,
         a.total_marks,
         a.passing_marks,
-        a.available_from,
-        a.available_until,
+        a.start_time,
+        a.end_time,
         a.created_at,
         a.updated_at,
 COUNT(DISTINCT q.question_id)            AS question_count,
@@ -90,11 +90,11 @@ LEFT JOIN questions q
 ON q.assessment_id = a.assessment_id
 LEFT JOIN assessment_attempts aa
 ON aa.assessment_id = a.assessment_id
-AND aa.status = 'completed'
+AND aa.status IN ('submitted','timeout')
 WHERE a.created_by = ?
-GROUP BY a.assessment_id, a.title, a.category, a.difficulty, a.status, a.duration_minutes, a.total_marks, a.passing_marks, a.available_from, a.available_until, a.created_at, a.updated_at
+GROUP BY a.assessment_id, a.title, a.category, a.difficulty, a.status, a.duration_minutes, a.total_marks, a.passing_marks, a.start_time, a.end_time, a.created_at, a.updated_at
 ORDER BY
-        FIELD(a.status, 'active', 'scheduled', 'draft', 'archived') ASC,
+        FIELD(a.status, 'active', 'draft', 'archived') ASC,
         a.updated_at DESC",
 "i", [$teacherId]
 );
@@ -109,7 +109,7 @@ $dbError = true;
 // ── 5. Recent unread notifications (up to 5) ──
 $notifications = [];
 $r5 = safePreparedQuery($conn,
-"SELECT notification_id, title, message, notification_type, action_url, created_at
+"SELECT notification_id, title, message, type, created_at
 FROM notifications
 WHERE user_id = ? AND is_read = 0
 ORDER BY created_at DESC
@@ -131,7 +131,7 @@ return date('M j, Y', strtotime($dt));
 function statusLabel(string $status): string {
 return match($status) {
 'active' => 'Active',
-'scheduled' => 'Scheduled',
+// no 'scheduled' status in schema
 'draft'    => 'Draft',
 'archived' => 'Completed',
 default    => ucfirst($status),
@@ -526,9 +526,9 @@ font-weight: 700; cursor: pointer; transition: var(--transition);
 <?php else: ?>
 <?php foreach ($notifications as $n): ?>
 <a class="notif-item"
-href="<?= htmlspecialchars($n['action_url'] ?? '#') ?>"
+href="<?= htmlspecialchars('#') ?>"
 data-notif-id="<?= (int)$n['notification_id'] ?>">
-<div class="notif-icon"><?= notifIcon($n['notification_type']) ?></div>
+<div class="notif-icon"><?= notifIcon($n['type']) ?></div>
 <div>
 <div class="notif-title"><?= htmlspecialchars($n['title']) ?></div>
 <?php if ($n['message']): ?>
@@ -626,8 +626,8 @@ $status   = $a['status'];
 $qCount   = (int)$a['question_count'];
 $attempts = (int)$a['attempt_count'];
 $students = (int)$a['student_count'];
-if ($status === 'active' && $a['available_until']) {
-    $dateLabel = 'Due: ' . fmtDate($a['available_until']);
+if ($status === 'active' && $a['end_time']) {
+    $dateLabel = 'Due: ' . fmtDate($a['end_time']);
 } elseif ($status === 'archived') {
     $dateLabel = 'Completed: ' . fmtDate($a['updated_at']);
 } else {

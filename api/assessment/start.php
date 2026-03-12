@@ -3,18 +3,10 @@
 // api/assessment/start.php
 //
 // Creates a new assessment attempt for the logged-in student.
-// Validates access, attempt limits, and availability window.
-//
-// FIX: If an in_progress attempt already exists for this student
-// and assessment, return it instead of creating a duplicate.
-// This prevents two-tab exploits and stale orphaned attempts.
+// If an in_progress attempt already exists, resumes it.
 //
 // POST JSON { assessment_id: int }
-// Returns {
-//   success: bool,
-//   attempt_id?: int,
-//   error?: string
-// }
+// Returns { success: bool, attempt_id?: int, resumed?: bool, error?: string }
 // ============================================================
 
 require_once __DIR__ . '/../../config.php';
@@ -30,7 +22,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $user         = validateSession($conn, 'student');
 $userId       = (int) $user['user_id'];
-$userDept     = $user['department'] ?? null;
 
 $body         = json_decode(file_get_contents('php://input'), true);
 $assessmentId = (int)($body['assessment_id'] ?? 0);
@@ -41,28 +32,31 @@ if ($assessmentId <= 0) {
     exit;
 }
 
-// ── Verify assessment is published, in window, and accessible ──
-// Visibility: public = all students; group = via assessment_targets;
-// private = teacher only (blocked here).
+// ── Verify assessment is active, within window, and accessible ──
+// Access: either visibility = 'public', or the student/their group
+// appears in assessment_targets.
 $asmResult = safePreparedQuery($conn,
     "SELECT assessment_id, max_attempts
      FROM assessments
      WHERE assessment_id = ?
-       AND status = 'published'
+       AND status = 'active'
        AND (start_time IS NULL OR start_time <= NOW())
        AND (end_time   IS NULL OR end_time   >= NOW())
        AND (
            visibility = 'public'
-           OR (visibility = 'group' AND EXISTS (
+           OR EXISTS (
                SELECT 1 FROM assessment_targets at2
                WHERE at2.assessment_id = assessments.assessment_id
-                 AND (
-                     (at2.target_type = 'student' AND at2.target_id = ?)
-                     OR (at2.target_type = 'group' AND at2.target_id IN (
-                         SELECT gm.group_id FROM group_members gm WHERE gm.student_id = ?
-                     ))
-                 )
-           ))
+                 AND at2.target_type   = 'student'
+                 AND at2.target_id     = ?
+           )
+           OR EXISTS (
+               SELECT 1 FROM assessment_targets at3
+               JOIN group_members gm ON gm.group_id = at3.target_id
+               WHERE at3.assessment_id = assessments.assessment_id
+                 AND at3.target_type   = 'group'
+                 AND gm.student_id     = ?
+           )
        )",
     "iii", [$assessmentId, $userId, $userId]
 );
@@ -77,13 +71,11 @@ $asm = $asmResult['result']->fetch_assoc();
 $asmResult['result']->free();
 $maxAttempts = (int)$asm['max_attempts'];
 
-// ── Resume existing in_progress attempt if one exists ──
-// Prevents duplicate attempts from double-clicks or multiple tabs.
+// ── Resume existing in_progress attempt ──
 $existingResult = safePreparedQuery($conn,
     "SELECT attempt_id FROM assessment_attempts
      WHERE assessment_id = ? AND user_id = ? AND status = 'in_progress'
-     ORDER BY start_time DESC
-     LIMIT 1",
+     ORDER BY start_time DESC LIMIT 1",
     "ii", [$assessmentId, $userId]
 );
 
@@ -97,15 +89,16 @@ if ($existingResult['success'] && $existingResult['result'] && $existingResult['
     ]);
     exit;
 }
-if ($existingResult['result']) {
+if (!empty($existingResult['result'])) {
     $existingResult['result']->free();
 }
 
 // ── Check completed attempt count ──
+// 'submitted' and 'timeout' both count as used attempts
 $countResult = safePreparedQuery($conn,
     "SELECT COUNT(*) AS cnt
      FROM assessment_attempts
-     WHERE assessment_id = ? AND user_id = ? AND status IN ('submitted','timeout')",
+     WHERE assessment_id = ? AND user_id = ? AND status IN ('submitted', 'timeout')",
     "ii", [$assessmentId, $userId]
 );
 
@@ -122,15 +115,15 @@ if ($attemptsUsed >= $maxAttempts) {
     exit;
 }
 
-// ── Create attempt record ──
+// ── Create attempt ──
 $attemptNumber = $attemptsUsed + 1;
-$ipAddress     = $_SERVER['REMOTE_ADDR'] ?? null;
+$ipAddress     = $_SERVER['REMOTE_ADDR']     ?? null;
 $userAgent     = $_SERVER['HTTP_USER_AGENT'] ?? null;
 
 $insert = safePreparedQuery($conn,
     "INSERT INTO assessment_attempts
-        (assessment_id, user_id, attempt_number, start_time, status, ip_address, user_agent)
-     VALUES (?, ?, ?, NOW(), 'in_progress', ?, ?)",
+        (assessment_id, user_id, attempt_number, start_time, status, ip_address, user_agent, created_at)
+     VALUES (?, ?, ?, NOW(), 'in_progress', ?, ?, NOW())",
     "iiiss", [$assessmentId, $userId, $attemptNumber, $ipAddress, $userAgent]
 );
 

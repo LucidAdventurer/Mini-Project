@@ -5,17 +5,24 @@
 // Returns training materials with filters, search, pagination.
 // Accessible by: admin (all), teacher (own + public), student (public only)
 //
-// GET ?category=pdf|video|...
+// Real schema — materials table columns:
+//   material_id, title, description, created_by, visibility,
+//   cloudinary_public_id, external_url, category, difficulty, created_at
+//
+// No: file_path, file_size, views, downloads, tags,
+//     estimated_time_minutes, material_type, uploaded_by
+//
+// GET ?category=...
 //     ?search=keyword
-//     ?type=pdf|video|link|article|quiz
-//     ?page=1&limit=20
+//     ?visibility=public|private
 //     ?my_uploads=1   (teacher: their own uploads only)
+//     ?page=1&limit=20
 //
 // Returns {
 //   success: bool,
 //   materials: [...],
 //   total: int, page: int, pages: int,
-//   stats: { total_materials, storage_used_bytes, total_downloads, total_views }
+//   stats: { total_materials }
 // }
 // ============================================================
 
@@ -26,41 +33,42 @@ header('Content-Type: application/json');
 
 $currentUser = validateSession($conn);
 $userId      = (int) $currentUser['user_id'];
-$role        = $currentUser['user_type'];
+$role        = $currentUser['role'];   // column is 'role', not 'user_type'
 
 // ── Query params ──
-$search    = trim($_GET['search']   ?? '');
-$category  = trim($_GET['category'] ?? '');
-$type      = trim($_GET['type']     ?? '');
-$myUploads = !empty($_GET['my_uploads']) && $role === 'teacher';
-$page      = max(1, (int)($_GET['page']  ?? 1));
-$limit     = min(100, max(1, (int)($_GET['limit'] ?? 20)));
-$offset    = ($page - 1) * $limit;
+$search     = trim($_GET['search']     ?? '');
+$category   = trim($_GET['category']   ?? '');
+$visibility = trim($_GET['visibility'] ?? '');
+$myUploads  = !empty($_GET['my_uploads']) && $role === 'teacher';
+$page       = max(1, (int)($_GET['page']  ?? 1));
+$limit      = min(100, max(1, (int)($_GET['limit'] ?? 20)));
+$offset     = ($page - 1) * $limit;
 
-$allowedTypes = ['pdf', 'video', 'link', 'article', 'quiz'];
-$allowedCategories = ['aptitude', 'technical', 'coding', 'reasoning', 'english', 'general', 'placement', 'interview'];
+$allowedCategories  = ['aptitude', 'technical', 'coding', 'reasoning', 'english', 'general', 'placement', 'interview'];
+$allowedVisibility  = ['public', 'private'];
 
 // ── Build WHERE ──
 $conditions = [];
 $params     = [];
 $types      = "";
 
-// Access control
+// Access control per role
 if ($role === 'admin') {
-    // Admins see everything
+    // Admin sees everything — no restriction
 } elseif ($role === 'teacher') {
     if ($myUploads) {
-        $conditions[] = "m.uploaded_by = ?";
+        $conditions[] = "m.created_by = ?";
         $params[]     = $userId;
         $types       .= "i";
     } else {
-        $conditions[] = "(m.is_public = 1 OR m.uploaded_by = ?)";
+        // Own uploads OR anything public
+        $conditions[] = "(m.visibility = 'public' OR m.created_by = ?)";
         $params[]     = $userId;
         $types       .= "i";
     }
 } else {
-    // Students see only public resources uploaded by teachers
-    $conditions[] = "m.is_public = 1 AND u.user_type = 'teacher'";
+    // Students see only public materials
+    $conditions[] = "m.visibility = 'public'";
 }
 
 if ($search !== '') {
@@ -72,15 +80,15 @@ if ($search !== '') {
     $types       .= "sss";
 }
 
-if ($type !== '' && in_array($type, $allowedTypes, true)) {
-    $conditions[] = "m.material_type = ?";
-    $params[]     = $type;
-    $types       .= "s";
-}
-
 if ($category !== '' && in_array($category, $allowedCategories, true)) {
     $conditions[] = "m.category = ?";
     $params[]     = $category;
+    $types       .= "s";
+}
+
+if ($visibility !== '' && in_array($visibility, $allowedVisibility, true)) {
+    $conditions[] = "m.visibility = ?";
+    $params[]     = $visibility;
     $types       .= "s";
 }
 
@@ -88,89 +96,56 @@ $where = !empty($conditions) ? implode(' AND ', $conditions) : '1=1';
 
 // ── Aggregate stats ──
 $rsStats = safePreparedQuery($conn,
-    "SELECT
-        COUNT(*)                AS total_materials,
-        SUM(m.file_size)        AS storage_used_bytes,
-        SUM(m.downloads)        AS total_downloads,
-        SUM(m.views)            AS total_views
-     FROM training_materials m
-     LEFT JOIN users u ON u.user_id = m.uploaded_by
+    "SELECT COUNT(*) AS total_materials
+     FROM materials m
+     LEFT JOIN users u ON u.user_id = m.created_by
      WHERE $where",
     $types ?: "", $params ?: []
 );
 
-$stats = ['total_materials' => 0, 'storage_used_bytes' => 0, 'total_downloads' => 0, 'total_views' => 0];
+$stats = ['total_materials' => 0];
 if ($rsStats['success'] && $rsStats['result']) {
     $row = $rsStats['result']->fetch_assoc();
     if ($row) {
-        $stats = [
-            'total_materials'    => (int)($row['total_materials']    ?? 0),
-            'storage_used_bytes' => (int)($row['storage_used_bytes'] ?? 0),
-            'total_downloads'    => (int)($row['total_downloads']    ?? 0),
-            'total_views'        => (int)($row['total_views']        ?? 0),
-        ];
+        $stats['total_materials'] = (int)($row['total_materials'] ?? 0);
     }
     $rsStats['result']->free();
 }
 
 // ── Total count for pagination ──
-$total = 0;
-$rc = safePreparedQuery($conn,
-    "SELECT COUNT(*) AS cnt
-     FROM training_materials m
-     LEFT JOIN users u ON u.user_id = m.uploaded_by
-     WHERE $where",
-    $types ?: "", $params ?: []
-);
-if ($rc['success'] && $rc['result']) {
-    $row   = $rc['result']->fetch_assoc();
-    $total = (int)($row['cnt'] ?? 0);
-    $rc['result']->free();
-}
+$total = $stats['total_materials'];
 
-// ── Fetch paginated rows ──
-$listTypes  = $types . "ii";
-$listParams = array_merge($params, [$limit, $offset]);
+// ── Material progress subquery (student/teacher only) ──
+$progressField = "NULL AS user_progress, NULL AS completed";
+$listTypes     = $types . "ii";
+$listParams    = array_merge($params, [$limit, $offset]);
 
-// Include user's own progress if student/teacher
-// $userId is already (int) cast — safe to embed in JOIN since it's a
-// numeric literal, but we use a subquery-style approach via params instead.
-$progressJoin  = '';
-$progressField = 'NULL AS user_progress, NULL AS is_completed';
 if (in_array($role, ['student', 'teacher'], true)) {
-    // Use a correlated subquery so $userId passes through bind_param safely
     $progressField = "(SELECT mp.progress_percentage FROM material_progress mp
                        WHERE mp.material_id = m.material_id AND mp.user_id = ?) AS user_progress,
-                      (SELECT mp.is_completed FROM material_progress mp
-                       WHERE mp.material_id = m.material_id AND mp.user_id = ?) AS is_completed";
-    // Prepend the two user_id params before limit/offset
+                      (SELECT mp.completed FROM material_progress mp
+                       WHERE mp.material_id = m.material_id AND mp.user_id = ?) AS completed";
     $listTypes  = "ii" . $listTypes;
     $listParams = array_merge([$userId, $userId], $listParams);
 }
 
+// ── Fetch paginated rows ──
 $r = safePreparedQuery($conn,
     "SELECT
         m.material_id,
         m.title,
         m.description,
-        m.material_type,
-        m.file_path,
+        m.created_by,
+        m.visibility,
+        m.cloudinary_public_id,
         m.external_url,
-        m.file_size,
         m.category,
         m.difficulty,
-        m.is_public,
-        m.views,
-        m.downloads,
-        m.tags,
-        m.estimated_time_minutes,
         m.created_at,
-        m.updated_at,
-        u.full_name   AS uploaded_by_name,
-        u.user_id     AS uploaded_by_id,
+        u.full_name AS created_by_name,
         $progressField
-     FROM training_materials m
-     LEFT JOIN users u ON u.user_id = m.uploaded_by
+     FROM materials m
+     LEFT JOIN users u ON u.user_id = m.created_by
      WHERE $where
      ORDER BY m.created_at DESC
      LIMIT ? OFFSET ?",
@@ -181,26 +156,19 @@ $materials = [];
 if ($r['success'] && $r['result']) {
     while ($row = $r['result']->fetch_assoc()) {
         $materials[] = [
-            'material_id'            => (int)$row['material_id'],
-            'title'                  => $row['title'],
-            'description'            => $row['description'],
-            'material_type'          => $row['material_type'],
-            'file_path'              => $row['file_path'],
-            'external_url'           => $row['external_url'],
-            'file_size'              => (int)($row['file_size'] ?? 0),
-            'category'               => $row['category'],
-            'difficulty'             => $row['difficulty'],
-            'is_public'              => (bool)$row['is_public'],
-            'views'                  => (int)$row['views'],
-            'downloads'              => (int)$row['downloads'],
-            'tags'                   => $row['tags'] ? json_decode($row['tags'], true) : [],
-            'estimated_time_minutes' => (int)($row['estimated_time_minutes'] ?? 0),
-            'created_at'             => $row['created_at'],
-            'updated_at'             => $row['updated_at'],
-            'uploaded_by_name'       => $row['uploaded_by_name'],
-            'uploaded_by_id'         => (int)($row['uploaded_by_id'] ?? 0),
-            'user_progress'          => isset($row['user_progress']) ? (int)$row['user_progress'] : null,
-            'is_completed'           => isset($row['is_completed']) ? (bool)$row['is_completed'] : null,
+            'material_id'          => (int)$row['material_id'],
+            'title'                => $row['title'],
+            'description'          => $row['description'],
+            'created_by'           => (int)$row['created_by'],
+            'created_by_name'      => $row['created_by_name'],
+            'visibility'           => $row['visibility'],
+            'cloudinary_public_id' => $row['cloudinary_public_id'],
+            'external_url'         => $row['external_url'],
+            'category'             => $row['category'],
+            'difficulty'           => $row['difficulty'],
+            'created_at'           => $row['created_at'],
+            'user_progress'        => isset($row['user_progress']) ? (int)$row['user_progress'] : null,
+            'completed'            => isset($row['completed'])     ? (bool)$row['completed']    : null,
         ];
     }
     $r['result']->free();
