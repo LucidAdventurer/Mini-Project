@@ -64,7 +64,6 @@ $attemptResult = safePreparedQuery($conn,
      WHERE aa.attempt_id = ?
        AND aa.user_id    = ?
        AND aa.status     = 'submitted'",
-       AND aa.status     = 'submitted'",
     "ii", [$attemptId, $userId]
 );
 
