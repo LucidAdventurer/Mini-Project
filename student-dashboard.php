@@ -95,7 +95,7 @@ $assessmentsResult = safePreparedQuery($conn,
        AND (a.start_time IS NULL OR a.start_time <= NOW())
        AND (a.end_time   IS NULL OR a.end_time   >= NOW())
      ORDER BY a.created_at DESC
-     LIMIT 20",
+     LIMIT 3",
     "ii", [$userId, $userId]
 );
 
@@ -150,6 +150,49 @@ if ($notifDropResult['success'] && $notifDropResult['result']) {
 $completionPct = ($availableTests > 0)
     ? min(100, round(($testsCompleted / $availableTests) * 100))
     : 0;
+
+// ── Chart data 1: Score % over last 5 attempts ──
+$scoreChartResult = safePreparedQuery($conn,
+    "SELECT a.title, aa.percentage, aa.submitted_at
+     FROM assessment_attempts aa
+     JOIN assessments a ON a.assessment_id = aa.assessment_id
+     WHERE aa.user_id = ? AND aa.status = 'submitted'
+     ORDER BY aa.submitted_at DESC
+     LIMIT 5",
+    "i", [$userId]
+);
+$scoreLabels = [];
+$scoreData   = [];
+if ($scoreChartResult['success'] && $scoreChartResult['result']) {
+    while ($row = $scoreChartResult['result']->fetch_assoc()) {
+        // Shorten title for label
+        $scoreLabels[] = mb_strimwidth($row['title'], 0, 14, '…');
+        $scoreData[]   = round((float)$row['percentage']);
+    }
+    $scoreChartResult['result']->free();
+}
+// Reverse so oldest → newest left to right
+$scoreLabels = array_reverse($scoreLabels);
+$scoreData   = array_reverse($scoreData);
+
+// ── Chart data 2: Tests completed per category ──
+$catChartResult = safePreparedQuery($conn,
+    "SELECT a.category, COUNT(*) AS cnt
+     FROM assessment_attempts aa
+     JOIN assessments a ON a.assessment_id = aa.assessment_id
+     WHERE aa.user_id = ? AND aa.status = 'submitted'
+     GROUP BY a.category",
+    "i", [$userId]
+);
+$catLabels = [];
+$catData   = [];
+if ($catChartResult['success'] && $catChartResult['result']) {
+    while ($row = $catChartResult['result']->fetch_assoc()) {
+        $catLabels[] = ucfirst($row['category']);
+        $catData[]   = (int)$row['cnt'];
+    }
+    $catChartResult['result']->free();
+}
 
 /* Helper: human-readable time-ago */
 function timeAgo(string $datetime): string {
@@ -939,8 +982,11 @@ function timeAgo(string $datetime): string {
         <div class="main-content">
             <div class="assessments-section" id="assessments-section">
                 <div class="section-header">
-                    <h2 class="section-title">Available Assessments</h2>
-                    <a href="student-assessments.php" class="view-all-link">View All →</a>
+                    <div>
+                        <h2 class="section-title">Available Assessments</h2>
+                        <p style="font-size:13px;color:#718096;margin-top:3px;">Showing latest 3 — <a href="student-assessments.php" style="color:#4facfe;font-weight:600;text-decoration:none;">view all</a></p>
+                    </div>
+                    <a href="student-assessments.php" class="view-all-link" style="background:linear-gradient(135deg,#4facfe,#00f2fe);color:white;padding:9px 20px;border-radius:10px;font-weight:600;font-size:14px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">View All Tests →</a>
                 </div>
                 <div class="filter-tabs">
                     <button class="filter-tab active" data-category="all">All Tests</button>
@@ -1038,10 +1084,29 @@ function timeAgo(string $datetime): string {
 
                 <div class="sidebar-card">
                     <h3 class="sidebar-card-title">Your Progress</h3>
-                    <div class="progress-chart">
-                        <span>📈 Progress Chart</span>
-                        <small>(Chart visualization will be here)</small>
+
+                    <?php if (empty($scoreData) && empty($catData)): ?>
+                        <div style="text-align:center;padding:30px 10px;color:#a0aec0;font-size:13px;">
+                            📊 Complete your first test to see charts here.
+                        </div>
+                    <?php else: ?>
+
+                    <?php if (!empty($scoreData)): ?>
+                    <div style="margin-bottom:18px;">
+                        <div style="font-size:12px;font-weight:600;color:#718096;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">Score % — Last <?= count($scoreData) ?> Attempts</div>
+                        <canvas id="scoreChart" height="130"></canvas>
                     </div>
+                    <?php endif; ?>
+
+                    <?php if (!empty($catData)): ?>
+                    <div style="margin-bottom:10px;">
+                        <div style="font-size:12px;font-weight:600;color:#718096;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">Tests by Category</div>
+                        <canvas id="catChart" height="130"></canvas>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php endif; ?>
+
                     <div class="overall-progress">
                         <div class="progress-label">
                             <span style="font-weight:600">Overall Completion</span>
@@ -1190,6 +1255,67 @@ function timeAgo(string $datetime): string {
 
         // Check every 30s but only fetch if 2 min have passed and tab is visible
         setInterval(pollNotifications, 30000);
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script>
+        // ── Score % line chart ──
+        <?php if (!empty($scoreData)): ?>
+        new Chart(document.getElementById('scoreChart'), {
+            type: 'line',
+            data: {
+                labels: <?= json_encode($scoreLabels) ?>,
+                datasets: [{
+                    label: 'Score %',
+                    data: <?= json_encode($scoreData) ?>,
+                    borderColor: '#4facfe',
+                    backgroundColor: 'rgba(79,172,254,0.12)',
+                    borderWidth: 2.5,
+                    pointBackgroundColor: '#4facfe',
+                    pointRadius: 4,
+                    tension: 0.4,
+                    fill: true,
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: {
+                        min: 0, max: 100,
+                        ticks: { font: { size: 11 }, callback: v => v + '%' },
+                        grid: { color: 'rgba(0,0,0,0.05)' }
+                    },
+                    x: { ticks: { font: { size: 10 } }, grid: { display: false } }
+                }
+            }
+        });
+        <?php endif; ?>
+
+        // ── Category doughnut chart ──
+        <?php if (!empty($catData)): ?>
+        new Chart(document.getElementById('catChart'), {
+            type: 'doughnut',
+            data: {
+                labels: <?= json_encode($catLabels) ?>,
+                datasets: [{
+                    data: <?= json_encode($catData) ?>,
+                    backgroundColor: ['#4facfe','#9f7aea','#48bb78','#ed8936','#fc8181','#f6ad55'],
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                cutout: '60%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { font: { size: 11 }, padding: 10, boxWidth: 12 }
+                    }
+                }
+            }
+        });
+        <?php endif; ?>
     </script>
 </body>
 </html>
