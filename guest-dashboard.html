@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Placement & Training Portal</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -21,8 +22,8 @@
             --teal:       #0d9488;
             --teal-dark:  #0f766e;
             --teal-light: #ccfbf1;
-            --serif: 'Instrument Serif', Georgia, serif;
-            --sans:  'DM Sans', system-ui, sans-serif;
+            --serif: 'Times New Roman', Times, serif;
+            --sans:  'Plus Jakarta Sans', system-ui, sans-serif;
             --r: 10px;
         }
 
@@ -442,7 +443,7 @@
 <section class="section" id="resources">
     <p class="section-label reveal">Study materials</p>
     <h2 class="section-title reveal">Resources to help you prepare</h2>
-    <p class="section-sub reveal">PDFs, videos, links and articles uploaded by your teachers — filtered by topic.</p>
+    <p class="section-sub reveal">PDFs, videos, links and articles for study preparation — filtered by topic.</p>
 
     <!-- Category tabs -->
     <div class="resources-tabs reveal">
@@ -585,7 +586,7 @@
 
     function renderResources(materials, grid) {
         if (!materials.length) {
-            grid.innerHTML = `<div class="resources-empty">No resources available for this category yet.<br>Check back after your teacher uploads some.</div>`;
+            grid.innerHTML = `<div class="resources-empty">No resources available for this category yet.<br>Check back later.</div>`;
             const viewAll = document.getElementById('resourcesViewAll');
             if (viewAll) viewAll.style.display = 'none';
             return;

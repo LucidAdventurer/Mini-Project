@@ -78,8 +78,8 @@ $r4 = safePreparedQuery($conn,
         a.duration_minutes,
         a.total_marks,
         a.passing_marks,
-        a.start_time,
-        a.end_time,
+        a.available_from,
+        a.available_until,
         a.created_at,
         a.updated_at,
 COUNT(DISTINCT q.question_id)            AS question_count,
@@ -90,11 +90,11 @@ LEFT JOIN questions q
 ON q.assessment_id = a.assessment_id
 LEFT JOIN assessment_attempts aa
 ON aa.assessment_id = a.assessment_id
-AND aa.status = 'submitted'
+AND aa.status = 'completed'
 WHERE a.created_by = ?
-GROUP BY a.assessment_id
+GROUP BY a.assessment_id, a.title, a.category, a.difficulty, a.status, a.duration_minutes, a.total_marks, a.passing_marks, a.available_from, a.available_until, a.created_at, a.updated_at
 ORDER BY
-        FIELD(a.status, 'published', 'draft', 'archived') ASC,
+        FIELD(a.status, 'active', 'scheduled', 'draft', 'archived') ASC,
         a.updated_at DESC",
 "i", [$teacherId]
 );
@@ -130,7 +130,8 @@ return date('M j, Y', strtotime($dt));
 // ── Helper: status label map ──
 function statusLabel(string $status): string {
 return match($status) {
-'published' => 'Published',
+'active' => 'Active',
+'scheduled' => 'Scheduled',
 'draft'    => 'Draft',
 'archived' => 'Completed',
 default    => ucfirst($status),
@@ -416,7 +417,7 @@ display: inline-flex; align-items: center; gap: 5px;
 padding: 5px 12px; border-radius: 6px;
 font-size: 12px; font-weight: 600; margin-bottom: 14px;
         }
-.status-badge.published    { background: #d1fae5; color: #065f46; }
+.status-badge.active    { background: #d1fae5; color: #065f46; }
 .status-badge.draft        { background: #fef3c7; color: #92400e; }
 .status-badge.archived     { background: #dbeafe; color: #1e40af; }
 .assessment-actions { display: flex; gap: 8px; }
@@ -625,8 +626,8 @@ $status   = $a['status'];
 $qCount   = (int)$a['question_count'];
 $attempts = (int)$a['attempt_count'];
 $students = (int)$a['student_count'];
-if ($status === 'published' && $a['end_time']) {
-    $dateLabel = 'Due: ' . fmtDate($a['end_time']);
+if ($status === 'active' && $a['available_until']) {
+    $dateLabel = 'Due: ' . fmtDate($a['available_until']);
 } elseif ($status === 'archived') {
     $dateLabel = 'Completed: ' . fmtDate($a['updated_at']);
 } else {
@@ -667,7 +668,7 @@ if ($status === 'published' && $a['end_time']) {
 <?php if ($status === 'draft'): ?>
 <a href="create-assessment.php?edit=<?= $aid ?>" class="btn btn-primary">Continue Editing</a>
 <button class="btn btn-danger" onclick="confirmDelete(<?= $aid ?>, '<?= htmlspecialchars(addslashes($a['title'])) ?>')">Delete</button>
-<?php elseif ($status === 'published' || $status === 'archived'): ?>
+<?php elseif ($status === 'active' || $status === 'archived'): ?>
 <a href="assessment-results.php?id=<?= $aid ?>" class="btn btn-primary">View Results</a>
 <a href="edit-assessment.php?id=<?= $aid ?>" class="btn btn-secondary">Edit</a>
 <?php else: ?>
