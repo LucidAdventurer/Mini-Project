@@ -154,7 +154,7 @@ default      => 'ℹ️',
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Teacher Dashboard - Placement Portal</title>
+<title>Teacher Dashboard - PREPAURA</title>
 <style>
 :root {
 --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -196,13 +196,15 @@ box-shadow: 0 2px 10px rgba(0,0,0,0.15);
 display: flex; align-items: center; gap: 12px;
 font-size: 20px; font-weight: 700; color: white; text-decoration: none;
         }
-.brand-logo {
+.brand-logo-img {
 width: 44px; height: 44px;
-background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
 border-radius: 10px;
-display: flex; align-items: center; justify-content: center;
-color: white; font-weight: 700; font-size: 16px;
+object-fit: contain;
+flex-shrink: 0;
         }
+.brand-text-group { display: flex; flex-direction: column; line-height: 1; }
+.brand-name { font-size: 19px; font-weight: 800; color: white; letter-spacing: 1px; }
+.brand-tagline { font-size: 10.5px; font-weight: 400; color: rgba(255,255,255,0.65); letter-spacing: 0.3px; margin-top: 3px; }
 .nav-search {
 flex: 1; max-width: 500px; margin: 0 30px; position: relative;
         }
@@ -492,8 +494,11 @@ font-weight: 700; cursor: pointer; transition: var(--transition);
 <!-- ── NAVIGATION ── -->
 <nav class="navbar">
 <a href="teacher-dashboard.php" class="navbar-brand">
-<div class="brand-logo">PT</div>
-<span>Placement Portal</span>
+<img src="data:image/png;base64,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" alt="PREPAURA Logo" class="brand-logo-img">
+<div class="brand-text-group">
+<span class="brand-name">PREPAURA</span>
+<span class="brand-tagline">Placement Training Platform</span>
+</div>
 </a>
 <div class="nav-search">
 <input type="text" class="search-input" id="searchInput" placeholder="Search assessments..." autocomplete="off">
