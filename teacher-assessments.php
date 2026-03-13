@@ -16,30 +16,14 @@ $userName     = htmlspecialchars($currentUser['full_name'] ?? 'Teacher');
 $userEmail    = htmlspecialchars($currentUser['email'] ?? '');
 $userInitials = strtoupper(substr($currentUser['full_name'] ?? 'T', 0, 2));
 
-// ── Unread notifications ──
-$unreadCount = 0;
-$r = safePreparedQuery($conn,
-    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
-    "i", [$teacherId]
-);
-if ($r['success'] && $r['result']) {
-    $row = $r['result']->fetch_assoc();
-    $unreadCount = (int)($row['cnt'] ?? 0);
-    $r['result']->free();
-}
+// Fetch profile_image (validateSession may not include it)
+$picStmt = $conn->prepare("SELECT profile_image FROM users WHERE user_id = ?");
+$picStmt->bind_param("i", $teacherId);
+$picStmt->execute();
+$picRow      = $picStmt->get_result()->fetch_assoc();
+$userPicture = $picRow['profile_image'] ?? '';
 
-// ── Latest 5 notifications ──
-$notifItems = [];
-$r2 = safePreparedQuery($conn,
-    "SELECT notification_id, title, message, is_read, created_at
-     FROM notifications WHERE user_id = ?
-     ORDER BY created_at DESC LIMIT 5",
-    "i", [$teacherId]
-);
-if ($r2['success'] && $r2['result']) {
-    while ($row = $r2['result']->fetch_assoc()) $notifItems[] = $row;
-    $r2['result']->free();
-}
+
 
 // ── Active filter from URL ──
 $activeFilter   = trim($_GET['filter']   ?? 'all');
@@ -173,28 +157,7 @@ if (!function_exists('timeAgo')) {
         .nav-date-box input[type="date"] { border: none; background: transparent; font-family: inherit; font-size: 13px; color: #4a5568; outline: none; cursor: pointer; width: 120px; }
         .nav-profile { display: flex; align-items: center; gap: 15px; position: relative; }
 
-        /* Notification */
-        .notification-btn { position: relative; width: 40px; height: 40px; background: rgba(255,255,255,0.1); border: none; border-radius: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: var(--transition); font-size: 18px; color: white; }
-        .notification-btn:hover { background: rgba(255,255,255,0.2); }
-        .notif-badge { position: absolute; top: -4px; right: -4px; background: #ff6b6b; color: white; width: 18px; height: 18px; border-radius: 50%; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
-        .notif-dropdown-wrap { position: relative; }
-        .notif-dropdown { position: absolute; top: calc(100% + 10px); right: 0; background: white; border-radius: 14px; box-shadow: var(--shadow-lg); width: 340px; opacity: 0; visibility: hidden; transform: translateY(-8px); transition: 0.25s; z-index: 1002; }
-        .notif-dropdown.show { opacity: 1; visibility: visible; transform: translateY(0); }
-        .notif-dropdown-header { padding: 16px 20px 12px; font-weight: 700; font-size: 15px; color: var(--text); border-bottom: 1px solid var(--border); }
-        .notif-list { max-height: 320px; overflow-y: auto; }
-        .nd-item { display: flex; gap: 12px; align-items: flex-start; padding: 14px 20px; border-bottom: 1px solid #f0f4f8; cursor: pointer; transition: background .15s; }
-        .nd-item:hover { background: #f7fafc; }
-        .nd-item.unread { background: #f5eeff; }
-        .nd-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--secondary); flex-shrink: 0; margin-top: 5px; }
-        .nd-dot.read { background: transparent; }
-        .nd-item-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
-        .nd-item-msg { font-size: 12px; color: var(--text-light); line-height: 1.4; }
-        .nd-item-time { font-size: 11px; color: #a0aec0; margin-top: 4px; }
-        .notif-see-all { display: block; text-align: center; padding: 12px; font-size: 13px; font-weight: 600; color: var(--secondary); text-decoration: none; border-top: 1px solid var(--border); border-radius: 0 0 14px 14px; transition: background .15s; }
-        .notif-see-all:hover { background: #f7fafc; }
-        .notif-empty { padding: 28px 20px; text-align: center; color: #a0aec0; font-size: 13px; }
-        .nd-badge-anim { animation: badgePulse 1.8s ease-in-out infinite; }
-        @keyframes badgePulse { 0%{box-shadow:0 0 0 0 rgba(255,107,107,.6)} 70%{box-shadow:0 0 0 7px rgba(255,107,107,0)} 100%{box-shadow:0 0 0 0 rgba(255,107,107,0)} }
+
 
         /* Profile dropdown */
         .profile-dropdown-container { position: relative; }
@@ -445,44 +408,29 @@ if (!function_exists('timeAgo')) {
         </div>
     </div>
     <div class="nav-profile">
-        <!-- Notifications -->
-        <div class="notif-dropdown-wrap">
-            <button class="notification-btn" id="notifBtn" onclick="toggleNotifDropdown()">
-                🔔
-                <?php if ($unreadCount > 0): ?>
-                <span class="notif-badge nd-badge-anim"><?= $unreadCount > 9 ? '9+' : $unreadCount ?></span>
-                <?php endif; ?>
-            </button>
-            <div class="notif-dropdown" id="notifDropdown">
-                <div class="notif-dropdown-header">🔔 Notifications</div>
-                <div class="notif-list">
-                    <?php if (empty($notifItems)): ?>
-                        <div class="notif-empty">🎉 You're all caught up!</div>
-                    <?php else: foreach ($notifItems as $n): ?>
-                        <div class="nd-item <?= $n['is_read'] ? '' : 'unread' ?>">
-                            <div class="nd-dot <?= $n['is_read'] ? 'read' : '' ?>"></div>
-                            <div>
-                                <div class="nd-item-title"><?= htmlspecialchars($n['title']) ?></div>
-                                <div class="nd-item-msg"><?= htmlspecialchars(mb_substr($n['message'] ?? '', 0, 80)) ?><?= strlen($n['message'] ?? '') > 80 ? '…' : '' ?></div>
-                                <div class="nd-item-time"><?= timeAgo($n['created_at']) ?></div>
-                            </div>
-                        </div>
-                    <?php endforeach; endif; ?>
-                </div>
-                <a href="notifications.php" class="notif-see-all">View all notifications →</a>
-            </div>
-        </div>
         <!-- Profile -->
         <div class="profile-dropdown-container">
             <button class="profile-button" id="profileBtn" onclick="toggleProfileDropdown()">
-                <div class="profile-avatar"><?= $userInitials ?></div>
+                <div class="profile-avatar">
+                    <?php if (!empty($userPicture)): ?>
+                        <img src="<?= htmlspecialchars($userPicture) ?>" alt="Profile" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
+                    <?php else: ?>
+                        <?= $userInitials ?>
+                    <?php endif; ?>
+                </div>
                 <span class="profile-name"><?= $userName ?></span>
                 <span class="profile-caret">▼</span>
             </button>
             <div class="profile-dropdown" id="profileDropdown">
                 <div class="dropdown-header">
                     <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;">
-                        <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:16px;flex-shrink:0;"><?= $userInitials ?></div>
+                        <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:16px;flex-shrink:0;overflow:hidden;">
+                            <?php if (!empty($userPicture)): ?>
+                                <img src="<?= htmlspecialchars($userPicture) ?>" alt="Profile" style="width:100%;height:100%;object-fit:cover;">
+                            <?php else: ?>
+                                <?= $userInitials ?>
+                            <?php endif; ?>
+                        </div>
                         <div>
                             <div class="dropdown-name"><?= $userName ?></div>
                             <div class="dropdown-email"><?= $userEmail ?></div>
@@ -511,12 +459,6 @@ if (!function_exists('timeAgo')) {
         <a href="teacher-assessments.php" class="active"><i class="fa fa-clipboard-list"></i> Assessments</a>
         <a href="teacher-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
         <a href="manage-groups.php"><i class="fa fa-users"></i> Manage Groups</a>
-        <a href="notifications.php" style="position:relative">
-            <i class="fa fa-bell"></i> Notifications
-            <?php if ($unreadCount > 0): ?>
-            <span style="margin-left:auto;background:#e53e3e;color:white;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;min-width:20px;text-align:center;"><?= $unreadCount ?></span>
-            <?php endif; ?>
-        </a>
         <span class="left-sidebar-section">Filter by Category</span>
         <a href="#" id="cat-all"       onclick="setSidebarCat('all',this);return false;"><i class="fa fa-layer-group"></i> All Tests</a>
         <a href="#" id="cat-aptitude"  onclick="setSidebarCat('aptitude',this);return false;"><i class="fa fa-calculator"  style="color:#4facfe"></i> Aptitude</a>
@@ -833,27 +775,9 @@ function applyFilters() {
 function toggleProfileDropdown() {
     document.getElementById('profileDropdown').classList.toggle('open');
     document.getElementById('dropdownOverlay').classList.toggle('show');
-    document.getElementById('notifDropdown').classList.remove('show');
-}
-function toggleNotifDropdown() {
-    const dd = document.getElementById('notifDropdown');
-    const open = dd.classList.contains('show');
-    document.getElementById('profileDropdown').classList.remove('open');
-    dd.classList.toggle('show', !open);
-    document.getElementById('dropdownOverlay').classList.toggle('show', !open);
-    if (!open) {
-        fetch('api/notifications/mark-read.php', {
-            method: 'POST',
-            headers: { 'X-CSRF-Token': CSRF_TOKEN, 'Content-Type': 'application/json' }
-        }).then(() => {
-            const badge = document.querySelector('.notif-badge');
-            if (badge) badge.remove();
-        }).catch(() => {});
-    }
 }
 function closeAllDropdowns() {
     document.getElementById('profileDropdown').classList.remove('open');
-    document.getElementById('notifDropdown').classList.remove('show');
     document.getElementById('dropdownOverlay').classList.remove('show');
 }
 
@@ -1061,23 +985,7 @@ window.addEventListener('load', () => {
     }
 });
 
-// ── Notification polling ──
-setInterval(() => {
-    fetch('api/notifications/unread-count.php')
-        .then(r => r.json())
-        .then(data => {
-            if (!data.success) return;
-            const badge = document.querySelector('.notif-badge');
-            if (data.count > 0) {
-                if (!badge) {
-                    const b = document.createElement('span');
-                    b.className = 'notif-badge nd-badge-anim';
-                    b.textContent = data.count > 9 ? '9+' : data.count;
-                    document.getElementById('notifBtn').appendChild(b);
-                } else { badge.textContent = data.count > 9 ? '9+' : data.count; }
-            } else if (badge) badge.remove();
-        }).catch(() => {});
-}, 30000);
+
 </script>
 </body>
 </html>

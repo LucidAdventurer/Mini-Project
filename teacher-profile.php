@@ -230,7 +230,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $fileSize = (int)$file['size'];
                 $userId   = (int)$_SESSION['user_id'];
                 $insFile->bind_param(
-                    "sssssiis",
+                    "sssssiii",
                     $file['name'],  // original_filename
                     $storedName,    // stored_filename
                     $fullPath,      // file_path
@@ -1025,7 +1025,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         <a href="teacher-assessments.php"><i class="fa fa-clipboard-list"></i> Assessments</a>
         <a href="manage-groups.php"><i class="fa fa-users"></i> Manage Groups</a>
         <a href="teacher-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
-        <a href="notifications.php"><i class="fa fa-bell"></i> Notifications</a>
         <div class="left-sidebar-bottom">
             <button onclick="handleLogout()"><i class="fa fa-sign-out-alt"></i> Logout</button>
         </div>

@@ -179,6 +179,48 @@ if ($result['success'] && $result['insert_id'] > 0) {
         }
     }
 
+    // ── Auto-notify group students when assessment is published ──
+    if ($status === 'published' && !empty($targets)) {
+        $notifTitle   = 'New Assessment Assigned';
+        $notifMessage = 'A new assessment has been assigned to you.';
+        $notifType    = 'assessment';
+        $actionUrl    = 'student-assessments.php';
+
+        $studentIds = [];
+
+        foreach ($targets as $t) {
+            if ($t['type'] === 'group') {
+                $r = safePreparedQuery($conn,
+                    "SELECT student_id FROM group_members WHERE group_id = ?",
+                    "i", [$t['id']]);
+                if ($r['success'] && $r['result']) {
+                    while ($row = $r['result']->fetch_assoc()) {
+                        $studentIds[] = (int)$row['student_id'];
+                    }
+                    $r['result']->free();
+                }
+            } elseif ($t['type'] === 'student') {
+                $studentIds[] = $t['id'];
+            }
+        }
+
+        $studentIds = array_unique($studentIds);
+
+        if (!empty($studentIds)) {
+            $stmt = $conn->prepare(
+                "INSERT INTO notifications (user_id, title, message, notification_type, action_url, created_at)
+                 VALUES (?, ?, ?, ?, ?, NOW())"
+            );
+            if ($stmt) {
+                foreach ($studentIds as $uid) {
+                    $stmt->bind_param("issss", $uid, $notifTitle, $notifMessage, $notifType, $actionUrl);
+                    $stmt->execute();
+                }
+                $stmt->close();
+            }
+        }
+    }
+
     echo json_encode(['success' => true, 'assessment_id' => $newId]);
 } else {
     error_log("create assessment failed for teacher_id=$teacherId: " . ($result['error'] ?? 'unknown'));

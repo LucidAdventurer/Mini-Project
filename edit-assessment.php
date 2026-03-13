@@ -16,13 +16,13 @@ $userName     = htmlspecialchars($currentUser['full_name'] ?? 'Teacher');
 $userEmail    = htmlspecialchars($currentUser['email'] ?? '');
 $userInitials = strtoupper(substr($currentUser['full_name'] ?? 'T', 0, 2));
 
-// ── Unread notifications count ──
-$unreadCount = 0;
-$rn = safePreparedQuery($conn, "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0", "i", [$teacherId]);
-if ($rn['success'] && $rn['result']) {
-    $unreadCount = (int)($rn['result']->fetch_assoc()['cnt'] ?? 0);
-    $rn['result']->free();
-}
+// Fetch profile_image (validateSession may not include it)
+$picStmt = $conn->prepare("SELECT profile_image FROM users WHERE user_id = ?");
+$picStmt->bind_param("i", $teacherId);
+$picStmt->execute();
+$picRow      = $picStmt->get_result()->fetch_assoc();
+$userPicture = $picRow['profile_image'] ?? '';
+
 
 $assessmentId = isset($_GET['id']) ? (int) $_GET['id'] : 0;
 if ($assessmentId <= 0) {
@@ -210,9 +210,7 @@ function fmtDate(?string $dt): string {
         .brand-name { font-size:18px; font-weight:800; letter-spacing:.5px; }
         .brand-tagline { font-size:11px; font-weight:400; opacity:.85; font-style:italic; }
         .nav-actions { display:flex; gap:15px; align-items:center; position:relative; }
-        .notification-btn { position:relative; width:40px; height:40px; background:rgba(255,255,255,.1); border:none; border-radius:10px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:18px; color:white; transition:var(--transition); }
-        .notification-btn:hover { background:rgba(255,255,255,.2); }
-        .notif-badge { position:absolute; top:-4px; right:-4px; background:#ff6b6b; color:white; width:18px; height:18px; border-radius:50%; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+
         .profile-button { display:flex; align-items:center; gap:10px; padding:8px 14px; background:rgba(255,255,255,.1); border:none; border-radius:10px; cursor:pointer; transition:var(--transition); }
         .profile-button:hover { background:rgba(255,255,255,.2); }
         .profile-avatar { width:34px; height:34px; background:linear-gradient(135deg,var(--color-teacher-primary),var(--color-teacher-secondary)); border:2px solid rgba(255,255,255,.4); border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:700; font-size:13px; }
@@ -625,21 +623,27 @@ function fmtDate(?string $dt): string {
         </div>
     </a>
     <div class="nav-actions" style="position:relative;">
-        <button class="notification-btn" id="notifBtn" title="Notifications">
-            🔔
-            <?php if ($unreadCount > 0): ?>
-            <span class="notif-badge"><?= $unreadCount > 9 ? '9+' : $unreadCount ?></span>
-            <?php endif; ?>
-        </button>
         <button class="profile-button" id="profileBtn">
-            <div class="profile-avatar"><?= $userInitials ?></div>
+            <div class="profile-avatar">
+                <?php if (!empty($userPicture)): ?>
+                    <img src="<?= htmlspecialchars($userPicture) ?>" alt="Profile" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
+                <?php else: ?>
+                    <?= $userInitials ?>
+                <?php endif; ?>
+            </div>
             <span class="profile-name"><?= $userName ?></span>
             <span class="profile-caret">▼</span>
         </button>
         <div class="profile-dropdown" id="profileDropdown">
             <div class="dropdown-header">
                 <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;width:100%;text-align:left;">
-                    <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--color-teacher-primary),var(--color-teacher-secondary));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;flex-shrink:0;overflow:hidden;"><?= $userInitials ?></div>
+                    <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--color-teacher-primary),var(--color-teacher-secondary));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;flex-shrink:0;overflow:hidden;">
+                        <?php if (!empty($userPicture)): ?>
+                            <img src="<?= htmlspecialchars($userPicture) ?>" alt="Profile" style="width:100%;height:100%;object-fit:cover;">
+                        <?php else: ?>
+                            <?= $userInitials ?>
+                        <?php endif; ?>
+                    </div>
                     <div>
                         <div class="dropdown-name"><?= $userName ?></div>
                         <div class="dropdown-email"><?= $userEmail ?></div>
@@ -663,7 +667,6 @@ function fmtDate(?string $dt): string {
         <a href="teacher-assessments.php" class="active"><i class="fa fa-clipboard-list"></i> Assessments</a>
         <a href="manage-groups.php"><i class="fa fa-users"></i> Manage Groups</a>
         <a href="teacher-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
-        <a href="notifications.php"><i class="fa fa-bell"></i> Notifications</a>
         <div class="left-sidebar-bottom">
             <button onclick="handleLogout()"><i class="fa fa-sign-out-alt"></i> Logout</button>
         </div>

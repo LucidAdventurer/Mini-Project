@@ -12,6 +12,13 @@ $userName     = htmlspecialchars($currentUser['full_name'] ?? 'Teacher');
 $userEmail    = htmlspecialchars($currentUser['email'] ?? '');
 $userInitials = strtoupper(substr($currentUser['full_name'] ?? 'T', 0, 2));
 
+// Fetch profile_image (validateSession may not include it)
+$picStmt = $conn->prepare("SELECT profile_image FROM users WHERE user_id = ?");
+$picStmt->bind_param("i", $teacherId);
+$picStmt->execute();
+$picRow      = $picStmt->get_result()->fetch_assoc();
+$userPicture = $picRow['profile_image'] ?? '';
+
 // ── Load all groups with member counts ──
 $groups = [];
 $rg = safePreparedQuery($conn,
@@ -463,14 +470,26 @@ body {
             <?php endif; ?>
         </button>
         <button class="profile-button" id="profileBtn">
-            <div class="profile-avatar"><?= $userInitials ?></div>
+            <div class="profile-avatar">
+                <?php if (!empty($userPicture)): ?>
+                    <img src="<?= htmlspecialchars($userPicture) ?>" alt="Profile" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
+                <?php else: ?>
+                    <?= $userInitials ?>
+                <?php endif; ?>
+            </div>
             <span class="profile-name"><?= $userName ?></span>
             <span class="profile-caret">▼</span>
         </button>
         <div class="profile-dropdown" id="profileDropdown">
             <div class="dropdown-header">
                 <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;width:100%;text-align:left;">
-                    <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;flex-shrink:0;overflow:hidden;"><?= $userInitials ?></div>
+                    <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;flex-shrink:0;overflow:hidden;">
+                        <?php if (!empty($userPicture)): ?>
+                            <img src="<?= htmlspecialchars($userPicture) ?>" alt="Profile" style="width:100%;height:100%;object-fit:cover;">
+                        <?php else: ?>
+                            <?= $userInitials ?>
+                        <?php endif; ?>
+                    </div>
                     <div>
                         <div class="dropdown-name"><?= $userName ?></div>
                         <div class="dropdown-email"><?= $userEmail ?></div>

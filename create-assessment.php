@@ -19,12 +19,12 @@ $userName     = htmlspecialchars($currentUser['full_name'] ?? 'Teacher');
 $userEmail    = htmlspecialchars($currentUser['email'] ?? '');
 $userInitials = strtoupper(substr($currentUser['full_name'] ?? 'T', 0, 2));
 
-$unreadCount = 0;
-$rn = safePreparedQuery($conn, "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0", "i", [$teacherId]);
-if ($rn['success'] && $rn['result']) {
-    $unreadCount = (int)($rn['result']->fetch_assoc()['cnt'] ?? 0);
-    $rn['result']->free();
-}
+// Fetch profile_image (validateSession may not include it)
+$picStmt = $conn->prepare("SELECT profile_image FROM users WHERE user_id = ?");
+$picStmt->bind_param("i", $teacherId);
+$picStmt->execute();
+$picRow      = $picStmt->get_result()->fetch_assoc();
+$userPicture = $picRow['profile_image'] ?? '';
 
 $editMode     = false;
 $assessmentId = 0;
@@ -618,9 +618,7 @@ function sel(?array $a, string $key, string $value, string $default = ''): strin
     </style>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
     <style>
-        .notification-btn { position:relative; width:40px; height:40px; background:rgba(255,255,255,.1); border:none; border-radius:10px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:18px; color:white; transition:all 0.2s ease; }
-        .notification-btn:hover { background:rgba(255,255,255,.2); }
-        .notif-badge { position:absolute; top:-4px; right:-4px; background:#ff6b6b; color:white; width:18px; height:18px; border-radius:50%; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+
         .page-wrapper { display:flex; min-height:calc(100vh - 71px); }
         .left-sidebar { width:220px; flex-shrink:0; padding:24px 12px; display:flex; flex-direction:column; gap:2px; background:#D3DAD9; position:fixed; top:71px; left:0; height:calc(100vh - 71px); z-index:100; }
         .left-sidebar-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#718096; padding:14px 12px 6px; }
@@ -646,21 +644,27 @@ function sel(?array $a, string $key, string $value, string $default = ''): strin
         </div>
     </a>
     <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;position:relative;">
-        <button class="notification-btn" id="notifBtn" title="Notifications">
-            🔔
-            <?php if ($unreadCount > 0): ?>
-            <span class="notif-badge"><?= $unreadCount > 9 ? '9+' : $unreadCount ?></span>
-            <?php endif; ?>
-        </button>
         <button class="nav-profile-btn" id="profileBtn">
-            <div class="nav-avatar"><?= $userInitials ?></div>
+            <div class="nav-avatar">
+                <?php if (!empty($userPicture)): ?>
+                    <img src="<?= htmlspecialchars($userPicture) ?>" alt="Profile" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
+                <?php else: ?>
+                    <?= $userInitials ?>
+                <?php endif; ?>
+            </div>
             <span style="font-weight:600;font-size:14px;"><?= $userName ?></span>
             <span style="font-size:10px;opacity:.7;">▼</span>
         </button>
         <div class="profile-dropdown" id="profileDropdown">
             <div class="dropdown-header">
                 <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;">
-                    <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--color-teacher-primary),var(--color-teacher-secondary));display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:16px;flex-shrink:0;"><?= $userInitials ?></div>
+                    <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--color-teacher-primary),var(--color-teacher-secondary));display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:16px;flex-shrink:0;overflow:hidden;">
+                        <?php if (!empty($userPicture)): ?>
+                            <img src="<?= htmlspecialchars($userPicture) ?>" alt="Profile" style="width:100%;height:100%;object-fit:cover;">
+                        <?php else: ?>
+                            <?= $userInitials ?>
+                        <?php endif; ?>
+                    </div>
                     <div>
                         <div class="dropdown-name"><?= $userName ?></div>
                         <div class="dropdown-email"><?= $userEmail ?></div>
@@ -684,7 +688,6 @@ function sel(?array $a, string $key, string $value, string $default = ''): strin
         <a href="teacher-assessments.php" class="active"><i class="fa fa-clipboard-list"></i> Assessments</a>
         <a href="manage-groups.php"><i class="fa fa-users"></i> Manage Groups</a>
         <a href="teacher-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
-        <a href="notifications.php"><i class="fa fa-bell"></i> Notifications</a>
         <div class="left-sidebar-bottom">
             <button onclick="handleLogout()"><i class="fa fa-sign-out-alt"></i> Logout</button>
         </div>
