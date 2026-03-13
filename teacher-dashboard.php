@@ -298,6 +298,7 @@ body::before {
   padding: 18px 20px;
   background: linear-gradient(135deg, var(--ink) 0%, var(--ink-3) 100%);
   border-bottom: 1px solid rgba(255,255,255,0.06);
+  text-align: left;
 }
 .dd-avatar {
   width: 44px; height: 44px; border-radius: 50%;
@@ -754,11 +755,7 @@ body::before {
   </div>
 
   <div class="nav-right">
-    <a href="create-assessment.php" class="nav-create-btn">
-      <i class="fa fa-plus"></i> New Assessment
-    </a>
-
-    <div class="profile-wrap">
+<div class="profile-wrap">
       <button class="profile-button" id="profileBtn">
         <div class="profile-avatar">
           <?php if (!empty($userPicture)): ?>
@@ -876,7 +873,7 @@ body::before {
     <div class="section-header">
       <div class="section-actions">
         <h2 class="section-title">My Assessments</h2>
-        <a href="create-assessment.php" class="btn-create-sm"><i class="fa fa-plus"></i> Create</a>
+        <a href="create-assessment.php" class="btn-create-sm"><i class="fa fa-plus"></i> Create New Assessment</a>
       </div>
       <a href="teacher-assessments.php" class="view-all-link">View all <i class="fa fa-arrow-right"></i></a>
     </div>
@@ -960,10 +957,7 @@ body::before {
   </div><!-- /page-content -->
 </div><!-- /page-wrapper -->
 
-<!-- FAB -->
-<a href="create-assessment.php" class="fab-container" title="Create Assessment (Ctrl+N)">
-  <span class="fab-button"><i class="fa fa-plus"></i></span>
-</a>
+
 
 <!-- Delete Confirm Modal -->
 <div class="modal-overlay" id="deleteModal">
