@@ -2321,14 +2321,123 @@
 
     <!-- QUESTIONS MODAL (view-only) -->
     <div class="modal-overlay" id="modalQuestions">
-        <div class="modal" style="max-width:760px;width:95%;">
+        <div class="modal" style="max-width:820px;width:96%;max-height:92vh;display:flex;flex-direction:column;">
             <button class="modal-close" onclick="closeModal('modalQuestions')">&#x2715;</button>
-            <h3 id="modalQTitle">Assessment Questions</h3>
-            <p id="modalQMeta" style="font-size:12px;color:var(--muted);margin-bottom:16px;"></p>
-            <div id="modalQBody" style="max-height:520px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;">
-                <div style="text-align:center;padding:32px;color:var(--muted);">Loading&hellip;</div>
+            <h3 id="modalQTitle" style="margin-bottom:2px;">Assessment Questions</h3>
+            <p id="modalQMeta" style="font-size:12px;color:var(--muted);margin-bottom:14px;"></p>
+
+            <!-- Tabs -->
+            <div style="display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:14px;">
+                <button id="qTabView"   class="btn btn-ghost btn-sm" style="border-radius:6px 6px 0 0;border-bottom:2px solid var(--blue-500);color:var(--blue-400);" onclick="switchQTab('view')">View Questions</button>
+                <button id="qTabAdd"    class="btn btn-ghost btn-sm" style="border-radius:6px 6px 0 0;" onclick="switchQTab('add')">Add Manually</button>
+                <button id="qTabImport" class="btn btn-ghost btn-sm" style="border-radius:6px 6px 0 0;" onclick="switchQTab('import')">Import PDF/DOCX</button>
             </div>
-            <div class="form-actions" style="margin-top:16px;">
+
+            <!-- VIEW TAB -->
+            <div id="qPanelView" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px;min-height:200px;">
+                <div style="text-align:center;padding:32px;color:var(--muted);">Loading...</div>
+            </div>
+
+            <!-- ADD MANUALLY TAB -->
+            <div id="qPanelAdd" style="display:none;overflow-y:auto;max-height:60vh;">
+                <div style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:12px;font-size:12px;color:var(--muted);">
+                    Add questions one at a time. Each is queued locally then saved together when you click <b>Save All to Test</b>.
+                </div>
+                <div style="display:flex;flex-direction:column;gap:10px;">
+                    <div>
+                        <label class="form-label">Question Text *</label>
+                        <textarea id="qAddText" class="form-input" rows="3" placeholder="Enter the question..."></textarea>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+                        <div>
+                            <label class="form-label">Type</label>
+                            <select id="qAddType" class="form-input" onchange="onQTypeChange()">
+                                <option value="mcq">MCQ (Single Answer)</option>
+                                <option value="true_false">True / False</option>
+                                <option value="multiple_select">Multiple Select</option>
+                                <option value="short_answer">Short Answer</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="form-label">Marks</label>
+                            <input id="qAddMarks" type="number" class="form-input" value="1" min="1" max="100">
+                        </div>
+                        <div>
+                            <label class="form-label">Negative Marks</label>
+                            <input id="qAddNegMarks" type="number" class="form-input" value="0" min="0" step="0.25">
+                        </div>
+                    </div>
+                    <div id="qOptionsSection">
+                        <label class="form-label">Options <span style="color:var(--muted);font-weight:400;">(select the correct answer)</span></label>
+                        <div id="qOptionsList" style="display:flex;flex-direction:column;gap:6px;">
+                            <div class="q-opt-row" style="display:flex;align-items:center;gap:8px;"><input type="radio" name="qCorrect" value="0" checked style="flex-shrink:0;"><input type="text" class="form-input q-opt-text" placeholder="Option A" style="flex:1;"><button class="btn btn-ghost btn-sm" onclick="removeQOption(this)" style="padding:4px 8px;color:var(--red);">x</button></div>
+                            <div class="q-opt-row" style="display:flex;align-items:center;gap:8px;"><input type="radio" name="qCorrect" value="1" style="flex-shrink:0;"><input type="text" class="form-input q-opt-text" placeholder="Option B" style="flex:1;"><button class="btn btn-ghost btn-sm" onclick="removeQOption(this)" style="padding:4px 8px;color:var(--red);">x</button></div>
+                            <div class="q-opt-row" style="display:flex;align-items:center;gap:8px;"><input type="radio" name="qCorrect" value="2" style="flex-shrink:0;"><input type="text" class="form-input q-opt-text" placeholder="Option C" style="flex:1;"><button class="btn btn-ghost btn-sm" onclick="removeQOption(this)" style="padding:4px 8px;color:var(--red);">x</button></div>
+                            <div class="q-opt-row" style="display:flex;align-items:center;gap:8px;"><input type="radio" name="qCorrect" value="3" style="flex-shrink:0;"><input type="text" class="form-input q-opt-text" placeholder="Option D" style="flex:1;"><button class="btn btn-ghost btn-sm" onclick="removeQOption(this)" style="padding:4px 8px;color:var(--red);">x</button></div>
+                        </div>
+                        <button class="btn btn-ghost btn-sm" onclick="addQOptionRow()" style="margin-top:6px;">+ Add Option</button>
+                    </div>
+                    <div id="qTFSection" style="display:none;">
+                        <label class="form-label">Correct Answer</label>
+                        <div style="display:flex;gap:16px;padding:10px;">
+                            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="radio" name="qTFCorrect" value="true" checked> True</label>
+                            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="radio" name="qTFCorrect" value="false"> False</label>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="form-label">Explanation <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
+                        <textarea id="qAddExplanation" class="form-input" rows="2" placeholder="Shown after submission..."></textarea>
+                    </div>
+                    <div id="qAddError" style="color:var(--red);font-size:12px;display:none;"></div>
+                    <button class="btn btn-primary btn-sm" onclick="queueQuestion()" style="align-self:flex-start;">+ Queue Question</button>
+                </div>
+                <div id="qQueueSection" style="margin-top:18px;display:none;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <b style="font-size:13px;">Queued: <span id="qQueueCount">0</span> questions</b>
+                        <button class="btn btn-danger btn-sm" onclick="clearQueue()">Clear All</button>
+                    </div>
+                    <div id="qQueueList" style="display:flex;flex-direction:column;gap:8px;max-height:180px;overflow-y:auto;"></div>
+                    <button id="btnSaveAllQ" class="btn btn-primary" onclick="saveAllQuestions()" style="margin-top:12px;width:100%;">Save All to Test</button>
+                </div>
+            </div>
+
+            <!-- IMPORT TAB -->
+            <div id="qPanelImport" style="display:none;overflow-y:auto;max-height:60vh;">
+                <div style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:14px;font-size:12px;color:var(--muted);">
+                    Upload a PDF or DOCX. Format: numbered questions (1. Question) followed by options (a) Option text) and optionally "Answer: b".
+                </div>
+                <div id="qImportDrop" style="border:2px dashed var(--border);border-radius:10px;padding:28px;text-align:center;cursor:pointer;"
+                    onclick="document.getElementById('qImportFile').click()"
+                    ondragover="event.preventDefault();this.style.borderColor='var(--blue-500)'"
+                    ondragleave="this.style.borderColor='var(--border)'"
+                    ondrop="handleQImportDrop(event)">
+                    <div style="font-size:30px;margin-bottom:8px;">&#128194;</div>
+                    <div style="font-size:14px;font-weight:600;">Drag &amp; drop or <span style="color:var(--blue-400);">browse</span></div>
+                    <div id="qImportDropLabel" style="font-size:11px;color:var(--muted);margin-top:4px;">PDF or DOCX &middot; max 10 MB</div>
+                </div>
+                <input type="file" id="qImportFile" accept=".pdf,.docx" style="display:none;" onchange="onQImportFileSelected(this)">
+                <div id="qImportProgress" style="display:none;margin-top:10px;">
+                    <div style="height:4px;background:var(--surface3);border-radius:4px;overflow:hidden;">
+                        <div id="qImportProgressBar" style="height:100%;width:0%;background:var(--blue-500);transition:width 0.3s;border-radius:4px;"></div>
+                    </div>
+                    <div id="qImportProgressText" style="font-size:11px;color:var(--muted);margin-top:3px;">Parsing document...</div>
+                </div>
+                <div id="qImportError" style="color:var(--red);font-size:12px;margin-top:8px;display:none;"></div>
+                <div id="qImportPreview" style="display:none;margin-top:14px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+                        <b style="font-size:13px;">Parsed: <span id="qImportCount">0</span> questions</b>
+                        <label style="font-size:12px;display:flex;align-items:center;gap:4px;">
+                            <input type="checkbox" id="qImportAppend"> Append to existing questions
+                        </label>
+                    </div>
+                    <div id="qImportList" style="max-height:240px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
+                    <button id="btnSaveImport" class="btn btn-primary" onclick="saveImportedQuestions()" style="width:100%;">
+                        Save <span id="qImportSaveCount">0</span> Questions to Test
+                    </button>
+                </div>
+            </div>
+
+            <div class="form-actions" style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);">
                 <button class="btn btn-ghost" onclick="closeModal('modalQuestions')">Close</button>
             </div>
         </div>
@@ -2461,28 +2570,93 @@
 
     <!-- CREATE TEST MODAL -->
     <div class="modal-overlay" id="modalCreateTest">
-        <div class="modal" style="width:640px;max-height:90vh;overflow-y:auto;">
+        <div class="modal" style="width:660px;max-height:92vh;overflow-y:auto;">
             <button class="modal-close" onclick="closeModal('modalCreateTest')">&#x2715;</button>
             <h3 style="margin-bottom:4px;">Create New Test</h3>
             <p style="font-size:12px;color:var(--muted);margin-bottom:18px;">Tests created here are published as
                 assessments visible to guest students</p>
 
+            <!-- ── Row 1: Title ── -->
             <div class="form-group">
                 <label>Test Title *</label>
                 <input class="form-input" id="ctTitle" placeholder="e.g. Quantitative Aptitude Mock Test 1"
                     maxlength="200" />
             </div>
 
-            <div class="form-group" style="display:flex;align-items:center;gap:10px;">
-                <label class="toggle" style="margin:0;">
-                    <input type="checkbox" id="urPublic" checked>
-                    <span class="toggle-slider"></span>
-                </label>
-                <span style="font-size:13px;">Make Public</span>
+            <!-- ── Row 2: Description ── -->
+            <div class="form-group" style="margin-top:12px;">
+                <label>Description <span style="font-weight:400;color:var(--muted);">(optional)</span></label>
+                <textarea class="form-input" id="ctDesc" rows="2"
+                    placeholder="Brief overview of what this test covers…"
+                    style="resize:vertical;min-height:56px;"></textarea>
             </div>
 
+            <!-- ── Row 3: Category + Difficulty ── -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+                <div class="form-group">
+                    <label>Category *</label>
+                    <select class="form-input" id="ctCategory">
+                        <option value="aptitude">Aptitude</option>
+                        <option value="technical">Technical</option>
+                        <option value="verbal">Verbal</option>
+                        <option value="logical">Logical Reasoning</option>
+                        <option value="reasoning">Reasoning</option>
+                        <option value="english">English</option>
+                        <option value="coding">Coding</option>
+                        <option value="general" selected>General</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Difficulty *</label>
+                    <select class="form-input" id="ctDifficulty">
+                        <option value="easy">Easy</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="hard">Hard</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- ── Row 4: Duration + Total Marks + Passing Marks ── -->
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px;">
+                <div class="form-group">
+                    <label>Duration (min) *</label>
+                    <input class="form-input" id="ctDuration" type="number" min="1" max="300" value="60"
+                        placeholder="e.g. 60" />
+                </div>
+                <div class="form-group">
+                    <label>Total Marks</label>
+                    <input class="form-input" id="ctTotalMarks" type="number" min="0" value="100"
+                        placeholder="e.g. 100" />
+                </div>
+                <div class="form-group">
+                    <label>Passing Marks</label>
+                    <input class="form-input" id="ctPassingMarks" type="number" min="0" value="40"
+                        placeholder="e.g. 40" />
+                </div>
+            </div>
+
+            <!-- ── Row 5: Marks/Q + Negative Marks + Max Attempts ── -->
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px;">
+                <div class="form-group">
+                    <label>Marks / Question</label>
+                    <input class="form-input" id="ctMarksPerQ" type="number" min="1" value="1"
+                        placeholder="e.g. 1" />
+                </div>
+                <div class="form-group">
+                    <label>Negative Marks</label>
+                    <input class="form-input" id="ctNegMarks" type="number" min="0" step="0.25" value="0"
+                        placeholder="e.g. 0.25" />
+                </div>
+                <div class="form-group">
+                    <label>Max Attempts</label>
+                    <input class="form-input" id="ctMaxAttempts" type="number" min="1" max="99" value="3"
+                        placeholder="e.g. 3" />
+                </div>
+            </div>
+
+            <!-- ── Row 6: Publish toggle ── -->
             <div
-                style="display:flex;align-items:center;gap:10px;margin-top:12px;padding:10px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2);">
+                style="display:flex;align-items:center;gap:10px;margin-top:14px;padding:10px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2);">
                 <label class="toggle" style="margin:0;">
                     <input type="checkbox" id="ctPublic" checked>
                     <span class="toggle-slider"></span>
@@ -2493,46 +2667,38 @@
                 </div>
             </div>
 
-
-            <!-- ── Question Paper PDF (optional) ── -->
+            <!-- ── Row 7: Question Paper PDF (optional) ── -->
             <div style="margin-top:14px;">
                 <label
                     style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px;">
                     Question Paper PDF
-                    <span
-                        style="font-weight:400;text-transform:none;letter-spacing:0;margin-left:4px;font-size:11px;">(optional
-                        — students can download while taking the test)</span>
+                    <span style="font-weight:400;text-transform:none;letter-spacing:0;margin-left:4px;font-size:11px;">(optional — students can download while taking the test)</span>
                 </label>
                 <div id="ctDropZone"
                     style="border:2px dashed var(--border);border-radius:10px;padding:22px;text-align:center;cursor:pointer;transition:border-color 0.2s,background 0.2s;"
                     onclick="document.getElementById('ctPdfFile').click()"
-                    ondragover="event.preventDefault();this.style.borderColor='var(--blue-500)';this.style.background='rgba(0,102,255,0.05)'"
+                    ondragover="event.preventDefault();this.style.borderColor='var(--crimson)';this.style.background='rgba(232,41,76,0.04)'"
                     ondragleave="this.style.borderColor='var(--border)';this.style.background=''"
                     ondrop="handleCtFileDrop(event)">
                     <div style="font-size:26px;margin-bottom:6px;">📄</div>
                     <div style="font-size:13px;font-weight:600;color:var(--text);">
-                        Drag & drop or <span style="color:var(--blue-400);">browse</span>
+                        Drag & drop or <span style="color:var(--crimson);">browse</span>
                     </div>
-                    <div id="ctDropLabel" style="font-size:11px;color:var(--muted);margin-top:4px;">PDF only · max 50 MB
-                    </div>
+                    <div id="ctDropLabel" style="font-size:11px;color:var(--muted);margin-top:4px;">PDF only · max 50 MB</div>
                 </div>
-                <input type="file" id="ctPdfFile" accept=".pdf" style="display:none;"
-                    onchange="onCtFileSelected(this)" />
-                <!-- Progress bar -->
+                <input type="file" id="ctPdfFile" accept=".pdf" style="display:none;" onchange="onCtFileSelected(this)" />
                 <div id="ctPdfProgress" style="display:none;margin-top:8px;">
                     <div style="height:5px;background:var(--surface3);border-radius:4px;overflow:hidden;">
                         <div id="ctPdfProgressBar"
-                            style="height:100%;width:0%;background:var(--blue-500);transition:width 0.3s;border-radius:4px;">
-                        </div>
+                            style="height:100%;width:0%;background:var(--crimson);transition:width 0.3s;border-radius:4px;"></div>
                     </div>
-                    <div id="ctPdfProgressText" style="font-size:11px;color:var(--muted);margin-top:3px;">Uploading PDF…
-                    </div>
+                    <div id="ctPdfProgressText" style="font-size:11px;color:var(--muted);margin-top:3px;">Uploading PDF…</div>
                 </div>
             </div>
 
             <div id="ctError" style="color:var(--red);font-size:12px;margin-top:10px;display:none;"></div>
 
-            <div class="form-actions" style="margin-top:16px;">
+            <div class="form-actions" style="margin-top:18px;">
                 <button class="btn btn-ghost" onclick="closeModal('modalCreateTest')">Cancel</button>
                 <button class="btn btn-primary" id="btnCreateTest" onclick="submitCreateTest()">
                     <svg viewBox="0 0 24 24"
@@ -2649,6 +2815,8 @@
             serveResource: _base + 'api/resources/serve-resource.php',
             viewResource: _base + 'api/resources/view-resource.php',
             createTest: _base + 'api/admin/create-test.php',
+            addQuestions: _base + 'api/admin/add-questions.php',
+            parseDocument: _base + 'api/admin/parse-document.php',
             getMe: _base + 'api/profile/get-profile.php',
             updateProfile: _base + 'api/profile/update-profile.php',
             changePassword: _base + 'api/profile/change-password.php',
@@ -3460,55 +3628,456 @@
             } catch (e) { showToast('Network error.', 'error'); }
         }
 
-        async function viewQuestions(assessmentId) {
-            document.getElementById('modalQTitle').textContent = 'Loading…';
-            document.getElementById('modalQMeta').textContent = '';
-            document.getElementById('modalQBody').innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted);">Loading questions…</div>';
-            openModal('modalQuestions');
+        // ======================================================
+        // QUESTION MANAGEMENT
+        // ======================================================
+        let currentQAssessmentId = null;
+        let queuedQuestions      = [];
+        let importedQuestions    = [];
 
+        function switchQTab(tab) {
+            const tabs   = ['view','add','import'];
+            const panels = { view:'qPanelView', add:'qPanelAdd', import:'qPanelImport' };
+            const btns   = { view:'qTabView',   add:'qTabAdd',   import:'qTabImport'   };
+            tabs.forEach(t => {
+                const p = document.getElementById(panels[t]);
+                if (p) { p.style.display = 'none'; p.style.flexDirection=''; }
+                const b = document.getElementById(btns[t]);
+                if (b) { b.style.borderBottom=''; b.style.color=''; }
+            });
+            const activePanel = document.getElementById(panels[tab]);
+            if (activePanel) { activePanel.style.display='flex'; activePanel.style.flexDirection='column'; }
+            const activeBtn = document.getElementById(btns[tab]);
+            if (activeBtn) { activeBtn.style.borderBottom='2px solid var(--blue-500)'; activeBtn.style.color='var(--blue-400)'; }
+        }
+
+        async function viewQuestions(assessmentId) {
+            currentQAssessmentId = assessmentId;
+            queuedQuestions      = [];
+            importedQuestions    = [];
+            document.getElementById('modalQTitle').textContent = 'Loading...';
+            document.getElementById('modalQMeta').textContent  = '';
+            switchQTab('view');
+            document.getElementById('qPanelView').innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted);">Loading questions...</div>';
+            openModal('modalQuestions');
+            await refreshQView();
+            resetQAddForm();
+            resetQImport();
+        }
+
+        async function refreshQView() {
+            const panel = document.getElementById('qPanelView');
             try {
-                const d = await apiGet(API.getTestQuestions, { assessment_id: assessmentId });
+                const d = await apiGet(API.getTestQuestions, { assessment_id: currentQAssessmentId });
                 if (!d.success) {
-                    document.getElementById('modalQBody').innerHTML = `<div style="color:var(--red);padding:16px;">${esc(d.error)}</div>`;
+                    panel.innerHTML = `<div style="color:var(--red);padding:16px;">${esc(d.error)}</div>`;
                     return;
                 }
                 const a = d.assessment;
                 document.getElementById('modalQTitle').textContent = a.title;
                 document.getElementById('modalQMeta').textContent =
-                    `${a.category || ''} · ${a.difficulty} · ${a.total_marks} marks · ${a.duration_minutes} min · by ${a.creator_name} · ${d.questions.length} question${d.questions.length !== 1 ? 's' : ''}`;
+                    `${a.category||''} - ${a.difficulty} - ${a.total_marks} marks - ${a.duration_minutes} min - by ${a.creator_name} - ${d.questions.length} question${d.questions.length!==1?'s':''}`;
 
                 if (!d.questions.length) {
-                    document.getElementById('modalQBody').innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted);">No questions added yet.</div>';
+                    panel.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);">' +
+                        '<div style="font-size:36px;margin-bottom:10px;">?</div>' +
+                        '<div style="font-weight:600;margin-bottom:4px;">No questions yet</div>' +
+                        '<div style="font-size:12px;">Use the <b>Add Manually</b> or <b>Import PDF/DOCX</b> tabs above.</div></div>';
                     return;
                 }
 
-                document.getElementById('modalQBody').innerHTML = d.questions.map((q, i) => {
-                    const optLabels = ['A', 'B', 'C', 'D'];
-                    const opts = [q.option_a, q.option_b, q.option_c, q.option_d]
-                        .map((o, j) => o ? `<div style="padding:4px 8px;border-radius:4px;margin-top:4px;font-size:13px;${q.correct_answer?.toUpperCase().includes(optLabels[j]) ? 'background:rgba(34,197,94,.15);color:var(--green);font-weight:600;' : ''}">
-                            <b>${optLabels[j]}.</b> ${esc(o)}
-                        </div>` : '')
-                        .join('');
-                    const typeBadge = `<span class="badge info" style="font-size:10px;">${esc(q.question_type?.replace(/_/g, ' '))}</span>`;
+                const labels = ['A','B','C','D','E','F'];
+                panel.innerHTML = d.questions.map((q, i) => {
+                    let optsHtml = '';
+                    if (q.options && q.options.length) {
+                        optsHtml = q.options.map((o, j) =>
+                            `<div style="padding:4px 10px;border-radius:4px;margin-top:4px;font-size:13px;${o.is_correct?'background:rgba(34,197,94,.15);color:var(--green);font-weight:600;':''}">
+                                <b>${labels[j]||j+1}.</b> ${esc(o.option_text)}${o.is_correct?' [correct]':''}
+                            </div>`
+                        ).join('');
+                    }
+                    const typeBadge = `<span class="badge info" style="font-size:10px;">${esc((q.question_type||'').replace(/_/g,' '))}</span>`;
                     return `<div style="border:1px solid var(--border);border-radius:8px;padding:14px;">
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
-                            <div style="font-size:13px;font-weight:600;">${i + 1}. ${esc(q.question_text)}</div>
+                            <div style="font-size:13px;font-weight:600;">${i+1}. ${esc(q.question_text)}</div>
                             <div style="display:flex;gap:6px;flex-shrink:0;">${typeBadge}
-                                <span class="badge ${q.difficulty || 'medium'}" style="font-size:10px;">${esc(q.difficulty || 'medium')}</span>
-                                <span style="font-size:11px;color:var(--muted);">${q.marks} mark${q.marks !== 1 ? 's' : ''}</span>
+                                <span style="font-size:11px;color:var(--muted);">${q.marks} mark${q.marks!==1?'s':''}</span>
                             </div>
                         </div>
-                        ${opts ? `<div style="margin-top:8px;">${opts}</div>` : ''}
+                        ${optsHtml ? `<div style="margin-top:8px;">${optsHtml}</div>` : ''}
                         ${q.explanation ? `<div style="margin-top:8px;font-size:12px;color:var(--muted);border-top:1px solid var(--border);padding-top:6px;"><b>Explanation:</b> ${esc(q.explanation)}</div>` : ''}
                     </div>`;
                 }).join('');
-
-            } catch (e) {
-                document.getElementById('modalQBody').innerHTML = `<div style="color:var(--red);padding:16px;">Network error loading questions.</div>`;
+            } catch(e) {
+                panel.innerHTML = '<div style="color:var(--red);padding:16px;">Network error loading questions.</div>';
             }
         }
 
-        async function exportTests() {
+        // ─── Add Manually ────────────────────────────────────
+        function onQTypeChange() {
+            const type = document.getElementById('qAddType').value;
+            document.getElementById('qOptionsSection').style.display = (type==='mcq'||type==='multiple_select') ? 'block' : 'none';
+            document.getElementById('qTFSection').style.display      = type==='true_false' ? 'block' : 'none';
+            const rows = document.querySelectorAll('#qOptionsList .q-opt-row input[type=radio],#qOptionsList .q-opt-row input[type=checkbox]');
+            rows.forEach(r => {
+                const nt = type==='multiple_select' ? 'checkbox' : 'radio';
+                if (r.type !== nt) { r.type=nt; r.name=nt==='radio'?'qCorrect':('qCorrectM_'+r.value); r.checked=false; }
+            });
+        }
+
+        function addQOptionRow() {
+            const list = document.getElementById('qOptionsList');
+            const idx  = list.querySelectorAll('.q-opt-row').length;
+            const type = document.getElementById('qAddType').value;
+            const it   = type==='multiple_select' ? 'checkbox' : 'radio';
+            const nm   = it==='radio' ? 'qCorrect' : ('qCorrectM_'+idx);
+            const row  = document.createElement('div');
+            row.className = 'q-opt-row'; row.style.cssText='display:flex;align-items:center;gap:8px;';
+            row.innerHTML = `<input type="${it}" name="${nm}" value="${idx}" style="flex-shrink:0;">
+                <input type="text" class="form-input q-opt-text" placeholder="Option ${String.fromCharCode(65+idx)}" style="flex:1;">
+                <button class="btn btn-ghost btn-sm" onclick="removeQOption(this)" style="padding:4px 8px;color:var(--red);">x</button>`;
+            list.appendChild(row);
+        }
+
+        function removeQOption(btn) {
+            if (document.querySelectorAll('#qOptionsList .q-opt-row').length <= 2) return;
+            btn.closest('.q-opt-row').remove();
+        }
+
+        function resetQAddForm() {
+            document.getElementById('qAddText').value        = '';
+            document.getElementById('qAddType').value        = 'mcq';
+            document.getElementById('qAddMarks').value       = '1';
+            document.getElementById('qAddNegMarks').value    = '0';
+            document.getElementById('qAddExplanation').value = '';
+            document.getElementById('qAddError').style.display = 'none';
+            document.getElementById('qOptionsSection').style.display = 'block';
+            document.getElementById('qTFSection').style.display      = 'none';
+            document.getElementById('qOptionsList').innerHTML = ['A','B','C','D'].map((l,i) =>
+                `<div class="q-opt-row" style="display:flex;align-items:center;gap:8px;">
+                    <input type="radio" name="qCorrect" value="${i}" ${i===0?'checked':''} style="flex-shrink:0;">
+                    <input type="text" class="form-input q-opt-text" placeholder="Option ${l}" style="flex:1;">
+                    <button class="btn btn-ghost btn-sm" onclick="removeQOption(this)" style="padding:4px 8px;color:var(--red);">x</button>
+                </div>`
+            ).join('');
+            updateQueueUI();
+        }
+
+        function queueQuestion() {
+            const text     = document.getElementById('qAddText').value.trim();
+            const type     = document.getElementById('qAddType').value;
+            const marks    = parseInt(document.getElementById('qAddMarks').value)    || 1;
+            const negMarks = parseFloat(document.getElementById('qAddNegMarks').value) || 0;
+            const explain  = document.getElementById('qAddExplanation').value.trim();
+            const errEl    = document.getElementById('qAddError');
+            errEl.style.display = 'none';
+
+            if (!text) { errEl.textContent='Question text is required.'; errEl.style.display='block'; return; }
+
+            let options = [];
+            if (type==='mcq' || type==='multiple_select') {
+                document.querySelectorAll('#qOptionsList .q-opt-row').forEach((row,i) => {
+                    const optText = row.querySelector('.q-opt-text').value.trim();
+                    const checked = row.querySelector('input[type=radio],input[type=checkbox]').checked;
+                    if (optText) options.push({ text:optText, is_correct:checked, order:i+1 });
+                });
+                if (options.length < 2) { errEl.textContent='At least 2 options required.'; errEl.style.display='block'; return; }
+                if (!options.some(o=>o.is_correct)) { errEl.textContent='Mark the correct answer.'; errEl.style.display='block'; return; }
+            } else if (type==='true_false') {
+                const correct = document.querySelector('input[name=qTFCorrect]:checked')?.value || 'true';
+                options = [{text:'True',is_correct:correct==='true',order:1},{text:'False',is_correct:correct==='false',order:2}];
+            }
+
+            queuedQuestions.push({ text, type, marks, negative_marks:negMarks, explanation:explain, order:queuedQuestions.length+1, options });
+            updateQueueUI();
+            document.getElementById('qAddText').value = '';
+            document.getElementById('qAddExplanation').value = '';
+            document.querySelectorAll('#qOptionsList .q-opt-text').forEach(i=>i.value='');
+            showToast('Question queued! Add more or Save All.', 'success');
+        }
+
+        function updateQueueUI() {
+            const section = document.getElementById('qQueueSection');
+            if (!queuedQuestions.length) { section.style.display='none'; return; }
+            section.style.display = 'block';
+            document.getElementById('qQueueCount').textContent = queuedQuestions.length;
+            document.getElementById('qQueueList').innerHTML = queuedQuestions.map((q,i) =>
+                `<div style="background:var(--surface2);border-radius:6px;padding:8px 12px;font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                    <span><b>${i+1}.</b> ${esc(q.text.substring(0,80))}${q.text.length>80?'...':''}</span>
+                    <span style="color:var(--muted);flex-shrink:0;">${q.type.replace(/_/g,' ')} - ${q.marks}m</span>
+                    <button class="btn btn-ghost btn-sm" onclick="removeQueued(${i})" style="padding:2px 6px;color:var(--red);">x</button>
+                </div>`
+            ).join('');
+        }
+
+        function removeQueued(idx) { queuedQuestions.splice(idx,1); queuedQuestions.forEach((q,i)=>q.order=i+1); updateQueueUI(); }
+        function clearQueue() { queuedQuestions=[]; updateQueueUI(); }
+
+        async function saveAllQuestions() {
+            if (!queuedQuestions.length) return;
+            const btn = document.getElementById('btnSaveAllQ');
+            btn.disabled=true; btn.textContent='Saving...';
+            try {
+                const d = await apiPost(API.addQuestions, { assessment_id:currentQAssessmentId, questions:queuedQuestions, append:false });
+                if (d.success) {
+                    showToast(`Saved ${d.inserted} question${d.inserted!==1?'s':''}!`, 'success');
+                    queuedQuestions=[]; updateQueueUI();
+                    PageCache.invalidate('tests'); loadTests();
+                    await refreshQView(); switchQTab('view');
+                } else { showToast(d.error||'Failed to save.', 'error'); }
+            } catch(e) { showToast('Network error.', 'error'); }
+            btn.disabled=false; btn.textContent='Save All to Test';
+        }
+
+        // ─── Import from PDF/DOCX ────────────────────────────
+        function resetQImport() {
+            importedQuestions=[];
+            document.getElementById('qImportFile').value='';
+            document.getElementById('qImportDropLabel').textContent='PDF or DOCX - max 10 MB';
+            document.getElementById('qImportDrop').style.borderColor='var(--border)';
+            document.getElementById('qImportProgress').style.display='none';
+            document.getElementById('qImportError').style.display='none';
+            document.getElementById('qImportPreview').style.display='none';
+        }
+
+        function handleQImportDrop(e) {
+            e.preventDefault();
+            document.getElementById('qImportDrop').style.borderColor='var(--border)';
+            const file=e.dataTransfer.files[0];
+            if (!file) return;
+            const inp=document.getElementById('qImportFile');
+            const dt=new DataTransfer(); dt.items.add(file); inp.files=dt.files;
+            onQImportFileSelected(inp);
+        }
+
+        async function onQImportFileSelected(input) {
+            const file=input.files[0]; if (!file) return;
+            const errEl=document.getElementById('qImportError');
+            errEl.style.display='none';
+            const ext=file.name.split('.').pop().toLowerCase();
+            if (!['pdf','docx'].includes(ext)) { errEl.textContent='Only PDF or DOCX allowed.'; errEl.style.display='block'; return; }
+            if (file.size>10*1024*1024) { errEl.textContent='File must be under 10 MB.'; errEl.style.display='block'; return; }
+
+            document.getElementById('qImportDropLabel').textContent = file.name + ' - parsing...';
+            document.getElementById('qImportProgress').style.display='block';
+            document.getElementById('qImportPreview').style.display='none';
+            document.getElementById('qImportProgressBar').style.width='40%';
+            document.getElementById('qImportProgressText').textContent='Uploading to server...';
+
+            const fd=new FormData(); fd.append('document',file);
+            try {
+                const r=await fetch(API.parseDocument, {method:'POST', credentials:'same-origin', body:fd});
+                document.getElementById('qImportProgressBar').style.width='100%';
+                document.getElementById('qImportProgressText').textContent='Parsing complete';
+                const d=await r.json();
+                if (!d.success) { errEl.textContent=d.error||'Parse failed.'; errEl.style.display='block'; document.getElementById('qImportProgress').style.display='none'; return; }
+
+                importedQuestions = (d.questions||[]).map((q,i) => ({
+                    text: q.text || q.question_text || '',
+                    type: q.type==='true_false' ? 'true_false' : 'mcq',
+                    marks:1, negative_marks:0, explanation:'', order:i+1,
+                    options: q.type==='true_false'
+                        ? [{text:'True',is_correct:(q.correctAnswer??'true')==='true',order:1},{text:'False',is_correct:(q.correctAnswer??'true')==='false',order:2}]
+                        : (q.options||[]).map((o,j) => ({text:o, is_correct: q.correctAnswer ? q.correctAnswer===String.fromCharCode(97+j) : j===0, order:j+1})).filter(o=>o.text)
+                }));
+                renderImportPreview();
+            } catch(e) { errEl.textContent='Network error.'; errEl.style.display='block'; document.getElementById('qImportProgress').style.display='none'; }
+        }
+
+        function renderImportPreview() {
+            const labels=['A','B','C','D'];
+            document.getElementById('qImportCount').textContent    = importedQuestions.length;
+            document.getElementById('qImportSaveCount').textContent = importedQuestions.length;
+            document.getElementById('qImportPreview').style.display='block';
+            document.getElementById('qImportList').innerHTML = importedQuestions.map((q,i) => {
+                const opts = q.options.map((o,j) =>
+                    `<span style="font-size:11px;${o.is_correct?'color:var(--green);font-weight:600;':'color:var(--muted);'}">${labels[j]||j+1}. ${esc(o.text)}${o.is_correct?' [correct]':''}</span>`
+                ).join('  ');
+                return `<div style="background:var(--surface2);border-radius:6px;padding:10px 12px;font-size:12px;">
+                    <b>${i+1}.</b> ${esc(q.text)}<br><div style="margin-top:4px;">${opts}</div></div>`;
+            }).join('');
+        }
+
+        async function saveImportedQuestions() {
+            if (!importedQuestions.length) return;
+            const btn=document.getElementById('btnSaveImport');
+            const append=document.getElementById('qImportAppend').checked;
+            btn.disabled=true; btn.textContent='Saving...';
+            try {
+                const d=await apiPost(API.addQuestions, { assessment_id:currentQAssessmentId, questions:importedQuestions, append });
+                if (d.success) {
+                    showToast(`Saved ${d.inserted} question${d.inserted!==1?'s':''}!`, 'success');
+                    resetQImport(); PageCache.invalidate('tests'); loadTests();
+                    await refreshQView(); switchQTab('view');
+                } else { showToast(d.error||'Failed.', 'error'); }
+            } catch(e) { showToast('Network error.', 'error'); }
+            btn.disabled=false; btn.textContent=`Save ${importedQuestions.length} Questions to Test`;
+        }
+
+
+        // ════════════════════════════════════════════════════════════
+        // CREATE TEST MODAL
+        // ════════════════════════════════════════════════════════════
+        let ctPdfFileObj = null;   // holds File selected for PDF upload
+
+        function openCreateTestModal() {
+            // Reset all fields
+            document.getElementById('ctTitle').value          = '';
+            document.getElementById('ctDesc').value           = '';
+            document.getElementById('ctCategory').value       = 'general';
+            document.getElementById('ctDifficulty').value     = 'medium';
+            document.getElementById('ctDuration').value       = '60';
+            document.getElementById('ctTotalMarks').value     = '100';
+            document.getElementById('ctPassingMarks').value   = '40';
+            document.getElementById('ctMarksPerQ').value      = '1';
+            document.getElementById('ctNegMarks').value       = '0';
+            document.getElementById('ctMaxAttempts').value    = '3';
+            document.getElementById('ctPublic').checked       = true;
+            document.getElementById('ctPdfFile').value        = '';
+            ctPdfFileObj = null;
+            document.getElementById('ctDropLabel').textContent = 'PDF only · max 50 MB';
+            document.getElementById('ctDropZone').style.borderColor = '';
+            document.getElementById('ctDropZone').style.background  = '';
+            document.getElementById('ctPdfProgress').style.display  = 'none';
+            document.getElementById('ctPdfProgressBar').style.width = '0%';
+            document.getElementById('ctError').style.display        = 'none';
+            document.getElementById('btnCreateTest').disabled       = false;
+            document.getElementById('btnCreateTest').textContent    = 'Create Test';
+            openModal('modalCreateTest');
+        }
+
+        function onCtFileSelected(input) {
+            const file = input.files && input.files[0];
+            if (!file) return;
+            if (file.size > 50 * 1024 * 1024) {
+                document.getElementById('ctError').textContent = 'PDF must be under 50 MB.';
+                document.getElementById('ctError').style.display = 'block';
+                input.value = '';
+                return;
+            }
+            ctPdfFileObj = file;
+            document.getElementById('ctDropLabel').textContent = file.name + '  (' + (file.size / 1024).toFixed(0) + ' KB)';
+            document.getElementById('ctError').style.display = 'none';
+        }
+
+        function handleCtFileDrop(event) {
+            event.preventDefault();
+            const zone = document.getElementById('ctDropZone');
+            zone.style.borderColor = '';
+            zone.style.background  = '';
+            const file = event.dataTransfer.files && event.dataTransfer.files[0];
+            if (!file) return;
+            if (!file.name.toLowerCase().endsWith('.pdf')) {
+                document.getElementById('ctError').textContent = 'Only PDF files are supported.';
+                document.getElementById('ctError').style.display = 'block';
+                return;
+            }
+            // Assign to the file input via DataTransfer so onCtFileSelected can read it
+            try {
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                const inp = document.getElementById('ctPdfFile');
+                inp.files = dt.files;
+            } catch(e) {
+                // DataTransfer not supported — store directly
+            }
+            ctPdfFileObj = file;
+            document.getElementById('ctDropLabel').textContent = file.name + '  (' + (file.size / 1024).toFixed(0) + ' KB)';
+            document.getElementById('ctError').style.display = 'none';
+        }
+
+        async function submitCreateTest() {
+            const title         = document.getElementById('ctTitle').value.trim();
+            const description   = document.getElementById('ctDesc').value.trim();
+            const category      = document.getElementById('ctCategory').value;
+            const difficulty    = document.getElementById('ctDifficulty').value;
+            const duration      = parseInt(document.getElementById('ctDuration').value) || 0;
+            const totalMarks    = parseInt(document.getElementById('ctTotalMarks').value) || 0;
+            const passingMarks  = parseInt(document.getElementById('ctPassingMarks').value) || 0;
+            const marksPerQ     = parseFloat(document.getElementById('ctMarksPerQ').value) || 1;
+            const negMarks      = parseFloat(document.getElementById('ctNegMarks').value) || 0;
+            const maxAttempts   = parseInt(document.getElementById('ctMaxAttempts').value) || 3;
+            const isPublic      = document.getElementById('ctPublic').checked;
+            const errEl         = document.getElementById('ctError');
+            const showErr       = (msg) => { errEl.textContent = msg; errEl.style.display = 'block'; };
+
+            errEl.style.display = 'none';
+            if (!title)      return showErr('Test title is required.');
+            if (duration < 1) return showErr('Duration must be at least 1 minute.');
+
+            const btn = document.getElementById('btnCreateTest');
+            btn.disabled    = true;
+            btn.textContent = 'Creating…';
+
+            let pdfUrl   = '';
+            let publicId = '';
+            let fileSize = 0;
+
+            // ── Optional: upload PDF to Cloudinary first ──
+            if (ctPdfFileObj) {
+                const progWrap = document.getElementById('ctPdfProgress');
+                const progBar  = document.getElementById('ctPdfProgressBar');
+                const progTxt  = document.getElementById('ctPdfProgressText');
+                progWrap.style.display = 'block';
+                progBar.style.width    = '0%';
+                progTxt.textContent    = 'Uploading PDF…';
+                try {
+                    const result = await uploadToCloudinary(ctPdfFileObj, (pct) => {
+                        progBar.style.width  = pct + '%';
+                        progTxt.textContent  = 'Uploading PDF… ' + pct + '%';
+                    });
+                    pdfUrl   = result.url;
+                    publicId = result.publicId;
+                    fileSize = result.fileSize;
+                    progTxt.textContent = 'PDF uploaded.';
+                } catch (e) {
+                    progWrap.style.display = 'none';
+                    showErr('PDF upload failed: ' + e.message);
+                    btn.disabled    = false;
+                    btn.textContent = 'Create Test';
+                    return;
+                }
+            }
+
+            // ── Save to DB via create-test.php ──
+            try {
+                const payload = {
+                    title,
+                    description,
+                    category,
+                    difficulty,
+                    duration_minutes: duration,
+                    total_marks:      totalMarks,
+                    passing_marks:    passingMarks,
+                    marks_per_q:      marksPerQ,
+                    negative_marks:   negMarks,
+                    max_attempts:     maxAttempts,
+                    visibility:       isPublic ? 'public' : 'private',
+                    status:           'published',
+                    pdf_url:          pdfUrl,
+                    public_id:        publicId,
+                    file_size:        fileSize,
+                };
+                const d = await apiPost(API.createTest, payload);
+                if (d.success) {
+                    showToast('Test "' + title + '" created successfully.', 'success');
+                    closeModal('modalCreateTest');
+                    PageCache.invalidateMany(['overview', 'tests']);
+                    loadTests();
+                    loadOverview();
+                } else {
+                    showErr(d.error || 'Failed to create test.');
+                    btn.disabled    = false;
+                    btn.textContent = 'Create Test';
+                }
+            } catch (e) {
+                showErr('Network error. Please try again.');
+                btn.disabled    = false;
+                btn.textContent = 'Create Test';
+            }
+        }
+
+                async function exportTests() {
             try {
                 const d = await apiGet(API.getTests, { status: testStatus, search: testSearch, category: testCategory, limit: 1000, page: 1 });
                 if (!d.success || !d.assessments.length) return showToast('No assessments to export.', 'error');
