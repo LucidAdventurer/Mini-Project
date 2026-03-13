@@ -2,13 +2,17 @@
 // ============================================================
 // api/resources/update-resource.php
 //
-// Updates metadata of an existing training material.
+// Updates metadata of an existing material.
 // Admins can edit any material; teachers can only edit their own.
 //
 // POST JSON {
-//   material_id, title, description, category,
-//   difficulty, is_public, external_url?,
-//   tags?, estimated_time_minutes?
+//   material_id  : int      (required)
+//   title        : string   (required)
+//   description  : string
+//   category     : 'aptitude'|'verbal'|'logical'|'technical'|'general'
+//   difficulty   : 'beginner'|'intermediate'|'advanced'
+//   visibility   : 'public'|'group'|'private'
+//   external_url : string   (optional)
 // }
 // Returns { success: bool, error?: string }
 // ============================================================
@@ -19,7 +23,7 @@ require_once __DIR__ . '/../../db-guard.php';
 header('Content-Type: application/json');
 
 $currentUser = validateSession($conn);
-$userId      = (int) $currentUser['user_id'];
+$userId      = (int)$currentUser['user_id'];
 $role        = $currentUser['user_type'];
 
 if (!in_array($role, ['admin', 'teacher'], true)) {
@@ -43,15 +47,13 @@ if (!is_array($body)) {
     exit;
 }
 
-$materialId  = (int)($body['material_id'] ?? 0);
-$title       = trim($body['title']        ?? '');
-$description = trim($body['description']  ?? '');
-$category    = trim($body['category']     ?? '');
-$difficulty  = trim($body['difficulty']   ?? '');
-$externalUrl = trim($body['external_url'] ?? '');
-$tagsRaw     = $body['tags'] ?? null;
-$estTime     = max(0, (int)($body['estimated_time_minutes'] ?? 0));
-$isPublic    = isset($body['is_public']) ? (int)(bool)$body['is_public'] : 1;
+$materialId  = (int)($body['material_id']  ?? 0);
+$title       = trim($body['title']         ?? '');
+$description = trim($body['description']   ?? '');
+$category    = trim($body['category']      ?? '');
+$difficulty  = trim($body['difficulty']    ?? '');
+$visibility  = trim($body['visibility']    ?? '');
+$externalUrl = trim($body['external_url']  ?? '');
 
 if ($materialId <= 0) {
     http_response_code(400);
@@ -64,8 +66,9 @@ if ($title === '') {
     exit;
 }
 
-$allowedCategories   = ['aptitude', 'technical', 'coding', 'reasoning', 'english', 'general', 'placement', 'interview'];
+$allowedCategories   = ['aptitude', 'verbal', 'logical', 'technical', 'general'];
 $allowedDifficulties = ['beginner', 'intermediate', 'advanced'];
+$allowedVisibilities = ['public', 'group', 'private'];
 
 if (!in_array($category, $allowedCategories, true)) {
     http_response_code(400);
@@ -75,30 +78,21 @@ if (!in_array($category, $allowedCategories, true)) {
 if (!in_array($difficulty, $allowedDifficulties, true)) {
     $difficulty = 'beginner';
 }
+if (!in_array($visibility, $allowedVisibilities, true)) {
+    $visibility = 'public';
+}
 
-// ── Validate external URL if provided ──
 if ($externalUrl !== '' && !filter_var($externalUrl, FILTER_VALIDATE_URL)) {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => 'Invalid URL format.']);
     exit;
 }
 
-// ── Tags ──
-$tagsJson = null;
-if (is_array($tagsRaw)) {
-    $clean    = array_slice(array_map('trim', $tagsRaw), 0, 10);
-    $tagsJson = json_encode(array_values(array_filter($clean)));
-} elseif (is_string($tagsRaw) && $tagsRaw !== '') {
-    $decoded = json_decode($tagsRaw, true);
-    if (is_array($decoded)) {
-        $tagsJson = json_encode(array_values(array_filter(array_map('trim', $decoded))));
-    }
-}
-
-// ── Verify ownership ──
+// ── Verify material exists and check ownership ────────────────────────────
+// Column is created_by, not uploaded_by
 $check = safePreparedQuery($conn,
-    "SELECT material_id, uploaded_by FROM training_materials WHERE material_id = ?",
-    "i", [$materialId]
+    'SELECT material_id, created_by FROM materials WHERE material_id = ?',
+    'i', [$materialId]
 );
 if (!$check['success'] || !$check['result'] || $check['result']->num_rows === 0) {
     http_response_code(404);
@@ -108,32 +102,32 @@ if (!$check['success'] || !$check['result'] || $check['result']->num_rows === 0)
 $mRow = $check['result']->fetch_assoc();
 $check['result']->free();
 
-if ($role !== 'admin' && (int)$mRow['uploaded_by'] !== $userId) {
+if ($role !== 'admin' && (int)$mRow['created_by'] !== $userId) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'Access denied. You can only edit your own materials.']);
     exit;
 }
 
-// ── Update ──
+// ── Update ────────────────────────────────────────────────────────────────
+// Only columns that actually exist in the materials schema.
+// No: is_public, uploaded_by, tags, estimated_time_minutes, updated_at
 $result = safePreparedQuery($conn,
-    "UPDATE training_materials SET
-        title                   = ?,
-        description             = ?,
-        category                = ?,
-        difficulty              = ?,
-        is_public               = ?,
-        external_url            = ?,
-        tags                    = ?,
-        estimated_time_minutes  = ?,
-        updated_at              = NOW()
-     WHERE material_id = ?",
-    "ssssissii",
+    'UPDATE materials SET
+        title                = ?,
+        description          = ?,
+        category             = ?,
+        difficulty           = ?,
+        visibility           = ?,
+        external_url         = ?
+     WHERE material_id = ?',
+    'ssssssi',
     [
-        $title, $description, $category, $difficulty,
-        $isPublic,
+        $title,
+        $description,
+        $category,
+        $difficulty,
+        $visibility,
         $externalUrl ?: null,
-        $tagsJson,
-        $estTime,
         $materialId,
     ]
 );

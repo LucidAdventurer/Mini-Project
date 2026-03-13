@@ -2,15 +2,15 @@
 // ============================================================
 // api/assessment/create.php
 //
-// Creates a new assessment (draft or active) for the logged-in teacher.
+// Creates a new assessment for the logged-in teacher.
 //
 // POST JSON {
-//   title, description, instructions,
-//   category, difficulty, duration_minutes, total_marks,
-//   passing_marks, max_attempts, start_time,
-//   end_time, show_results_immediately,
-//   show_correct_answers, randomize_questions,
-//   randomize_options, is_public, status
+//   title, description, category, difficulty,
+//   duration_minutes, total_marks, passing_marks,
+//   max_attempts, start_time?, end_time?,
+//   randomize_questions?, randomize_options?,
+//   visibility?: 'public'|'private',
+//   status?: 'draft'|'active'
 // }
 // Returns { success: bool, assessment_id?: int, error?: string }
 // ============================================================
@@ -19,6 +19,9 @@ require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
+
+$conn = createDatabaseConnection();
+if (!$conn) { http_response_code(503); echo json_encode(['success'=>false,'error'=>'Database unavailable.']); exit; }
 
 $currentUser = validateSession($conn, 'teacher');
 $teacherId   = (int) $currentUser['user_id'];
@@ -86,77 +89,139 @@ if ($passingMarks < 0 || $passingMarks > $totalMarks) {
 }
 
 // ── Optional fields ──
-$description  = trim($body['description']  ?? '');
-$instructions = trim($body['instructions'] ?? '');
-$maxAttempts  = max(1, (int)($body['max_attempts'] ?? 1));
+$description = trim($body['description'] ?? '');
+$maxAttempts = max(1, (int)($body['max_attempts'] ?? 1));
 
 // ── Datetime fields ──
-// strtotime() handles all ISO-8601 variants the browser may send:
-// "2025-03-06T14:30", "2025-03-06T14:30:00", "2025-03-06 14:30:00", etc.
-$availableFrom = null;
-$availableUntil = null;
+$startTime = null;
+$endTime   = null;
 
-if (!empty($body['available_from'])) {
-    $ts = strtotime($body['available_from']);
-    if ($ts !== false) {
-        $availableFrom = date('Y-m-d H:i:s', $ts);
-    }
+if (!empty($body['start_time'])) {
+    $ts = strtotime($body['start_time']);
+    if ($ts !== false) $startTime = date('Y-m-d H:i:s', $ts);
 }
-if (!empty($body['available_until'])) {
-    $ts = strtotime($body['available_until']);
-    if ($ts !== false) {
-        $availableUntil = date('Y-m-d H:i:s', $ts);
-    }
+if (!empty($body['end_time'])) {
+    $ts = strtotime($body['end_time']);
+    if ($ts !== false) $endTime = date('Y-m-d H:i:s', $ts);
 }
 
-if ($availableFrom && $availableUntil && $availableFrom >= $availableUntil) {
+if ($startTime && $endTime && $startTime >= $endTime) {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => '"End Time" must be after "Start Time".']);
     exit;
 }
 
-// Boolean flags
-$showResultsImmediately = !empty($body['show_results_immediately']) ? 1 : 0;
-$showCorrectAnswers     = !empty($body['show_correct_answers'])     ? 1 : 0;
-$randomizeQuestions     = !empty($body['randomize_questions'])      ? 1 : 0;
-$randomizeOptions       = !empty($body['randomize_options'])        ? 1 : 0;
-$isPublic               = !empty($body['is_public'])                ? 1 : 0;
+// ── Boolean flags ──
+$randomizeQuestions = !empty($body['randomize_questions']) ? 1 : 0;
+$randomizeOptions   = !empty($body['randomize_options'])   ? 1 : 0;
 
-// Status — only allow draft or published
+// ── Visibility ──
+$visibility = trim($body['visibility'] ?? 'private');
+if (!in_array($visibility, ['public', 'private'], true)) {
+    $visibility = 'private';
+}
+
+// ── Targets (for private assessments) ──
+// Array of { type: 'group'|'student', id: int }
+$targets = [];
+if (!empty($body['targets']) && is_array($body['targets'])) {
+    foreach ($body['targets'] as $t) {
+        $ttype = trim($t['type'] ?? '');
+        $tid   = (int)($t['id'] ?? 0);
+        if (in_array($ttype, ['group', 'student'], true) && $tid > 0) {
+            $targets[] = ['type' => $ttype, 'id' => $tid];
+        }
+    }
+}
+
+// ── Status — DB enum uses 'published' not 'active' ──
 $status = trim($body['status'] ?? 'draft');
 if (!in_array($status, ['draft', 'active'], true)) {
     $status = 'draft';
 }
+if ($status === 'active') $status = 'published';
 
 // ── Insert ──
 $result = safePreparedQuery($conn,
     "INSERT INTO assessments
-        (title, description, instructions, category, difficulty,
+        (created_by, title, description, category, difficulty,
          duration_minutes, total_marks, passing_marks, max_attempts,
-         available_from, available_until,
-         show_results_immediately, show_correct_answers,
-         randomize_questions, randomize_options, is_public,
-         status, created_by, created_at, updated_at)
+         start_time, end_time,
+         randomize_questions, randomize_options, visibility,
+         status, created_at, updated_at)
      VALUES
         (?, ?, ?, ?, ?,
          ?, ?, ?, ?,
          ?, ?,
-         ?, ?,
          ?, ?, ?,
-         ?, ?, NOW(), NOW())",
-    "sssssiiiissiiiiisi",
+         ?, NOW(), NOW())",
+    "issssiiiissiiss",
     [
-        $title, $description, $instructions, $category, $difficulty,
+        $teacherId,
+        $title, $description, $category, $difficulty,
         $duration, $totalMarks, $passingMarks, $maxAttempts,
-        $availableFrom, $availableUntil,
-        $showResultsImmediately, $showCorrectAnswers,
-        $randomizeQuestions, $randomizeOptions, $isPublic,
-        $status, $teacherId,
+        $startTime, $endTime,
+        $randomizeQuestions, $randomizeOptions, $visibility,
+        $status,
     ]
 );
 
 if ($result['success'] && $result['insert_id'] > 0) {
-    echo json_encode(['success' => true, 'assessment_id' => $result['insert_id']]);
+    $newId = $result['insert_id'];
+
+    // Sync assessment_targets for private assessments
+    if (!empty($targets)) {
+        foreach ($targets as $t) {
+            safePreparedQuery($conn,
+                "INSERT IGNORE INTO assessment_targets (assessment_id, target_type, target_id) VALUES (?, ?, ?)",
+                "isi", [$newId, $t['type'], $t['id']]
+            );
+        }
+    }
+
+    // ── Auto-notify group students when assessment is published ──
+    if ($status === 'published' && !empty($targets)) {
+        $notifTitle   = 'New Assessment Assigned';
+        $notifMessage = 'A new assessment has been assigned to you.';
+        $notifType    = 'assessment';
+        $actionUrl    = 'student-assessments.php';
+
+        $studentIds = [];
+
+        foreach ($targets as $t) {
+            if ($t['type'] === 'group') {
+                $r = safePreparedQuery($conn,
+                    "SELECT student_id FROM group_members WHERE group_id = ?",
+                    "i", [$t['id']]);
+                if ($r['success'] && $r['result']) {
+                    while ($row = $r['result']->fetch_assoc()) {
+                        $studentIds[] = (int)$row['student_id'];
+                    }
+                    $r['result']->free();
+                }
+            } elseif ($t['type'] === 'student') {
+                $studentIds[] = $t['id'];
+            }
+        }
+
+        $studentIds = array_unique($studentIds);
+
+        if (!empty($studentIds)) {
+            $stmt = $conn->prepare(
+                "INSERT INTO notifications (user_id, title, message, notification_type, action_url, created_at)
+                 VALUES (?, ?, ?, ?, ?, NOW())"
+            );
+            if ($stmt) {
+                foreach ($studentIds as $uid) {
+                    $stmt->bind_param("issss", $uid, $notifTitle, $notifMessage, $notifType, $actionUrl);
+                    $stmt->execute();
+                }
+                $stmt->close();
+            }
+        }
+    }
+
+    echo json_encode(['success' => true, 'assessment_id' => $newId]);
 } else {
     error_log("create assessment failed for teacher_id=$teacherId: " . ($result['error'] ?? 'unknown'));
     http_response_code(500);

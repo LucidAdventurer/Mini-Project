@@ -46,7 +46,6 @@ $asmResult = safePreparedQuery($conn,
         a.passing_marks,
         a.randomize_questions,
         a.randomize_options,
-        a.show_results_immediately,
 
         /* Seconds elapsed since the attempt started */
         TIMESTAMPDIFF(SECOND, aa.start_time, NOW()) AS elapsed_seconds
@@ -82,7 +81,7 @@ if ($timeRemaining <= 0) {
     /* Mark attempt as timeout — a proper submit will happen on results page */
     safePreparedQuery($conn,
         "UPDATE assessment_attempts
-         SET status = 'timeout', submitted_at = NOW(), end_time = NOW()
+         SET status = 'timeout', submitted_at = NOW()
          WHERE attempt_id = ? AND user_id = ? AND status = 'in_progress'",
         "ii", [$attemptId, $userId]
     );
@@ -93,145 +92,118 @@ if ($timeRemaining <= 0) {
 /* ── Load questions ── */
 $assessmentId = (int)$attempt['assessment_id'];
 
-/* Check if randomized order was already locked for this attempt */
-$lockedResult = safePreparedQuery($conn,
-    "SELECT aq.question_id, aq.question_order
-     FROM attempt_questions aq
-     WHERE aq.attempt_id = ?
-     ORDER BY aq.question_order ASC",
-    "i", [$attemptId]
+/* Fetch questions ordered by question_order */
+$qResult = safePreparedQuery($conn,
+    "SELECT q.question_id, q.question_type, q.question_text,
+            q.marks, q.negative_marks,
+            qo.option_id, qo.option_text, qo.is_correct, qo.option_order
+     FROM questions q
+     LEFT JOIN question_options qo ON qo.question_id = q.question_id
+     WHERE q.assessment_id = ?
+     ORDER BY q.question_order ASC, q.question_id ASC, qo.option_order ASC",
+    "i", [$assessmentId]
 );
 
-$lockedOrder = [];
-if ($lockedResult['success'] && $lockedResult['result'] && $lockedResult['result']->num_rows > 0) {
-    while ($row = $lockedResult['result']->fetch_assoc()) {
-        $lockedOrder[(int)$row['question_order']] = (int)$row['question_id'];
-    }
-    $lockedResult['result']->free();
-}
-
-/* If no locked order yet, fetch questions and lock them now */
-if (empty($lockedOrder)) {
-    $qResult = safePreparedQuery($conn,
-        "SELECT question_id FROM questions
-         WHERE assessment_id = ?
-         ORDER BY question_order ASC, question_id ASC",
-        "i", [$assessmentId]
-    );
-
-    $qIds = [];
-    if ($qResult['success'] && $qResult['result']) {
-        while ($row = $qResult['result']->fetch_assoc()) {
-            $qIds[] = (int)$row['question_id'];
+/* Group rows into questions with their options */
+$questionsRaw = [];
+if ($qResult['success'] && $qResult['result']) {
+    while ($row = $qResult['result']->fetch_assoc()) {
+        $qid = (int)$row['question_id'];
+        if (!isset($questionsRaw[$qid])) {
+            $questionsRaw[$qid] = [
+                'question_id'   => $qid,
+                'question_type' => $row['question_type'],
+                'question_text' => $row['question_text'],
+                'marks'         => (int)$row['marks'],
+                'negative_marks'=> (float)$row['negative_marks'],
+                'options'       => [],
+            ];
         }
-        $qResult['result']->free();
+        if ($row['option_id'] !== null) {
+            $questionsRaw[$qid]['options'][] = [
+                'option_id'  => (int)$row['option_id'],
+                'option_text'=> $row['option_text'],
+                'option_order'=> (int)$row['option_order'],
+            ];
+        }
     }
-
-    if ($attempt['randomize_questions']) {
-        shuffle($qIds);
-    }
-
-    /* Lock the order into attempt_questions */
-    foreach ($qIds as $pos => $qid) {
-        safePreparedQuery($conn,
-            "INSERT IGNORE INTO attempt_questions (attempt_id, question_id, question_order)
-             VALUES (?, ?, ?)",
-            "iii", [$attemptId, $qid, $pos + 1]
-        );
-        $lockedOrder[$pos + 1] = $qid;
-    }
+    $qResult['result']->free();
 }
 
-/* ── Fetch full question data in locked order ── */
-if (empty($lockedOrder)) {
+$qIds = array_keys($questionsRaw);
+
+if ($attempt['randomize_questions']) {
+    shuffle($qIds);
+}
+
+if (empty($qIds)) {
     header('Location: student-dashboard.php?error=no_questions');
     exit;
 }
 
-$orderedIds   = array_values($lockedOrder); // [qid, qid, ...]
-$placeholders = implode(',', array_fill(0, count($orderedIds), '?'));
-$types        = str_repeat('i', count($orderedIds));
-
-$fullQResult = safePreparedQuery($conn,
-    "SELECT question_id, question_type, question_text,
-            option_a, option_b, option_c, option_d,
-            marks, negative_marks, topic
-     FROM questions
-     WHERE question_id IN ($placeholders)",
-    $types, $orderedIds
-);
-
-$questionsById = [];
-if ($fullQResult['success'] && $fullQResult['result']) {
-    while ($row = $fullQResult['result']->fetch_assoc()) {
-        $questionsById[(int)$row['question_id']] = $row;
-    }
-    $fullQResult['result']->free();
-}
-
 /* ── Load any existing answers (resume support) ── */
 $savedResult = safePreparedQuery($conn,
-    "SELECT question_id, selected_answer
+    "SELECT question_id, selected_option_id
      FROM answers
      WHERE attempt_id = ?",
     "i", [$attemptId]
 );
 
-$savedAnswers = [];
+$savedAnswers = []; // question_id => option_id
 if ($savedResult['success'] && $savedResult['result']) {
     while ($row = $savedResult['result']->fetch_assoc()) {
-        $savedAnswers[(int)$row['question_id']] = $row['selected_answer'];
+        if ($row['selected_option_id'] !== null) {
+            $savedAnswers[(int)$row['question_id']] = (int)$row['selected_option_id'];
+        }
     }
     $savedResult['result']->free();
 }
 
 /* ── Build JS-safe question array ── */
 $questions = [];
-foreach ($lockedOrder as $pos => $qid) {
-    if (!isset($questionsById[$qid])) continue;
-    $q = $questionsById[$qid];
+foreach ($qIds as $pos => $qid) {
+    if (!isset($questionsRaw[$qid])) continue;
+    $q = $questionsRaw[$qid];
 
-    /* Build options array */
-    $opts = [];
-    $optMap = []; /* label → text, for randomise support */
-    foreach (['A' => $q['option_a'], 'B' => $q['option_b'],
-               'C' => $q['option_c'], 'D' => $q['option_d']] as $lbl => $txt) {
-        if ($txt !== null && $txt !== '') {
-            $optMap[$lbl] = $txt;
-        }
+    $opts = $q['options'];
+
+    /* Randomise option order if teacher enabled it */
+    if ($attempt['randomize_options'] && count($opts) > 1) {
+        shuffle($opts);
     }
 
-    if ($attempt['randomize_options'] && count($optMap) > 1) {
-        $keys = array_keys($optMap);
-        shuffle($keys);
-        $newMap = [];
-        $labelList = ['A','B','C','D'];
-        foreach ($keys as $i => $origLabel) {
-            $newMap[$labelList[$i]] = [
-                'text'      => $optMap[$origLabel],
-                'origLabel' => $origLabel   /* we need this to grade correctly */
-            ];
-        }
-        foreach ($newMap as $lbl => $info) {
-            $opts[] = ['label' => $lbl, 'text' => $info['text'], 'origLabel' => $info['origLabel']];
-        }
-    } else {
-        foreach ($optMap as $lbl => $txt) {
-            $opts[] = ['label' => $lbl, 'text' => $txt, 'origLabel' => $lbl];
+    /* Assign display labels A/B/C/D */
+    $labelList   = ['A','B','C','D'];
+    $builtOpts   = [];
+    foreach ($opts as $i => $opt) {
+        $lbl = $labelList[$i] ?? chr(65 + $i);
+        $builtOpts[] = [
+            'label'     => $lbl,
+            'text'      => $opt['option_text'],
+            'option_id' => $opt['option_id'],
+        ];
+    }
+
+    $savedOptionId = $savedAnswers[$qid] ?? null;
+    $savedLabel    = null;
+    if ($savedOptionId !== null) {
+        foreach ($builtOpts as $bo) {
+            if ($bo['option_id'] === $savedOptionId) {
+                $savedLabel = $bo['label'];
+                break;
+            }
         }
     }
 
     $questions[] = [
-        'id'           => (int)$qid,
-        'pos'          => (int)$pos,          /* 1-based display number */
-        'type'         => $q['question_type'],
-        'text'         => $q['question_text'],
-        'options'      => $opts,
-        'marks'        => (int)$q['marks'],
-        'negMarks'     => (float)$q['negative_marks'],
-        'topic'        => $q['topic'] ?? '',
-        /* NOTE: correct_answer is NOT sent to the browser */
-        'savedAnswer'  => $savedAnswers[$qid] ?? null,
+        'id'          => $qid,
+        'pos'         => $pos + 1,
+        'type'        => $q['question_type'],
+        'text'        => $q['question_text'],
+        'options'     => $builtOpts,
+        'marks'       => $q['marks'],
+        'negMarks'    => $q['negative_marks'],
+        'savedAnswer' => $savedLabel,
     ];
 }
 
@@ -239,7 +211,13 @@ $totalQuestions = count($questions);
 
 /* ── JSON encode for JS injection ── */
 $questionsJson = json_encode($questions, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP);
-$savedJson     = json_encode($savedAnswers, JSON_HEX_TAG);
+$savedJson     = json_encode(
+    array_combine(
+        array_column($questions, 'id'),
+        array_column($questions, 'savedAnswer')
+    ),
+    JSON_HEX_TAG
+);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -587,8 +565,7 @@ const questionData   = <?= $questionsJson ?>;   // array of question objects
    STATE
    ============================================================ */
 let currentQuestionIndex = 0;
-let userAnswers          = {};   // { questionId: displayLabel }
-let origLabelMap         = {};   // { questionId: { displayLabel: origLabel } }
+let userAnswers          = {};   // { questionId: { label, option_id } }
 let markedQuestions      = new Set();
 let timeLeft             = TIME_REMAINING;
 let timerInterval        = null;
@@ -597,17 +574,16 @@ let isSubmitting         = false;
 let csrfToken            = '';
 
 /* Pre-populate saved answers from PHP */
-<?php if (!empty($savedAnswers)): ?>
-userAnswers = <?= $savedJson ?>;
-<?php endif ?>
-
-/* Build origLabelMap so we always send the original option label to the server */
+<?php if (!empty($questions)): ?>
+const savedLabels = <?= $savedJson ?>;
 questionData.forEach(q => {
-    origLabelMap[q.id] = {};
-    q.options.forEach(opt => {
-        origLabelMap[q.id][opt.label] = opt.origLabel;
-    });
+    if (savedLabels[q.id]) {
+        const lbl = savedLabels[q.id];
+        const opt = q.options.find(o => o.label === lbl);
+        if (opt) userAnswers[q.id] = { label: lbl, option_id: opt.option_id };
+    }
 });
+<?php endif ?>
 
 /* ============================================================
    INIT
@@ -684,7 +660,8 @@ function loadQuestion(index) {
 
     q.options.forEach(opt => {
         if (!opt.text) return;
-        const isSelected = userAnswers[q.id] === opt.label;
+        const savedAns   = userAnswers[q.id];
+        const isSelected = savedAns && savedAns.label === opt.label;
 
         const label   = document.createElement('label');
         label.className = `option${isSelected ? ' selected' : ''}`;
@@ -734,11 +711,13 @@ function loadQuestion(index) {
    SELECT OPTION
    ============================================================ */
 function selectOption(displayLabel) {
-    const q = questionData[currentQuestionIndex];
-    userAnswers[q.id] = displayLabel;
+    const q   = questionData[currentQuestionIndex];
+    const opt = q.options.find(o => o.label === displayLabel);
+    if (!opt) return;
+    userAnswers[q.id] = { label: displayLabel, option_id: opt.option_id };
 
-    document.querySelectorAll('.option').forEach(opt => {
-        opt.classList.toggle('selected', opt.getAttribute('data-option') === displayLabel);
+    document.querySelectorAll('.option').forEach(el => {
+        el.classList.toggle('selected', el.getAttribute('data-option') === displayLabel);
     });
 
     updateStats();
@@ -780,7 +759,7 @@ function updatePalette() {
 }
 
 function updateStats() {
-    const answered   = Object.keys(userAnswers).length;
+    const answered   = Object.values(userAnswers).filter(Boolean).length;
     const total      = questionData.length;
     document.getElementById('answeredCount').textContent    = answered;
     document.getElementById('notAnsweredCount').textContent = total - answered;
@@ -821,10 +800,10 @@ function renderTimer(secs) {
 async function autoSave() {
     if (isSubmitting) return;
 
-    /* Convert display labels back to original labels before saving */
+    /* Build answers payload: { question_id: option_id } */
     const answersToSend = {};
-    for (const [qid, displayLabel] of Object.entries(userAnswers)) {
-        answersToSend[qid] = origLabelMap[qid]?.[displayLabel] ?? displayLabel;
+    for (const [qid, ans] of Object.entries(userAnswers)) {
+        if (ans && ans.option_id) answersToSend[qid] = ans.option_id;
     }
 
     try {
@@ -866,10 +845,10 @@ async function submitTest(autoSubmit = false) {
     document.getElementById('submitModal').classList.remove('active');
     document.getElementById('loadingOverlay').classList.add('active');
 
-    /* Convert display labels → original labels */
+    /* Build answers payload: { question_id: option_id } */
     const answersToSend = {};
-    for (const [qid, displayLabel] of Object.entries(userAnswers)) {
-        answersToSend[qid] = origLabelMap[qid]?.[displayLabel] ?? displayLabel;
+    for (const [qid, ans] of Object.entries(userAnswers)) {
+        if (ans && ans.option_id) answersToSend[qid] = ans.option_id;
     }
 
     try {

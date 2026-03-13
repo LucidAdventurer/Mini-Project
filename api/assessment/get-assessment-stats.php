@@ -6,7 +6,6 @@
 // Used by edit-assessment.php to refresh stats without reload.
 //
 // GET ?assessment_id=<int>
-//
 // Returns {
 //   success: bool,
 //   stats: {
@@ -21,6 +20,9 @@ require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
+
+$conn = createDatabaseConnection();
+if (!$conn) { http_response_code(503); echo json_encode(['success'=>false,'error'=>'Database unavailable.']); exit; }
 
 $currentUser  = validateSession($conn, 'teacher');
 $teacherId    = (int) $currentUser['user_id'];
@@ -44,24 +46,26 @@ if (!$check['success'] || !$check['result'] || $check['result']->num_rows === 0)
     echo json_encode(['success' => false, 'error' => 'Assessment not found or access denied.']);
     exit;
 }
-$aRow        = $check['result']->fetch_assoc();
+$aRow       = $check['result']->fetch_assoc();
 $check['result']->free();
-$passingPct  = $aRow['total_marks'] > 0
+$passingPct = $aRow['total_marks'] > 0
     ? ($aRow['passing_marks'] / $aRow['total_marks']) * 100
     : 0;
 
 // ── Aggregate stats ──
+// 'submitted' is the terminal success status; 'timeout' is terminal failure.
+// Both count as completed for stats purposes.
 $rs = safePreparedQuery($conn,
     "SELECT
-        COUNT(*)                                                         AS total_attempts,
-        SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END)             AS completed,
-        ROUND(AVG(CASE WHEN status='completed' THEN percentage END), 1)  AS avg_score,
-        ROUND(MAX(percentage), 1)                                        AS highest_score,
-        ROUND(MIN(CASE WHEN status='completed' THEN percentage END), 1)  AS lowest_score,
-        SUM(CASE WHEN status='completed' AND percentage >= ? THEN 1 ELSE 0 END) AS pass_count,
-        ROUND(AVG(CASE WHEN status='completed'
-                  THEN TIMESTAMPDIFF(MINUTE, start_time, submitted_at) END), 0) AS avg_time,
-        COUNT(DISTINCT user_id)                                          AS unique_students
+        COUNT(*)                                                                        AS total_attempts,
+        SUM(CASE WHEN status IN ('submitted','timeout') THEN 1 ELSE 0 END)             AS completed,
+        ROUND(AVG(CASE WHEN status IN ('submitted','timeout') THEN percentage END), 1) AS avg_score,
+        ROUND(MAX(percentage), 1)                                                       AS highest_score,
+        ROUND(MIN(CASE WHEN status IN ('submitted','timeout') THEN percentage END), 1) AS lowest_score,
+        SUM(CASE WHEN status IN ('submitted','timeout') AND percentage >= ? THEN 1 ELSE 0 END) AS pass_count,
+        ROUND(AVG(CASE WHEN status IN ('submitted','timeout')
+                  THEN TIMESTAMPDIFF(MINUTE, start_time, submitted_at) END), 0)        AS avg_time,
+        COUNT(DISTINCT user_id)                                                         AS unique_students
      FROM assessment_attempts
      WHERE assessment_id = ?",
     "di", [$passingPct, $assessmentId]
@@ -77,6 +81,7 @@ $stats = [
     'pass_rate'        => 0,
     'avg_time_minutes' => 0,
     'unique_students'  => 0,
+    'question_count'   => 0,
 ];
 
 if ($rs['success'] && $rs['result']) {
@@ -94,6 +99,7 @@ if ($rs['success'] && $rs['result']) {
             'pass_rate'        => $completed > 0 ? round(($passCount / $completed) * 100, 1) : 0,
             'avg_time_minutes' => (int)($row['avg_time']         ?? 0),
             'unique_students'  => (int)($row['unique_students']  ?? 0),
+            'question_count'   => 0,
         ];
     }
     $rs['result']->free();

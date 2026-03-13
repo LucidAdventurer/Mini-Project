@@ -651,7 +651,8 @@
             border: 1px solid rgba(107, 114, 128, 0.2);
         }
 
-        .badge.published {
+        .badge.published,
+        .badge.active {
             background: rgba(34, 197, 94, 0.12);
             color: var(--green);
             border: 1px solid rgba(34, 197, 94, 0.25);
@@ -1897,9 +1898,8 @@
                 <!-- Status filter tabs -->
                 <div class="tabs">
                     <button class="tab active" onclick="filterByStatus('all',this)">All</button>
-                    <button class="tab" onclick="filterByStatus('published',this)">Published</button>
+                    <button class="tab" onclick="filterByStatus('active',this)">Published</button>
                     <button class="tab" onclick="filterByStatus('draft',this)">Draft</button>
-                    <button class="tab" onclick="filterByStatus('scheduled',this)">Scheduled</button>
                     <button class="tab" onclick="filterByStatus('archived',this)">Archived</button>
                 </div>
 
@@ -1971,33 +1971,13 @@
                     </button>
                 </div>
 
-                <div class="three-col" style="margin-bottom:20px;">
-                    <div class="stat-card blue">
+                <div class="stat-card blue" style="margin-bottom:20px;max-width:240px;">
                         <div class="stat-icon"><svg viewBox="0 0 24 24">
                                 <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
                                 <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
                             </svg></div>
                         <div class="stat-value" id="resTotalMaterials">—</div>
                         <div class="stat-label">Total Materials</div>
-                    </div>
-                    <div class="stat-card green">
-                        <div class="stat-icon"><svg viewBox="0 0 24 24">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                <polyline points="17 8 12 3 7 8" />
-                                <line x1="12" y1="3" x2="12" y2="15" />
-                            </svg></div>
-                        <div class="stat-value" id="resStorageUsed">—</div>
-                        <div class="stat-label">Storage Used</div>
-                    </div>
-                    <div class="stat-card yellow">
-                        <div class="stat-icon"><svg viewBox="0 0 24 24">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                <polyline points="7 10 12 15 17 10" />
-                                <line x1="12" y1="15" x2="12" y2="3" />
-                            </svg></div>
-                        <div class="stat-value" id="resTotalDownloads">—</div>
-                        <div class="stat-label">Total Downloads</div>
-                    </div>
                 </div>
 
                 <div class="resource-grid" id="resourceGrid">
@@ -2435,38 +2415,23 @@
                 <div class="form-group">
                     <label>Difficulty</label>
                     <select class="form-input" id="urDifficulty">
-                        <option value="beginner">Beginner</option>
-                        <option value="intermediate">Intermediate</option>
-                        <option value="advanced">Advanced</option>
+                        <option value="easy">Easy</option>
+                        <option value="medium">Medium</option>
+                        <option value="hard">Hard</option>
                     </select>
                 </div>
             </div>
 
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Est. Time (minutes)</label>
-                    <input class="form-input" id="urEstTime" type="number" min="0" placeholder="e.g. 30" />
-                </div>
-                <div class="form-group" style="display:flex;align-items:center;gap:10px;padding-top:22px;">
-                    <label class="toggle" style="margin:0;">
-                        <input type="checkbox" id="urPublic" checked>
-                        <span class="toggle-slider"></span>
-                    </label>
-                    <span style="font-size:13px;">Visible to guests</span>
-                </div>
+            <div class="form-group" id="urFileGroup">
+                <label>File (PDF) <span id="urFileHint"
+                        style="font-weight:400;text-transform:none;color:var(--muted);font-size:11px;">(max 50
+                        MB)</span></label>
+                <input class="form-input" id="urFile" type="file" accept=".pdf" style="padding:6px 12px;" />
             </div>
 
             <div class="form-group">
-                <label>Description</label>
-                <textarea class="form-input" id="urDescription" rows="3"
-                    placeholder="Brief description of what students will find in this resource…"
-                    style="resize:vertical;"></textarea>
-            </div>
-
-            <div class="form-group">
-                <label>Tags <span style="font-weight:400;color:var(--muted);font-size:11px;">(comma-separated,
-                        optional)</span></label>
-                <input class="form-input" id="urTags" placeholder="e.g. aptitude, speed math, practice" />
+                <label>External URL</label>
+                <input class="form-input" id="urUrl" type="url" placeholder="https://…" />
             </div>
 
             <div id="urError" style="color:var(--red);font-size:12px;margin-top:4px;display:none;"></div>
@@ -2508,104 +2473,12 @@
                     maxlength="200" />
             </div>
 
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Category *</label>
-                    <select class="form-input" id="ctCategory">
-                        <option value="aptitude">Aptitude</option>
-                        <option value="technical">Technical</option>
-                        <option value="coding">Coding</option>
-                        <option value="reasoning">Reasoning</option>
-                        <option value="english">English</option>
-                        <option value="general">General</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Difficulty *</label>
-                    <select class="form-input" id="ctDifficulty">
-                        <option value="easy">Easy</option>
-                        <option value="medium" selected>Medium</option>
-                        <option value="hard">Hard</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Duration (minutes) *</label>
-                    <input class="form-input" id="ctDuration" type="number" min="1" max="480" placeholder="e.g. 60" />
-                </div>
-                <div class="form-group">
-                    <label>Total Marks *</label>
-                    <input class="form-input" id="ctTotalMarks" type="number" min="1" placeholder="e.g. 100" />
-                </div>
-            </div>
-
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Passing Marks *</label>
-                    <input class="form-input" id="ctPassingMarks" type="number" min="1" placeholder="e.g. 40" />
-                </div>
-                <div class="form-group">
-                    <label>Max Attempts</label>
-                    <input class="form-input" id="ctMaxAttempts" type="number" min="1" value="1" />
-                </div>
-            </div>
-
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Start Time <span
-                            style="font-weight:400;color:var(--muted);font-size:11px;">(optional)</span></label>
-                    <input class="form-input" id="ctStartTime" type="datetime-local" />
-                </div>
-                <div class="form-group">
-                    <label>End Time <span
-                            style="font-weight:400;color:var(--muted);font-size:11px;">(optional)</span></label>
-                    <input class="form-input" id="ctEndTime" type="datetime-local" />
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label>Description / Instructions</label>
-                <textarea class="form-input" id="ctDescription" rows="3"
-                    placeholder="Instructions or notes for students taking this test…"
-                    style="resize:vertical;"></textarea>
-            </div>
-
-            <!-- Test options as toggles -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px;">
-                <div
-                    style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2);">
-                    <label class="toggle" style="margin:0;">
-                        <input type="checkbox" id="ctRandomizeQ">
-                        <span class="toggle-slider"></span>
-                    </label>
-                    <span style="font-size:13px;">Randomize Questions</span>
-                </div>
-                <div
-                    style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2);">
-                    <label class="toggle" style="margin:0;">
-                        <input type="checkbox" id="ctRandomizeO">
-                        <span class="toggle-slider"></span>
-                    </label>
-                    <span style="font-size:13px;">Randomize Options</span>
-                </div>
-                <div
-                    style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2);">
-                    <label class="toggle" style="margin:0;">
-                        <input type="checkbox" id="ctShowResults" checked>
-                        <span class="toggle-slider"></span>
-                    </label>
-                    <span style="font-size:13px;">Show Results Immediately</span>
-                </div>
-                <div
-                    style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2);">
-                    <label class="toggle" style="margin:0;">
-                        <input type="checkbox" id="ctShowAnswers">
-                        <span class="toggle-slider"></span>
-                    </label>
-                    <span style="font-size:13px;">Show Correct Answers</span>
-                </div>
+            <div class="form-group" style="display:flex;align-items:center;gap:10px;">
+                <label class="toggle" style="margin:0;">
+                    <input type="checkbox" id="urPublic" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px;">Make Public</span>
             </div>
 
             <div
@@ -3124,17 +2997,8 @@
             // Stats
             if (d.stats) {
                 setEl('resTotalMaterials', fmtNum(d.stats.total_materials));
-                const gb = (d.stats.storage_used_bytes / (1024 ** 3)).toFixed(1);
-                setEl('resStorageUsed', gb + ' GB');
-                setEl('resTotalDownloads', fmtNum(d.stats.total_downloads));
             }
 
-            const typeIcon = { pdf: '📄', video: '🎬', link: '🔗', article: '📰', quiz: '📝' };
-            const typeBg = {
-                pdf: 'rgba(0,102,255,0.12)', video: 'rgba(34,197,94,0.12)',
-                link: 'rgba(234,179,8,0.12)', article: 'rgba(124,58,237,0.12)', quiz: 'rgba(239,68,68,0.12)'
-            };
-            // Category pill colours matching guest-dashboard filter tabs
             const catBg = {
                 aptitude: 'rgba(59,130,246,0.12)', verbal: 'rgba(236,72,153,0.12)',
                 logical: 'rgba(34,197,94,0.12)', technical: 'rgba(234,179,8,0.12)', general: 'rgba(107,114,128,0.12)'
@@ -3143,34 +3007,30 @@
                 aptitude: '#1e40af', verbal: '#be185d', logical: '#15803d', technical: '#a16207', general: '#374151'
             };
 
-            const fileTypes = ['pdf', 'video', 'quiz'];
             let html = d.materials.map(m => {
-                // get-resources.php returns resource_id; support legacy material_id too
-                const rid = m.resource_id ?? m.material_id;
-                const sizeMB = m.file_size ? (m.file_size / (1024 * 1024)).toFixed(1) + ' MB' : (m.external_url ? 'Link' : '—');
-                const isFile = fileTypes.includes(m.material_type);
-                const viewUrl = isFile
-                    ? `${API.viewResource}?material_id=${rid}`
-                    : m.external_url;
-                const dlUrl = isFile
-                    ? `${API.serveResource}?material_id=${rid}&action=download`
-                    : null;
+                const rid     = m.material_id;
+                const hasFile = !!m.cloudinary_public_id;
+                const viewUrl = hasFile ? `${API.viewResource}?material_id=${rid}` : m.external_url;
+                const dlUrl   = hasFile ? `${API.serveResource}?material_id=${rid}&action=download` : null;
                 const viewBtn = viewUrl
                     ? `<a href="${viewUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 8px;">View</a>`
                     : '';
                 const dlBtn = dlUrl
                     ? `<a href="${dlUrl}" class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 8px;">Download</a>`
                     : '';
-                const cat = (m.category || 'general').toLowerCase();
-                const catPill = `<span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:600;background:${catBg[cat] || catBg.general};color:${catColor[cat] || catColor.general};margin-left:6px;">${esc(cat)}</span>`;
-                const visIcon = m.is_public == 1 ? '🌐' : '🔒';
+                const cat      = (m.category || 'general').toLowerCase();
+                const catPill  = `<span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:600;background:${catBg[cat] || catBg.general};color:${catColor[cat] || catColor.general};margin-left:6px;">${esc(cat)}</span>`;
+                const visIcon  = m.visibility === 'public' ? '🌐' : '🔒';
+                const typeLabel = hasFile ? 'PDF' : m.external_url ? 'Link' : '—';
+                const icon     = hasFile ? '📄' : '🔗';
+                const iconBg   = hasFile ? 'rgba(0,102,255,0.12)' : 'rgba(234,179,8,0.12)';
                 return `<div class="resource-card">
-                        <div class="resource-icon" style="background:${typeBg[m.material_type] || 'rgba(0,102,255,0.12)'};">${typeIcon[m.material_type] || '📦'}</div>
+                        <div class="resource-icon" style="background:${iconBg};">${icon}</div>
                         <h4>${esc(m.title)}${catPill}</h4>
                         <p>${esc(m.description || '—')}</p>
                         <div class="resource-meta">
-                            <span>${esc(m.material_type.toUpperCase())} · ${sizeMB} ${visIcon}</span>
-                            <span>↓ ${fmtNum(m.downloads)}</span>
+                            <span>${typeLabel} ${visIcon}</span>
+                            <span style="font-size:11px;color:var(--muted);">${esc(m.created_by_name || '')}</span>
                         </div>
                         <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
                             ${viewBtn}
@@ -3513,8 +3373,8 @@
 
             // Tab counts
             const tabs = document.querySelectorAll('#page-tests .tab');
-            const sKeys = ['all', 'published', 'draft', 'archived'];
-            const sLabel = ['All', 'Active', 'Draft', 'Scheduled', 'Archived'];
+            const sKeys = ['all', 'active', 'draft', 'archived'];
+            const sLabel = ['All', 'Active', 'Draft', 'Archived'];
             tabs.forEach((tab, i) => {
                 const cnt = d.counts[sKeys[i]];
                 tab.textContent = sLabel[i] + (cnt ? ` (${fmtNum(cnt)})` : '');
@@ -3532,7 +3392,8 @@
         function renderTestRow(t) {
             const diffBadge = `<span class="badge ${t.difficulty}">${esc(t.difficulty)}</span>`;
             const statusClass = t.status;
-            const statusBadge = `<span class="badge ${statusClass}">${esc(t.status)}</span>`;
+            const statusLabel = { active: 'Published', draft: 'Draft', archived: 'Archived' }[t.status] || t.status;
+            const statusBadge = `<span class="badge ${statusClass}">${esc(statusLabel)}</span>`;
             const passRate = t.pass_rate !== null ? t.pass_rate + '%' : '—';
             const avgScore = t.avg_score ? t.avg_score + '%' : '—';
 
@@ -3540,17 +3401,14 @@
             let actions = `<button class="btn btn-ghost btn-sm" onclick="viewQuestions(${t.assessment_id})">Questions</button>`;
 
             if (t.status === 'draft') {
-                actions += ` <button class="btn btn-primary btn-sm" onclick="changeTestStatus(${t.assessment_id},'published')">Publish</button>`;
+                actions += ` <button class="btn btn-primary btn-sm" onclick="changeTestStatus(${t.assessment_id},'active')">Publish</button>`;
                 actions += ` <button class="btn btn-danger btn-sm" onclick="deleteTest(${t.assessment_id},'${esc(t.title)}')">Delete</button>`;
-            } else if (t.status === 'published') {
+            } else if (t.status === 'active') {
                 actions += ` <button class="btn btn-ghost btn-sm" onclick="changeTestStatus(${t.assessment_id},'draft')">Unpublish</button>`;
                 actions += ` <button class="btn btn-danger btn-sm" onclick="changeTestStatus(${t.assessment_id},'archived')">Archive</button>`;
             } else if (t.status === 'archived') {
-                actions += ` <button class="btn btn-primary btn-sm" onclick="changeTestStatus(${t.assessment_id},'published')">Restore</button>`;
+                actions += ` <button class="btn btn-primary btn-sm" onclick="changeTestStatus(${t.assessment_id},'active')">Restore</button>`;
                 actions += ` <button class="btn btn-danger btn-sm" onclick="deleteTest(${t.assessment_id},'${esc(t.title)}')">Delete</button>`;
-            } else if (t.status === 'scheduled') {
-                actions += ` <button class="btn btn-ghost btn-sm" onclick="changeTestStatus(${t.assessment_id},'draft')">Unschedule</button>`;
-                actions += ` <button class="btn btn-danger btn-sm" onclick="changeTestStatus(${t.assessment_id},'archived')">Archive</button>`;
             }
 
             return `<tr>
@@ -3572,7 +3430,7 @@
         }
 
         async function changeTestStatus(assessmentId, newStatus) {
-            const label = { active: 'Publish', draft: 'Unpublish', archived: 'Archive', scheduled: 'Schedule' }[newStatus] || newStatus;
+            const label = { active: 'Publish', draft: 'Unpublish', archived: 'Archive' }[newStatus] || newStatus;
             if (!confirm(`${label} this assessment?`)) return;
             try {
                 const d = await apiPost(API.updateTestStatus, { assessment_id: assessmentId, status: newStatus });
@@ -3964,222 +3822,6 @@
             openModal('modalUploadResource');
         }
 
-        function selectResType(tile, val) {
-            document.querySelectorAll('.res-type-tile').forEach(t => t.classList.remove('active'));
-            tile.classList.add('active');
-            document.getElementById('urType').value = val;
-            applyResType(val);
-        }
-
-        function applyResType(type) {
-            const fileTypes = ['pdf', 'video', 'quiz'];
-            const fileGroup = document.getElementById('urFileGroup');
-            const urlGroup = document.getElementById('urUrlGroup');
-            const hint = document.getElementById('urFileHint');
-            const fileInput = document.getElementById('urFile');
-            if (fileTypes.includes(type)) {
-                fileGroup.style.display = '';
-                urlGroup.style.display = 'none';
-                if (type === 'video') {
-                    hint.textContent = '(MP4, WebM — max 50 MB)';
-                    fileInput.accept = '.mp4,.webm,.ogg,.mov,.avi,.mpeg';
-                } else {
-                    hint.textContent = '(PDF or DOC — max 50 MB)';
-                    fileInput.accept = '.pdf,.doc,.docx';
-                }
-            } else {
-                fileGroup.style.display = 'none';
-                urlGroup.style.display = '';
-            }
-        }
-
-        function onUrTypeChange() { /* legacy — kept for safety */ }
-
-        function onFileSelected(input) {
-            const file = input.files[0];
-            const label = document.getElementById('urDropLabel');
-            if (file) {
-                const mb = (file.size / (1024 * 1024)).toFixed(1);
-                label.textContent = file.name + ' (' + mb + ' MB)';
-                document.getElementById('urDropZone').style.borderColor = 'var(--blue-500)';
-            } else {
-                label.textContent = 'No file selected';
-                document.getElementById('urDropZone').style.borderColor = 'var(--border)';
-            }
-        }
-
-        function handleFileDrop(event) {
-            event.preventDefault();
-            document.getElementById('urDropZone').style.borderColor = 'var(--border)';
-            const file = event.dataTransfer.files[0];
-            if (!file) return;
-            const input = document.getElementById('urFile');
-            const dt = new DataTransfer();
-            dt.items.add(file);
-            input.files = dt.files;
-            onFileSelected(input);
-        }
-
-        // ════════════════════════════════════════
-        // CREATE TEST MODAL
-        // ════════════════════════════════════════
-        function openCreateTestModal() {
-            document.getElementById('ctTitle').value = '';
-            document.getElementById('ctCategory').value = 'aptitude';
-            document.getElementById('ctDifficulty').value = 'medium';
-            document.getElementById('ctDuration').value = '';
-            document.getElementById('ctTotalMarks').value = '';
-            document.getElementById('ctPassingMarks').value = '';
-            document.getElementById('ctMaxAttempts').value = '1';
-            document.getElementById('ctStartTime').value = '';
-            document.getElementById('ctEndTime').value = '';
-            document.getElementById('ctDescription').value = '';
-            document.getElementById('ctRandomizeQ').checked = false;
-            document.getElementById('ctRandomizeO').checked = false;
-            document.getElementById('ctShowResults').checked = true;
-            document.getElementById('ctShowAnswers').checked = false;
-            document.getElementById('ctPublic').checked = true;
-            // Reset PDF upload fields
-            document.getElementById('ctPdfFile').value = '';
-            document.getElementById('ctDropLabel').textContent = 'PDF only · max 50 MB';
-            document.getElementById('ctDropZone').style.borderColor = 'var(--border)';
-            document.getElementById('ctDropZone').style.background = '';
-            document.getElementById('ctPdfProgress').style.display = 'none';
-            document.getElementById('ctPdfProgressBar').style.width = '0%';
-            document.getElementById('ctError').style.display = 'none';
-            const btn = document.getElementById('btnCreateTest');
-            btn.disabled = false;
-            btn.innerHTML = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-right:4px;"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> Create Test';
-            openModal('modalCreateTest');
-        }
-
-        async function submitCreateTest() {
-            const title = document.getElementById('ctTitle').value.trim();
-            const category = document.getElementById('ctCategory').value;
-            const difficulty = document.getElementById('ctDifficulty').value;
-            const duration = parseInt(document.getElementById('ctDuration').value) || 0;
-            const totalMarks = parseInt(document.getElementById('ctTotalMarks').value) || 0;
-            const passingMarks = parseInt(document.getElementById('ctPassingMarks').value) || 0;
-            const maxAttempts = parseInt(document.getElementById('ctMaxAttempts').value) || 1;
-            const startTime = document.getElementById('ctStartTime').value || null;
-            const endTime = document.getElementById('ctEndTime').value || null;
-            const description = document.getElementById('ctDescription').value.trim();
-            const randomizeQ = document.getElementById('ctRandomizeQ').checked ? 1 : 0;
-            const randomizeO = document.getElementById('ctRandomizeO').checked ? 1 : 0;
-            const isPublic = document.getElementById('ctPublic').checked ? 1 : 0;
-
-            const errEl = document.getElementById('ctError');
-            const showErr = msg => { errEl.textContent = msg; errEl.style.display = 'block'; };
-            errEl.style.display = 'none';
-
-            if (!title) return showErr('Test title is required.');
-            if (duration < 1) return showErr('Duration must be at least 1 minute.');
-            if (totalMarks < 1) return showErr('Total marks must be at least 1.');
-            if (passingMarks < 1) return showErr('Passing marks must be at least 1.');
-            if (passingMarks > totalMarks) return showErr('Passing marks cannot exceed total marks.');
-
-            const btn = document.getElementById('btnCreateTest');
-            btn.disabled = true;
-            btn.textContent = 'Creating…';
-
-            const pdfFile = document.getElementById('ctPdfFile').files[0] || null;
-            const pdfProgressWrap = document.getElementById('ctPdfProgress');
-            const pdfProgressBar = document.getElementById('ctPdfProgressBar');
-            const pdfProgressText = document.getElementById('ctPdfProgressText');
-
-            try {
-                // Step 1 — upload PDF to Cloudinary if one was attached
-                let pdfUrl = '', pdfPublicId = '', pdfSize = 0;
-                if (pdfFile) {
-                    pdfProgressWrap.style.display = 'block';
-                    btn.textContent = 'Uploading PDF…';
-                    const uploaded = await uploadToCloudinary(pdfFile, (pct) => {
-                        pdfProgressBar.style.width = pct + '%';
-                        pdfProgressText.textContent = 'Uploading PDF… ' + pct + '%';
-                    });
-                    pdfUrl = uploaded.url;
-                    pdfPublicId = uploaded.publicId;
-                    pdfSize = uploaded.fileSize;
-                    pdfProgressBar.style.width = '100%';
-                    pdfProgressText.textContent = 'PDF uploaded ✓  Saving test…';
-                    btn.textContent = 'Saving…';
-                }
-
-                // Step 2 — create assessment record
-                const payload = {
-                    title, category, difficulty, duration_minutes: duration,
-                    total_marks: totalMarks, passing_marks: passingMarks,
-                    max_attempts: maxAttempts, description,
-                    start_time: startTime, end_time: endTime,
-                    randomize_questions: randomizeQ, randomize_options: randomizeO,
-                    status: isPublic ? 'published' : 'draft',
-                    visibility: isPublic ? 'public' : 'private',
-                    pdf_url: pdfUrl, pdf_public_id: pdfPublicId, pdf_size: pdfSize,
-                };
-                const d = await apiPost(API.createTest, payload);
-                if (d.success) {
-                    closeModal('modalCreateTest');
-                    showToast(pdfFile ? 'Test created with question paper PDF!' : 'Test created successfully!', 'success');
-                    PageCache.invalidate('tests');
-                    loadTests();
-                } else {
-                    showErr(d.error || 'Failed to create test.');
-                    btn.disabled = false;
-                    btn.innerHTML = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-right:4px;"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> Create Test';
-                    pdfProgressWrap.style.display = 'none';
-                }
-            } catch (e) {
-                showErr(e.message || 'Network error. Please try again.');
-                btn.disabled = false;
-                btn.innerHTML = 'Create Test';
-                pdfProgressWrap.style.display = 'none';
-            }
-        }
-
-        function onCtFileSelected(input) {
-            const file = input.files[0];
-            const label = document.getElementById('ctDropLabel');
-            const zone = document.getElementById('ctDropZone');
-            const err = document.getElementById('ctError');
-            if (!file) {
-                label.textContent = 'PDF only · max 50 MB';
-                zone.style.borderColor = 'var(--border)';
-                zone.style.background = '';
-                return;
-            }
-            if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
-                err.textContent = 'Only PDF files are allowed.';
-                err.style.display = 'block';
-                input.value = '';
-                return;
-            }
-            if (file.size > 50 * 1024 * 1024) {
-                err.textContent = 'PDF must be under 50 MB.';
-                err.style.display = 'block';
-                input.value = '';
-                return;
-            }
-            err.style.display = 'none';
-            const mb = (file.size / (1024 * 1024)).toFixed(1);
-            label.innerHTML = '✅ <strong>' + file.name + '</strong> (' + mb + ' MB)';
-            zone.style.borderColor = 'var(--blue-500)';
-            zone.style.background = 'rgba(0,102,255,0.05)';
-        }
-
-        function handleCtFileDrop(event) {
-            event.preventDefault();
-            const zone = document.getElementById('ctDropZone');
-            zone.style.borderColor = 'var(--border)';
-            zone.style.background = '';
-            const file = event.dataTransfer.files[0];
-            if (!file) return;
-            const input = document.getElementById('ctPdfFile');
-            const dt = new DataTransfer();
-            dt.items.add(file);
-            input.files = dt.files;
-            onCtFileSelected(input);
-        }
-
         async function uploadToCloudinary(file, onProgress) {
             const fd = new FormData();
             fd.append('file', file);
@@ -4223,40 +3865,24 @@
         }
 
         async function submitUploadResource() {
-            const title = document.getElementById('urTitle').value.trim();
-            const type = document.getElementById('urType').value;
+            const title    = document.getElementById('urTitle').value.trim();
             const category = document.getElementById('urCategory').value;
-            const diff = document.getElementById('urDifficulty').value;
-            const estTime = document.getElementById('urEstTime').value;
-            const desc = document.getElementById('urDescription').value.trim();
-            const tagsRaw = document.getElementById('urTags').value.trim();
-            const isPublic = document.getElementById('urPublic').checked ? 1 : 0;
-            const fileEl = document.getElementById('urFile');
-            const urlVal = document.getElementById('urUrl').value.trim();
+            const diff     = document.getElementById('urDifficulty').value;
+            const desc     = document.getElementById('urDescription').value.trim();
+            const isPublic = document.getElementById('urPublic').checked;
+            const fileEl   = document.getElementById('urFile');
+            const urlVal   = document.getElementById('urUrl').value.trim();
 
-            const errEl = document.getElementById('urError');
+            const errEl   = document.getElementById('urError');
             const showErr = (msg) => { errEl.textContent = msg; errEl.style.display = 'block'; };
             errEl.style.display = 'none';
 
             if (!title) return showErr('Title is required.');
+            if (!fileEl.files[0] && !urlVal) return showErr('Provide a file or an external URL.');
 
-            const fileTypes = ['pdf', 'video', 'quiz'];
-            const urlTypes = ['link', 'article'];
-
-            if (fileTypes.includes(type) && (!fileEl.files || !fileEl.files[0])) {
-                return showErr('Please select a file to upload.');
-            }
-            if (urlTypes.includes(type) && !urlVal) {
-                return showErr('External URL is required for this type.');
-            }
-
-            const tagsJson = tagsRaw
-                ? JSON.stringify(tagsRaw.split(',').map(t => t.trim()).filter(Boolean).slice(0, 10))
-                : '[]';
-
-            const btn = document.getElementById('btnUploadResource');
+            const btn          = document.getElementById('btnUploadResource');
             const progressWrap = document.getElementById('urProgress');
-            const progressBar = document.getElementById('urProgressBar');
+            const progressBar  = document.getElementById('urProgressBar');
             const progressText = document.getElementById('urProgressText');
 
             btn.disabled = true;
@@ -4266,34 +3892,27 @@
 
             try {
                 let externalUrl = urlVal;
-                let fileSize = 0;
-                let publicId = '';
+                let publicId    = '';
 
-                if (fileTypes.includes(type) && fileEl.files[0]) {
+                if (fileEl.files[0]) {
                     progressText.textContent = 'Uploading to storage…';
                     const result = await uploadToCloudinary(fileEl.files[0], (pct) => {
                         progressBar.style.width = pct + '%';
                         progressText.textContent = `Uploading… ${pct}%`;
                     });
                     externalUrl = result.url;
-                    fileSize = result.fileSize;
-                    publicId = result.publicId;
+                    publicId    = result.publicId;
                     progressText.textContent = 'Saving to database…';
                 }
 
-                // Save metadata to your DB via upload-resource.php
                 const payload = {
                     title,
-                    material_type: type,
                     category,
-                    difficulty: diff,
-                    estimated_time_minutes: parseInt(estTime) || 0,
-                    description: desc,
-                    tags: tagsJson,
-                    is_public: isPublic,
-                    external_url: externalUrl,
-                    file_size: fileSize,
-                    cloudinary_public_id: publicId,
+                    difficulty:            diff,
+                    description:           desc,
+                    visibility:            isPublic ? 'public' : 'private',
+                    external_url:          externalUrl || null,
+                    cloudinary_public_id:  publicId || null,
                 };
 
                 const d = await apiPost(API.uploadResource, payload);

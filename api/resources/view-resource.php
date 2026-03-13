@@ -3,8 +3,8 @@
 // api/resources/view-resource.php
 //
 // Inline PDF/video viewer page.
-// Embeds serve-resource.php directly in an <iframe> or <video>
-// so the browser renders it instead of downloading.
+// Embeds serve-resource.php in an <iframe> or <video> element.
+// Works for logged-in users AND guests (public materials only).
 //
 // GET ?material_id=int
 // ============================================================
@@ -12,46 +12,63 @@
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
 
-$currentUser = validateSession($conn);
-$role        = $currentUser['user_type'];
+// ── Optional session: guests get null ────────────────────────────────────
+$currentUser = optionalSession($conn);
+$role        = $currentUser ? $currentUser['user_type'] : 'guest';
+$isGuest     = $currentUser === null;
 
 $materialId = (int)($_GET['material_id'] ?? 0);
 
 if ($materialId <= 0) {
     http_response_code(400);
-    echo "Invalid material ID.";
+    echo 'Invalid material ID.';
     exit;
 }
 
+// ── Fetch material ────────────────────────────────────────────────────────
 $r = safePreparedQuery($conn,
-    "SELECT material_id, title, material_type, is_public FROM training_materials WHERE material_id = ?",
-    "i", [$materialId]
+    'SELECT material_id, title, cloudinary_public_id, external_url, visibility
+     FROM materials WHERE material_id = ?',
+    'i', [$materialId]
 );
 
 if (!$r['success'] || !$r['result'] || $r['result']->num_rows === 0) {
     http_response_code(404);
-    echo "Material not found.";
+    echo 'Material not found.';
     exit;
 }
 
 $material = $r['result']->fetch_assoc();
 $r['result']->free();
 
-if ($role === 'student' && !$material['is_public']) {
+// ── Access control ────────────────────────────────────────────────────────
+// Guests may only view public materials.
+if ($isGuest && $material['visibility'] !== 'public') {
     http_response_code(403);
-    echo "Access denied.";
+    echo 'Access denied.';
     exit;
 }
 
-$title   = htmlspecialchars($material['title']);
-$type    = $material['material_type'];
-$isVideo = $type === 'video';
+// Logged-in students cannot view private materials either.
+if ($role === 'student' && $material['visibility'] === 'private') {
+    http_response_code(403);
+    echo 'Access denied.';
+    exit;
+}
 
-// Both URLs hit serve-resource.php which handles auth + Cloudinary fetch
-$serveUrl = 'serve-resource.php?material_id=' . $materialId . '&action=view';
-$dlUrl    = 'serve-resource.php?material_id=' . $materialId . '&action=download';
+$title = htmlspecialchars($material['title'], ENT_QUOTES, 'UTF-8');
 
-// Send X-Frame-Options: SAMEORIGIN so our iframe works but external sites can't embed us
+// Derive type from stored data — no material_type column in schema
+$hasCloudinary = !empty($material['cloudinary_public_id']);
+$publicId      = $material['cloudinary_public_id'] ?? '';
+
+// Detect video by public_id prefix convention (e.g. stored under video/)
+$isVideo = $hasCloudinary && (strpos($publicId, 'video/') === 0);
+
+$serveUrl = htmlspecialchars('serve-resource.php?material_id=' . $materialId . '&action=view',  ENT_QUOTES, 'UTF-8');
+$dlUrl    = htmlspecialchars('serve-resource.php?material_id=' . $materialId . '&action=download', ENT_QUOTES, 'UTF-8');
+
+// Prevent this page from being embedded by external origins
 header('X-Frame-Options: SAMEORIGIN');
 ?>
 <!DOCTYPE html>
@@ -83,14 +100,12 @@ header('X-Frame-Options: SAMEORIGIN');
             flex-shrink: 0;
             gap: 12px;
         }
-
         .topbar-left {
             display: flex;
             align-items: center;
             gap: 10px;
             min-width: 0;
         }
-
         .back-btn {
             display: inline-flex;
             align-items: center;
@@ -135,51 +150,28 @@ header('X-Frame-Options: SAMEORIGIN');
         }
         .dl-btn:hover { background: #0052cc; }
 
-        .viewer {
-            flex: 1;
-            overflow: hidden;
-            position: relative;
-        }
+        .viewer { flex: 1; overflow: hidden; position: relative; }
 
-        iframe#pdf-frame {
-            width: 100%;
-            height: 100%;
-            border: none;
-            display: block;
-        }
+        iframe#pdf-frame { width: 100%; height: 100%; border: none; display: block; }
 
         .video-wrap {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            width: 100%; height: 100%;
+            display: flex; align-items: center; justify-content: center;
             background: #000;
         }
-        video {
-            max-width: 100%;
-            max-height: 100%;
-        }
+        video { max-width: 100%; max-height: 100%; }
 
-        /* Shown while iframe loads */
         .loader-overlay {
-            position: absolute;
-            inset: 0;
+            position: absolute; inset: 0;
             background: #0f1117;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 14px;
-            color: #a0aec0;
-            font-size: 14px;
-            pointer-events: none;
-            transition: opacity 0.3s;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: 14px; color: #a0aec0; font-size: 14px;
+            pointer-events: none; transition: opacity 0.3s;
         }
         .loader-overlay.hidden { opacity: 0; }
         .spinner {
-            width: 36px;
-            height: 36px;
+            width: 36px; height: 36px;
             border: 3px solid #2d3148;
             border-top-color: #0066ff;
             border-radius: 50%;
@@ -199,7 +191,6 @@ header('X-Frame-Options: SAMEORIGIN');
 </div>
 
 <div class="viewer">
-
 <?php if ($isVideo): ?>
     <div class="video-wrap">
         <video controls autoplay>
@@ -212,12 +203,6 @@ header('X-Frame-Options: SAMEORIGIN');
         <div class="spinner"></div>
         <span>Loading document…</span>
     </div>
-    <!--
-        We set the iframe src directly to serve-resource.php.
-        The PHP session cookie is present (same origin, same browser session),
-        so validateSession() passes. serve-resource.php returns the raw PDF bytes
-        with Content-Disposition: inline — the browser renders it inside the frame.
-    -->
     <iframe
         id="pdf-frame"
         src="<?= $serveUrl ?>"
@@ -225,7 +210,7 @@ header('X-Frame-Options: SAMEORIGIN');
         onload="document.getElementById('loader').classList.add('hidden')"
     ></iframe>
 <?php endif; ?>
-
 </div>
+
 </body>
 </html>

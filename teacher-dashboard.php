@@ -11,6 +11,13 @@ $teacherId   = (int) $currentUser['user_id'];
 $userName    = htmlspecialchars($currentUser['full_name'] ?? 'Teacher');
 $userEmail   = htmlspecialchars($currentUser['email'] ?? '');
 $userInitials = strtoupper(substr($currentUser['full_name'] ?? 'T', 0, 2));
+
+// Fetch profile_image (validateSession may not include it)
+$picStmt = $conn->prepare("SELECT profile_image FROM users WHERE user_id = ?");
+$picStmt->bind_param("i", $teacherId);
+$picStmt->execute();
+$picRow      = $picStmt->get_result()->fetch_assoc();
+$userPicture = $picRow['profile_image'] ?? '';
 // ============================================================
 // DATABASE QUERIES
 // ============================================================
@@ -55,17 +62,7 @@ $r2['result']->free();
 } else {
 $dbError = true;
 }
-// ── 3. Unread notifications count ──
-$unreadCount = 0;
-$r3 = safePreparedQuery($conn,
-"SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
-"i", [$teacherId]
-);
-if ($r3['success'] && $r3['result']) {
-$row = $r3['result']->fetch_assoc();
-$unreadCount = (int)($row['cnt'] ?? 0);
-$r3['result']->free();
-}
+
 // ── 4. Assessments list with question count and attempt count ──
 $assessments = [];
 $r4 = safePreparedQuery($conn,
@@ -78,8 +75,8 @@ $r4 = safePreparedQuery($conn,
         a.duration_minutes,
         a.total_marks,
         a.passing_marks,
-        a.available_from,
-        a.available_until,
+        a.start_time,
+        a.end_time,
         a.created_at,
         a.updated_at,
 COUNT(DISTINCT q.question_id)            AS question_count,
@@ -90,11 +87,11 @@ LEFT JOIN questions q
 ON q.assessment_id = a.assessment_id
 LEFT JOIN assessment_attempts aa
 ON aa.assessment_id = a.assessment_id
-AND aa.status = 'completed'
+AND aa.status IN ('submitted','timeout')
 WHERE a.created_by = ?
-GROUP BY a.assessment_id, a.title, a.category, a.difficulty, a.status, a.duration_minutes, a.total_marks, a.passing_marks, a.available_from, a.available_until, a.created_at, a.updated_at
+GROUP BY a.assessment_id, a.title, a.category, a.difficulty, a.status, a.duration_minutes, a.total_marks, a.passing_marks, a.start_time, a.end_time, a.created_at, a.updated_at
 ORDER BY
-        FIELD(a.status, 'active', 'scheduled', 'draft', 'archived') ASC,
+        FIELD(a.status, 'active', 'draft', 'archived') ASC,
         a.updated_at DESC",
 "i", [$teacherId]
 );
@@ -106,22 +103,7 @@ $r4['result']->free();
 } else {
 $dbError = true;
 }
-// ── 5. Recent unread notifications (up to 5) ──
-$notifications = [];
-$r5 = safePreparedQuery($conn,
-"SELECT notification_id, title, message, notification_type, action_url, created_at
-FROM notifications
-WHERE user_id = ? AND is_read = 0
-ORDER BY created_at DESC
-LIMIT 5",
-"i", [$teacherId]
-);
-if ($r5['success'] && $r5['result']) {
-while ($row = $r5['result']->fetch_assoc()) {
-$notifications[] = $row;
-    }
-$r5['result']->free();
-}
+
 // ── Helper: format date for display ──
 function fmtDate(?string $dt): string {
 if (!$dt) return '—';
@@ -131,706 +113,975 @@ return date('M j, Y', strtotime($dt));
 function statusLabel(string $status): string {
 return match($status) {
 'active' => 'Active',
-'scheduled' => 'Scheduled',
 'draft'    => 'Draft',
 'archived' => 'Completed',
 default    => ucfirst($status),
     };
 }
-// ── Helper: notification type icon ──
-function notifIcon(string $type): string {
-return match($type) {
-'success'    => '✅',
-'warning'    => '⚠️',
-'error'      => '❌',
-'assessment' => '📝',
-'result'     => '📊',
-'material'   => '📚',
-default      => 'ℹ️',
-    };
-}
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Teacher Dashboard - PREPAURA</title>
+<title>Teacher Dashboard — PREPAURA</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet">
 <style>
+/* ── DESIGN TOKENS ── */
 :root {
---font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
---color-teacher-primary: #2E073F;
---color-teacher-secondary: #AD49E1;
---color-text: #2d3748;
---color-text-light: #718096;
---color-bg: #D3DAD9;
---color-bg-light: #f5f7fa;
---color-white: #ffffff;
---color-border: #e2e8f0;
---color-success: #48bb78;
---color-error: #f56565;
---shadow-sm: 0 2px 10px rgba(0,0,0,0.08);
---shadow-md: 0 4px 20px rgba(0,0,0,0.08);
---shadow-lg: 0 8px 30px rgba(0,0,0,0.15);
---radius: 10px;
---radius-lg: 20px;
---transition: all 0.3s ease;
-        }
-* { margin: 0; padding: 0; box-sizing: border-box; }
+  --ink:         #0d0a14;
+  --ink-2:       #1a1425;
+  --ink-3:       #261d35;
+  --surface:     #f7f5fb;
+  --surface-2:   #ede9f6;
+  --surface-3:   #ffffff;
+  --violet:      #7c3aed;
+  --violet-lt:   #9f67f5;
+  --violet-dim:  rgba(124,58,237,0.12);
+  --violet-glow: rgba(124,58,237,0.25);
+  --orchid:      #c084fc;
+  --gold:        #f59e0b;
+  --emerald:     #10b981;
+  --rose:        #f43f5e;
+  --sky:         #38bdf8;
+  --text-1:      #1a1425;
+  --text-2:      #4b4565;
+  --text-3:      #8b7fa8;
+  --border:      rgba(124,58,237,0.1);
+  --border-2:    rgba(124,58,237,0.18);
+  --shadow-xs:   0 1px 3px rgba(13,10,20,0.06);
+  --shadow-sm:   0 2px 12px rgba(13,10,20,0.08);
+  --shadow-md:   0 8px 32px rgba(13,10,20,0.12);
+  --shadow-lg:   0 20px 60px rgba(13,10,20,0.18);
+  --shadow-vl:   0 0 0 1px var(--border), 0 4px 24px rgba(124,58,237,0.1);
+  --r-sm:        8px;
+  --r-md:        14px;
+  --r-lg:        20px;
+  --r-xl:        28px;
+  --ease:        cubic-bezier(0.22,1,0.36,1);
+  --t:           0.22s var(--ease);
+  --font-head:   'Syne', system-ui, sans-serif;
+  --font-body:   'DM Sans', system-ui, sans-serif;
+  --nav-h:       64px;
+}
+
+/* ── BASE ── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
+
 body {
-font-family: var(--font-family);
-background: var(--color-bg);
-min-height: 100vh;
-color: var(--color-text);
-padding-top: 71px;
-overflow-x: hidden;
-        }
+  font-family: var(--font-body);
+  background: var(--surface);
+  color: var(--text-1);
+  min-height: 100vh;
+  padding-top: var(--nav-h);
+  overflow-x: hidden;
+}
+
+/* ── NOISE TEXTURE OVERLAY ── */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+}
+
 /* ── NAVBAR ── */
 .navbar {
-background: var(--color-teacher-primary);
-padding: 12px 28px;
-display: flex; align-items: center; justify-content: space-between;
-position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
-box-shadow: 0 2px 10px rgba(0,0,0,0.15);
-        }
+  height: var(--nav-h);
+  background: rgba(13,10,20,0.96);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding: 0 28px;
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
+  position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+}
+
 .navbar-brand {
-display: flex; align-items: center; gap: 12px;
-font-size: 20px; font-weight: 700; color: white; text-decoration: none;
-        }
+  display: flex; align-items: center; gap: 12px;
+  text-decoration: none; flex-shrink: 0;
+}
 .brand-logo-img {
-width: 44px; height: 44px;
-border-radius: 10px;
-object-fit: contain;
-flex-shrink: 0;
-        }
-.brand-text-group { display: flex; flex-direction: column; line-height: 1; }
-.brand-name { font-size: 19px; font-weight: 800; color: white; letter-spacing: 1px; }
-.brand-tagline { font-size: 10.5px; font-weight: 400; color: rgba(255,255,255,0.65); letter-spacing: 0.3px; margin-top: 3px; }
+  width: 36px; height: 36px; border-radius: 9px;
+  object-fit: contain; background: white; padding: 3px;
+}
+.brand-text-group { display: flex; flex-direction: column; line-height: 1.15; }
+.brand-name {
+  font-family: var(--font-head);
+  font-size: 16px; font-weight: 800; letter-spacing: 0.06em;
+  color: white;
+}
+.brand-tagline {
+  font-size: 10px; font-weight: 400; color: rgba(255,255,255,0.45);
+  letter-spacing: 0.03em;
+}
+
 .nav-search {
-flex: 1; max-width: 500px; margin: 0 30px; position: relative;
-        }
+  flex: 1; max-width: 420px; position: relative;
+}
 .search-input {
-width: 100%; padding: 10px 40px 10px 15px;
-border: 2px solid #e2e8f0; border-radius: 10px;
-font-size: 14px; transition: var(--transition);
-font-family: var(--font-family);
-        }
-.search-input:focus { outline: none; border-color: var(--color-teacher-secondary); }
+  width: 100%; padding: 9px 38px 9px 14px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: var(--r-sm);
+  font-family: var(--font-body); font-size: 13.5px; color: white;
+  transition: var(--t);
+  outline: none;
+}
+.search-input::placeholder { color: rgba(255,255,255,0.35); }
+.search-input:focus {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(124,58,237,0.5);
+  box-shadow: 0 0 0 3px rgba(124,58,237,0.15);
+}
 .search-icon {
-position: absolute; right: 15px; top: 50%; transform: translateY(-50%);
-color: #a0aec0; font-size: 16px;
-        }
-.nav-profile { display: flex; align-items: center; gap: 15px; }
-.notification-btn {
-position: relative; width: 40px; height: 40px;
-background: rgba(255,255,255,0.1); border: none; border-radius: 10px;
-display: flex; align-items: center; justify-content: center;
-cursor: pointer; transition: var(--transition); font-size: 18px;
-color: white;
-        }
-.notification-btn:hover { background: rgba(255,255,255,0.2); }
-.notif-badge {
-position: absolute; top: -4px; right: -4px;
-background: #ff6b6b; color: white;
-width: 18px; height: 18px; border-radius: 50%;
-font-size: 10px; font-weight: 700;
-display: flex; align-items: center; justify-content: center;
-        }
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  color: rgba(255,255,255,0.35); font-size: 13px; pointer-events: none;
+}
+
+.nav-right { display: flex; align-items: center; gap: 12px; }
+
+.nav-create-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 16px;
+  background: var(--violet);
+  color: white; border-radius: var(--r-sm);
+  font-family: var(--font-body); font-size: 13px; font-weight: 600;
+  text-decoration: none; border: none; cursor: pointer;
+  transition: var(--t);
+  white-space: nowrap;
+}
+.nav-create-btn:hover {
+  background: var(--violet-lt);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(124,58,237,0.4);
+}
+
+.profile-wrap { position: relative; }
 .profile-button {
-display: flex; align-items: center; gap: 10px;
-padding: 8px 14px; background: rgba(255,255,255,0.1);
-border: none; border-radius: 10px; cursor: pointer;
-transition: var(--transition); position: relative;
-        }
-.profile-button:hover { background: rgba(255,255,255,0.2); }
+  display: flex; align-items: center; gap: 9px;
+  padding: 6px 12px 6px 6px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 40px; cursor: pointer;
+  transition: var(--t); color: white;
+}
+.profile-button:hover { background: rgba(255,255,255,0.13); border-color: rgba(255,255,255,0.18); }
 .profile-avatar {
-width: 34px; height: 34px;
-background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
-border: 2px solid rgba(255,255,255,0.4);
-border-radius: 50%;
-display: flex; align-items: center; justify-content: center;
-color: white; font-weight: 700; font-size: 13px;
-        }
-.profile-name { font-weight: 600; font-size: 14px; color: white; }
-.profile-caret { color: rgba(255,255,255,0.6); font-size: 10px; }
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--violet), var(--orchid));
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-head); font-weight: 700; font-size: 12px; color: white;
+  overflow: hidden; flex-shrink: 0;
+}
+.profile-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.profile-name { font-size: 13px; font-weight: 500; }
+.profile-caret { font-size: 9px; color: rgba(255,255,255,0.5); margin-left: 2px; }
+
+/* ── DROPDOWN ── */
 .profile-dropdown {
-position: absolute; top: calc(100% + 12px); right: 0;
-background: white; border-radius: var(--radius);
-box-shadow: var(--shadow-lg); min-width: 220px;
-opacity: 0; visibility: hidden; transform: translateY(-8px);
-transition: var(--transition); z-index: 1001;
-        }
-.profile-dropdown.open { opacity: 1; visibility: visible; transform: translateY(0); }
+  position: absolute; top: calc(100% + 10px); right: 0;
+  background: var(--surface-3); border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg), 0 0 0 1px var(--border);
+  min-width: 230px;
+  opacity: 0; visibility: hidden; transform: translateY(-6px) scale(0.98);
+  transition: var(--t); z-index: 1001;
+  overflow: hidden;
+}
+.profile-dropdown.open {
+  opacity: 1; visibility: visible; transform: translateY(0) scale(1);
+}
 .dropdown-header {
-padding: 16px 20px; border-bottom: 1px solid var(--color-border);
-        }
-.dropdown-name  { font-weight: 700; font-size: 14px; color: var(--color-text); }
-.dropdown-email { font-size: 12px; color: var(--color-text-light); margin-top: 2px; }
-.dropdown-role  {
-display: inline-block; margin-top: 6px;
-padding: 2px 10px;
-background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
-color: white; border-radius: 20px; font-size: 11px; font-weight: 600;
-        }
+  padding: 18px 20px;
+  background: linear-gradient(135deg, var(--ink) 0%, var(--ink-3) 100%);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  text-align: left;
+}
+.dd-avatar {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--violet), var(--orchid));
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-head); font-weight: 700; font-size: 16px; color: white;
+  overflow: hidden; margin-bottom: 10px;
+}
+.dd-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.dropdown-name { font-weight: 600; font-size: 14px; color: white; }
+.dropdown-email { font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 2px; }
+.dropdown-role {
+  display: inline-block; margin-top: 8px;
+  padding: 2px 10px;
+  background: var(--violet-dim);
+  border: 1px solid rgba(124,58,237,0.3);
+  color: var(--orchid); border-radius: 20px; font-size: 11px; font-weight: 600;
+  letter-spacing: 0.04em; text-transform: uppercase;
+}
 .dropdown-menu { padding: 6px 0; }
 .dropdown-item {
-display: flex; align-items: center; gap: 12px;
-padding: 11px 20px; color: var(--color-text);
-text-decoration: none; font-size: 14px; transition: var(--transition);
-cursor: pointer; border: none; background: none; width: 100%; text-align: left;
-        }
-.dropdown-item:hover { background: var(--color-bg-light); }
-.dropdown-item.danger { color: var(--color-error); }
-.dropdown-item.danger:hover { background: #fff5f5; }
-.dropdown-divider { height: 1px; background: var(--color-border); margin: 4px 0; }
-.notif-panel {
-position: absolute; top: calc(100% + 12px); right: 60px;
-background: white; border-radius: var(--radius);
-box-shadow: var(--shadow-lg); width: 340px;
-opacity: 0; visibility: hidden; transform: translateY(-8px);
-transition: var(--transition); z-index: 1001;
-        }
-.notif-panel.open { opacity: 1; visibility: visible; transform: translateY(0); }
-.notif-panel-header {
-padding: 16px 20px; border-bottom: 1px solid var(--color-border);
-font-weight: 700; font-size: 15px; display: flex; justify-content: space-between; align-items: center;
-        }
-.notif-mark-all {
-font-size: 12px; font-weight: 600; color: var(--color-teacher-secondary);
-cursor: pointer; border: none; background: none;
-        }
-.notif-item {
-padding: 14px 20px; border-bottom: 1px solid var(--color-border);
-display: flex; gap: 12px; align-items: flex-start;
-text-decoration: none; color: var(--color-text);
-transition: var(--transition);
-        }
-.notif-item:hover { background: var(--color-bg-light); }
-.notif-icon { font-size: 20px; flex-shrink: 0; margin-top: 2px; }
-.notif-title { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
-.notif-msg   { font-size: 12px; color: var(--color-text-light); line-height: 1.4; }
-.notif-time  { font-size: 11px; color: #a0aec0; margin-top: 4px; }
-.notif-empty { padding: 30px 20px; text-align: center; color: var(--color-text-light); font-size: 14px; }
-/* ── CONTAINER ── */
-.container { max-width: 1400px; margin: 0 auto; padding: 30px 20px; }
-/* ── DB ERROR BANNER ── */
+  display: flex; align-items: center; gap: 11px;
+  padding: 10px 18px; color: var(--text-2);
+  text-decoration: none; font-size: 13.5px; transition: var(--t);
+  cursor: pointer; border: none; background: none; width: 100%; text-align: left;
+  font-family: var(--font-body);
+}
+.dropdown-item i { width: 16px; text-align: center; color: var(--text-3); }
+.dropdown-item:hover { background: var(--surface-2); color: var(--text-1); }
+.dropdown-item.danger { color: var(--rose); }
+.dropdown-item.danger i { color: var(--rose); }
+.dropdown-item.danger:hover { background: rgba(244,63,94,0.06); }
+.dropdown-divider { height: 1px; background: var(--border); margin: 4px 0; }
+
+/* ── PAGE LAYOUT ── */
+.page-wrapper { display: flex; min-height: calc(100vh - var(--nav-h)); position: relative; z-index: 1; }
+
+/* ── SIDEBAR ── */
+.left-sidebar {
+  width: 230px; flex-shrink: 0;
+  padding: 28px 12px;
+  display: flex; flex-direction: column; gap: 2px;
+  background: rgba(255,255,255,0.6);
+  backdrop-filter: blur(12px);
+  border-right: 1px solid var(--border);
+  min-height: calc(100vh - var(--nav-h));
+  position: sticky; top: var(--nav-h); align-self: flex-start;
+}
+
+.sidebar-section-label {
+  font-family: var(--font-head);
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--text-3);
+  padding: 14px 14px 6px;
+}
+
+.sidebar-link {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: var(--r-sm);
+  text-decoration: none; font-size: 13.5px; font-weight: 500;
+  color: var(--text-2); transition: var(--t);
+}
+.sidebar-link i { width: 18px; text-align: center; font-size: 14px; color: var(--text-3); transition: var(--t); }
+.sidebar-link:hover { background: var(--violet-dim); color: var(--violet); }
+.sidebar-link:hover i { color: var(--violet); }
+.sidebar-link.active {
+  background: linear-gradient(135deg, rgba(124,58,237,0.12), rgba(192,132,252,0.08));
+  color: var(--violet); font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--violet);
+}
+.sidebar-link.active i { color: var(--violet); }
+
+.sidebar-bottom {
+  margin-top: auto; padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.sidebar-logout {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: var(--r-sm);
+  font-size: 13.5px; font-weight: 500; color: var(--rose);
+  background: none; border: none; cursor: pointer; width: 100%;
+  transition: var(--t); font-family: var(--font-body);
+}
+.sidebar-logout i { width: 18px; text-align: center; font-size: 14px; }
+.sidebar-logout:hover { background: rgba(244,63,94,0.07); }
+
+/* ── PAGE CONTENT ── */
+.page-content { flex: 1; min-width: 0; padding: 36px 36px 48px 28px; }
+
+/* ── DB ERROR ── */
 .db-error-banner {
-background: #fff5f5; border: 2px solid var(--color-error);
-border-radius: var(--radius); padding: 16px 20px; margin-bottom: 24px;
-display: flex; align-items: center; gap: 12px;
-color: #c53030; font-weight: 600; font-size: 14px;
-        }
-/* ── WELCOME ── */
-.welcome-section { margin-bottom: 28px; }
-.welcome-title { font-size: 28px; font-weight: 700; color: var(--color-text); margin-bottom: 6px; }
-.welcome-subtitle { font-size: 15px; color: var(--color-text-light); }
-/* ── STATS ── */
+  background: rgba(244,63,94,0.06);
+  border: 1px solid rgba(244,63,94,0.25);
+  border-radius: var(--r-md); padding: 14px 18px; margin-bottom: 28px;
+  display: flex; align-items: center; gap: 10px;
+  color: var(--rose); font-size: 13.5px; font-weight: 600;
+}
+
+/* ── WELCOME SECTION ── */
+.welcome-section {
+  background: linear-gradient(135deg, var(--ink) 0%, var(--ink-3) 55%, #3d1f6e 100%);
+  border-radius: var(--r-xl);
+  padding: 36px 40px;
+  margin-bottom: 28px;
+  display: flex; justify-content: space-between; align-items: center; gap: 24px;
+  position: relative; overflow: hidden;
+  box-shadow: var(--shadow-md);
+}
+.welcome-section::before {
+  content: '';
+  position: absolute; top: -60px; right: -40px;
+  width: 300px; height: 300px;
+  background: radial-gradient(circle, rgba(124,58,237,0.35) 0%, transparent 70%);
+  pointer-events: none;
+}
+.welcome-section::after {
+  content: '';
+  position: absolute; bottom: -80px; left: 30%;
+  width: 200px; height: 200px;
+  background: radial-gradient(circle, rgba(192,132,252,0.2) 0%, transparent 70%);
+  pointer-events: none;
+}
+.welcome-content { position: relative; z-index: 1; }
+.welcome-greeting {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--orchid); margin-bottom: 8px;
+}
+.welcome-content h1 {
+  font-family: var(--font-head);
+  font-size: 30px; font-weight: 800; color: white; margin-bottom: 6px;
+  line-height: 1.15;
+}
+.welcome-subtitle { font-size: 14px; color: rgba(255,255,255,0.55); }
+
+.welcome-stats {
+  display: flex; gap: 2px; position: relative; z-index: 1;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--r-md); overflow: hidden;
+}
+.w-stat {
+  padding: 20px 28px; text-align: center; flex: 1;
+  border-right: 1px solid rgba(255,255,255,0.08);
+}
+.w-stat:last-child { border-right: none; }
+.w-stat-num {
+  font-family: var(--font-head);
+  font-size: 28px; font-weight: 800; color: white; display: block;
+}
+.w-stat-label { font-size: 11px; color: rgba(255,255,255,0.45); margin-top: 2px; font-weight: 500; }
+
+/* ── STATS GRID ── */
 .stats-grid {
-display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-gap: 20px; margin-bottom: 28px;
-        }
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px; margin-bottom: 32px;
+}
+
 .stat-card {
-background: white; border-radius: var(--radius); padding: 24px;
-box-shadow: var(--shadow-sm); border-left: 4px solid var(--color-teacher-secondary);
-transition: var(--transition);
-        }
-.stat-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
-.stat-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-.stat-label { font-size: 12px; font-weight: 600; color: var(--color-text-light); text-transform: uppercase; letter-spacing: 0.5px; }
-.stat-icon {
-width: 38px; height: 38px; border-radius: 10px; font-size: 18px;
-background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
-display: flex; align-items: center; justify-content: center; color: white;
-        }
-.stat-value { font-size: 34px; font-weight: 700; color: var(--color-text); margin-bottom: 4px; }
-.stat-change { font-size: 13px; color: var(--color-success); font-weight: 600; }
-.stat-change.none { color: var(--color-text-light); font-weight: normal; }
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: 24px;
+  box-shadow: var(--shadow-xs);
+  transition: var(--t); position: relative; overflow: hidden;
+}
+.stat-card::after {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--violet), var(--orchid));
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+.stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-vl);
+  border-color: var(--border-2);
+}
+
+.stat-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+.stat-card-label {
+  font-size: 12px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--text-3);
+}
+.stat-card-icon {
+  width: 36px; height: 36px; border-radius: var(--r-sm);
+  background: var(--violet-dim);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--violet); font-size: 15px;
+}
+.stat-card-value {
+  font-family: var(--font-head);
+  font-size: 38px; font-weight: 800; color: var(--text-1);
+  line-height: 1; margin-bottom: 6px;
+}
+.stat-card-delta {
+  font-size: 12.5px; font-weight: 600; color: var(--emerald);
+  display: flex; align-items: center; gap: 4px;
+}
+.stat-card-delta.neutral { color: var(--text-3); font-weight: 400; }
+.stat-card-delta i { font-size: 10px; }
+
 /* ── SECTION HEADER ── */
 .section-header {
-display: flex; align-items: center; justify-content: space-between;
-margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
-        }
-.section-title { font-size: 22px; font-weight: 700; color: var(--color-text); }
-.filter-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 18px; flex-wrap: wrap; gap: 12px;
+}
+.section-title {
+  font-family: var(--font-head);
+  font-size: 20px; font-weight: 700; color: var(--text-1);
+}
+.section-actions { display: flex; align-items: center; gap: 10px; }
+
+.btn-create-sm {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 18px;
+  background: linear-gradient(135deg, var(--violet), #9333ea);
+  color: white; border-radius: var(--r-sm);
+  font-family: var(--font-body); font-size: 13px; font-weight: 600;
+  text-decoration: none; transition: var(--t);
+}
+.btn-create-sm:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(124,58,237,0.4);
+}
+
+.view-all-link {
+  font-size: 13px; font-weight: 600; color: var(--violet);
+  text-decoration: none; display: flex; align-items: center; gap: 5px;
+  transition: var(--t);
+}
+.view-all-link:hover { color: var(--violet-lt); }
+
+/* ── FILTER TABS ── */
+.filter-tabs { display: flex; gap: 6px; margin-bottom: 22px; flex-wrap: wrap; }
 .filter-tab {
-padding: 7px 16px; background: white; border: 2px solid var(--color-border);
-border-radius: 8px; font-size: 13px; font-weight: 600;
-color: var(--color-text-light); cursor: pointer; transition: var(--transition);
-        }
-.filter-tab:hover { border-color: var(--color-teacher-secondary); color: var(--color-teacher-secondary); }
+  padding: 7px 16px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 40px; font-size: 13px; font-weight: 500;
+  color: var(--text-2); cursor: pointer;
+  transition: var(--t); font-family: var(--font-body);
+}
+.filter-tab:hover { border-color: var(--violet); color: var(--violet); }
 .filter-tab.active {
-background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
-border-color: transparent; color: white;
-        }
+  background: var(--violet); border-color: var(--violet);
+  color: white; font-weight: 600;
+  box-shadow: 0 2px 10px rgba(124,58,237,0.3);
+}
+
+/* ── ASSESSMENT CARDS ── */
+.assessments-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px; margin-bottom: 40px;
+}
+
+.assessment-card {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: 24px;
+  box-shadow: var(--shadow-xs);
+  transition: var(--t); position: relative; overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.assessment-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+  background: linear-gradient(90deg, var(--violet), var(--orchid));
+}
+.assessment-card.draft::before  { background: linear-gradient(90deg, #d97706, var(--gold)); }
+.assessment-card.archived::before { background: linear-gradient(90deg, #0ea5e9, var(--sky)); }
+
+.assessment-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md), 0 0 0 1px var(--border-2);
+  border-color: var(--border-2);
+}
+.assessment-card.hidden { display: none; }
+
+.card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; gap: 10px; }
+.assessment-title {
+  font-family: var(--font-head);
+  font-size: 15.5px; font-weight: 700; color: var(--text-1);
+  line-height: 1.3; flex: 1;
+}
+
+.status-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 40px;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.04em; text-transform: uppercase; flex-shrink: 0;
+}
+.status-badge.active   { background: rgba(16,185,129,0.1); color: #059669; border: 1px solid rgba(16,185,129,0.25); }
+.status-badge.draft    { background: rgba(245,158,11,0.1); color: #b45309; border: 1px solid rgba(245,158,11,0.25); }
+.status-badge.archived { background: rgba(56,189,248,0.1); color: #0284c7; border: 1px solid rgba(56,189,248,0.25); }
+.badge-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+
+.assessment-category {
+  display: inline-block; padding: 3px 10px;
+  background: var(--violet-dim);
+  color: var(--violet);
+  border: 1px solid rgba(124,58,237,0.18);
+  border-radius: 40px; font-size: 11.5px; font-weight: 600;
+  margin-bottom: 16px; letter-spacing: 0.02em;
+}
+
+.assessment-meta {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  margin-bottom: 18px;
+  background: var(--surface); border-radius: var(--r-md);
+  padding: 12px; flex: 1;
+}
+.meta-item {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12.5px; color: var(--text-2);
+}
+.meta-item i { font-size: 11px; color: var(--text-3); width: 13px; text-align: center; }
+
+.assessment-actions { display: flex; gap: 8px; margin-top: auto; }
+.btn {
+  padding: 9px 14px; border: 1px solid transparent;
+  border-radius: var(--r-sm); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: var(--t); flex: 1;
+  text-align: center; text-decoration: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--font-body);
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--violet), #9333ea);
+  color: white; border-color: transparent;
+}
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(124,58,237,0.35);
+}
+.btn-secondary {
+  background: var(--surface); color: var(--text-2);
+  border-color: var(--border);
+}
+.btn-secondary:hover { background: var(--surface-2); color: var(--text-1); }
+.btn-danger { background: rgba(244,63,94,0.08); color: var(--rose); border-color: rgba(244,63,94,0.2); }
+.btn-danger:hover { background: rgba(244,63,94,0.14); }
+
 /* ── EMPTY STATE ── */
 .empty-state {
-background: white; border-radius: var(--radius-lg); padding: 60px 30px;
-text-align: center; box-shadow: var(--shadow-sm);
-        }
-.empty-icon { font-size: 64px; margin-bottom: 16px; opacity: 0.4; }
-.empty-title { font-size: 20px; font-weight: 700; color: var(--color-text); margin-bottom: 8px; }
-.empty-subtitle { font-size: 15px; color: var(--color-text-light); margin-bottom: 24px; }
-.btn-create {
-display: inline-block; padding: 12px 28px;
-background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
-color: white; border-radius: var(--radius); font-weight: 700;
-text-decoration: none; transition: var(--transition);
-        }
-.btn-create:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(46,7,63,0.3); }
-/* ── ASSESSMENT CARDS GRID ── */
-.assessments-grid {
-display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-gap: 24px; margin-bottom: 30px;
-        }
-.assessment-card {
-background: white; border-radius: var(--radius); padding: 24px;
-box-shadow: var(--shadow-sm); transition: var(--transition);
-position: relative; overflow: hidden;
-        }
-.assessment-card::before {
-content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
-background: linear-gradient(90deg, var(--color-teacher-primary), var(--color-teacher-secondary));
-        }
-.assessment-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
-.assessment-card.hidden { display: none; }
-.assessment-title {
-font-size: 17px; font-weight: 700; color: var(--color-text);
-margin-bottom: 8px; line-height: 1.3;
-        }
-.assessment-category {
-display: inline-block; padding: 3px 10px;
-background: #f0f9ff; color: #0284c7;
-border-radius: 5px; font-size: 12px; font-weight: 600; margin-bottom: 14px;
-        }
-.assessment-meta {
-display: flex; flex-direction: column; gap: 8px;
-margin-bottom: 14px; padding: 12px;
-background: var(--color-bg-light); border-radius: 8px;
-        }
-.meta-item {
-display: flex; align-items: center; gap: 8px;
-font-size: 13px; color: var(--color-text-light);
-        }
-.meta-icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
-.status-badge {
-display: inline-flex; align-items: center; gap: 5px;
-padding: 5px 12px; border-radius: 6px;
-font-size: 12px; font-weight: 600; margin-bottom: 14px;
-        }
-.status-badge.active    { background: #d1fae5; color: #065f46; }
-.status-badge.draft        { background: #fef3c7; color: #92400e; }
-.status-badge.archived     { background: #dbeafe; color: #1e40af; }
-.assessment-actions { display: flex; gap: 8px; }
-.btn {
-padding: 9px 14px; border: none; border-radius: 8px;
-font-size: 13px; font-weight: 600; cursor: pointer;
-transition: var(--transition); flex: 1; text-align: center;
-text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
-        }
-.btn-primary {
-background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
-color: white;
-        }
-.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(46,7,63,0.3); }
-.btn-secondary { background: var(--color-bg-light); color: var(--color-text); }
-.btn-secondary:hover { background: var(--color-border); }
-.btn-danger { background: #fee2e2; color: #dc2626; }
-.btn-danger:hover { background: #fecaca; }
+  background: var(--surface-3); border: 1px dashed var(--border-2);
+  border-radius: var(--r-xl); padding: 72px 30px;
+  text-align: center; box-shadow: var(--shadow-xs);
+}
+.empty-icon { font-size: 56px; margin-bottom: 18px; opacity: 0.35; }
+.empty-title {
+  font-family: var(--font-head);
+  font-size: 20px; font-weight: 700; color: var(--text-1); margin-bottom: 8px;
+}
+.empty-subtitle { font-size: 14.5px; color: var(--text-3); margin-bottom: 28px; }
+.btn-create-empty {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 12px 28px;
+  background: linear-gradient(135deg, var(--violet), #9333ea);
+  color: white; border-radius: var(--r-md); font-weight: 700; font-size: 14px;
+  text-decoration: none; transition: var(--t);
+}
+.btn-create-empty:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(124,58,237,0.35); }
+
 /* ── FAB ── */
-.fab-container { position: fixed; bottom: 30px; right: 30px; z-index: 999; }
+.fab-container { position: fixed; bottom: 32px; right: 32px; z-index: 999; }
 .fab-button {
-width: 58px; height: 58px; border-radius: 50%;
-background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
-color: white; border: none; font-size: 26px;
-cursor: pointer; box-shadow: var(--shadow-lg);
-transition: var(--transition);
-display: flex; align-items: center; justify-content: center;
-text-decoration: none;
-        }
-.fab-button:hover { transform: scale(1.1) rotate(90deg); box-shadow: 0 8px 25px rgba(46,7,63,0.4); }
-/* ── DELETE CONFIRM MODAL ── */
+  width: 56px; height: 56px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--violet), #9333ea);
+  color: white; border: none; font-size: 22px;
+  cursor: pointer; box-shadow: 0 6px 24px rgba(124,58,237,0.45);
+  transition: var(--t);
+  display: flex; align-items: center; justify-content: center;
+  text-decoration: none;
+}
+.fab-button:hover { transform: scale(1.1) rotate(90deg); box-shadow: 0 10px 32px rgba(124,58,237,0.55); }
+
+/* ── DELETE MODAL ── */
 .modal-overlay {
-display: none; position: fixed; inset: 0;
-background: rgba(0,0,0,0.5); z-index: 2000;
-align-items: center; justify-content: center;
-        }
+  display: none; position: fixed; inset: 0;
+  background: rgba(13,10,20,0.6); backdrop-filter: blur(4px);
+  z-index: 2000; align-items: center; justify-content: center;
+}
 .modal-overlay.open { display: flex; }
 .modal {
-background: white; border-radius: var(--radius-lg); padding: 30px;
-width: 90%; max-width: 440px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        }
-.modal-title { font-size: 20px; font-weight: 700; margin-bottom: 12px; color: var(--color-text); }
-.modal-body  { font-size: 14px; color: var(--color-text-light); margin-bottom: 24px; line-height: 1.6; }
-.modal-actions { display: flex; gap: 12px; justify-content: flex-end; }
+  background: var(--surface-3); border-radius: var(--r-xl);
+  padding: 32px; width: 90%; max-width: 440px;
+  box-shadow: var(--shadow-lg), 0 0 0 1px var(--border);
+  animation: modal-in 0.2s var(--ease) forwards;
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.95) translateY(12px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.modal-icon {
+  width: 48px; height: 48px; border-radius: 50%;
+  background: rgba(244,63,94,0.1); border: 1px solid rgba(244,63,94,0.25);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--rose); font-size: 20px; margin-bottom: 18px;
+}
+.modal-title {
+  font-family: var(--font-head);
+  font-size: 19px; font-weight: 700; margin-bottom: 10px; color: var(--text-1);
+}
+.modal-body  { font-size: 14px; color: var(--text-2); margin-bottom: 26px; line-height: 1.65; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 .btn-cancel {
-padding: 10px 22px; background: var(--color-bg-light); color: var(--color-text);
-border: 2px solid var(--color-border); border-radius: var(--radius);
-font-weight: 600; cursor: pointer; transition: var(--transition);
-        }
-.btn-cancel:hover { border-color: var(--color-error); color: var(--color-error); }
+  padding: 10px 22px; background: var(--surface); color: var(--text-2);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  font-weight: 600; font-size: 13.5px; cursor: pointer; transition: var(--t);
+  font-family: var(--font-body);
+}
+.btn-cancel:hover { border-color: var(--violet); color: var(--violet); }
 .btn-confirm-delete {
-padding: 10px 22px; background: var(--color-error); color: white;
-border: none; border-radius: var(--radius);
-font-weight: 700; cursor: pointer; transition: var(--transition);
-        }
-.btn-confirm-delete:hover { background: #c53030; }
-.btn-confirm-delete:disabled { opacity: 0.6; cursor: not-allowed; }
+  padding: 10px 22px; background: var(--rose); color: white;
+  border: none; border-radius: var(--r-sm);
+  font-weight: 700; font-size: 13.5px; cursor: pointer; transition: var(--t);
+  font-family: var(--font-body);
+}
+.btn-confirm-delete:hover { background: #e11d48; box-shadow: 0 4px 14px rgba(244,63,94,0.35); }
+.btn-confirm-delete:disabled { opacity: 0.55; cursor: not-allowed; }
+
 /* ── RESPONSIVE ── */
-@media (max-width: 768px) {
-            .container { padding: 20px 15px; }
-.nav-search { display: none; }
-.navbar { padding: 10px 15px; }
-.stats-grid { grid-template-columns: 1fr 1fr; }
-.assessments-grid { grid-template-columns: 1fr; }
-.section-header { flex-direction: column; align-items: flex-start; }
-.notif-panel { right: 10px; width: calc(100vw - 20px); }
-        }
-@media (max-width: 480px) {
-            .stats-grid { grid-template-columns: 1fr; }
-.welcome-title { font-size: 22px; }
-        }
+@media (max-width: 960px) {
+  .left-sidebar { display: none; }
+  .page-content { padding: 28px 20px; }
+  .welcome-section { flex-direction: column; align-items: flex-start; }
+  .welcome-stats { width: 100%; }
+}
+@media (max-width: 640px) {
+  .nav-search { display: none; }
+  .navbar { padding: 0 16px; }
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .assessments-grid { grid-template-columns: 1fr; }
+  .section-header { flex-direction: column; align-items: flex-start; }
+  .welcome-content h1 { font-size: 22px; }
+}
+@media (max-width: 400px) {
+  .stats-grid { grid-template-columns: 1fr; }
+}
 </style>
 </head>
 <body>
+
 <!-- ── NAVIGATION ── -->
 <nav class="navbar">
-<a href="teacher-dashboard.php" class="navbar-brand">
-<img src="data:image/png;base64,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" alt="PREPAURA Logo" class="brand-logo-img">
-<div class="brand-text-group">
-<span class="brand-name">PREPAURA</span>
-<span class="brand-tagline">Placement Training Platform</span>
-</div>
-</a>
-<div class="nav-search">
-<input type="text" class="search-input" id="searchInput" placeholder="Search assessments..." autocomplete="off">
-<span class="search-icon">🔍</span>
-</div>
-<div class="nav-profile" style="position:relative;">
-<!-- Notification bell -->
-<button class="notification-btn" id="notifBtn" title="Notifications">
-            🔔
-<?php if ($unreadCount > 0): ?>
-<span class="notif-badge"><?= $unreadCount > 9 ? '9+' : $unreadCount ?></span>
-<?php endif; ?>
-</button>
-<!-- Notification panel -->
-<div class="notif-panel" id="notifPanel">
-<div class="notif-panel-header">
-<span>Notifications</span>
-<?php if (!empty($notifications)): ?>
-<button class="notif-mark-all" onclick="markAllRead()">Mark all read</button>
-<?php endif; ?>
-</div>
-<?php if (empty($notifications)): ?>
-<div class="notif-empty">🎉 You're all caught up!</div>
-<?php else: ?>
-<?php foreach ($notifications as $n): ?>
-<a class="notif-item"
-href="<?= htmlspecialchars($n['action_url'] ?? '#') ?>"
-data-notif-id="<?= (int)$n['notification_id'] ?>">
-<div class="notif-icon"><?= notifIcon($n['notification_type']) ?></div>
-<div>
-<div class="notif-title"><?= htmlspecialchars($n['title']) ?></div>
-<?php if ($n['message']): ?>
-<div class="notif-msg"><?= htmlspecialchars(mb_strimwidth($n['message'], 0, 80, '…')) ?></div>
-<?php endif; ?>
-<div class="notif-time"><?= fmtDate($n['created_at']) ?></div>
-</div>
-</a>
-<?php endforeach; ?>
-<?php endif; ?>
-</div>
-<!-- Profile button + dropdown -->
-<button class="profile-button" id="profileBtn">
-<div class="profile-avatar"><?= $userInitials ?></div>
-<span class="profile-name"><?= $userName ?></span>
-<span class="profile-caret">▼</span>
-<div class="profile-dropdown" id="profileDropdown">
-<div class="dropdown-header">
-<div class="dropdown-name"><?= $userName ?></div>
-<div class="dropdown-email"><?= $userEmail ?></div>
-<span class="dropdown-role">Teacher</span>
-</div>
-<div class="dropdown-menu">
-<a href="teacher-profile.php" class="dropdown-item">👤 My Profile</a>
-<a href="teacher-dashboard.php" class="dropdown-item">📊 Dashboard</a>
-<a href="help.html" target="_blank" rel="noopener" class="dropdown-item">❓ Help & Support</a>
-<div class="dropdown-divider"></div>
-<a onclick="handleLogout()" class="dropdown-item">🚪 Logout</a>
-</div>
-</div>
-</button>
-</div>
+  <a href="teacher-dashboard.php" class="navbar-brand">
+    <img src="prepaura-logo.png" alt="PREPAURA" class="brand-logo-img">
+    <div class="brand-text-group">
+      <span class="brand-name">PREPAURA</span>
+      <span class="brand-tagline">Placement Training Platform</span>
+    </div>
+  </a>
+
+  <div class="nav-search">
+    <input type="text" class="search-input" id="searchInput" placeholder="Search assessments…" autocomplete="off">
+    <i class="fa fa-search search-icon"></i>
+  </div>
+
+  <div class="nav-right">
+<div class="profile-wrap">
+      <button class="profile-button" id="profileBtn">
+        <div class="profile-avatar">
+          <?php if (!empty($userPicture)): ?>
+            <img src="<?= htmlspecialchars($userPicture) ?>" alt="Profile">
+          <?php else: ?>
+            <?= $userInitials ?>
+          <?php endif; ?>
+        </div>
+        <span class="profile-name"><?= $userName ?></span>
+        <i class="fa fa-chevron-down profile-caret"></i>
+
+        <div class="profile-dropdown" id="profileDropdown">
+          <div class="dropdown-header">
+            <div class="dd-avatar">
+              <?php if (!empty($userPicture)): ?>
+                <img src="<?= htmlspecialchars($userPicture) ?>" alt="Profile">
+              <?php else: ?>
+                <?= $userInitials ?>
+              <?php endif; ?>
+            </div>
+            <div class="dropdown-name"><?= $userName ?></div>
+            <div class="dropdown-email"><?= $userEmail ?></div>
+            <span class="dropdown-role">Teacher</span>
+          </div>
+          <div class="dropdown-menu">
+            <a href="teacher-profile.php" class="dropdown-item"><i class="fa fa-user"></i> My Profile</a>
+            <a href="help.html" target="_blank" rel="noopener" class="dropdown-item"><i class="fa fa-circle-question"></i> Help &amp; Support</a>
+            <div class="dropdown-divider"></div>
+            <a href="#" onclick="handleLogout()" class="dropdown-item"><i class="fa fa-right-from-bracket"></i> Logout</a>
+          </div>
+        </div>
+      </button>
+    </div>
+  </div>
 </nav>
+
 <!-- ── MAIN ── -->
-<div class="container">
-<?php if ($dbError): ?>
-<div class="db-error-banner">
-        ⚠️ Some data could not be loaded. Please report this to your administrator.
-</div>
-<?php endif; ?>
-<!-- Welcome -->
-<div class="welcome-section">
-<h1 class="welcome-title">Welcome back, <?= $userName ?>! 👋</h1>
-<p class="welcome-subtitle">Here's what's happening with your assessments today.</p>
-</div>
-<!-- Stats -->
-<div class="stats-grid">
-<div class="stat-card">
-<div class="stat-header">
-<span class="stat-label">Total Assessments</span>
-<div class="stat-icon">📝</div>
-</div>
-<div class="stat-value"><?= $totalAssessments ?></div>
-<?php if ($newThisMonth > 0): ?>
-<div class="stat-change">↑ <?= $newThisMonth ?> new this month</div>
-<?php else: ?>
-<div class="stat-change none">No new assessments this month</div>
-<?php endif; ?>
-</div>
-<div class="stat-card">
-<div class="stat-header">
-<span class="stat-label">Students Attempted</span>
-<div class="stat-icon">👥</div>
-</div>
-<div class="stat-value"><?= $activeStudents ?></div>
-<?php if ($newStudentsWeek > 0): ?>
-<div class="stat-change">↑ <?= $newStudentsWeek ?> this week</div>
-<?php else: ?>
-<div class="stat-change none">No new attempts this week</div>
-<?php endif; ?>
-</div>
-</div>
-<!-- Assessments section -->
-<div class="section-header">
-<h2 class="section-title">My Assessments</h2>
-<div class="filter-tabs" role="tablist">
-<button class="filter-tab active" data-filter="all"      role="tab">All</button>
-<button class="filter-tab"         data-filter="active"   role="tab">Active</button>
-<button class="filter-tab"         data-filter="draft"    role="tab">Draft</button>
-<button class="filter-tab"         data-filter="archived" role="tab">Completed</button>
-</div>
-</div>
-<?php if (empty($assessments)): ?>
-<div class="empty-state">
-<div class="empty-icon">📋</div>
-<div class="empty-title">No assessments yet</div>
-<div class="empty-subtitle">Create your first assessment to get started.</div>
-<a href="create-assessment.php" class="btn-create">+ Create Assessment</a>
-</div>
-<?php else: ?>
-<div class="assessments-grid" id="assessmentsGrid">
-<?php foreach ($assessments as $a):
-$aid      = (int)$a['assessment_id'];
-$status   = $a['status'];
-$qCount   = (int)$a['question_count'];
-$attempts = (int)$a['attempt_count'];
-$students = (int)$a['student_count'];
-if ($status === 'active' && $a['available_until']) {
-    $dateLabel = 'Due: ' . fmtDate($a['available_until']);
-} elseif ($status === 'archived') {
-    $dateLabel = 'Completed: ' . fmtDate($a['updated_at']);
-} else {
-    $dateLabel = 'Created: ' . fmtDate($a['created_at']);
-}
-?>
-<div class="assessment-card" data-status="<?= htmlspecialchars($status) ?>" data-id="<?= $aid ?>">
-<h3 class="assessment-title"><?= htmlspecialchars($a['title']) ?></h3>
-<span class="assessment-category"><?= htmlspecialchars(ucfirst($a['category'] ?? 'General')) ?></span>
-<div class="assessment-meta">
-<div class="meta-item">
-<span class="meta-icon">📅</span>
-<span><?= $dateLabel ?></span>
-</div>
-<div class="meta-item">
-<span class="meta-icon">⏱️</span>
-<span><?= (int)$a['duration_minutes'] ?> minutes</span>
-</div>
-<div class="meta-item">
-<span class="meta-icon">📝</span>
-<span><?= $qCount ?> question<?= $qCount !== 1 ? 's' : '' ?></span>
-</div>
-<div class="meta-item">
-<span class="meta-icon">👥</span>
-<?php if ($status === 'draft'): ?>
-<span>Not published yet</span>
-<?php elseif ($attempts === 0): ?>
-<span>No attempts yet</span>
-<?php else: ?>
-<span><?= $students ?> student<?= $students !== 1 ? 's' : '' ?> · <?= $attempts ?> attempt<?= $attempts !== 1 ? 's' : '' ?></span>
-<?php endif; ?>
-</div>
-</div>
-<span class="status-badge <?= $status ?>">
-                    ● <?= statusLabel($status) ?>
-</span>
-<div class="assessment-actions">
-<?php if ($status === 'draft'): ?>
-<a href="create-assessment.php?edit=<?= $aid ?>" class="btn btn-primary">Continue Editing</a>
-<button class="btn btn-danger" onclick="confirmDelete(<?= $aid ?>, '<?= htmlspecialchars(addslashes($a['title'])) ?>')">Delete</button>
-<?php elseif ($status === 'active' || $status === 'archived'): ?>
-<a href="assessment-results.php?id=<?= $aid ?>" class="btn btn-primary">View Results</a>
-<a href="edit-assessment.php?id=<?= $aid ?>" class="btn btn-secondary">Edit</a>
-<?php else: ?>
-<a href="edit-assessment.php?id=<?= $aid ?>" class="btn btn-secondary">Edit</a>
-<?php endif; ?>
-</div>
-</div>
-<?php endforeach; ?>
-</div>
-<?php endif; ?>
-</div><!-- /container -->
-<!-- FAB -->
-<div class="fab-container">
-<a href="create-assessment.php" class="fab-button" title="Create New Assessment">+</a>
-</div>
+<div class="page-wrapper">
+
+  <!-- Sidebar -->
+  <aside class="left-sidebar">
+    <span class="sidebar-section-label">Navigation</span>
+    <a href="teacher-dashboard.php" class="sidebar-link active"><i class="fa fa-house"></i> Dashboard</a>
+    <a href="teacher-assessments.php" class="sidebar-link"><i class="fa fa-clipboard-list"></i> Assessments</a>
+    <a href="manage-groups.php" class="sidebar-link"><i class="fa fa-users"></i> Manage Groups</a>
+    <a href="teacher-resources.php" class="sidebar-link"><i class="fa fa-folder-open"></i> Resources</a>
+    <div class="sidebar-bottom">
+      <button onclick="handleLogout()" class="sidebar-logout"><i class="fa fa-right-from-bracket"></i> Logout</button>
+    </div>
+  </aside>
+
+  <!-- Content -->
+  <div class="page-content">
+
+    <?php if ($dbError): ?>
+    <div class="db-error-banner">
+      <i class="fa fa-triangle-exclamation"></i>
+      Some data could not be loaded. Please report this to your administrator.
+    </div>
+    <?php endif; ?>
+
+    <!-- Welcome -->
+    <div class="welcome-section">
+      <div class="welcome-content">
+        <div class="welcome-greeting">Good to see you</div>
+        <h1>Welcome back, <?= $userName ?>!</h1>
+        <p class="welcome-subtitle">Here's what's happening with your assessments today.</p>
+      </div>
+      <div class="welcome-stats">
+        <div class="w-stat">
+          <span class="w-stat-num"><?= $totalAssessments ?></span>
+          <span class="w-stat-label">Assessments</span>
+        </div>
+        <div class="w-stat">
+          <span class="w-stat-num"><?= $activeStudents ?></span>
+          <span class="w-stat-label">Students</span>
+        </div>
+        <div class="w-stat">
+          <span class="w-stat-num"><?= $newThisMonth ?></span>
+          <span class="w-stat-label">New This Month</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stat Cards -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <span class="stat-card-label">Total Assessments</span>
+          <div class="stat-card-icon"><i class="fa fa-file-pen"></i></div>
+        </div>
+        <div class="stat-card-value"><?= $totalAssessments ?></div>
+        <?php if ($newThisMonth > 0): ?>
+        <div class="stat-card-delta"><i class="fa fa-arrow-up"></i><?= $newThisMonth ?> new this month</div>
+        <?php else: ?>
+        <div class="stat-card-delta neutral">No new assessments this month</div>
+        <?php endif; ?>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <span class="stat-card-label">Students Attempted</span>
+          <div class="stat-card-icon"><i class="fa fa-user-group"></i></div>
+        </div>
+        <div class="stat-card-value"><?= $activeStudents ?></div>
+        <?php if ($newStudentsWeek > 0): ?>
+        <div class="stat-card-delta"><i class="fa fa-arrow-up"></i><?= $newStudentsWeek ?> this week</div>
+        <?php else: ?>
+        <div class="stat-card-delta neutral">No new attempts this week</div>
+        <?php endif; ?>
+      </div>
+    </div>
+
+    <!-- Assessments Section -->
+    <div class="section-header">
+      <div class="section-actions">
+        <h2 class="section-title">My Assessments</h2>
+        <a href="create-assessment.php" class="btn-create-sm"><i class="fa fa-plus"></i> Create New Assessment</a>
+      </div>
+      <a href="teacher-assessments.php" class="view-all-link">View all <i class="fa fa-arrow-right"></i></a>
+    </div>
+
+    <div class="filter-tabs" role="tablist">
+      <button class="filter-tab active" data-filter="all"      role="tab">All</button>
+      <button class="filter-tab"         data-filter="active"  role="tab">Active</button>
+      <button class="filter-tab"         data-filter="draft"   role="tab">Draft</button>
+      <button class="filter-tab"         data-filter="archived" role="tab">Completed</button>
+    </div>
+
+    <?php if (empty($assessments)): ?>
+    <div class="empty-state">
+      <div class="empty-icon">📋</div>
+      <div class="empty-title">No assessments yet</div>
+      <div class="empty-subtitle">Create your first assessment to get started.</div>
+      <a href="create-assessment.php" class="btn-create-empty"><i class="fa fa-plus"></i> Create Assessment</a>
+    </div>
+    <?php else: ?>
+    <div class="assessments-grid" id="assessmentsGrid">
+      <?php foreach ($assessments as $a):
+        $aid      = (int)$a['assessment_id'];
+        $status   = $a['status'];
+        $qCount   = (int)$a['question_count'];
+        $attempts = (int)$a['attempt_count'];
+        $students = (int)$a['student_count'];
+        if (in_array($status, ['active','published']) && $a['end_time']) {
+          $dateLabel = 'Due ' . fmtDate($a['end_time']);
+        } elseif ($status === 'archived') {
+          $dateLabel = 'Completed ' . fmtDate($a['updated_at']);
+        } else {
+          $dateLabel = 'Created ' . fmtDate($a['created_at']);
+        }
+      ?>
+      <div class="assessment-card <?= htmlspecialchars($status) ?>"
+           data-status="<?= htmlspecialchars($status) ?>"
+           data-id="<?= $aid ?>">
+
+        <div class="card-top">
+          <h3 class="assessment-title"><?= htmlspecialchars($a['title']) ?></h3>
+          <span class="status-badge <?= $status ?>">
+            <span class="badge-dot"></span>
+            <?= statusLabel($status) ?>
+          </span>
+        </div>
+
+        <span class="assessment-category"><?= htmlspecialchars(ucfirst($a['category'] ?? 'General')) ?></span>
+
+        <div class="assessment-meta">
+          <div class="meta-item"><i class="fa fa-calendar"></i> <?= $dateLabel ?></div>
+          <div class="meta-item"><i class="fa fa-clock"></i> <?= (int)$a['duration_minutes'] ?> min</div>
+          <div class="meta-item"><i class="fa fa-circle-question"></i> <?= $qCount ?> question<?= $qCount !== 1 ? 's' : '' ?></div>
+          <div class="meta-item">
+            <i class="fa fa-users"></i>
+            <?php if ($status === 'draft'): ?>
+              Not published
+            <?php elseif ($attempts === 0): ?>
+              No attempts yet
+            <?php else: ?>
+              <?= $students ?> student<?= $students !== 1 ? 's' : '' ?>
+            <?php endif; ?>
+          </div>
+        </div>
+
+        <div class="assessment-actions">
+          <?php if ($status === 'draft'): ?>
+            <a href="create-assessment.php?edit=<?= $aid ?>" class="btn btn-primary">Continue Editing</a>
+            <button class="btn btn-danger" onclick="confirmDelete(<?= $aid ?>, '<?= htmlspecialchars(addslashes($a['title'])) ?>')">Delete</button>
+          <?php elseif (in_array($status, ['active','published']) || $status === 'archived'): ?>
+            <a href="assessment-results.php?id=<?= $aid ?>" class="btn btn-primary">View Results</a>
+            <a href="edit-assessment.php?id=<?= $aid ?>" class="btn btn-secondary">Edit</a>
+          <?php else: ?>
+            <a href="edit-assessment.php?id=<?= $aid ?>" class="btn btn-secondary">Edit</a>
+          <?php endif; ?>
+        </div>
+      </div>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+
+  </div><!-- /page-content -->
+</div><!-- /page-wrapper -->
+
+
+
 <!-- Delete Confirm Modal -->
 <div class="modal-overlay" id="deleteModal">
-<div class="modal">
-<div class="modal-title">Delete Assessment?</div>
-<div class="modal-body" id="deleteModalBody">
-            This will permanently delete the assessment and all associated questions and student attempts. This cannot be undone.
+  <div class="modal">
+    <div class="modal-icon"><i class="fa fa-trash-can"></i></div>
+    <div class="modal-title">Delete Assessment?</div>
+    <div class="modal-body" id="deleteModalBody">
+      This will permanently delete the assessment and all associated questions and student attempts. This cannot be undone.
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeDeleteModal()">Cancel</button>
+      <button class="btn-confirm-delete" id="confirmDeleteBtn">Delete</button>
+    </div>
+  </div>
 </div>
-<div class="modal-actions">
-<button class="btn-cancel" onclick="closeDeleteModal()">Cancel</button>
-<button class="btn-confirm-delete" id="confirmDeleteBtn">Delete</button>
-</div>
-</div>
-</div>
+
 <script>
 // ── CSRF token — fetched once on page load, reused for all POST requests ──
 let csrfToken = null;
 async function getCsrfToken() {
-    if (csrfToken) return csrfToken;
-    const res  = await fetch('api/csrf-token.php', { credentials: 'same-origin' });
-    const data = await res.json();
-    if (!data.success) throw new Error('Could not fetch CSRF token.');
-    csrfToken = data.token;
-    return csrfToken;
+  if (csrfToken) return csrfToken;
+  const res  = await fetch('api/csrf-token.php', { credentials: 'same-origin' });
+  const data = await res.json();
+  if (!data.success) throw new Error('Could not fetch CSRF token.');
+  csrfToken = data.token;
+  return csrfToken;
 }
 
-// ── Panel toggles ──
+// ── Profile dropdown ──
 const profileBtn  = document.getElementById('profileBtn');
 const profileDrop = document.getElementById('profileDropdown');
-const notifBtn    = document.getElementById('notifBtn');
-const notifPanel  = document.getElementById('notifPanel');
 profileBtn.addEventListener('click', e => {
-    e.stopPropagation();
-    profileDrop.classList.toggle('open');
-    notifPanel.classList.remove('open');
+  e.stopPropagation();
+  profileDrop.classList.toggle('open');
 });
-notifBtn.addEventListener('click', e => {
-    e.stopPropagation();
-    notifPanel.classList.toggle('open');
-    profileDrop.classList.remove('open');
-});
-document.addEventListener('click', () => {
-    profileDrop.classList.remove('open');
-    notifPanel.classList.remove('open');
-});
+document.addEventListener('click', () => profileDrop.classList.remove('open'));
 
 // ── Logout ──
 function handleLogout() {
-    if (confirm('Are you sure you want to logout?')) {
-        window.location.href = 'logout.php';
-    }
+  if (confirm('Are you sure you want to logout?')) {
+    window.location.href = 'logout.php';
+  }
 }
 
 // ── Filter tabs ──
 document.querySelectorAll('.filter-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-        document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        const filter = tab.dataset.filter;
-        document.querySelectorAll('.assessment-card').forEach(card => {
-            const match = filter === 'all' || card.dataset.status === filter;
-            card.classList.toggle('hidden', !match);
-        });
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const filter = tab.dataset.filter;
+    document.querySelectorAll('.assessment-card').forEach(card => {
+      const match = filter === 'all' || card.dataset.status === filter;
+      card.classList.toggle('hidden', !match);
     });
+  });
 });
 
 // ── Search ──
 document.getElementById('searchInput')?.addEventListener('input', function() {
-    const q = this.value.toLowerCase().trim();
-    document.querySelectorAll('.assessment-card').forEach(card => {
-        const title    = card.querySelector('.assessment-title')?.textContent?.toLowerCase() ?? '';
-        const category = card.querySelector('.assessment-category')?.textContent?.toLowerCase() ?? '';
-        card.classList.toggle('hidden', q !== '' && !title.includes(q) && !category.includes(q));
-    });
-    if (q) {
-        document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
-    }
+  const q = this.value.toLowerCase().trim();
+  document.querySelectorAll('.assessment-card').forEach(card => {
+    const title    = card.querySelector('.assessment-title')?.textContent?.toLowerCase() ?? '';
+    const category = card.querySelector('.assessment-category')?.textContent?.toLowerCase() ?? '';
+    card.classList.toggle('hidden', q !== '' && !title.includes(q) && !category.includes(q));
+  });
+  if (q) {
+    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+  }
 });
 
 // ── Delete modal ──
 let deleteTargetId = null;
 function confirmDelete(id, title) {
-    deleteTargetId = id;
-    document.getElementById('deleteModalBody').textContent =
-        `Are you sure you want to delete "${title}"? This will permanently remove all questions and student attempts. This cannot be undone.`;
-    document.getElementById('deleteModal').classList.add('open');
+  deleteTargetId = id;
+  document.getElementById('deleteModalBody').textContent =
+    `Are you sure you want to delete "${title}"? This will permanently remove all questions and student attempts. This cannot be undone.`;
+  document.getElementById('deleteModal').classList.add('open');
 }
 function closeDeleteModal() {
-    document.getElementById('deleteModal').classList.remove('open');
-    deleteTargetId = null;
+  document.getElementById('deleteModal').classList.remove('open');
+  deleteTargetId = null;
 }
 document.getElementById('deleteModal').addEventListener('click', function(e) {
-    if (e.target === this) closeDeleteModal();
+  if (e.target === this) closeDeleteModal();
 });
 
 document.getElementById('confirmDeleteBtn').addEventListener('click', async function() {
-    if (!deleteTargetId) return;
-    this.disabled    = true;
-    this.textContent = 'Deleting…';
-    try {
-        const token = await getCsrfToken();
-        const res   = await fetch('api/assessment/delete.php', {
-            method:      'POST',
-            credentials: 'same-origin',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': token,
-            },
-            body: JSON.stringify({ assessment_id: deleteTargetId }),
-        });
-        const data = await res.json();
-        if (data.success) {
-            document.querySelector(`.assessment-card[data-id="${deleteTargetId}"]`)?.remove();
-            closeDeleteModal();
-            if (!document.querySelector('.assessment-card')) location.reload();
-        } else {
-            alert(data.error || 'Delete failed. Please try again.');
-            this.disabled    = false;
-            this.textContent = 'Delete';
-        }
-    } catch (err) {
-        alert('Network error. Please try again.');
-        this.disabled    = false;
-        this.textContent = 'Delete';
+  if (!deleteTargetId) return;
+  this.disabled    = true;
+  this.textContent = 'Deleting…';
+  try {
+    const token = await getCsrfToken();
+    const res   = await fetch('api/assessment/delete.php', {
+      method:      'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': token,
+      },
+      body: JSON.stringify({ assessment_id: deleteTargetId }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      document.querySelector(`.assessment-card[data-id="${deleteTargetId}"]`)?.remove();
+      closeDeleteModal();
+      if (!document.querySelector('.assessment-card')) location.reload();
+    } else {
+      alert(data.error || 'Delete failed. Please try again.');
+      this.disabled    = false;
+      this.textContent = 'Delete';
     }
+  } catch (err) {
+    alert('Network error. Please try again.');
+    this.disabled    = false;
+    this.textContent = 'Delete';
+  }
 });
-
-// ── Mark all notifications read ──
-async function markAllRead() {
-    try {
-        const token = await getCsrfToken();
-        await fetch('api/notifications/mark-read.php', {
-            method:      'POST',
-            credentials: 'same-origin',
-            headers:     { 'X-CSRF-Token': token },
-        });
-        document.getElementById('notifPanel').innerHTML =
-            '<div class="notif-panel-header"><span>Notifications</span></div><div class="notif-empty">🎉 You\'re all caught up!</div>';
-        document.querySelector('.notif-badge')?.remove();
-    } catch(e) { /* silent fail */ }
-}
 
 // ── Keyboard shortcuts ──
 document.addEventListener('keydown', e => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
-        e.preventDefault();
-        window.location.href = 'create-assessment.php';
-    }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+    e.preventDefault();
+    window.location.href = 'create-assessment.php';
+  }
 });
 </script>
 </body>
