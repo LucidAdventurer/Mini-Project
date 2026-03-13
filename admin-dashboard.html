@@ -1444,6 +1444,32 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* Resource type tile picker */
+        .res-type-tile {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 12px 6px;
+            background: var(--surface2);
+            border: 2px solid var(--border2);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+            user-select: none;
+        }
+
+        .res-type-tile:hover {
+            border-color: var(--blue-400);
+            background: rgba(0, 102, 255, 0.06);
+        }
+
+        .res-type-tile.active {
+            border-color: var(--blue-500);
+            background: rgba(0, 102, 255, 0.12);
+        }
     </style>
 </head>
 
@@ -1819,6 +1845,13 @@
                                 <line x1="12" y1="15" x2="12" y2="3" />
                             </svg>
                             Export
+                        </button>
+                        <button class="btn btn-primary" onclick="openCreateTestModal()">
+                            <svg viewBox="0 0 24 24">
+                                <line x1="12" y1="5" x2="12" y2="19" />
+                                <line x1="5" y1="12" x2="19" y2="12" />
+                            </svg>
+                            Create Test
                         </button>
                     </div>
                 </div>
@@ -2321,41 +2354,84 @@
         </div>
     </div>
 
-    <!-- UPLOAD RESOURCE MODAL -->
+    <!-- UPLOAD RESOURCE MODAL (redesigned) -->
     <div class="modal-overlay" id="modalUploadResource">
-        <div class="modal" style="width:560px;">
+        <div class="modal" style="width:600px;max-height:90vh;overflow-y:auto;">
             <button class="modal-close" onclick="closeModal('modalUploadResource')">&#x2715;</button>
-            <h3>Upload Resource</h3>
+            <h3 style="margin-bottom:4px;">Add Study Resource</h3>
+            <p style="font-size:12px;color:var(--muted);margin-bottom:18px;">Upload materials for guest students — PDFs,
+                videos, links, and more</p>
+
+            <!-- Resource type selector as visual tiles -->
+            <div class="form-group">
+                <label>Resource Type *</label>
+                <div id="urTypeTiles" style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:6px;">
+                    <div class="res-type-tile active" data-val="pdf" onclick="selectResType(this,'pdf')">
+                        <span style="font-size:22px;">📄</span>
+                        <span style="font-size:11px;font-weight:600;">PDF</span>
+                    </div>
+                    <div class="res-type-tile" data-val="video" onclick="selectResType(this,'video')">
+                        <span style="font-size:22px;">🎬</span>
+                        <span style="font-size:11px;font-weight:600;">Video</span>
+                    </div>
+                    <div class="res-type-tile" data-val="link" onclick="selectResType(this,'link')">
+                        <span style="font-size:22px;">🔗</span>
+                        <span style="font-size:11px;font-weight:600;">Link</span>
+                    </div>
+                    <div class="res-type-tile" data-val="article" onclick="selectResType(this,'article')">
+                        <span style="font-size:22px;">📰</span>
+                        <span style="font-size:11px;font-weight:600;">Article</span>
+                    </div>
+                    <div class="res-type-tile" data-val="quiz" onclick="selectResType(this,'quiz')">
+                        <span style="font-size:22px;">📝</span>
+                        <span style="font-size:11px;font-weight:600;">Quiz</span>
+                    </div>
+                </div>
+                <!-- hidden input to hold current type value -->
+                <input type="hidden" id="urType" value="pdf" />
+            </div>
+
+            <div class="form-group" id="urFileGroup" style="margin-top:4px;">
+                <label>File * <span id="urFileHint"
+                        style="font-weight:400;text-transform:none;color:var(--muted);font-size:11px;">(PDF, max 50
+                        MB)</span></label>
+                <div id="urDropZone"
+                    style="border:2px dashed var(--border);border-radius:10px;padding:28px;text-align:center;cursor:pointer;transition:border-color 0.2s,background 0.2s;"
+                    onclick="document.getElementById('urFile').click()"
+                    ondragover="event.preventDefault();this.style.borderColor='var(--blue-500)'"
+                    ondragleave="this.style.borderColor='var(--border)'" ondrop="handleFileDrop(event)">
+                    <div style="font-size:28px;margin-bottom:6px;">☁️</div>
+                    <div style="font-size:13px;font-weight:600;color:var(--text);">Drag & drop or <span
+                            style="color:var(--blue-400);">browse</span></div>
+                    <div id="urDropLabel" style="font-size:11px;color:var(--muted);margin-top:4px;">No file selected
+                    </div>
+                </div>
+                <input class="form-input" id="urFile" type="file" accept=".pdf" style="display:none;"
+                    onchange="onFileSelected(this)" />
+            </div>
+
+            <div class="form-group" id="urUrlGroup" style="display:none;">
+                <label>URL *</label>
+                <input class="form-input" id="urUrl" type="url" placeholder="https://…" />
+            </div>
 
             <div class="form-group">
                 <label>Title *</label>
-                <input class="form-input" id="urTitle" placeholder="e.g. GATE 2025 Prep Pack" maxlength="200" />
+                <input class="form-input" id="urTitle" placeholder="e.g. Quantitative Aptitude Workbook 2025"
+                    maxlength="200" />
             </div>
 
             <div class="form-row">
-                <div class="form-group">
-                    <label>Material Type *</label>
-                    <select class="form-input" id="urType" onchange="onUrTypeChange()">
-                        <option value="pdf">PDF</option>
-                        <option value="video">Video</option>
-                        <option value="link">Link</option>
-                        <option value="article">Article</option>
-                        <option value="quiz">Quiz</option>
-                    </select>
-                </div>
                 <div class="form-group">
                     <label>Category *</label>
                     <select class="form-input" id="urCategory">
-                        <option value="aptitude">Aptitude</option>
-                        <option value="verbal">Verbal</option>
-                        <option value="logical">Logical</option>
-                        <option value="technical">Technical</option>
-                        <option value="general">General</option>
+                        <option value="aptitude">📊 Aptitude</option>
+                        <option value="verbal">💬 Verbal</option>
+                        <option value="logical">🧩 Logical</option>
+                        <option value="technical">⚙️ Technical</option>
+                        <option value="general">📚 General</option>
                     </select>
                 </div>
-            </div>
-
-            <div class="form-row">
                 <div class="form-group">
                     <label>Difficulty</label>
                     <select class="form-input" id="urDifficulty">
@@ -2364,47 +2440,38 @@
                         <option value="advanced">Advanced</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label>Est. Time (minutes)</label>
-                    <input class="form-input" id="urEstTime" type="number" min="0" placeholder="e.g. 30" />
-                </div>
-            </div>
-
-            <div class="form-group" id="urFileGroup">
-                <label>File * <span id="urFileHint"
-                        style="font-weight:400;text-transform:none;color:var(--muted);font-size:11px;">(PDF, max 50
-                        MB)</span></label>
-                <input class="form-input" id="urFile" type="file" accept=".pdf" style="padding:6px 12px;" />
-            </div>
-
-            <div class="form-group" id="urUrlGroup" style="display:none;">
-                <label>External URL *</label>
-                <input class="form-input" id="urUrl" type="url" placeholder="https://…" />
-            </div>
-
-            <div class="form-group">
-                <label>Description</label>
-                <textarea class="form-input" id="urDescription" rows="3"
-                    placeholder="Brief description of this resource…" style="resize:vertical;"></textarea>
             </div>
 
             <div class="form-row">
                 <div class="form-group">
-                    <label>Tags (comma-separated)</label>
-                    <input class="form-input" id="urTags" placeholder="e.g. arrays, sorting, graphs" />
+                    <label>Est. Time (minutes)</label>
+                    <input class="form-input" id="urEstTime" type="number" min="0" placeholder="e.g. 30" />
                 </div>
                 <div class="form-group" style="display:flex;align-items:center;gap:10px;padding-top:22px;">
                     <label class="toggle" style="margin:0;">
                         <input type="checkbox" id="urPublic" checked>
                         <span class="toggle-slider"></span>
                     </label>
-                    <span style="font-size:13px;">Make Public</span>
+                    <span style="font-size:13px;">Visible to guests</span>
                 </div>
+            </div>
+
+            <div class="form-group">
+                <label>Description</label>
+                <textarea class="form-input" id="urDescription" rows="3"
+                    placeholder="Brief description of what students will find in this resource…"
+                    style="resize:vertical;"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Tags <span style="font-weight:400;color:var(--muted);font-size:11px;">(comma-separated,
+                        optional)</span></label>
+                <input class="form-input" id="urTags" placeholder="e.g. aptitude, speed math, practice" />
             </div>
 
             <div id="urError" style="color:var(--red);font-size:12px;margin-top:4px;display:none;"></div>
             <div id="urProgress" style="display:none;margin-top:8px;">
-                <div style="height:4px;background:var(--surface3);border-radius:4px;overflow:hidden;">
+                <div style="height:6px;background:var(--surface3);border-radius:4px;overflow:hidden;">
                     <div id="urProgressBar"
                         style="height:100%;width:0%;background:var(--blue-500);transition:width 0.3s;border-radius:4px;">
                     </div>
@@ -2414,7 +2481,194 @@
 
             <div class="form-actions">
                 <button class="btn btn-ghost" onclick="closeModal('modalUploadResource')">Cancel</button>
-                <button class="btn btn-primary" id="btnUploadResource" onclick="submitUploadResource()">Upload</button>
+                <button class="btn btn-primary" id="btnUploadResource" onclick="submitUploadResource()">
+                    <svg viewBox="0 0 24 24"
+                        style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-right:4px;">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                    Upload Resource
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CREATE TEST MODAL -->
+    <div class="modal-overlay" id="modalCreateTest">
+        <div class="modal" style="width:640px;max-height:90vh;overflow-y:auto;">
+            <button class="modal-close" onclick="closeModal('modalCreateTest')">&#x2715;</button>
+            <h3 style="margin-bottom:4px;">Create New Test</h3>
+            <p style="font-size:12px;color:var(--muted);margin-bottom:18px;">Tests created here are published as
+                assessments visible to guest students</p>
+
+            <div class="form-group">
+                <label>Test Title *</label>
+                <input class="form-input" id="ctTitle" placeholder="e.g. Quantitative Aptitude Mock Test 1"
+                    maxlength="200" />
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Category *</label>
+                    <select class="form-input" id="ctCategory">
+                        <option value="aptitude">Aptitude</option>
+                        <option value="technical">Technical</option>
+                        <option value="coding">Coding</option>
+                        <option value="reasoning">Reasoning</option>
+                        <option value="english">English</option>
+                        <option value="general">General</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Difficulty *</label>
+                    <select class="form-input" id="ctDifficulty">
+                        <option value="easy">Easy</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="hard">Hard</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Duration (minutes) *</label>
+                    <input class="form-input" id="ctDuration" type="number" min="1" max="480" placeholder="e.g. 60" />
+                </div>
+                <div class="form-group">
+                    <label>Total Marks *</label>
+                    <input class="form-input" id="ctTotalMarks" type="number" min="1" placeholder="e.g. 100" />
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Passing Marks *</label>
+                    <input class="form-input" id="ctPassingMarks" type="number" min="1" placeholder="e.g. 40" />
+                </div>
+                <div class="form-group">
+                    <label>Max Attempts</label>
+                    <input class="form-input" id="ctMaxAttempts" type="number" min="1" value="1" />
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Start Time <span
+                            style="font-weight:400;color:var(--muted);font-size:11px;">(optional)</span></label>
+                    <input class="form-input" id="ctStartTime" type="datetime-local" />
+                </div>
+                <div class="form-group">
+                    <label>End Time <span
+                            style="font-weight:400;color:var(--muted);font-size:11px;">(optional)</span></label>
+                    <input class="form-input" id="ctEndTime" type="datetime-local" />
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Description / Instructions</label>
+                <textarea class="form-input" id="ctDescription" rows="3"
+                    placeholder="Instructions or notes for students taking this test…"
+                    style="resize:vertical;"></textarea>
+            </div>
+
+            <!-- Test options as toggles -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px;">
+                <div
+                    style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2);">
+                    <label class="toggle" style="margin:0;">
+                        <input type="checkbox" id="ctRandomizeQ">
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <span style="font-size:13px;">Randomize Questions</span>
+                </div>
+                <div
+                    style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2);">
+                    <label class="toggle" style="margin:0;">
+                        <input type="checkbox" id="ctRandomizeO">
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <span style="font-size:13px;">Randomize Options</span>
+                </div>
+                <div
+                    style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2);">
+                    <label class="toggle" style="margin:0;">
+                        <input type="checkbox" id="ctShowResults" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <span style="font-size:13px;">Show Results Immediately</span>
+                </div>
+                <div
+                    style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2);">
+                    <label class="toggle" style="margin:0;">
+                        <input type="checkbox" id="ctShowAnswers">
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <span style="font-size:13px;">Show Correct Answers</span>
+                </div>
+            </div>
+
+            <div
+                style="display:flex;align-items:center;gap:10px;margin-top:12px;padding:10px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2);">
+                <label class="toggle" style="margin:0;">
+                    <input type="checkbox" id="ctPublic" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <div>
+                    <div style="font-size:13px;font-weight:600;">Publish as Public</div>
+                    <div style="font-size:11px;color:var(--muted);">Visible to all guest users immediately</div>
+                </div>
+            </div>
+
+
+            <!-- ── Question Paper PDF (optional) ── -->
+            <div style="margin-top:14px;">
+                <label
+                    style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px;">
+                    Question Paper PDF
+                    <span
+                        style="font-weight:400;text-transform:none;letter-spacing:0;margin-left:4px;font-size:11px;">(optional
+                        — students can download while taking the test)</span>
+                </label>
+                <div id="ctDropZone"
+                    style="border:2px dashed var(--border);border-radius:10px;padding:22px;text-align:center;cursor:pointer;transition:border-color 0.2s,background 0.2s;"
+                    onclick="document.getElementById('ctPdfFile').click()"
+                    ondragover="event.preventDefault();this.style.borderColor='var(--blue-500)';this.style.background='rgba(0,102,255,0.05)'"
+                    ondragleave="this.style.borderColor='var(--border)';this.style.background=''"
+                    ondrop="handleCtFileDrop(event)">
+                    <div style="font-size:26px;margin-bottom:6px;">📄</div>
+                    <div style="font-size:13px;font-weight:600;color:var(--text);">
+                        Drag & drop or <span style="color:var(--blue-400);">browse</span>
+                    </div>
+                    <div id="ctDropLabel" style="font-size:11px;color:var(--muted);margin-top:4px;">PDF only · max 50 MB
+                    </div>
+                </div>
+                <input type="file" id="ctPdfFile" accept=".pdf" style="display:none;"
+                    onchange="onCtFileSelected(this)" />
+                <!-- Progress bar -->
+                <div id="ctPdfProgress" style="display:none;margin-top:8px;">
+                    <div style="height:5px;background:var(--surface3);border-radius:4px;overflow:hidden;">
+                        <div id="ctPdfProgressBar"
+                            style="height:100%;width:0%;background:var(--blue-500);transition:width 0.3s;border-radius:4px;">
+                        </div>
+                    </div>
+                    <div id="ctPdfProgressText" style="font-size:11px;color:var(--muted);margin-top:3px;">Uploading PDF…
+                    </div>
+                </div>
+            </div>
+
+            <div id="ctError" style="color:var(--red);font-size:12px;margin-top:10px;display:none;"></div>
+
+            <div class="form-actions" style="margin-top:16px;">
+                <button class="btn btn-ghost" onclick="closeModal('modalCreateTest')">Cancel</button>
+                <button class="btn btn-primary" id="btnCreateTest" onclick="submitCreateTest()">
+                    <svg viewBox="0 0 24 24"
+                        style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-right:4px;">
+                        <path d="M9 11l3 3L22 4" />
+                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                    </svg>
+                    Create Test
+                </button>
             </div>
         </div>
     </div>
@@ -2521,6 +2775,7 @@
             deleteResource: _base + 'api/resources/delete-resource.php',
             serveResource: _base + 'api/resources/serve-resource.php',
             viewResource: _base + 'api/resources/view-resource.php',
+            createTest: _base + 'api/admin/create-test.php',
             getMe: _base + 'api/profile/get-profile.php',
             updateProfile: _base + 'api/profile/update-profile.php',
             changePassword: _base + 'api/profile/change-password.php',
@@ -2542,7 +2797,7 @@
 
         async function fetchCsrf() {
             try {
-                const r = await fetch(API.csrf);
+                const r = await fetch(API.csrf, { credentials: 'same-origin' });
                 const d = await r.json();
                 if (d.success) csrfToken = d.token;
             } catch (e) { console.error('CSRF fetch failed', e); }
@@ -2562,6 +2817,7 @@
         async function apiPost(url, body) {
             const r = await fetch(url, {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
                 body: JSON.stringify(body),
             });
@@ -3250,7 +3506,7 @@
             // Stat cards
             if (d.stats) {
                 setEl('tStatTotal', fmtNum(d.stats.total_assessments));
-                setEl('tStatActive', fmtNum(d.stats.active));
+                setEl('tStatActive', fmtNum(d.stats.published));
                 setEl('tStatDraft', fmtNum(d.stats.draft));
                 setEl('tStatPassRate', (d.stats.avg_pass_rate || 0) + '%');
             }
@@ -3698,34 +3954,230 @@
             document.getElementById('urProgress').style.display = 'none';
             document.getElementById('urProgressBar').style.width = '0%';
             document.getElementById('btnUploadResource').disabled = false;
-            document.getElementById('btnUploadResource').textContent = 'Upload';
-            onUrTypeChange();
+            document.getElementById('btnUploadResource').innerHTML = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-right:4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Upload Resource';
+            document.getElementById('urDropLabel').textContent = 'No file selected';
+            document.getElementById('urDropZone').style.borderColor = 'var(--border)';
+            // Reset tile selection
+            document.querySelectorAll('.res-type-tile').forEach(t => t.classList.remove('active'));
+            document.querySelector('.res-type-tile[data-val="pdf"]').classList.add('active');
+            applyResType('pdf');
             openModal('modalUploadResource');
         }
 
-        function onUrTypeChange() {
-            const type = document.getElementById('urType').value;
+        function selectResType(tile, val) {
+            document.querySelectorAll('.res-type-tile').forEach(t => t.classList.remove('active'));
+            tile.classList.add('active');
+            document.getElementById('urType').value = val;
+            applyResType(val);
+        }
+
+        function applyResType(type) {
             const fileTypes = ['pdf', 'video', 'quiz'];
-            const urlTypes = ['link', 'article'];
             const fileGroup = document.getElementById('urFileGroup');
             const urlGroup = document.getElementById('urUrlGroup');
             const hint = document.getElementById('urFileHint');
             const fileInput = document.getElementById('urFile');
-
             if (fileTypes.includes(type)) {
                 fileGroup.style.display = '';
                 urlGroup.style.display = 'none';
                 if (type === 'video') {
-                    hint.textContent = '(MP4, WebM, max 50 MB)';
+                    hint.textContent = '(MP4, WebM — max 50 MB)';
                     fileInput.accept = '.mp4,.webm,.ogg,.mov,.avi,.mpeg';
                 } else {
-                    hint.textContent = '(PDF or DOC, max 50 MB)';
+                    hint.textContent = '(PDF or DOC — max 50 MB)';
                     fileInput.accept = '.pdf,.doc,.docx';
                 }
             } else {
                 fileGroup.style.display = 'none';
                 urlGroup.style.display = '';
             }
+        }
+
+        function onUrTypeChange() { /* legacy — kept for safety */ }
+
+        function onFileSelected(input) {
+            const file = input.files[0];
+            const label = document.getElementById('urDropLabel');
+            if (file) {
+                const mb = (file.size / (1024 * 1024)).toFixed(1);
+                label.textContent = file.name + ' (' + mb + ' MB)';
+                document.getElementById('urDropZone').style.borderColor = 'var(--blue-500)';
+            } else {
+                label.textContent = 'No file selected';
+                document.getElementById('urDropZone').style.borderColor = 'var(--border)';
+            }
+        }
+
+        function handleFileDrop(event) {
+            event.preventDefault();
+            document.getElementById('urDropZone').style.borderColor = 'var(--border)';
+            const file = event.dataTransfer.files[0];
+            if (!file) return;
+            const input = document.getElementById('urFile');
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            input.files = dt.files;
+            onFileSelected(input);
+        }
+
+        // ════════════════════════════════════════
+        // CREATE TEST MODAL
+        // ════════════════════════════════════════
+        function openCreateTestModal() {
+            document.getElementById('ctTitle').value = '';
+            document.getElementById('ctCategory').value = 'aptitude';
+            document.getElementById('ctDifficulty').value = 'medium';
+            document.getElementById('ctDuration').value = '';
+            document.getElementById('ctTotalMarks').value = '';
+            document.getElementById('ctPassingMarks').value = '';
+            document.getElementById('ctMaxAttempts').value = '1';
+            document.getElementById('ctStartTime').value = '';
+            document.getElementById('ctEndTime').value = '';
+            document.getElementById('ctDescription').value = '';
+            document.getElementById('ctRandomizeQ').checked = false;
+            document.getElementById('ctRandomizeO').checked = false;
+            document.getElementById('ctShowResults').checked = true;
+            document.getElementById('ctShowAnswers').checked = false;
+            document.getElementById('ctPublic').checked = true;
+            // Reset PDF upload fields
+            document.getElementById('ctPdfFile').value = '';
+            document.getElementById('ctDropLabel').textContent = 'PDF only · max 50 MB';
+            document.getElementById('ctDropZone').style.borderColor = 'var(--border)';
+            document.getElementById('ctDropZone').style.background = '';
+            document.getElementById('ctPdfProgress').style.display = 'none';
+            document.getElementById('ctPdfProgressBar').style.width = '0%';
+            document.getElementById('ctError').style.display = 'none';
+            const btn = document.getElementById('btnCreateTest');
+            btn.disabled = false;
+            btn.innerHTML = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-right:4px;"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> Create Test';
+            openModal('modalCreateTest');
+        }
+
+        async function submitCreateTest() {
+            const title = document.getElementById('ctTitle').value.trim();
+            const category = document.getElementById('ctCategory').value;
+            const difficulty = document.getElementById('ctDifficulty').value;
+            const duration = parseInt(document.getElementById('ctDuration').value) || 0;
+            const totalMarks = parseInt(document.getElementById('ctTotalMarks').value) || 0;
+            const passingMarks = parseInt(document.getElementById('ctPassingMarks').value) || 0;
+            const maxAttempts = parseInt(document.getElementById('ctMaxAttempts').value) || 1;
+            const startTime = document.getElementById('ctStartTime').value || null;
+            const endTime = document.getElementById('ctEndTime').value || null;
+            const description = document.getElementById('ctDescription').value.trim();
+            const randomizeQ = document.getElementById('ctRandomizeQ').checked ? 1 : 0;
+            const randomizeO = document.getElementById('ctRandomizeO').checked ? 1 : 0;
+            const isPublic = document.getElementById('ctPublic').checked ? 1 : 0;
+
+            const errEl = document.getElementById('ctError');
+            const showErr = msg => { errEl.textContent = msg; errEl.style.display = 'block'; };
+            errEl.style.display = 'none';
+
+            if (!title) return showErr('Test title is required.');
+            if (duration < 1) return showErr('Duration must be at least 1 minute.');
+            if (totalMarks < 1) return showErr('Total marks must be at least 1.');
+            if (passingMarks < 1) return showErr('Passing marks must be at least 1.');
+            if (passingMarks > totalMarks) return showErr('Passing marks cannot exceed total marks.');
+
+            const btn = document.getElementById('btnCreateTest');
+            btn.disabled = true;
+            btn.textContent = 'Creating…';
+
+            const pdfFile = document.getElementById('ctPdfFile').files[0] || null;
+            const pdfProgressWrap = document.getElementById('ctPdfProgress');
+            const pdfProgressBar = document.getElementById('ctPdfProgressBar');
+            const pdfProgressText = document.getElementById('ctPdfProgressText');
+
+            try {
+                // Step 1 — upload PDF to Cloudinary if one was attached
+                let pdfUrl = '', pdfPublicId = '', pdfSize = 0;
+                if (pdfFile) {
+                    pdfProgressWrap.style.display = 'block';
+                    btn.textContent = 'Uploading PDF…';
+                    const uploaded = await uploadToCloudinary(pdfFile, (pct) => {
+                        pdfProgressBar.style.width = pct + '%';
+                        pdfProgressText.textContent = 'Uploading PDF… ' + pct + '%';
+                    });
+                    pdfUrl = uploaded.url;
+                    pdfPublicId = uploaded.publicId;
+                    pdfSize = uploaded.fileSize;
+                    pdfProgressBar.style.width = '100%';
+                    pdfProgressText.textContent = 'PDF uploaded ✓  Saving test…';
+                    btn.textContent = 'Saving…';
+                }
+
+                // Step 2 — create assessment record
+                const payload = {
+                    title, category, difficulty, duration_minutes: duration,
+                    total_marks: totalMarks, passing_marks: passingMarks,
+                    max_attempts: maxAttempts, description,
+                    start_time: startTime, end_time: endTime,
+                    randomize_questions: randomizeQ, randomize_options: randomizeO,
+                    status: isPublic ? 'published' : 'draft',
+                    visibility: isPublic ? 'public' : 'private',
+                    pdf_url: pdfUrl, pdf_public_id: pdfPublicId, pdf_size: pdfSize,
+                };
+                const d = await apiPost(API.createTest, payload);
+                if (d.success) {
+                    closeModal('modalCreateTest');
+                    showToast(pdfFile ? 'Test created with question paper PDF!' : 'Test created successfully!', 'success');
+                    PageCache.invalidate('tests');
+                    loadTests();
+                } else {
+                    showErr(d.error || 'Failed to create test.');
+                    btn.disabled = false;
+                    btn.innerHTML = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-right:4px;"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> Create Test';
+                    pdfProgressWrap.style.display = 'none';
+                }
+            } catch (e) {
+                showErr(e.message || 'Network error. Please try again.');
+                btn.disabled = false;
+                btn.innerHTML = 'Create Test';
+                pdfProgressWrap.style.display = 'none';
+            }
+        }
+
+        function onCtFileSelected(input) {
+            const file = input.files[0];
+            const label = document.getElementById('ctDropLabel');
+            const zone = document.getElementById('ctDropZone');
+            const err = document.getElementById('ctError');
+            if (!file) {
+                label.textContent = 'PDF only · max 50 MB';
+                zone.style.borderColor = 'var(--border)';
+                zone.style.background = '';
+                return;
+            }
+            if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+                err.textContent = 'Only PDF files are allowed.';
+                err.style.display = 'block';
+                input.value = '';
+                return;
+            }
+            if (file.size > 50 * 1024 * 1024) {
+                err.textContent = 'PDF must be under 50 MB.';
+                err.style.display = 'block';
+                input.value = '';
+                return;
+            }
+            err.style.display = 'none';
+            const mb = (file.size / (1024 * 1024)).toFixed(1);
+            label.innerHTML = '✅ <strong>' + file.name + '</strong> (' + mb + ' MB)';
+            zone.style.borderColor = 'var(--blue-500)';
+            zone.style.background = 'rgba(0,102,255,0.05)';
+        }
+
+        function handleCtFileDrop(event) {
+            event.preventDefault();
+            const zone = document.getElementById('ctDropZone');
+            zone.style.borderColor = 'var(--border)';
+            zone.style.background = '';
+            const file = event.dataTransfer.files[0];
+            if (!file) return;
+            const input = document.getElementById('ctPdfFile');
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            input.files = dt.files;
+            onCtFileSelected(input);
         }
 
         async function uploadToCloudinary(file, onProgress) {
