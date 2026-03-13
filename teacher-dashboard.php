@@ -272,7 +272,7 @@ transition: var(--transition); z-index: 1001;
 .dropdown-header {
 padding: 16px 20px; border-bottom: 1px solid var(--color-border);
         }
-.dropdown-name  { font-weight: 700; font-size: 14px; color: var(--color-text); }
+.dropdown-name  { font-weight: 500; font-size: 14px; color: var(--color-text); }
 .dropdown-email { font-size: 12px; color: var(--color-text-light); margin-top: 2px; }
 .dropdown-role  {
 display: inline-block; margin-top: 6px;
@@ -581,8 +581,8 @@ font-weight: 700; cursor: pointer; transition: var(--transition);
             <span class="profile-caret">▼</span>
             <div class="profile-dropdown" id="profileDropdown">
                 <div class="dropdown-header">
-                    <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;">
-                        <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--color-teacher-primary),var(--color-teacher-secondary));display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:16px;flex-shrink:0;"><?= $userInitials ?></div>
+                    <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;width:100%;text-align:left;">
+                        <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--color-teacher-primary),var(--color-teacher-secondary));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;flex-shrink:0;overflow:hidden;"><?= $userInitials ?></div>
                         <div>
                             <div class="dropdown-name"><?= $userName ?></div>
                             <div class="dropdown-email"><?= $userEmail ?></div>

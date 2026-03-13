@@ -19,6 +19,13 @@ $userName     = htmlspecialchars($currentUser['full_name'] ?? 'Teacher');
 $userEmail    = htmlspecialchars($currentUser['email'] ?? '');
 $userInitials = strtoupper(substr($currentUser['full_name'] ?? 'T', 0, 2));
 
+$unreadCount = 0;
+$rn = safePreparedQuery($conn, "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0", "i", [$teacherId]);
+if ($rn['success'] && $rn['result']) {
+    $unreadCount = (int)($rn['result']->fetch_assoc()['cnt'] ?? 0);
+    $rn['result']->free();
+}
+
 $editMode     = false;
 $assessmentId = 0;
 $assessment   = null;
@@ -609,6 +616,24 @@ function sel(?array $a, string $key, string $value, string $default = ''): strin
             .btn-save-draft, .btn-publish { width: 100%; }
         }
     </style>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .notification-btn { position:relative; width:40px; height:40px; background:rgba(255,255,255,.1); border:none; border-radius:10px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:18px; color:white; transition:all 0.2s ease; }
+        .notification-btn:hover { background:rgba(255,255,255,.2); }
+        .notif-badge { position:absolute; top:-4px; right:-4px; background:#ff6b6b; color:white; width:18px; height:18px; border-radius:50%; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+        .page-wrapper { display:flex; min-height:calc(100vh - 71px); }
+        .left-sidebar { width:220px; flex-shrink:0; padding:24px 12px; display:flex; flex-direction:column; gap:2px; background:#D3DAD9; position:fixed; top:71px; left:0; height:calc(100vh - 71px); z-index:100; }
+        .left-sidebar-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#718096; padding:14px 12px 6px; }
+        .left-sidebar a { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; text-decoration:none; font-size:14px; font-weight:500; color:#4a5568; transition:background .15s, color .15s; }
+        .left-sidebar a:hover { background:rgba(46,7,63,.08); color:var(--color-teacher-primary); }
+        .left-sidebar a.active { background:rgba(46,7,63,.12); color:var(--color-teacher-primary); font-weight:600; }
+        .left-sidebar a i { width:18px; text-align:center; font-size:15px; }
+        .left-sidebar-bottom { margin-top:auto; padding-top:12px; border-top:1px solid rgba(46,7,63,.12); }
+        .left-sidebar-bottom button { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; font-size:14px; font-weight:500; color:#e53e3e; background:none; border:none; cursor:pointer; width:100%; transition:background .15s; font-family:inherit; }
+        .left-sidebar-bottom button:hover { background:rgba(229,62,62,.08); }
+        .left-sidebar-bottom button i { width:18px; text-align:center; font-size:15px; }
+        .page-content { flex:1; min-width:0; margin-left:220px; }
+    </style>
 </head>
 <body>
 
@@ -621,6 +646,12 @@ function sel(?array $a, string $key, string $value, string $default = ''): strin
         </div>
     </a>
     <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;position:relative;">
+        <button class="notification-btn" id="notifBtn" title="Notifications">
+            🔔
+            <?php if ($unreadCount > 0): ?>
+            <span class="notif-badge"><?= $unreadCount > 9 ? '9+' : $unreadCount ?></span>
+            <?php endif; ?>
+        </button>
         <button class="nav-profile-btn" id="profileBtn">
             <div class="nav-avatar"><?= $userInitials ?></div>
             <span style="font-weight:600;font-size:14px;"><?= $userName ?></span>
@@ -646,6 +677,19 @@ function sel(?array $a, string $key, string $value, string $default = ''): strin
     </div>
 </nav>
 
+<div class="page-wrapper">
+    <aside class="left-sidebar">
+        <span class="left-sidebar-label">Navigation</span>
+        <a href="teacher-dashboard.php"><i class="fa fa-home"></i> Dashboard</a>
+        <a href="teacher-assessments.php" class="active"><i class="fa fa-clipboard-list"></i> Assessments</a>
+        <a href="manage-groups.php"><i class="fa fa-users"></i> Manage Groups</a>
+        <a href="teacher-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
+        <a href="notifications.php"><i class="fa fa-bell"></i> Notifications</a>
+        <div class="left-sidebar-bottom">
+            <button onclick="handleLogout()"><i class="fa fa-sign-out-alt"></i> Logout</button>
+        </div>
+    </aside>
+    <div class="page-content">
 <div class="container">
 
     <div class="page-header">
@@ -1154,6 +1198,8 @@ function sel(?array $a, string $key, string $value, string $default = ''): strin
     </div>
 
 </div><!-- /container -->
+    </div><!-- /page-content -->
+</div><!-- /page-wrapper -->
 
 <div class="loading-overlay" id="loading">
     <div>

@@ -106,20 +106,23 @@ body {
     display:flex; align-items:center; gap:12px;
     font-size:20px; font-weight:700; color:white; text-decoration:none;
 }
-.brand-logo {
-    width:44px; height:44px;
-    background:linear-gradient(135deg,var(--primary),var(--secondary));
-    border-radius:10px; display:flex; align-items:center; justify-content:center;
-    color:white; font-weight:700; font-size:16px;
-}
-.nav-right { display:flex; align-items:center; gap:12px; }
-.nav-back {
-    display:flex; align-items:center; gap:6px;
-    padding:8px 14px; background:rgba(255,255,255,.1);
-    border:none; border-radius:8px; color:white; font-size:13px;
-    font-weight:600; cursor:pointer; text-decoration:none; transition:var(--transition);
-}
-.nav-back:hover { background:rgba(255,255,255,.2); }
+.brand-logo-img { width:44px; height:44px; border-radius:10px; object-fit:contain; flex-shrink:0; background:white; padding:4px; }
+.brand-text-group { display:flex; flex-direction:column; line-height:1.1; color:white; }
+.brand-name { font-size:18px; font-weight:800; letter-spacing:.5px; }
+.brand-tagline { font-size:11px; font-weight:400; opacity:.85; font-style:italic; }
+.page-wrapper { display:flex; min-height:calc(100vh - 71px); }
+.left-sidebar { width:220px; flex-shrink:0; padding:24px 12px; display:flex; flex-direction:column; gap:2px; background:#D3DAD9; position:fixed; top:71px; left:0; height:calc(100vh - 71px); z-index:100; }
+.left-sidebar-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#718096; padding:14px 12px 6px; }
+.left-sidebar a { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; text-decoration:none; font-size:14px; font-weight:500; color:#4a5568; transition:background .15s, color .15s; }
+.left-sidebar a:hover { background:rgba(46,7,63,.08); color:var(--primary); }
+.left-sidebar a.active { background:rgba(46,7,63,.12); color:var(--primary); font-weight:600; }
+.left-sidebar a i { width:18px; text-align:center; font-size:15px; }
+.left-sidebar-bottom { margin-top:auto; padding-top:12px; border-top:1px solid rgba(46,7,63,.12); }
+.left-sidebar-bottom button { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; font-size:14px; font-weight:500; color:#e53e3e; background:none; border:none; cursor:pointer; width:100%; transition:background .15s; font-family:inherit; }
+.left-sidebar-bottom button:hover { background:rgba(229,62,62,.08); }
+.left-sidebar-bottom button i { width:18px; text-align:center; font-size:15px; }
+.page-content { flex:1; min-width:0; margin-left:220px; }
+
 .notification-btn {
     position:relative; width:40px; height:40px;
     background:rgba(255,255,255,.1); border:none; border-radius:10px;
@@ -439,17 +442,20 @@ body {
 .add-members-count { font-size:12px; color:var(--text-light); margin-bottom:8px; }
 .hidden { display:none !important; }
 </style>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
 
 <!-- ── NAVBAR ── -->
 <nav class="navbar">
     <a href="teacher-dashboard.php" class="navbar-brand">
-        <div class="brand-logo">PT</div>
-        <span>Placement Portal</span>
+        <img src="prepaura-logo.png" alt="PREPAURA Logo" class="brand-logo-img">
+        <div class="brand-text-group">
+            <span class="brand-name">PREPAURA</span>
+            <span class="brand-tagline">Placement Training Platform</span>
+        </div>
     </a>
-    <div class="nav-right">
-        <a href="teacher-dashboard.php" class="nav-back">← Dashboard</a>
+    <div class="nav-right" style="position:relative;display:flex;align-items:center;gap:15px;">
         <button class="notification-btn" id="notifBtn">
             🔔
             <?php if ($unreadCount > 0): ?>
@@ -460,25 +466,41 @@ body {
             <div class="profile-avatar"><?= $userInitials ?></div>
             <span class="profile-name"><?= $userName ?></span>
             <span class="profile-caret">▼</span>
-            <div class="profile-dropdown" id="profileDropdown">
-                <div class="dropdown-header">
-                    <div class="dropdown-name"><?= $userName ?></div>
-                    <div class="dropdown-email"><?= $userEmail ?></div>
-                    <span class="dropdown-role">Teacher</span>
-                </div>
-                <div class="dropdown-menu">
-                    <a href="teacher-profile.php" class="dropdown-item">👤 My Profile</a>
-                    <a href="teacher-dashboard.php" class="dropdown-item">📊 Dashboard</a>
-                    <a href="manage-groups.php" class="dropdown-item">👥 Manage Groups</a>
-                    <div class="dropdown-divider"></div>
-                    <button onclick="handleLogout()" class="dropdown-item danger">🚪 Logout</button>
+        </button>
+        <div class="profile-dropdown" id="profileDropdown">
+            <div class="dropdown-header">
+                <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;width:100%;text-align:left;">
+                    <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;flex-shrink:0;overflow:hidden;"><?= $userInitials ?></div>
+                    <div>
+                        <div class="dropdown-name"><?= $userName ?></div>
+                        <div class="dropdown-email"><?= $userEmail ?></div>
+                    </div>
                 </div>
             </div>
-        </button>
+            <div class="dropdown-menu">
+                <a href="teacher-profile.php" class="dropdown-item">👤 My Profile</a>
+                <a href="help.html" target="_blank" rel="noopener" class="dropdown-item">❓ Help & Support</a>
+                <div class="dropdown-divider"></div>
+                <button onclick="handleLogout()" class="dropdown-item danger">🚪 Logout</button>
+            </div>
+        </div>
     </div>
 </nav>
 
 <!-- ── MAIN ── -->
+<div class="page-wrapper">
+    <aside class="left-sidebar">
+        <span class="left-sidebar-label">Navigation</span>
+        <a href="teacher-dashboard.php"><i class="fa fa-home"></i> Dashboard</a>
+        <a href="teacher-assessments.php"><i class="fa fa-clipboard-list"></i> Assessments</a>
+        <a href="manage-groups.php" class="active"><i class="fa fa-users"></i> Manage Groups</a>
+        <a href="teacher-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
+        <a href="notifications.php"><i class="fa fa-bell"></i> Notifications</a>
+        <div class="left-sidebar-bottom">
+            <button onclick="handleLogout()"><i class="fa fa-sign-out-alt"></i> Logout</button>
+        </div>
+    </aside>
+    <div class="page-content">
 <div class="container">
     <div class="page-header">
         <div>
@@ -591,7 +613,9 @@ body {
         </div>
 
     </div><!-- /two-col -->
-</div><!-- /container -->
+    </div><!-- /container -->
+    </div><!-- /page-content -->
+</div><!-- /page-wrapper -->
 
 <!-- ── CREATE / EDIT MODAL ── -->
 <div class="modal-overlay" id="groupModal">

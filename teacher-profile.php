@@ -904,19 +904,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         .left-sidebar {
             width: 220px; flex-shrink: 0; padding: 24px 12px;
             display: flex; flex-direction: column; gap: 2px;
-            background: transparent;
-            position: sticky; top: 71px; align-self: flex-start;
-            min-height: calc(100vh - 71px);
+            background: #D3DAD9;
+            position: fixed; top: 71px; left: 0;
+            height: calc(100vh - 71px);
+            z-index: 100;
         }
+        .page-content { margin-left: 220px; }
         .left-sidebar-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #718096; padding: 14px 12px 6px; }
-        .left-sidebar a { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; text-decoration: none; font-size: 14px; font-weight: 500; color: #4a5568; transition: background .15s, color .15s; }
+        .left-sidebar a { display: flex; align-items: center; gap: 10px; padding: 13px 14px; border-radius: 10px; text-decoration: none; font-size: 16px; font-weight: 500; color: #4a5568; transition: background .15s, color .15s; }
         .left-sidebar a:hover { background: rgba(46,7,63,.08); color: var(--color-teacher-primary); }
         .left-sidebar a.active { background: rgba(46,7,63,.12); color: var(--color-teacher-primary); font-weight: 600; }
-        .left-sidebar a i { width: 18px; text-align: center; font-size: 15px; }
+        .left-sidebar a i { width: 20px; text-align: center; font-size: 17px; }
         .left-sidebar-bottom { margin-top: auto; padding-top: 12px; border-top: 1px solid rgba(46,7,63,.12); }
-        .left-sidebar-bottom button { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; font-size: 14px; font-weight: 500; color: #e53e3e; background: none; border: none; cursor: pointer; width: 100%; transition: background .15s; font-family: inherit; }
+        .left-sidebar-bottom button { display: flex; align-items: center; gap: 10px; padding: 13px 14px; border-radius: 10px; font-size: 16px; font-weight: 500; color: #e53e3e; background: none; border: none; cursor: pointer; width: 100%; transition: background .15s; font-family: inherit; }
         .left-sidebar-bottom button:hover { background: rgba(229,62,62,.08); }
-        .left-sidebar-bottom button i { width: 18px; text-align: center; font-size: 15px; }
+        .left-sidebar-bottom button i { width: 20px; text-align: center; font-size: 17px; }
         @media (max-width: 900px) {
             .left-sidebar { display: none; }
             .page-content { padding: 30px; }
@@ -973,32 +975,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
         <div class="profile-dropdown" id="profileDropdown">
             <div class="dropdown-header">
-                <div class="dropdown-name"><?= htmlspecialchars($userName) ?></div>
-                <div class="dropdown-email"><?= htmlspecialchars($userEmail) ?></div>
-                <div style="margin-top:6px;">
-                    <span style="display:inline-block;padding:2px 10px;background:linear-gradient(135deg,var(--color-teacher-primary),var(--color-teacher-secondary));color:#fff;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:0.5px;">Teacher</span>
+                <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;">
+                    <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--color-teacher-primary),var(--color-teacher-secondary));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;flex-shrink:0;overflow:hidden;">
+                        <?php if ($userPicture): ?>
+                            <img src="<?= htmlspecialchars($userPicture) ?>" style="width:100%;height:100%;object-fit:cover;" alt="">
+                        <?php else: ?>
+                            <?= htmlspecialchars($userInitials) ?>
+                        <?php endif; ?>
+                    </div>
+                    <div>
+                        <div class="dropdown-name"><?= htmlspecialchars($userName) ?></div>
+                        <div class="dropdown-email"><?= htmlspecialchars($userEmail) ?></div>
+                    </div>
                 </div>
             </div>
             <div class="dropdown-menu">
-                <a href="teacher-profile.php" class="dropdown-item" style="background:var(--color-bg-light);">
-                    <span>👤</span>
-                    <span>My Profile</span>
-                </a>
                 <a href="teacher-dashboard.php" class="dropdown-item">
-                    <span>📊</span>
+                    <i class="fa fa-home" style="width:18px;text-align:center;font-size:15px;color:#4a5568;"></i>
                     <span>Dashboard</span>
                 </a>
-                <a href="home.php" class="dropdown-item">
-                        <span class="dropdown-item-icon">📝</span>
-                        <span>Practice Tests</span>
-                </a>
                 <a href="help.html" target="_blank" rel="noopener noreferrer" class="dropdown-item">
-                    <span>❓</span>
+                    <i class="fa fa-question-circle" style="width:18px;text-align:center;font-size:15px;color:#4a5568;"></i>
                     <span>Help & Support</span>
                 </a>
                 <div class="dropdown-divider"></div>
                 <a onclick="handleLogout()" class="dropdown-item danger">
-                    <span>🚪</span>
+                    <i class="fa fa-sign-out-alt" style="width:18px;text-align:center;font-size:15px;"></i>
                     <span>Logout</span>
                 </a>
             </div>

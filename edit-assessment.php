@@ -12,6 +12,17 @@ require_once 'db-guard.php';
 
 $currentUser = validateSession($conn, 'teacher');
 $teacherId   = (int) $currentUser['user_id'];
+$userName     = htmlspecialchars($currentUser['full_name'] ?? 'Teacher');
+$userEmail    = htmlspecialchars($currentUser['email'] ?? '');
+$userInitials = strtoupper(substr($currentUser['full_name'] ?? 'T', 0, 2));
+
+// ── Unread notifications count ──
+$unreadCount = 0;
+$rn = safePreparedQuery($conn, "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0", "i", [$teacherId]);
+if ($rn['success'] && $rn['result']) {
+    $unreadCount = (int)($rn['result']->fetch_assoc()['cnt'] ?? 0);
+    $rn['result']->free();
+}
 
 $assessmentId = isset($_GET['id']) ? (int) $_GET['id'] : 0;
 if ($assessmentId <= 0) {
@@ -194,27 +205,42 @@ function fmtDate(?string $dt): string {
             display: flex; align-items: center; gap: 12px;
             font-size: 20px; font-weight: 700; color: white; text-decoration: none;
         }
-        .brand-logo {
-            width: 45px; height: 45px;
-            background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
-            border-radius: 10px;
-            display: flex; align-items: center; justify-content: center;
-            color: white; font-weight: 700; font-size: 20px;
-        }
-        .nav-actions { display: flex; gap: 15px; align-items: center; }
-        .btn-back {
-            padding: 9px 20px;
-            background: rgba(255,255,255,0.15);
-            color: white;
-            border: 2px solid rgba(255,255,255,0.4);
-            border-radius: var(--radius);
-            font-weight: 600; font-size: 14px;
-            cursor: pointer; text-decoration: none;
-            display: flex; align-items: center; gap: 8px;
-            transition: var(--transition);
-        }
-        .btn-back:hover { background: rgba(255,255,255,0.25); }
-
+        .brand-logo-img { width:44px; height:44px; border-radius:10px; object-fit:contain; flex-shrink:0; background:white; padding:4px; }
+        .brand-text-group { display:flex; flex-direction:column; line-height:1.1; color:white; }
+        .brand-name { font-size:18px; font-weight:800; letter-spacing:.5px; }
+        .brand-tagline { font-size:11px; font-weight:400; opacity:.85; font-style:italic; }
+        .nav-actions { display:flex; gap:15px; align-items:center; position:relative; }
+        .notification-btn { position:relative; width:40px; height:40px; background:rgba(255,255,255,.1); border:none; border-radius:10px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:18px; color:white; transition:var(--transition); }
+        .notification-btn:hover { background:rgba(255,255,255,.2); }
+        .notif-badge { position:absolute; top:-4px; right:-4px; background:#ff6b6b; color:white; width:18px; height:18px; border-radius:50%; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+        .profile-button { display:flex; align-items:center; gap:10px; padding:8px 14px; background:rgba(255,255,255,.1); border:none; border-radius:10px; cursor:pointer; transition:var(--transition); }
+        .profile-button:hover { background:rgba(255,255,255,.2); }
+        .profile-avatar { width:34px; height:34px; background:linear-gradient(135deg,var(--color-teacher-primary),var(--color-teacher-secondary)); border:2px solid rgba(255,255,255,.4); border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:700; font-size:13px; }
+        .profile-name { font-weight:600; font-size:14px; color:white; }
+        .profile-caret { color:rgba(255,255,255,.6); font-size:10px; }
+        .profile-dropdown { position:absolute; top:calc(100% + 12px); right:0; background:white; border-radius:var(--radius); box-shadow:var(--shadow-lg); min-width:220px; opacity:0; visibility:hidden; transform:translateY(-8px); transition:var(--transition); z-index:1001; }
+        .profile-dropdown.open { opacity:1; visibility:visible; transform:translateY(0); }
+        .dropdown-header { padding:16px 20px; border-bottom:1px solid var(--color-border); }
+        .dropdown-name { font-weight:500; font-size:14px; color:var(--color-text); }
+        .dropdown-email { font-size:12px; color:var(--color-text-light); margin-top:2px; }
+        .dropdown-menu { padding:6px 0; }
+        .dropdown-item { display:flex; align-items:center; gap:12px; padding:11px 20px; color:var(--color-text); text-decoration:none; font-size:14px; cursor:pointer; border:none; background:none; width:100%; text-align:left; transition:var(--transition); }
+        .dropdown-item:hover { background:var(--color-bg-light); }
+        .dropdown-item.danger { color:#f56565; }
+        .dropdown-item.danger:hover { background:#fff5f5; }
+        .dropdown-divider { height:1px; background:var(--color-border); margin:4px 0; }
+        .page-wrapper { display:flex; min-height:calc(100vh - 71px); }
+        .left-sidebar { width:220px; flex-shrink:0; padding:24px 12px; display:flex; flex-direction:column; gap:2px; background:#D3DAD9; position:fixed; top:71px; left:0; height:calc(100vh - 71px); z-index:100; }
+        .left-sidebar-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#718096; padding:14px 12px 6px; }
+        .left-sidebar a { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; text-decoration:none; font-size:14px; font-weight:500; color:#4a5568; transition:background .15s, color .15s; }
+        .left-sidebar a:hover { background:rgba(46,7,63,.08); color:var(--color-teacher-primary); }
+        .left-sidebar a.active { background:rgba(46,7,63,.12); color:var(--color-teacher-primary); font-weight:600; }
+        .left-sidebar a i { width:18px; text-align:center; font-size:15px; }
+        .left-sidebar-bottom { margin-top:auto; padding-top:12px; border-top:1px solid rgba(46,7,63,.12); }
+        .left-sidebar-bottom button { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; font-size:14px; font-weight:500; color:#e53e3e; background:none; border:none; cursor:pointer; width:100%; transition:background .15s; font-family:inherit; }
+        .left-sidebar-bottom button:hover { background:rgba(229,62,62,.08); }
+        .left-sidebar-bottom button i { width:18px; text-align:center; font-size:15px; }
+        .page-content { flex:1; min-width:0; margin-left:220px; }
         .container { max-width: 1100px; margin: 0 auto; padding: 30px 20px; }
 
         /* ── TOAST ── */
@@ -586,19 +612,63 @@ function fmtDate(?string $dt): string {
         }
         @media (max-width: 480px) { .stats-grid { grid-template-columns: 1fr; } }
     </style>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
 
 <nav class="navbar">
     <a href="teacher-dashboard.php" class="navbar-brand">
-        <div class="brand-logo">PT</div>
-        <span>Placement Portal</span>
+        <img src="prepaura-logo.png" alt="PREPAURA Logo" class="brand-logo-img">
+        <div class="brand-text-group">
+            <span class="brand-name">PREPAURA</span>
+            <span class="brand-tagline">Placement Training Platform</span>
+        </div>
     </a>
-    <div class="nav-actions">
-        <a href="teacher-dashboard.php" class="btn-back">← Back to Dashboard</a>
+    <div class="nav-actions" style="position:relative;">
+        <button class="notification-btn" id="notifBtn" title="Notifications">
+            🔔
+            <?php if ($unreadCount > 0): ?>
+            <span class="notif-badge"><?= $unreadCount > 9 ? '9+' : $unreadCount ?></span>
+            <?php endif; ?>
+        </button>
+        <button class="profile-button" id="profileBtn">
+            <div class="profile-avatar"><?= $userInitials ?></div>
+            <span class="profile-name"><?= $userName ?></span>
+            <span class="profile-caret">▼</span>
+        </button>
+        <div class="profile-dropdown" id="profileDropdown">
+            <div class="dropdown-header">
+                <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;width:100%;text-align:left;">
+                    <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--color-teacher-primary),var(--color-teacher-secondary));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;flex-shrink:0;overflow:hidden;"><?= $userInitials ?></div>
+                    <div>
+                        <div class="dropdown-name"><?= $userName ?></div>
+                        <div class="dropdown-email"><?= $userEmail ?></div>
+                    </div>
+                </div>
+            </div>
+            <div class="dropdown-menu">
+                <a href="teacher-profile.php" class="dropdown-item">👤 My Profile</a>
+                <a href="help.html" target="_blank" rel="noopener" class="dropdown-item">❓ Help & Support</a>
+                <div class="dropdown-divider"></div>
+                <button onclick="handleLogout()" class="dropdown-item danger">🚪 Logout</button>
+            </div>
+        </div>
     </div>
 </nav>
 
+<div class="page-wrapper">
+    <aside class="left-sidebar">
+        <span class="left-sidebar-label">Navigation</span>
+        <a href="teacher-dashboard.php"><i class="fa fa-home"></i> Dashboard</a>
+        <a href="teacher-assessments.php" class="active"><i class="fa fa-clipboard-list"></i> Assessments</a>
+        <a href="manage-groups.php"><i class="fa fa-users"></i> Manage Groups</a>
+        <a href="teacher-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
+        <a href="notifications.php"><i class="fa fa-bell"></i> Notifications</a>
+        <div class="left-sidebar-bottom">
+            <button onclick="handleLogout()"><i class="fa fa-sign-out-alt"></i> Logout</button>
+        </div>
+    </aside>
+    <div class="page-content">
 <div class="container">
 
     <!-- Page Header -->
@@ -924,6 +994,8 @@ function fmtDate(?string $dt): string {
     </div>
 
 </div><!-- /container -->
+    </div><!-- /page-content -->
+</div><!-- /page-wrapper -->
 
 <!-- ── ADD QUESTION MODAL ── -->
 <div class="modal-overlay" id="addModal">
@@ -1550,6 +1622,13 @@ document.addEventListener('keydown', e => {
 document.getElementById('addModal').addEventListener('click', function(e) {
     if (e.target === this) closeAddModal();
 });
+const profileBtn  = document.getElementById('profileBtn');
+const profileDrop = document.getElementById('profileDropdown');
+profileBtn.addEventListener('click', e => { e.stopPropagation(); profileDrop.classList.toggle('open'); });
+document.addEventListener('click', () => profileDrop.classList.remove('open'));
+function handleLogout() {
+    if (confirm('Are you sure you want to logout?')) window.location.href = 'logout.php';
+}
 </script>
 </body>
 </html>
