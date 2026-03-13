@@ -167,7 +167,7 @@ function extractTextFromDOCX(string $path): string {
 function parseQuestions(string $text): array {
     $questions = [];
 
-    $text  = str_replace(["\r\n", "\r"], "\n", $text);
+    $text  = str_replace(["\r\n", "\r", "\f"], "\n", $text);
     $lines = explode("\n", $text);
 
     // Per-line normalisation
@@ -240,8 +240,7 @@ function parseQuestions(string $text): array {
         $tfTokens  = [];
         $lookahead = 0;
         while (
-            $lookahead < 3
-            && ($i + $lookahead) < $totalLines
+            ($i + $lookahead) < $totalLines
             && !preg_match($reOption, $lines[$i + $lookahead])
             && !preg_match($reNextQ,  $lines[$i + $lookahead])
         ) {
