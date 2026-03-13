@@ -1706,6 +1706,7 @@ async function handleFile(file) {
         showToast('Only PDF or DOCX files are supported.', 'error');
         return;
     }
+    csrfToken = null; // force fresh token — cached token may have expired during file selection
     const formData = new FormData();
     formData.append('document', file);
     showLoading('Parsing document…');
@@ -1728,7 +1729,8 @@ async function handleFile(file) {
         } else {
             showToast(result.error || 'No questions found in document.', 'error');
         }
-    } catch {
+    } catch (err) {
+        console.error('handleFile error:', err);
         showToast('Parse failed. Please try again.', 'error');
     } finally {
         hideLoading();
