@@ -20,7 +20,7 @@ $memberSince  = !empty($user['created_at']) ? date('F Y', strtotime($user['creat
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
-$lastLogin    = $user['last_login'] ?? null;
+$lastLogin = $user['last_login'] ?? null;
 
 // ── Unread notification count ──
 $unreadResult = safePreparedQuery($conn,
@@ -34,11 +34,11 @@ if ($unreadResult['success'] && $unreadResult['result']) {
     $unreadResult['result']->free();
 }
 
-// ── Latest 5 for navbar dropdown ──
+// ── All notifications for navbar dropdown (scroll, latest first) ──
 $notifDropResult = safePreparedQuery($conn,
     "SELECT notification_id, title, message, type, is_read, created_at
      FROM notifications WHERE user_id = ?
-     ORDER BY created_at DESC LIMIT 5",
+     ORDER BY created_at DESC",
     "i", [$userId]
 );
 $notifItems = [];
@@ -79,7 +79,7 @@ if ($statsResult['success'] && $statsResult['result']) {
     $statsResult['result']->free();
 }
 
-// ── Recent attempts (last 10) ─────────────────────────────────────────────
+// ── Recent attempts (last 10) ──
 $recentQuery = "
     SELECT
         a.attempt_id,
@@ -106,7 +106,7 @@ if ($recentResult['success'] && $recentResult['result']) {
     $recentResult['result']->free();
 }
 
-// ── Category performance breakdown ────────────────────────────────────────
+// ── Category performance breakdown ──
 $categoryQuery = "
     SELECT
         t.category,
@@ -129,7 +129,7 @@ if ($categoryResult['success'] && $categoryResult['result']) {
     $categoryResult['result']->free();
 }
 
-// ── Notifications (unread count) ──────────────────────────────────────────
+// ── Notifications (unread count) ──
 $notifResult = safePreparedQuery(
     $conn,
     "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
@@ -142,21 +142,17 @@ if ($notifResult['success'] && $notifResult['result']) {
     $notifResult['result']->free();
 }
 
-// ── Handle POST ───────────────────────────────────────────────────────────
+// ── Handle POST ──
 $updateMessage = '';
 $updateType    = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
-    // ── Update profile ────────────────────────────────────────────────────
     if ($_POST['action'] === 'update_profile') {
-        // student_profiles table does not exist in the current schema.
-        // Core fields (name, email, dept, reg no) are managed by admin via the users table.
         $updateMessage = 'Additional profile fields are not available yet.';
         $updateType    = 'error';
     }
 
-    // ── Change password ───────────────────────────────────────────────────
     if ($_POST['action'] === 'change_password') {
         $current = $_POST['current_password'] ?? '';
         $new     = $_POST['new_password']     ?? '';
@@ -197,11 +193,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 }
 
-// ── student_profiles table does not exist in the current schema ──────────
+// ── student_profiles table does not exist in the current schema ──
 $profile  = [];
 $spExists = false;
 
-// ── Login activity (last 5 successful logins) ─────────────────────────────
+// ── Login activity (last 5 successful logins) ──
 $loginResult = safePreparedQuery(
     $conn,
     "SELECT ip_address, user_agent, created_at
@@ -218,16 +214,16 @@ if ($loginResult['success'] && $loginResult['result']) {
     $loginResult['result']->free();
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────
+// ── Helpers ──
 function scoreColor(int $s): string {
-    if ($s >= 80) return '#22543d';
-    if ($s >= 60) return '#7c2d12';
-    return '#742a2a';
+    if ($s >= 80) return '#065f46';
+    if ($s >= 60) return '#92400e';
+    return '#991b1b';
 }
 function scoreBg(int $s): string {
-    if ($s >= 80) return '#c6f6d5';
-    if ($s >= 60) return '#feebc8';
-    return '#fed7d7';
+    if ($s >= 80) return '#d1fae5';
+    if ($s >= 60) return '#fef3c7';
+    return '#fee2e2';
 }
 function scoreLabel(int $s): string {
     if ($s >= 80) return 'Excellent';
@@ -243,9 +239,13 @@ function timeAgo(string $dt): string {
     return date('M j, Y', strtotime($dt));
 }
 function difficultyBadge(string $d): string {
-    $map = ['easy' => '#c6f6d5:#22543d', 'medium' => '#feebc8:#7c2d12', 'hard' => '#fed7d7:#742a2a'];
-    [$bg, $color] = explode(':', $map[$d] ?? '#e2e8f0:#4a5568');
-    return "<span style=\"background:{$bg};color:{$color};padding:3px 9px;border-radius:12px;font-size:11px;font-weight:700;\">"
+    $map = [
+        'easy'   => 'background:#dcfce7;color:#166534',
+        'medium' => 'background:#fef3c7;color:#92400e',
+        'hard'   => 'background:#fee2e2;color:#991b1b',
+    ];
+    $style = $map[$d] ?? 'background:#f1f5f9;color:#475569';
+    return "<span style=\"{$style};padding:3px 9px;border-radius:6px;font-size:11px;font-weight:700;font-family:'Sora',sans-serif;\">"
          . ucfirst($d) . "</span>";
 }
 function parseUA(string $ua): string {
@@ -262,341 +262,330 @@ function parseUA(string $ua): string {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Profile – Student | Placement Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
     <style>
-        /* ============================================
-           CSS VARIABLES
-           ============================================ */
         :root {
-            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            --color-primary: #234C6A;
-            --color-primary-dark: #456882;
-            --color-accent: #4facfe;
-            --color-text: #2d3748;
-            --color-text-light: #718096;
-            --color-bg-light: #f5f7fa;
-            --color-white: #ffffff;
-            --color-border: #e2e8f0;
-            --color-success: #48bb78;
-            --color-error: #f56565;
-            --shadow-sm: 0 2px 10px rgba(0,0,0,0.1);
-            --shadow-md: 0 4px 20px rgba(0,0,0,0.08);
-            --shadow-lg: 0 8px 30px rgba(0,0,0,0.15);
-            --border-radius: 10px;
-            --transition: all 0.3s ease;
+            --primary:       #1a3a52;
+            --primary-mid:   #234C6A;
+            --accent:        #0ea5e9;
+            --accent-glow:   rgba(14,165,233,.18);
+            --accent2:       #06b6d4;
+            --success:       #10b981;
+            --warning:       #f59e0b;
+            --danger:        #ef4444;
+            --bg:            #f0f4f8;
+            --surface:       #ffffff;
+            --surface2:      #f8fafc;
+            --border:        #e2e8f0;
+            --text:          #0f172a;
+            --text-mid:      #475569;
+            --text-soft:     #94a3b8;
+            --radius:        16px;
+            --radius-sm:     10px;
+            --shadow:        0 1px 3px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.06);
+            --shadow-md:     0 4px 24px rgba(0,0,0,.10);
+            --nav-h:         68px;
+            --sidebar-w:     230px;
+            --transition:    .2s cubic-bezier(.4,0,.2,1);
         }
 
-        /* ============================================
-           BASE
-           ============================================ */
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            font-family: var(--font-family);
-            background: #D3DAD9;
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
             min-height: 100vh;
-            color: var(--color-text);
-            padding-top: 71px;
+            padding-top: var(--nav-h);
+            -webkit-font-smoothing: antialiased;
         }
 
-        /* ============================================
+        /* ══════════════════════════════
            NAVBAR
-           ============================================ */
+        ══════════════════════════════ */
         .navbar {
-            background: var(--color-primary);
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-            padding: 0 30px;
-            height: 70px;
+            background: var(--primary);
+            padding: 0 28px;
+            height: var(--nav-h);
             display: flex; align-items: center; justify-content: space-between;
             position: fixed; top: 0; left: 0; right: 0;
             z-index: 1000;
+            box-shadow: 0 1px 0 rgba(255,255,255,.06), 0 4px 20px rgba(0,0,0,.18);
         }
+        .navbar-brand { display: flex; align-items: center; gap: 12px; text-decoration: none; flex-shrink: 0; }
 
-        .navbar-brand {
-            display: flex; align-items: center; gap: 12px;
-            text-decoration: none;
-        }
+        .nav-profile { display: flex; align-items: center; gap: 10px; }
 
-        .nav-search {
-            flex: 1; max-width: 500px; margin: 0 30px;
-            position: relative;
-        }
-        .nav-search input {
-            width: 100%;
-            padding: 10px 20px 10px 45px;
-            border: 2px solid #e2e8f0;
-            border-radius: 10px;
-            font-family: inherit; font-size: 14px;
-            background: #f7fafc; color: #2d3748;
-            outline: none;
-            transition: border-color .2s, box-shadow .2s;
-        }
-        .nav-search input:focus { border-color: #4facfe; box-shadow: 0 0 0 3px rgba(79,172,254,.15); }
-        .nav-search .sicon {
-            position: absolute; left: 15px; top: 50%; transform: translateY(-50%);
-            color: #a0aec0; font-size: 14px;
-        }
-
-        .nav-profile { display: flex; align-items: center; gap: 15px; }
-
-        /* Notification bell */
-        .notif-dropdown-wrap { position: relative; }
         .notification-btn {
-            position: relative; width: 40px; height: 40px;
-            background: #f7fafc; border-radius: 10px;
-            border: none; cursor: pointer;
+            position: relative; width: 38px; height: 38px;
+            background: rgba(255,255,255,.12); border-radius: 10px;
             display: flex; align-items: center; justify-content: center;
-            font-size: 16px; transition: 0.3s;
+            cursor: pointer; border: 1.5px solid rgba(255,255,255,.15);
+            transition: var(--transition); color: white; font-size: 16px;
         }
-        .notification-btn:hover { background: #e2e8f0; }
-        .notif-badge {
-            position: absolute; top: -5px; right: -5px;
-            background: #e53e3e; color: white;
-            width: 20px; height: 20px; border-radius: 50%;
-            font-size: 11px; font-weight: bold;
-            display: flex; align-items: center; justify-content: center;
-            animation: badgePulse 1.8s ease-in-out infinite;
-        }
-        @keyframes badgePulse {
-            0%   { box-shadow: 0 0 0 0 rgba(229,62,62,0.6); }
-            70%  { box-shadow: 0 0 0 7px rgba(229,62,62,0); }
-            100% { box-shadow: 0 0 0 0 rgba(229,62,62,0); }
-        }
+        .notification-btn:hover { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.3); }
+
+        .notif-dropdown-wrap { position: relative; }
         .notif-dropdown-menu {
-            position: absolute; top: calc(100% + 10px); right: 0;
-            background: white; border-radius: 14px;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
-            width: 340px; opacity: 0; visibility: hidden;
-            transform: translateY(-8px); transition: 0.25s; z-index: 1002;
+            position: absolute; top: calc(100% + 12px); right: 0;
+            background: var(--surface); border-radius: var(--radius);
+            box-shadow: var(--shadow-md); border: 1px solid var(--border);
+            width: 348px; opacity: 0; visibility: hidden;
+            transform: translateY(-6px) scale(.98); transition: var(--transition); z-index: 1002;
         }
-        .notif-dropdown-menu.show { opacity: 1; visibility: visible; transform: translateY(0); }
+        .notif-dropdown-menu.show { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
         .notif-dd-header {
-            padding: 16px 20px 12px;
-            font-weight: 700; font-size: 15px; color: #2d3748;
-            border-bottom: 1px solid #e2e8f0;
+            padding: 16px 20px 14px;
+            font-family: 'Sora', sans-serif; font-weight: 700; font-size: 14px; color: var(--text);
+            border-bottom: 1px solid var(--border);
         }
-        .notif-dd-list { max-height: 320px; overflow-y: auto; }
+        .notif-dd-list { max-height: 360px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+        .notif-dd-list::-webkit-scrollbar { width: 4px; }
+        .notif-dd-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
         .notif-dd-item {
             display: flex; gap: 12px; align-items: flex-start;
-            padding: 14px 20px; border-bottom: 1px solid #f0f4f8;
-            cursor: pointer; transition: background .15s;
+            padding: 13px 20px; border-bottom: 1px solid var(--border);
+            cursor: pointer; transition: background var(--transition);
         }
-        .notif-dd-item:hover { background: #f7fafc; }
-        .notif-dd-item.unread { background: #f0f7ff; }
-        .notif-dd-dot { width: 8px; height: 8px; border-radius: 50%; background: #4facfe; flex-shrink: 0; margin-top: 5px; }
+        .notif-dd-item:last-child { border-bottom: none; }
+        .notif-dd-item:hover { background: var(--surface2); }
+        .notif-dd-item.unread { background: #eff8ff; }
+        .notif-dd-item.unread:hover { background: #e0f2fe; }
+        .notif-dd-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex-shrink: 0; margin-top: 5px; }
         .notif-dd-dot.read { background: transparent; }
         .notif-dd-body { flex: 1; }
-        .notif-dd-title { font-size: 13px; font-weight: 600; color: #2d3748; margin-bottom: 3px; }
-        .notif-dd-msg   { font-size: 12px; color: #718096; line-height: 1.4; }
-        .notif-dd-time  { font-size: 11px; color: #a0aec0; margin-top: 4px; }
-        .notif-see-all {
-            display: block; text-align: center; padding: 12px;
-            font-size: 13px; font-weight: 600; color: #4facfe;
-            text-decoration: none; border-top: 1px solid #e2e8f0;
-            transition: background .15s; border-radius: 0 0 14px 14px;
+        .notif-dd-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+        .notif-dd-msg   { font-size: 12px; color: var(--text-mid); line-height: 1.45; }
+        .notif-dd-time  { font-size: 11px; color: var(--text-soft); margin-top: 4px; }
+        .notif-dd-empty { padding: 32px 20px; text-align: center; color: var(--text-soft); font-size: 13px; }
+
+        .notif-badge {
+            position: absolute; top: -4px; right: -4px;
+            background: var(--danger); color: white;
+            min-width: 18px; height: 18px; border-radius: 9px; padding: 0 4px;
+            font-size: 10px; font-weight: 700;
+            display: flex; align-items: center; justify-content: center;
+            animation: badgePulse 2s ease-in-out infinite;
+            border: 2px solid var(--primary);
         }
-        .notif-see-all:hover { background: #f7fafc; }
-        .notif-dd-empty { padding: 28px 20px; text-align: center; color: #a0aec0; font-size: 13px; }
+        @keyframes badgePulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,.5); }
+            60%       { box-shadow: 0 0 0 5px rgba(239,68,68,0); }
+        }
 
         .profile-button {
-            display: flex; align-items: center; gap: 10px;
-            padding: 6px 14px 6px 6px;
-            background: #f7fafc;
-            border: 2px solid #e2e8f0; border-radius: 10px;
-            cursor: pointer; transition: background .2s;
-            position: relative; font-family: inherit;
+            display: flex; align-items: center; gap: 9px;
+            padding: 6px 12px 6px 6px;
+            background: rgba(255,255,255,.12);
+            border: 1.5px solid rgba(255,255,255,.15);
+            border-radius: 10px; cursor: pointer; transition: var(--transition);
+            font-family: inherit;
         }
-
-        .profile-button:hover { background: #e2e8f0; }
-
-        .profile-avatar {
+        .profile-button:hover { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.3); }
+        .profile-avatar-sm {
             width: 32px; height: 32px;
-            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
-            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            border-radius: 8px;
             display: flex; align-items: center; justify-content: center;
-            color: white; font-weight: bold; font-size: 12px;
+            color: white; font-weight: 700; font-size: 13px;
+            font-family: 'Sora', sans-serif;
         }
+        .profile-name-nav { font-weight: 600; font-size: 13.5px; color: rgba(255,255,255,.95); }
+        .dropdown-arrow { font-size: 10px; color: rgba(255,255,255,.6); }
 
-        .profile-name { font-weight: 600; font-size: 14px; color: var(--color-text); }
-
-        /* Dropdown */
-        .profile-dropdown {
-            position: absolute; top: calc(100% + 10px); right: 0;
-            background: var(--color-white); border-radius: 12px;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.15); min-width: 220px;
-            opacity: 0; visibility: hidden; transform: translateY(-10px);
-            transition: var(--transition); z-index: 1001;
+        .nav-profile-dropdown {
+            position: absolute; top: calc(100% + 12px); right: 0;
+            background: var(--surface); border-radius: var(--radius);
+            box-shadow: var(--shadow-md); border: 1px solid var(--border);
+            min-width: 240px; z-index: 1001; overflow: hidden;
+            opacity: 0; visibility: hidden; transform: translateY(-6px) scale(.98);
+            transition: var(--transition);
         }
-
-        .profile-dropdown.active { opacity: 1; visibility: visible; transform: translateY(0); }
-
-        .dropdown-header {
-            display: flex; align-items: center; gap: 12px;
-            padding: 16px; border-bottom: 1px solid var(--color-border);
+        .nav-profile-dropdown.active { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
+        .nav-dropdown-header {
+            padding: 18px 20px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-mid));
+            display: flex; gap: 12px; align-items: center;
         }
-        .dropdown-avatar {
-            width: 42px; height: 42px;
-            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
-            border-radius: 50%;
+        .nav-dropdown-avatar {
+            width: 44px; height: 44px;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            border-radius: 12px;
             display: flex; align-items: center; justify-content: center;
-            color: white; font-size: 14px; font-weight: 700; flex-shrink: 0;
+            color: white; font-weight: 800; font-size: 18px;
+            font-family: 'Sora', sans-serif; flex-shrink: 0;
         }
-        .dropdown-name  { font-weight: 700; font-size: 15px; color: var(--color-text); }
-        .dropdown-email { font-size: 12px; color: var(--color-text-light); margin-top: 2px; }
-        .dropdown-menu  { padding: 8px 0; }
-
-        .dropdown-item {
-            display: flex; align-items: center; gap: 12px;
-            padding: 12px 20px; color: var(--color-text); text-decoration: none;
-            font-size: 14px; transition: var(--transition);
+        .nav-dropdown-info { flex: 1; overflow: hidden; }
+        .nav-dropdown-name  { font-family: 'Sora', sans-serif; font-weight: 700; font-size: 15px; color: white; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .nav-dropdown-email { font-size: 12px; color: rgba(255,255,255,.65); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .nav-dropdown-menu { padding: 8px; }
+        .nav-dropdown-item {
+            display: flex; align-items: center; gap: 11px;
+            padding: 10px 12px; border-radius: 8px;
+            color: var(--text-mid); text-decoration: none;
             cursor: pointer; border: none; background: none;
-            width: 100%; text-align: left; font-family: inherit;
+            width: 100%; text-align: left; font-size: 13.5px;
+            font-family: 'Inter', sans-serif; transition: var(--transition);
         }
+        .nav-dropdown-item:hover { background: var(--surface2); color: var(--text); }
+        .nav-dropdown-item i { width: 18px; text-align: center; font-size: 14px; color: var(--text-soft); }
+        .nav-dropdown-divider { height: 1px; background: var(--border); margin: 6px 8px; }
+        .nav-dropdown-item.danger { color: var(--danger); }
+        .nav-dropdown-item.danger i { color: var(--danger); }
+        .nav-dropdown-item.danger:hover { background: #fef2f2; }
 
-        .dropdown-item:hover { background: var(--color-bg-light); }
-        .dropdown-item.danger { color: var(--color-error); }
-        .dropdown-item.danger:hover { background: rgba(245,101,101,0.1); }
-        .dropdown-divider { height: 1px; background: var(--color-border); margin: 8px 0; }
+        /* ══════════════════════════════
+           PAGE LAYOUT
+        ══════════════════════════════ */
+        .page-wrapper { display: flex; min-height: calc(100vh - var(--nav-h)); }
 
-        /* ============================================
-           BREADCRUMB
-           ============================================ */
-        /* ============================================
-           SIDEBAR
-           ============================================ */
-        .page-wrapper { display: flex; min-height: calc(100vh - 70px); }
         .left-sidebar {
-            width: 220px; flex-shrink: 0; padding: 24px 12px;
+            width: var(--sidebar-w); flex-shrink: 0;
+            padding: 20px 12px;
             display: flex; flex-direction: column; gap: 2px;
-            min-height: calc(100vh - 70px);
-            position: sticky; top: 70px; align-self: flex-start;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            min-height: calc(100vh - var(--nav-h));
+            position: sticky; top: var(--nav-h); align-self: flex-start;
         }
         .left-sidebar-label {
-            font-size: 11px; font-weight: 700;
-            text-transform: uppercase; letter-spacing: .08em;
-            color: #718096; padding: 14px 12px 6px;
+            font-size: 10.5px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .1em;
+            color: var(--text-soft); padding: 14px 12px 7px;
         }
         .left-sidebar a {
             display: flex; align-items: center; gap: 10px;
-            padding: 10px 12px; border-radius: 10px;
-            text-decoration: none; font-size: 14px; font-weight: 500;
-            color: #4a5568; transition: background .15s, color .15s;
+            padding: 10px 13px; border-radius: var(--radius-sm);
+            text-decoration: none; font-size: 13.5px; font-weight: 500;
+            color: var(--text-mid); transition: var(--transition);
+            position: relative;
         }
-        .left-sidebar a:hover { background: rgba(35,76,106,.08); color: var(--color-primary); }
-        .left-sidebar a.active { background: rgba(35,76,106,.12); color: var(--color-primary); font-weight: 600; }
-        .left-sidebar a i { width: 18px; text-align: center; font-size: 15px; }
-        .left-sidebar-bottom {
-            margin-top: auto; padding-top: 12px;
-            border-top: 1px solid rgba(35,76,106,.12);
+        .left-sidebar a:hover { background: var(--surface2); color: var(--primary); }
+        .left-sidebar a.active {
+            background: linear-gradient(135deg, #e0f2fe, #e0f9ff);
+            color: var(--accent); font-weight: 600;
         }
+        .left-sidebar a.active::before {
+            content: ''; position: absolute; left: 0; top: 20%; bottom: 20%;
+            width: 3px; border-radius: 0 3px 3px 0; background: var(--accent);
+        }
+        .left-sidebar a i { width: 18px; text-align: center; font-size: 14px; flex-shrink: 0; }
+        .left-sidebar-bottom { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); }
         .left-sidebar-bottom button {
             display: flex; align-items: center; gap: 10px;
-            padding: 10px 12px; border-radius: 10px;
-            font-size: 14px; font-weight: 500;
-            color: #e53e3e; background: none; border: none;
-            cursor: pointer; width: 100%;
-            transition: background .15s; font-family: inherit;
+            padding: 10px 13px; border-radius: var(--radius-sm);
+            font-size: 13.5px; font-weight: 500;
+            color: var(--danger); background: none; border: none;
+            cursor: pointer; width: 100%; transition: var(--transition);
+            font-family: 'Inter', sans-serif;
         }
-        .left-sidebar-bottom button:hover { background: rgba(229,62,62,.08); }
-        .left-sidebar-bottom button i { width: 18px; text-align: center; font-size: 15px; }
-        .page-content { flex: 1; min-width: 0; padding: 24px 24px 40px 0; }
+        .left-sidebar-bottom button:hover { background: #fef2f2; }
+        .left-sidebar-bottom button i { width: 18px; text-align: center; font-size: 14px; }
 
-        @media (max-width: 900px) { .left-sidebar { display: none; } .page-content { padding: 16px; } }
+        .page-content { flex: 1; min-width: 0; padding: 28px 28px 40px 0; }
 
-        .breadcrumb {
-            max-width: 1100px; margin: 24px auto 0; padding: 0 20px;
-            display: flex; align-items: center; gap: 8px;
-            font-size: 14px; color: var(--color-text-light);
-        }
+        @media (max-width: 900px) { .left-sidebar { display: none; } .page-content { padding: 20px; } }
 
-        .breadcrumb a { color: var(--color-accent); text-decoration: none; font-weight: 600; }
-        .breadcrumb a:hover { text-decoration: underline; }
-
-        /* ============================================
-           PAGE LAYOUT
-           ============================================ */
+        /* ══════════════════════════════
+           PROFILE CONTENT GRID
+        ══════════════════════════════ */
         .container {
-            max-width: 100%; margin: 0; padding: 0 8px;
+            max-width: 100%; margin: 0;
             display: grid; grid-template-columns: 300px 1fr; gap: 24px;
         }
 
-        /* ============================================
+        /* ══════════════════════════════
            PROFILE CARD (left column)
-           ============================================ */
+        ══════════════════════════════ */
         .profile-card {
-            background: var(--color-white); border-radius: var(--border-radius);
-            padding: 32px 24px; box-shadow: var(--shadow-sm);
+            background: var(--surface); border-radius: var(--radius);
+            padding: 28px 24px; box-shadow: var(--shadow);
+            border: 1px solid var(--border);
             text-align: center; height: fit-content;
-            position: sticky; top: 90px;
+            position: sticky; top: calc(var(--nav-h) + 16px);
         }
 
         .avatar-large {
             width: 110px; height: 110px; border-radius: 50%;
-            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+            background: linear-gradient(135deg, var(--primary), var(--primary-mid));
             display: flex; align-items: center; justify-content: center;
-            font-size: 36px; font-weight: 700; color: white;
+            font-family: 'Sora', sans-serif;
+            font-size: 36px; font-weight: 800; color: white;
             margin: 0 auto 16px;
-            border: 4px solid rgba(79,172,254,0.2);
+            border: 4px solid var(--accent-glow);
+            box-shadow: 0 0 0 6px rgba(14,165,233,.08);
         }
 
-        .profile-card-name { font-size: 20px; font-weight: 700; color: var(--color-text); margin-bottom: 6px; }
+        .profile-card-name {
+            font-family: 'Sora', sans-serif;
+            font-size: 18px; font-weight: 800; color: var(--text); margin-bottom: 8px;
+        }
 
         .role-badge {
             display: inline-block; padding: 4px 14px;
-            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+            background: linear-gradient(135deg, var(--primary), var(--primary-mid));
             color: white; border-radius: 20px;
-            font-size: 12px; font-weight: 600; letter-spacing: 0.5px;
+            font-family: 'Sora', sans-serif;
+            font-size: 11.5px; font-weight: 700; letter-spacing: 0.5px;
             margin-bottom: 16px;
         }
 
         .profile-card-detail {
-            font-size: 13px; color: var(--color-text-light); margin-bottom: 6px;
+            font-size: 13px; color: var(--text-mid); margin-bottom: 6px;
             display: flex; align-items: center; justify-content: center; gap: 6px;
         }
 
-        .profile-divider { height: 1px; background: var(--color-border); margin: 20px 0; }
+        .profile-divider { height: 1px; background: var(--border); margin: 18px 0; }
 
         .stat-row { display: flex; justify-content: space-around; }
         .stat-item { text-align: center; }
-        .stat-item-value { font-size: 22px; font-weight: 700; color: var(--color-accent); }
-        .stat-item-label { font-size: 11px; color: var(--color-text-light); text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-item-value {
+            font-family: 'Sora', sans-serif;
+            font-size: 22px; font-weight: 800; color: var(--accent);
+        }
+        .stat-item-label { font-size: 11px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.5px; }
 
-        .cat-bar  { height: 9px; background: var(--color-border); border-radius: 9px; overflow: hidden; }
-        .cat-fill { height: 100%; border-radius: 9px; background: linear-gradient(90deg, var(--color-accent), #00f2fe); transition: width .6s ease; }
+        .cat-bar  { height: 7px; background: var(--border); border-radius: 9px; overflow: hidden; }
+        .cat-fill { height: 100%; border-radius: 9px; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .6s ease; }
 
-        /* Sidebar nav */
-        .profile-nav { margin-top: 20px; display: flex; flex-direction: column; gap: 4px; }
+        /* Profile inner nav */
+        .profile-nav { margin-top: 18px; display: flex; flex-direction: column; gap: 4px; }
 
         .profile-nav-item {
             display: flex; align-items: center; gap: 10px;
-            padding: 11px 14px; border-radius: 8px;
-            font-size: 14px; font-weight: 500; color: var(--color-text-light);
+            padding: 11px 14px; border-radius: var(--radius-sm);
+            font-size: 13.5px; font-weight: 500; color: var(--text-mid);
             cursor: pointer; transition: var(--transition);
             border: none; background: transparent;
-            width: 100%; text-align: left;
+            width: 100%; text-align: left; font-family: 'Inter', sans-serif;
         }
-
-        .profile-nav-item:hover { background: var(--color-bg-light); color: var(--color-text); }
-
+        .profile-nav-item:hover { background: var(--surface2); color: var(--text); }
         .profile-nav-item.active {
-            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
-            color: white;
+            background: linear-gradient(135deg, #e0f2fe, #e0f9ff);
+            color: var(--accent); font-weight: 600;
         }
 
-        /* ============================================
+        /* ══════════════════════════════
            RIGHT COLUMN — PANELS
-           ============================================ */
+        ══════════════════════════════ */
         .tab-panel { display: none; }
         .tab-panel.active { display: block; }
 
         .card {
-            background: var(--color-white); border-radius: var(--border-radius);
-            padding: 28px; box-shadow: var(--shadow-sm); margin-bottom: 24px;
+            background: var(--surface); border-radius: var(--radius);
+            padding: 26px; box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+            margin-bottom: 22px;
         }
 
         .card-title {
-            font-size: 18px; font-weight: 700; color: var(--color-text);
-            margin-bottom: 20px; padding-bottom: 12px;
-            border-bottom: 2px solid var(--color-border);
+            font-family: 'Sora', sans-serif;
+            font-size: 17px; font-weight: 700; color: var(--text);
+            margin-bottom: 20px; padding-bottom: 14px;
+            border-bottom: 1.5px solid var(--border);
             display: flex; align-items: center; gap: 10px;
         }
 
@@ -605,170 +594,166 @@ function parseUA(string $ua): string {
         .form-group { display: flex; flex-direction: column; gap: 6px; }
         .form-group.full-width { grid-column: 1 / -1; }
 
-        .form-label { font-size: 13px; font-weight: 600; color: var(--color-text-light); text-transform: uppercase; letter-spacing: 0.5px; }
-        .form-label .req { color: var(--color-error); margin-left: 2px; }
+        .form-label {
+            font-size: 11.5px; font-weight: 700; color: var(--text-soft);
+            text-transform: uppercase; letter-spacing: 0.06em;
+        }
+        .form-label .req { color: var(--danger); margin-left: 2px; }
 
         .form-control {
-            padding: 10px 14px; border: 2px solid var(--color-border); border-radius: 8px;
-            font-size: 14px; font-family: var(--font-family); color: var(--color-text);
-            background: var(--color-white); transition: var(--transition); width: 100%;
+            padding: 10px 14px; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+            font-size: 14px; font-family: 'Inter', sans-serif; color: var(--text);
+            background: var(--surface); transition: var(--transition); width: 100%;
         }
-
-        .form-control:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px rgba(79,172,254,0.1); }
-        .form-control[disabled], .form-control[readonly] { background: var(--color-bg-light); color: var(--color-text-light); cursor: not-allowed; }
+        .form-control:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+        .form-control[disabled], .form-control[readonly] { background: var(--surface2); color: var(--text-soft); cursor: not-allowed; }
         textarea.form-control { resize: vertical; min-height: 88px; line-height: 1.5; }
-        .form-hint { font-size: 11px; color: var(--color-text-light); }
+        .form-hint { font-size: 11px; color: var(--text-soft); }
 
         .form-actions {
             display: flex; align-items: center; justify-content: space-between;
             margin-top: 24px; padding-top: 18px;
-            border-top: 1px solid var(--color-border);
+            border-top: 1px solid var(--border);
         }
-
         .form-actions-right { display: flex; gap: 12px; }
 
         .btn {
-            padding: 10px 24px; border-radius: 8px;
-            font-size: 14px; font-weight: 600;
+            padding: 10px 24px; border-radius: var(--radius-sm);
+            font-size: 13.5px; font-weight: 700;
             cursor: pointer; transition: var(--transition); border: none;
             display: inline-flex; align-items: center; gap: 8px;
+            font-family: 'Inter', sans-serif;
         }
-
         .btn-primary {
-            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
-            color: white;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            color: white; box-shadow: 0 2px 8px rgba(14,165,233,.3);
         }
-
-        .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: var(--shadow-sm); }
-
-        .btn-secondary { background: var(--color-bg-light); color: var(--color-text); border: 2px solid var(--color-border); }
-        .btn-secondary:hover { background: var(--color-border); }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(14,165,233,.45); }
+        .btn-secondary {
+            background: var(--surface2); color: var(--text-mid);
+            border: 1.5px solid var(--border);
+        }
+        .btn-secondary:hover { background: var(--border); color: var(--text); }
 
         /* Alert banners */
         .alert {
-            padding: 14px 18px; border-radius: 8px;
-            font-size: 14px; font-weight: 500; margin-bottom: 20px;
+            padding: 14px 18px; border-radius: var(--radius-sm);
+            font-size: 13.5px; font-weight: 500; margin-bottom: 20px;
             display: flex; align-items: center; gap: 10px;
         }
-
-        .alert-success { background: rgba(72,187,120,0.1); color: #276749; border: 1px solid rgba(72,187,120,0.3); }
-        .alert-error   { background: rgba(245,101,101,0.1); color: #c53030; border: 1px solid rgba(245,101,101,0.3); }
+        .alert-success { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+        .alert-error   { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
 
         /* Info boxes */
         .info-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 10px; }
-
-        .info-box { background: var(--color-bg-light); border-radius: 9px; padding: 13px; border: 1px solid var(--color-border); }
-        .info-box-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--color-text-light); margin-bottom: 4px; }
-        .info-box-value { font-size: 15px; font-weight: 700; color: var(--color-primary); }
+        .info-box {
+            background: var(--surface2); border-radius: var(--radius-sm);
+            padding: 14px; border: 1px solid var(--border);
+        }
+        .info-box-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-soft); margin-bottom: 4px; }
+        .info-box-value { font-size: 15px; font-weight: 700; color: var(--primary-mid); }
         .info-box-value.mono { font-family: 'Courier New', monospace; font-size: 13px; }
 
         /* History table */
         .history-table { width: 100%; border-collapse: collapse; }
-
         .history-table th {
             text-align: left; padding: 9px 13px;
             font-size: 11px; font-weight: 700; text-transform: uppercase;
-            letter-spacing: .5px; color: var(--color-text-light);
-            background: var(--color-bg-light); border-bottom: 1px solid var(--color-border);
+            letter-spacing: .06em; color: var(--text-soft);
+            background: var(--surface2); border-bottom: 1px solid var(--border);
         }
-
         .history-table th:first-child { border-radius: 8px 0 0 8px; }
         .history-table th:last-child  { border-radius: 0 8px 8px 0; }
-
         .history-table td {
             padding: 12px 13px; font-size: 13px;
-            border-bottom: 1px solid var(--color-border); vertical-align: middle;
+            border-bottom: 1px solid var(--border); vertical-align: middle;
         }
-
         .history-table tr:last-child td { border-bottom: none; }
-        .history-table tr:hover td { background: var(--color-bg-light); }
-
+        .history-table tr:hover td { background: var(--surface2); }
         .score-pill { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; }
-        .test-name  { font-weight: 600; color: var(--color-text); margin-bottom: 2px; }
-        .test-cat   { font-size: 11px; color: var(--color-text-light); }
+        .test-name  { font-weight: 600; color: var(--text); margin-bottom: 2px; font-family: 'Sora', sans-serif; font-size: 13.5px; }
+        .test-cat   { font-size: 11px; color: var(--text-soft); }
 
         /* Password */
         .pw-wrap { position: relative; }
         .pw-wrap .form-control { padding-right: 42px; }
-
         .pw-eye {
-            position: absolute; right: 12px; top: 50%;
-            transform: translateY(-50%);
+            position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
             background: none; border: none; cursor: pointer;
-            font-size: 16px; color: var(--color-text-light); padding: 0;
+            font-size: 16px; color: var(--text-soft); padding: 0;
         }
+        .pw-eye:hover { color: var(--text); }
 
-        .pw-eye:hover { color: var(--color-text); }
-
-        .password-strength { margin-top: 6px; height: 4px; border-radius: 2px; background: var(--color-border); overflow: hidden; }
-        .password-strength-bar { height: 100%; border-radius: 2px; transition: var(--transition); width: 0%; }
-        .strength-weak   { width: 25%;  background: var(--color-error); }
-        .strength-fair   { width: 50%;  background: #ed8936; }
-        .strength-good   { width: 75%;  background: #ecc94b; }
-        .strength-strong { width: 100%; background: var(--color-success); }
+        .password-strength { margin-top: 6px; height: 5px; border-radius: 3px; background: var(--border); overflow: hidden; }
+        .password-strength-bar { height: 100%; border-radius: 3px; transition: var(--transition); width: 0%; }
+        .strength-weak   { width: 25%;  background: var(--danger); }
+        .strength-fair   { width: 50%;  background: var(--warning); }
+        .strength-good   { width: 75%;  background: #eab308; }
+        .strength-strong { width: 100%; background: var(--success); }
         .strength-label  { font-size: 12px; font-weight: 600; margin-top: 4px; }
         .match-msg       { font-size: 12px; font-weight: 600; margin-top: 5px; min-height: 16px; }
 
         /* Login history */
         .login-row {
             display: flex; align-items: center; justify-content: space-between;
-            padding: 12px 14px; border-radius: 9px;
-            background: var(--color-bg-light); border: 1px solid var(--color-border);
+            padding: 12px 14px; border-radius: var(--radius-sm);
+            background: var(--surface2); border: 1px solid var(--border);
             margin-bottom: 8px;
         }
-
         .login-row:last-child { margin-bottom: 0; }
         .login-info   { display: flex; align-items: center; gap: 10px; }
         .login-icon   { font-size: 18px; }
-        .login-detail { font-size: 13px; font-weight: 600; color: var(--color-text); }
-        .login-ip     { font-size: 11px; color: var(--color-text-light); font-family: monospace; }
-        .login-time   { font-size: 12px; color: var(--color-text-light); }
+        .login-detail { font-size: 13px; font-weight: 600; color: var(--text); }
+        .login-ip     { font-size: 11px; color: var(--text-soft); font-family: monospace; }
+        .login-time   { font-size: 12px; color: var(--text-soft); }
 
         /* Empty state */
-        .empty-state { text-align: center; padding: 44px 20px; color: var(--color-text-light); }
+        .empty-state { text-align: center; padding: 44px 20px; color: var(--text-soft); }
         .empty-icon  { font-size: 38px; margin-bottom: 10px; }
-        .empty-title { font-size: 15px; font-weight: 600; margin-bottom: 5px; color: var(--color-text); }
+        .empty-title { font-family: 'Sora', sans-serif; font-size: 15px; font-weight: 700; margin-bottom: 5px; color: var(--text); }
         .empty-sub   { font-size: 13px; }
 
-        .divider { height: 1px; background: var(--color-border); margin: 24px 0; }
+        .divider { height: 1px; background: var(--border); margin: 22px 0; }
 
-        /* ============================================
-           RESPONSIVE
-           ============================================ */
+        /* ── RESPONSIVE ── */
         @media (max-width: 900px) {
             .container { grid-template-columns: 1fr; }
             .profile-card { position: static; }
             .profile-nav { flex-direction: row; flex-wrap: wrap; }
             .profile-nav-item { flex: 1; min-width: 120px; justify-content: center; }
         }
-
         @media (max-width: 600px) {
             .form-grid { grid-template-columns: 1fr; }
             .info-grid { grid-template-columns: 1fr; }
-            .navbar { padding: 12px 16px; }
-            .container { padding: 0 14px; }
+            .navbar { padding: 0 16px; }
+            .profile-name-nav { display: none; }
         }
+
+        /* Page load animation */
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(16px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .profile-card { animation: fadeUp .4s ease both; }
+        .tab-panel.active { animation: fadeUp .35s ease both; }
     </style>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
 
-<!-- ================================================
-     NAVBAR
-     ================================================ -->
+<!-- NAVBAR -->
 <nav class="navbar">
     <a href="student-dashboard.php" class="navbar-brand">
         <img src="prepaura-logo.png" alt="Prepaura Logo" style="width:44px;height:44px;border-radius:10px;object-fit:contain;background:white;padding:3px;">
-        <div style="display:flex;flex-direction:column;line-height:1.1;color:white">
-            <span style="font-size:18px;font-weight:800;letter-spacing:.5px">PREPAURA</span>
-            <span style="font-size:11px;font-weight:400;opacity:.85;font-style:italic">Placement Training Platform</span>
+        <div style="display:flex;flex-direction:column;line-height:1.15;">
+            <span style="font-family:'Sora',sans-serif;font-size:17px;font-weight:800;letter-spacing:.5px;color:white;">PREPAURA</span>
+            <span style="font-size:10.5px;font-weight:400;color:rgba(255,255,255,.65);letter-spacing:.02em;">Placement Training Platform</span>
         </div>
     </a>
 
     <div class="nav-profile">
         <!-- Notification bell -->
         <div class="notif-dropdown-wrap">
-            <button class="notification-btn" onclick="toggleNotifDropdown()" title="Notifications">
+            <button class="notification-btn" onclick="toggleNotifDropdown()" title="Notifications" id="notifBtn">
                 <span>🔔</span>
                 <?php if ($unreadCount > 0): ?>
                 <div class="notif-badge" id="notifBadge"><?= $unreadCount ?></div>
@@ -796,36 +781,35 @@ function parseUA(string $ua): string {
                     </div>
                     <?php endforeach; endif; ?>
                 </div>
-                <a href="notifications.php" class="notif-see-all">See All</a>
             </div>
         </div>
 
         <!-- Profile dropdown -->
         <div style="position:relative" id="profileWrapper">
             <button class="profile-button" onclick="toggleProfileDropdown()" aria-expanded="false" aria-haspopup="true">
-                <div class="profile-avatar"><?php echo htmlspecialchars($userInitials); ?></div>
-                <span class="profile-name"><?php echo htmlspecialchars($userName); ?></span>
-                <i class="fa fa-chevron-down" style="font-size:11px;color:#718096;margin-left:4px;"></i>
+                <div class="profile-avatar-sm"><?= htmlspecialchars($userInitials) ?></div>
+                <span class="profile-name-nav"><?= htmlspecialchars($userName) ?></span>
+                <span class="dropdown-arrow">▼</span>
             </button>
 
-            <div class="profile-dropdown" id="profileDropdown">
-                <div class="dropdown-header">
-                    <div class="dropdown-avatar"><?php echo htmlspecialchars($userInitials); ?></div>
-                    <div>
-                        <div class="dropdown-name"><?php echo htmlspecialchars($userName); ?></div>
-                        <div class="dropdown-email"><?php echo htmlspecialchars($userEmail); ?></div>
+            <div class="nav-profile-dropdown" id="profileDropdown">
+                <div class="nav-dropdown-header">
+                    <div class="nav-dropdown-avatar"><?= htmlspecialchars($userInitials) ?></div>
+                    <div class="nav-dropdown-info">
+                        <div class="nav-dropdown-name"><?= htmlspecialchars($userName) ?></div>
+                        <div class="nav-dropdown-email"><?= htmlspecialchars($userEmail) ?></div>
                     </div>
                 </div>
-                <div class="dropdown-menu">
-                    <a href="student-dashboard.php" class="dropdown-item">
-                        <i class="fa fa-home" style="width:18px"></i><span>Dashboard</span>
+                <div class="nav-dropdown-menu">
+                    <a href="student-dashboard.php" class="nav-dropdown-item">
+                        <i class="fa fa-home"></i><span>Dashboard</span>
                     </a>
-                    <a href="help.html" target="_blank" rel="noopener noreferrer" class="dropdown-item">
-                        <i class="fa fa-circle-question" style="width:18px"></i><span>Help & Support</span>
+                    <a href="help.html" target="_blank" rel="noopener noreferrer" class="nav-dropdown-item">
+                        <i class="fa fa-circle-question"></i><span>Help &amp; Support</span>
                     </a>
-                    <div class="dropdown-divider"></div>
-                    <button onclick="handleLogout()" class="dropdown-item danger">
-                        <i class="fa fa-sign-out-alt" style="width:18px"></i><span>Logout</span>
+                    <div class="nav-dropdown-divider"></div>
+                    <button onclick="handleLogout()" class="nav-dropdown-item danger">
+                        <i class="fa fa-sign-out-alt"></i><span>Logout</span>
                     </button>
                 </div>
             </div>
@@ -833,71 +817,61 @@ function parseUA(string $ua): string {
     </div>
 </nav>
 
-<!-- Breadcrumb -->
 <div class="page-wrapper">
 
 <!-- LEFT SIDEBAR -->
 <aside class="left-sidebar">
     <span class="left-sidebar-label">Navigation</span>
     <a href="student-dashboard.php"><i class="fa fa-home"></i> Dashboard</a>
+    <a href="student-assessments.php"><i class="fa fa-clipboard-list"></i> Assessments</a>
     <a href="student-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
-    <a href="notifications.php" style="position:relative">
-        <i class="fa fa-bell"></i> Notifications
-        <?php if ($unreadCount > 0): ?>
-        <span style="margin-left:auto;background:#e53e3e;color:white;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;"><?= $unreadCount ?></span>
-        <?php endif; ?>
-    </a>
+    <a href="student-profile.php" class="active"><i class="fa fa-user"></i> Profile</a>
     <div class="left-sidebar-bottom">
         <button onclick="handleLogout()"><i class="fa fa-sign-out-alt"></i> Logout</button>
     </div>
 </aside>
 
 <div class="page-content">
-
-<!-- ================================================
-     MAIN LAYOUT
-     ================================================ -->
 <div class="container">
 
     <!-- ── LEFT: Profile Card ── -->
     <aside>
         <div class="profile-card">
 
-            <div class="avatar-large"><?php echo htmlspecialchars($userInitials); ?></div>
+            <div class="avatar-large"><?= htmlspecialchars($userInitials) ?></div>
 
-            <div class="profile-card-name"><?php echo htmlspecialchars($userName); ?></div>
+            <div class="profile-card-name"><?= htmlspecialchars($userName) ?></div>
             <div class="role-badge">🎓 Student</div>
 
             <?php if ($userDept): ?>
-                <div class="profile-card-detail">🏛️ <?php echo htmlspecialchars($userDept); ?></div>
+                <div class="profile-card-detail">🏛️ <?= htmlspecialchars($userDept) ?></div>
             <?php endif; ?>
-
             <?php if ($userRegNo): ?>
-                <div class="profile-card-detail">🆔 <?php echo htmlspecialchars($userRegNo); ?></div>
+                <div class="profile-card-detail">🆔 <?= htmlspecialchars($userRegNo) ?></div>
             <?php endif; ?>
 
-            <div class="profile-card-detail">✉️ <?php echo htmlspecialchars($userEmail); ?></div>
+            <div class="profile-card-detail">✉️ <?= htmlspecialchars($userEmail) ?></div>
 
             <?php if ($lastLogin): ?>
-                <div class="profile-card-detail">🕐 Last login <?php echo timeAgo($lastLogin); ?></div>
+                <div class="profile-card-detail">🕐 Last login <?= timeAgo($lastLogin) ?></div>
             <?php endif; ?>
 
-            <div class="profile-card-detail">📅 Member since <?php echo htmlspecialchars($memberSince); ?></div>
+            <div class="profile-card-detail">📅 Member since <?= htmlspecialchars($memberSince) ?></div>
 
             <div class="profile-divider"></div>
 
             <!-- Live stats -->
             <div class="stat-row">
                 <div class="stat-item">
-                    <div class="stat-item-value"><?php echo $testsCompleted; ?></div>
+                    <div class="stat-item-value"><?= $testsCompleted ?></div>
                     <div class="stat-item-label">Tests</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-item-value"><?php echo $avgScore; ?>%</div>
+                    <div class="stat-item-value"><?= $avgScore ?>%</div>
                     <div class="stat-item-label">Avg</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-item-value"><?php echo $bestScore; ?>%</div>
+                    <div class="stat-item-value"><?= $bestScore ?>%</div>
                     <div class="stat-item-label">Best</div>
                 </div>
             </div>
@@ -905,19 +879,17 @@ function parseUA(string $ua): string {
             <?php if (!empty($categories)): ?>
             <div class="profile-divider"></div>
             <div style="text-align:left;">
-                <div style="font-size:12px;font-weight:700;color:var(--color-text-light);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">Performance by Category</div>
+                <div style="font-size:11px;font-weight:700;color:var(--text-soft);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;">Performance by Category</div>
                 <div style="display:flex;flex-direction:column;gap:10px;">
                     <?php foreach ($categories as $cat):
                         $cs = (int)round($cat['avg_score']);
                     ?>
                     <div>
                         <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-                            <span style="font-size:12px;font-weight:700;color:var(--color-text);"><?php echo htmlspecialchars(ucfirst($cat['category'])); ?></span>
-                            <span style="font-size:11px;color:var(--color-text-light);"><?php echo $cat['attempts']; ?> · <?php echo $cs; ?>%</span>
+                            <span style="font-size:12px;font-weight:600;color:var(--text);"><?= htmlspecialchars(ucfirst($cat['category'])) ?></span>
+                            <span style="font-size:11px;color:var(--text-soft);"><?= $cat['attempts'] ?> · <?= $cs ?>%</span>
                         </div>
-                        <div class="cat-bar">
-                            <div class="cat-fill" style="width:<?php echo $cs; ?>%"></div>
-                        </div>
+                        <div class="cat-bar"><div class="cat-fill" style="width:<?= $cs ?>%"></div></div>
                     </div>
                     <?php endforeach; ?>
                 </div>
@@ -930,29 +902,25 @@ function parseUA(string $ua): string {
             ?>
             <div class="profile-divider"></div>
             <div style="text-align:left;">
-                <div style="font-size:12px;font-weight:700;color:var(--color-text-light);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">Answer Accuracy</div>
+                <div style="font-size:11px;font-weight:700;color:var(--text-soft);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;">Answer Accuracy</div>
                 <div style="display:flex;flex-direction:column;gap:8px;">
                     <div>
                         <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-                            <span style="font-size:12px;font-weight:700;color:#22543d;">Correct</span>
-                            <span style="font-size:12px;font-weight:700;color:#22543d;"><?php echo $totalCorrect; ?></span>
+                            <span style="font-size:12px;font-weight:700;color:#065f46;">Correct</span>
+                            <span style="font-size:12px;font-weight:700;color:#065f46;"><?= $totalCorrect ?></span>
                         </div>
-                        <div class="cat-bar">
-                            <div class="cat-fill" style="width:<?php echo $accRate; ?>%;background:linear-gradient(90deg,#48bb78,#9ae6b4);"></div>
-                        </div>
+                        <div class="cat-bar"><div class="cat-fill" style="width:<?= $accRate ?>%;background:linear-gradient(90deg,#10b981,#34d399);"></div></div>
                     </div>
                     <div>
                         <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-                            <span style="font-size:12px;font-weight:700;color:#c53030;">Wrong</span>
-                            <span style="font-size:12px;font-weight:700;color:#c53030;"><?php echo $totalWrong; ?></span>
+                            <span style="font-size:12px;font-weight:700;color:#991b1b;">Wrong</span>
+                            <span style="font-size:12px;font-weight:700;color:#991b1b;"><?= $totalWrong ?></span>
                         </div>
-                        <div class="cat-bar">
-                            <div class="cat-fill" style="width:<?php echo (100 - $accRate); ?>%;background:linear-gradient(90deg,#fc8181,#feb2b2);"></div>
-                        </div>
+                        <div class="cat-bar"><div class="cat-fill" style="width:<?= (100 - $accRate) ?>%;background:linear-gradient(90deg,#ef4444,#f87171);"></div></div>
                     </div>
-                    <div style="text-align:center;padding-top:4px;">
-                        <span style="font-size:20px;font-weight:800;color:var(--color-primary);"><?php echo $accRate; ?>%</span>
-                        <div style="font-size:10px;color:var(--color-text-light);font-weight:600;text-transform:uppercase;letter-spacing:.5px;">accuracy rate</div>
+                    <div style="text-align:center;padding-top:6px;">
+                        <span style="font-family:'Sora',sans-serif;font-size:22px;font-weight:800;color:var(--accent);"><?= $accRate ?>%</span>
+                        <div style="font-size:10px;color:var(--text-soft);font-weight:700;text-transform:uppercase;letter-spacing:.06em;">accuracy rate</div>
                     </div>
                 </div>
             </div>
@@ -960,7 +928,7 @@ function parseUA(string $ua): string {
 
             <div class="profile-divider"></div>
 
-            <!-- Sidebar nav -->
+            <!-- Inner tab nav -->
             <nav class="profile-nav">
                 <button class="profile-nav-item active" onclick="switchTab('info')" id="nav-info">
                     <span>👤</span> Personal Info
@@ -979,9 +947,9 @@ function parseUA(string $ua): string {
     <main>
 
         <?php if ($updateMessage): ?>
-            <div class="alert alert-<?php echo $updateType; ?>">
-                <?php echo $updateType === 'success' ? '✅' : '⚠️'; ?>
-                <?php echo htmlspecialchars($updateMessage); ?>
+            <div class="alert alert-<?= $updateType ?>">
+                <?= $updateType === 'success' ? '✅' : '⚠️' ?>
+                <?= htmlspecialchars($updateMessage) ?>
             </div>
         <?php endif; ?>
 
@@ -993,31 +961,31 @@ function parseUA(string $ua): string {
 
                     <div class="form-group">
                         <label class="form-label">Full Name</label>
-                        <input type="text" class="form-control" value="<?php echo htmlspecialchars($userName); ?>" disabled>
+                        <input type="text" class="form-control" value="<?= htmlspecialchars($userName) ?>" disabled>
                         <span class="form-hint">Managed by admin.</span>
                     </div>
 
                     <div class="form-group">
                         <label class="form-label">Email Address</label>
-                        <input type="email" class="form-control" value="<?php echo htmlspecialchars($userEmail); ?>" disabled>
+                        <input type="email" class="form-control" value="<?= htmlspecialchars($userEmail) ?>" disabled>
                         <span class="form-hint">Managed by admin.</span>
                     </div>
 
                     <div class="form-group">
                         <label class="form-label">Department</label>
-                        <input type="text" class="form-control" value="<?php echo htmlspecialchars($userDept ?: '—'); ?>" disabled>
+                        <input type="text" class="form-control" value="<?= htmlspecialchars($userDept ?: '—') ?>" disabled>
                         <span class="form-hint">Managed by admin.</span>
                     </div>
 
                     <div class="form-group">
                         <label class="form-label">Registration Number</label>
-                        <input type="text" class="form-control" value="<?php echo htmlspecialchars($userRegNo ?: '—'); ?>" disabled>
+                        <input type="text" class="form-control" value="<?= htmlspecialchars($userRegNo ?: '—') ?>" disabled>
                         <span class="form-hint">Managed by admin.</span>
                     </div>
 
                 </div>
 
-                <div style="margin-top:20px;padding:14px;background:#f0f9ff;border:1px solid #bee3f8;border-radius:9px;font-size:13px;color:#2c5282;">
+                <div style="margin-top:20px;padding:14px;background:#eff8ff;border:1px solid #bae6fd;border-radius:var(--radius-sm);font-size:13px;color:#075985;">
                     ℹ️ Additional profile fields (phone, bio, degree, etc.) will be available in a future update.
                     Contact your administrator to update your core details.
                 </div>
@@ -1029,7 +997,7 @@ function parseUA(string $ua): string {
                 <div class="info-grid">
                     <div class="info-box">
                         <div class="info-box-label">User ID</div>
-                        <div class="info-box-value mono">#<?php echo $userId; ?></div>
+                        <div class="info-box-value mono">#<?= $userId ?></div>
                     </div>
                     <div class="info-box">
                         <div class="info-box-label">Role</div>
@@ -1037,21 +1005,21 @@ function parseUA(string $ua): string {
                     </div>
                     <div class="info-box">
                         <div class="info-box-label">Account Status</div>
-                        <div class="info-box-value" style="color:<?php echo $user['is_active'] ? '#22543d' : '#c53030'; ?>;">
-                            <?php echo $user['is_active'] ? '✅ Active' : '❌ Inactive'; ?>
+                        <div class="info-box-value" style="color:<?= $user['is_active'] ? '#065f46' : '#991b1b' ?>;">
+                            <?= $user['is_active'] ? '✅ Active' : '❌ Inactive' ?>
                         </div>
                     </div>
                     <div class="info-box">
                         <div class="info-box-label">Verified</div>
-                        <div class="info-box-value" style="color:<?php echo $user['is_verified'] ? '#22543d' : '#c53030'; ?>;">
-                            <?php echo $user['is_verified'] ? '✅ Yes' : '❌ No'; ?>
+                        <div class="info-box-value" style="color:<?= $user['is_verified'] ? '#065f46' : '#991b1b' ?>;">
+                            <?= $user['is_verified'] ? '✅ Yes' : '❌ No' ?>
                         </div>
                     </div>
                     <?php if (!empty($user['created_at'])): ?>
                     <div class="info-box" style="grid-column:1/-1;">
                         <div class="info-box-label">Member Since</div>
                         <div class="info-box-value" style="font-size:14px;">
-                            <?php echo date('F j, Y', strtotime($user['created_at'])); ?>
+                            <?= date('F j, Y', strtotime($user['created_at'])) ?>
                         </div>
                     </div>
                     <?php endif; ?>
@@ -1084,39 +1052,39 @@ function parseUA(string $ua): string {
                         </thead>
                         <tbody>
                             <?php foreach ($recentAttempts as $a):
-                                $pct  = (int)round($a['percentage'] ?? 0);
-                                $mins = $a['time_taken_minutes'] ?? 0;
+                                $pct    = (int)round($a['percentage'] ?? 0);
+                                $mins   = $a['time_taken_minutes'] ?? 0;
                                 $scored = number_format($a['score'] ?? 0, 1);
                                 $total  = $a['total_marks'] ?? '—';
                             ?>
                             <tr>
                                 <td>
-                                    <div class="test-name"><?php echo htmlspecialchars($a['test_title']); ?></div>
+                                    <div class="test-name"><?= htmlspecialchars($a['test_title']) ?></div>
                                     <div class="test-cat">
-                                        <?php echo htmlspecialchars(ucfirst($a['category'] ?? '')); ?>
-                                        &nbsp;<?php echo difficultyBadge($a['difficulty'] ?? 'medium'); ?>
+                                        <?= htmlspecialchars(ucfirst($a['category'] ?? '')) ?>
+                                        &nbsp;<?= difficultyBadge($a['difficulty'] ?? 'medium') ?>
                                     </div>
                                 </td>
                                 <td>
-                                    <span class="score-pill" style="background:<?php echo scoreBg($pct); ?>;color:<?php echo scoreColor($pct); ?>">
-                                        <?php echo $pct; ?>%
+                                    <span class="score-pill" style="background:<?= scoreBg($pct) ?>;color:<?= scoreColor($pct) ?>">
+                                        <?= $pct ?>%
                                     </span>
-                                    <div style="font-size:11px;color:var(--color-text-light);margin-top:3px;">
-                                        <?php echo $scored; ?> / <?php echo $total; ?> marks
+                                    <div style="font-size:11px;color:var(--text-soft);margin-top:3px;">
+                                        <?= $scored ?> / <?= $total ?> marks
                                     </div>
                                 </td>
                                 <td style="font-size:12px;">
-                                    <span style="color:#22543d;font-weight:700;"><?php echo $scored; ?></span>&nbsp;/&nbsp;
-                                    <span style="color:var(--color-text-light);"><?php echo $total; ?> marks</span>
+                                    <span style="color:#065f46;font-weight:700;"><?= $scored ?></span>&nbsp;/&nbsp;
+                                    <span style="color:var(--text-soft);"><?= $total ?> marks</span>
                                 </td>
-                                <td style="font-size:12px;color:var(--color-text-light);">
-                                    <?php echo $mins ? $mins . ' min' : '—'; ?>
+                                <td style="font-size:12px;color:var(--text-soft);">
+                                    <?= $mins ? $mins . ' min' : '—' ?>
                                 </td>
-                                <td style="font-size:12px;color:var(--color-text-light);">
-                                    <?php echo $a['submitted_at'] ? timeAgo($a['submitted_at']) : '—'; ?>
+                                <td style="font-size:12px;color:var(--text-soft);">
+                                    <?= $a['submitted_at'] ? timeAgo($a['submitted_at']) : '—' ?>
                                 </td>
-                                <td style="font-size:12px;font-weight:700;color:<?php echo scoreColor($pct); ?>">
-                                    <?php echo scoreLabel($pct); ?>
+                                <td style="font-size:12px;font-weight:700;color:<?= scoreColor($pct) ?>">
+                                    <?= scoreLabel($pct) ?>
                                 </td>
                             </tr>
                             <?php endforeach; ?>
@@ -1124,7 +1092,7 @@ function parseUA(string $ua): string {
                     </table>
                 </div>
                 <div style="text-align:center;margin-top:16px;">
-                    <a href="all-results.php" style="color:var(--color-accent);font-size:13px;font-weight:700;text-decoration:none;">
+                    <a href="all-results.php" style="color:var(--accent);font-size:13px;font-weight:700;text-decoration:none;">
                         View full history →
                     </a>
                 </div>
@@ -1163,7 +1131,7 @@ function parseUA(string $ua): string {
                             <div class="password-strength">
                                 <div class="password-strength-bar" id="strengthBar"></div>
                             </div>
-                            <span class="strength-label" id="strengthLabel" style="color:var(--color-text-light);"></span>
+                            <span class="strength-label" id="strengthLabel" style="color:var(--text-soft);"></span>
                         </div>
 
                         <div class="form-group">
@@ -1180,7 +1148,7 @@ function parseUA(string $ua): string {
 
                     </div>
                     <div class="form-actions">
-                        <span style="font-size:12px;color:var(--color-text-light);">Use letters, numbers, and symbols.</span>
+                        <span style="font-size:12px;color:var(--text-soft);">Use letters, numbers, and symbols.</span>
                         <button type="submit" class="btn btn-primary"><span>🔑</span> Update Password</button>
                     </div>
                 </form>
@@ -1188,10 +1156,10 @@ function parseUA(string $ua): string {
 
             <div class="card">
                 <div class="card-title">ℹ️ Account Information</div>
-                <div class="info-grid" style="margin-bottom:<?php echo !empty($loginHistory) ? '24px' : '0'; ?>;">
+                <div class="info-grid" style="margin-bottom:<?= !empty($loginHistory) ? '22px' : '0' ?>;">
                     <div class="info-box">
                         <div class="info-box-label">User ID</div>
-                        <div class="info-box-value mono">#<?php echo $userId; ?></div>
+                        <div class="info-box-value mono">#<?= $userId ?></div>
                     </div>
                     <div class="info-box">
                         <div class="info-box-label">Role</div>
@@ -1199,21 +1167,21 @@ function parseUA(string $ua): string {
                     </div>
                     <div class="info-box">
                         <div class="info-box-label">Account Status</div>
-                        <div class="info-box-value" style="color:<?php echo $user['is_active'] ? '#22543d' : '#c53030'; ?>;">
-                            <?php echo $user['is_active'] ? '✅ Active' : '❌ Inactive'; ?>
+                        <div class="info-box-value" style="color:<?= $user['is_active'] ? '#065f46' : '#991b1b' ?>;">
+                            <?= $user['is_active'] ? '✅ Active' : '❌ Inactive' ?>
                         </div>
                     </div>
                     <div class="info-box">
                         <div class="info-box-label">Verified</div>
-                        <div class="info-box-value" style="color:<?php echo $user['is_verified'] ? '#22543d' : '#c53030'; ?>;">
-                            <?php echo $user['is_verified'] ? '✅ Yes' : '❌ No'; ?>
+                        <div class="info-box-value" style="color:<?= $user['is_verified'] ? '#065f46' : '#991b1b' ?>;">
+                            <?= $user['is_verified'] ? '✅ Yes' : '❌ No' ?>
                         </div>
                     </div>
                     <?php if (!empty($user['created_at'])): ?>
                     <div class="info-box" style="grid-column:1/-1;">
                         <div class="info-box-label">Member Since</div>
                         <div class="info-box-value" style="font-size:14px;">
-                            <?php echo date('F j, Y', strtotime($user['created_at'])); ?>
+                            <?= date('F j, Y', strtotime($user['created_at'])) ?>
                         </div>
                     </div>
                     <?php endif; ?>
@@ -1225,17 +1193,17 @@ function parseUA(string $ua): string {
                 <?php foreach ($loginHistory as $ll): ?>
                 <div class="login-row">
                     <div class="login-info">
-                        <span class="login-icon"><?php echo parseUA($ll['user_agent'] ?? ''); ?></span>
+                        <span class="login-icon"><?= parseUA($ll['user_agent'] ?? '') ?></span>
                         <div>
-                            <div class="login-detail"><?php echo parseUA($ll['user_agent'] ?? ''); ?></div>
-                            <div class="login-ip"><?php echo htmlspecialchars($ll['ip_address'] ?? '—'); ?></div>
+                            <div class="login-detail"><?= parseUA($ll['user_agent'] ?? '') ?></div>
+                            <div class="login-ip"><?= htmlspecialchars($ll['ip_address'] ?? '—') ?></div>
                         </div>
                     </div>
-                    <div class="login-time"><?php echo timeAgo($ll['created_at']); ?></div>
+                    <div class="login-time"><?= timeAgo($ll['created_at']) ?></div>
                 </div>
                 <?php endforeach; ?>
-                <div style="margin-top:8px;font-size:11px;color:var(--color-text-light);text-align:right;">
-                    Showing last <?php echo count($loginHistory); ?> successful logins
+                <div style="margin-top:8px;font-size:11px;color:var(--text-soft);text-align:right;">
+                    Showing last <?= count($loginHistory) ?> successful logins
                 </div>
                 <?php endif; ?>
             </div>
@@ -1248,9 +1216,7 @@ function parseUA(string $ua): string {
 </div><!-- /.page-wrapper -->
 
 <script>
-    /* ============================================
-       TAB SWITCHING
-       ============================================ */
+    /* ── Tab switching ── */
     function switchTab(tab) {
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
         document.querySelectorAll('.profile-nav-item').forEach(n => n.classList.remove('active'));
@@ -1260,17 +1226,14 @@ function parseUA(string $ua): string {
         if (nav)   nav.classList.add('active');
     }
 
-    /* ============================================
-       PROFILE DROPDOWN
-       ============================================ */
+    /* ── Dropdowns ── */
     const CSRF_TOKEN = <?= json_encode($_SESSION['csrf_token']) ?>;
 
     function toggleProfileDropdown() {
         const dropdown = document.getElementById('profileDropdown');
-        const button   = document.querySelector('.profile-button');
         document.getElementById('notifDropdown').classList.remove('show');
         dropdown.classList.toggle('active');
-        button.setAttribute('aria-expanded', dropdown.classList.contains('active'));
+        document.querySelector('.profile-button').setAttribute('aria-expanded', dropdown.classList.contains('active'));
     }
 
     function toggleNotifDropdown() {
@@ -1291,12 +1254,10 @@ function parseUA(string $ua): string {
     }
 
     document.addEventListener('click', function(e) {
-        const btn      = document.querySelector('.profile-button');
-        const dropdown = document.getElementById('profileDropdown');
-        const nw       = document.querySelector('.notif-dropdown-wrap');
-        if (btn && !btn.contains(e.target) && !document.getElementById('profileWrapper').contains(e.target)) {
-            dropdown.classList.remove('active');
-            btn.setAttribute('aria-expanded', 'false');
+        const pw = document.getElementById('profileWrapper');
+        const nw = document.querySelector('.notif-dropdown-wrap');
+        if (pw && !pw.contains(e.target)) {
+            document.getElementById('profileDropdown').classList.remove('active');
         }
         if (nw && !nw.contains(e.target)) {
             document.getElementById('notifDropdown').classList.remove('show');
@@ -1304,63 +1265,49 @@ function parseUA(string $ua): string {
     });
 
     function handleLogout() {
-        if (confirm('Are you sure you want to logout?')) {
-            window.location.href = 'logout.php';
-        }
+        if (confirm('Are you sure you want to logout?')) window.location.href = 'logout.php';
     }
 
-    /* ============================================
-       PASSWORD EYE TOGGLE
-       ============================================ */
+    /* ── Password eye toggle ── */
     function togglePw(id, btn) {
         const inp = document.getElementById(id);
         if (inp.type === 'password') { inp.type = 'text';     btn.textContent = '🙈'; }
-        else                         { inp.type = 'password'; btn.textContent = '👁️'; }
+        else                          { inp.type = 'password'; btn.textContent = '👁️'; }
     }
 
-    /* ============================================
-       PASSWORD STRENGTH METER
-       ============================================ */
+    /* ── Password strength meter ── */
     function checkStrength(val) {
         const bar   = document.getElementById('strengthBar');
         const label = document.getElementById('strengthLabel');
-
         if (!val) { bar.className = 'password-strength-bar'; label.textContent = ''; return; }
-
         let score = 0;
-        if (val.length >= 8)            score++;
-        if (/[A-Z]/.test(val))          score++;
-        if (/[0-9]/.test(val))          score++;
-        if (/[^A-Za-z0-9]/.test(val))   score++;
-
+        if (val.length >= 8)           score++;
+        if (/[A-Z]/.test(val))         score++;
+        if (/[0-9]/.test(val))         score++;
+        if (/[^A-Za-z0-9]/.test(val))  score++;
         const levels = [
-            { cls: 'strength-weak',   label: 'Weak',   color: '#f56565' },
-            { cls: 'strength-fair',   label: 'Fair',   color: '#ed8936' },
-            { cls: 'strength-good',   label: 'Good',   color: '#ecc94b' },
-            { cls: 'strength-strong', label: 'Strong', color: '#48bb78' },
+            { cls: 'strength-weak',   label: 'Weak',   color: '#ef4444' },
+            { cls: 'strength-fair',   label: 'Fair',   color: '#f59e0b' },
+            { cls: 'strength-good',   label: 'Good',   color: '#eab308' },
+            { cls: 'strength-strong', label: 'Strong', color: '#10b981' },
         ];
-
-        const lvl             = levels[Math.max(score - 1, 0)];
-        bar.className         = 'password-strength-bar ' + lvl.cls;
-        label.textContent     = lvl.label;
-        label.style.color     = lvl.color;
+        const lvl         = levels[Math.max(score - 1, 0)];
+        bar.className     = 'password-strength-bar ' + lvl.cls;
+        label.textContent = lvl.label;
+        label.style.color = lvl.color;
     }
 
-    /* ============================================
-       PASSWORD MATCH CHECK
-       ============================================ */
+    /* ── Password match check ── */
     function checkMatch() {
         const nw  = document.getElementById('pwNew').value;
         const cf  = document.getElementById('pwConfirm').value;
         const msg = document.getElementById('matchMsg');
         if (!cf) { msg.textContent = ''; return; }
-        if (nw === cf) { msg.style.color = '#22543d'; msg.textContent = '✓ Passwords match'; }
-        else           { msg.style.color = '#742a2a'; msg.textContent = '✗ Passwords do not match'; }
+        if (nw === cf) { msg.style.color = '#065f46'; msg.textContent = '✓ Passwords match'; }
+        else           { msg.style.color = '#991b1b'; msg.textContent = '✗ Passwords do not match'; }
     }
 
-    /* ============================================
-       ANIMATE CATEGORY BARS ON LOAD
-       ============================================ */
+    /* ── Animate category bars on load ── */
     window.addEventListener('load', () => {
         document.querySelectorAll('.cat-fill').forEach(bar => {
             const w = bar.style.width;
@@ -1369,9 +1316,7 @@ function parseUA(string $ua): string {
         });
     });
 
-    /* ============================================
-       AUTO-OPEN TAB FROM URL HASH
-       ============================================ */
+    /* ── Auto-open tab from URL hash ── */
     window.addEventListener('DOMContentLoaded', function() {
         const hash = window.location.hash.replace('#', '');
         const validTabs = ['info', 'history', 'security'];

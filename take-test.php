@@ -13,9 +13,8 @@
  *  4. Loads all questions for this attempt (respects randomize_questions
  *     and randomize_options set by the teacher)
  *  5. Injects everything as a JS constant so the frontend works unchanged
- *  6. submitTest() calls  api/assessment/submit.php  (created below as
- *     an inline heredoc so everything ships in one file)
- *  7. autoSave() calls    api/assessment/autosave.php (same)
+ *  6. submitTest() calls  api/assessment/submit.php
+ *  7. autoSave() calls    api/assessment/autosave.php
  * ============================================================ */
 
 require_once 'config.php';
@@ -47,7 +46,6 @@ $asmResult = safePreparedQuery($conn,
         a.randomize_questions,
         a.randomize_options,
 
-        /* Seconds elapsed since the attempt started */
         TIMESTAMPDIFF(SECOND, aa.start_time, NOW()) AS elapsed_seconds
 
      FROM assessment_attempts aa
@@ -66,7 +64,6 @@ $asmResult['result']->free();
 
 /* ── Guard: only allow 'in_progress' attempts ── */
 if ($attempt['status'] !== 'in_progress') {
-    /* Already submitted — send straight to results */
     header("Location: test-results.php?attempt_id=$attemptId");
     exit;
 }
@@ -78,7 +75,6 @@ $timeRemaining  = max(0, $totalSeconds - $elapsedSeconds);
 
 /* If timer has expired, auto-submit and redirect */
 if ($timeRemaining <= 0) {
-    /* Mark attempt as timeout — a proper submit will happen on results page */
     safePreparedQuery($conn,
         "UPDATE assessment_attempts
          SET status = 'timeout', submitted_at = NOW()
@@ -92,7 +88,6 @@ if ($timeRemaining <= 0) {
 /* ── Load questions ── */
 $assessmentId = (int)$attempt['assessment_id'];
 
-/* Fetch questions ordered by question_order */
 $qResult = safePreparedQuery($conn,
     "SELECT q.question_id, q.question_type, q.question_text,
             q.marks, q.negative_marks,
@@ -104,25 +99,24 @@ $qResult = safePreparedQuery($conn,
     "i", [$assessmentId]
 );
 
-/* Group rows into questions with their options */
 $questionsRaw = [];
 if ($qResult['success'] && $qResult['result']) {
     while ($row = $qResult['result']->fetch_assoc()) {
         $qid = (int)$row['question_id'];
         if (!isset($questionsRaw[$qid])) {
             $questionsRaw[$qid] = [
-                'question_id'   => $qid,
-                'question_type' => $row['question_type'],
-                'question_text' => $row['question_text'],
-                'marks'         => (int)$row['marks'],
-                'negative_marks'=> (float)$row['negative_marks'],
-                'options'       => [],
+                'question_id'    => $qid,
+                'question_type'  => $row['question_type'],
+                'question_text'  => $row['question_text'],
+                'marks'          => (int)$row['marks'],
+                'negative_marks' => (float)$row['negative_marks'],
+                'options'        => [],
             ];
         }
         if ($row['option_id'] !== null) {
             $questionsRaw[$qid]['options'][] = [
-                'option_id'  => (int)$row['option_id'],
-                'option_text'=> $row['option_text'],
+                'option_id'   => (int)$row['option_id'],
+                'option_text' => $row['option_text'],
                 'option_order'=> (int)$row['option_order'],
             ];
         }
@@ -149,7 +143,7 @@ $savedResult = safePreparedQuery($conn,
     "i", [$attemptId]
 );
 
-$savedAnswers = []; // question_id => option_id
+$savedAnswers = [];
 if ($savedResult['success'] && $savedResult['result']) {
     while ($row = $savedResult['result']->fetch_assoc()) {
         if ($row['selected_option_id'] !== null) {
@@ -167,14 +161,12 @@ foreach ($qIds as $pos => $qid) {
 
     $opts = $q['options'];
 
-    /* Randomise option order if teacher enabled it */
     if ($attempt['randomize_options'] && count($opts) > 1) {
         shuffle($opts);
     }
 
-    /* Assign display labels A/B/C/D */
-    $labelList   = ['A','B','C','D'];
-    $builtOpts   = [];
+    $labelList = ['A','B','C','D'];
+    $builtOpts = [];
     foreach ($opts as $i => $opt) {
         $lbl = $labelList[$i] ?? chr(65 + $i);
         $builtOpts[] = [
@@ -209,7 +201,6 @@ foreach ($qIds as $pos => $qid) {
 
 $totalQuestions = count($questions);
 
-/* ── JSON encode for JS injection ── */
 $questionsJson = json_encode($questions, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP);
 $savedJson     = json_encode(
     array_combine(
@@ -225,228 +216,342 @@ $savedJson     = json_encode(
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= htmlspecialchars($attempt['title']) ?> - Assessment</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            --color-primary: #234C6A;
-            --color-primary-dark: #456882;
-            --color-text: #2d3748;
-            --color-text-light: #718096;
-            --color-border: #e2e8f0;
-            --color-success: #48bb78;
-            --color-warning: #ffc107;
-            --transition: all 0.3s ease;
-        }
-        html, * { margin:0; padding:0; box-sizing:border-box; }
-        body {
-            font-family: var(--font-family);
-            background: #D3DAD9;
-            color: var(--color-text);
-            overflow-x: hidden;
-            padding-top: 71px;
+            --primary:       #1a3a52;
+            --primary-mid:   #234C6A;
+            --accent:        #0ea5e9;
+            --accent-glow:   rgba(14,165,233,.18);
+            --accent2:       #06b6d4;
+            --success:       #10b981;
+            --warning:       #f59e0b;
+            --danger:        #ef4444;
+            --bg:            #f0f4f8;
+            --surface:       #ffffff;
+            --surface2:      #f8fafc;
+            --border:        #e2e8f0;
+            --text:          #0f172a;
+            --text-mid:      #475569;
+            --text-soft:     #94a3b8;
+            --radius:        16px;
+            --radius-sm:     10px;
+            --shadow:        0 1px 3px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.06);
+            --shadow-md:     0 4px 24px rgba(0,0,0,.10);
+            --header-h:      68px;
+            --transition:    .2s cubic-bezier(.4,0,.2,1);
         }
 
-        /* ── Header ── */
+        html, *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            overflow-x: hidden;
+            padding-top: var(--header-h);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ══════════════════════════════
+           TEST HEADER
+        ══════════════════════════════ */
         .test-header {
-            background: var(--color-primary);
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-            padding: 12px 28px;
+            background: var(--primary);
+            padding: 0 28px;
+            height: var(--header-h);
             display: flex; justify-content: space-between; align-items: center;
-            position: fixed; top:0; left:0; right:0; z-index:1000;
-            border-bottom: 3px solid var(--color-primary);
+            position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+            box-shadow: 0 1px 0 rgba(255,255,255,.06), 0 4px 20px rgba(0,0,0,.18);
         }
-        .test-info { display:flex; align-items:center; gap:20px; }
-        .test-title { font-size:18px; font-weight:700; color:white; }
+
+        .test-info { display: flex; align-items: center; gap: 16px; }
+
+        .test-title {
+            font-family: 'Sora', sans-serif;
+            font-size: 16px; font-weight: 800; color: white;
+            letter-spacing: -.2px;
+            max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+
         .test-badge {
-            padding:6px 12px; background:rgba(255,255,255,0.2);
-            color:white; border-radius:6px; font-size:12px; font-weight:600;
+            padding: 5px 12px;
+            background: rgba(255,255,255,.12);
+            border: 1px solid rgba(255,255,255,.2);
+            color: rgba(255,255,255,.9); border-radius: 8px;
+            font-size: 12px; font-weight: 600; white-space: nowrap;
         }
-        .timer-section { display:flex; align-items:center; gap:15px; }
+
+        .timer-section { display: flex; align-items: center; gap: 12px; }
+
         .timer-display {
-            display:flex; align-items:center; gap:10px;
-            padding:10px 20px;
-            background:linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
-            border-radius:10px; color:white; font-weight:700; font-size:18px;
-            min-width:150px; justify-content:center;
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 20px;
+            background: rgba(255,255,255,.12);
+            border: 1.5px solid rgba(255,255,255,.2);
+            border-radius: var(--radius-sm);
+            color: white;
+            font-family: 'Sora', sans-serif; font-weight: 800; font-size: 18px;
+            min-width: 140px; justify-content: center;
+            transition: var(--transition);
         }
         .timer-display.warning {
-            background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%);
-            animation:pulse 1s infinite;
+            background: rgba(239,68,68,.25);
+            border-color: var(--danger);
+            animation: pulse 1s ease-in-out infinite;
         }
-        @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.05)} }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.04); } }
+
         .submit-btn {
-            padding:10px 30px;
-            background:linear-gradient(135deg, #48bb78 0%, #38a169 100%);
-            color:white; border:none; border-radius:10px;
-            font-weight:700; font-size:14px; cursor:pointer;
-            transition:var(--transition);
-            box-shadow:0 4px 15px rgba(72,187,120,0.3);
+            padding: 10px 24px;
+            background: linear-gradient(135deg, var(--success), #34d399);
+            color: white; border: none; border-radius: var(--radius-sm);
+            font-family: 'Inter', sans-serif; font-weight: 700; font-size: 13.5px;
+            cursor: pointer; transition: var(--transition);
+            box-shadow: 0 2px 8px rgba(16,185,129,.35);
         }
-        .submit-btn:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(72,187,120,0.4); }
+        .submit-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(16,185,129,.5); }
 
-        /* ── Layout ── */
+        /* ══════════════════════════════
+           LAYOUT
+        ══════════════════════════════ */
         .container {
-            max-width:1400px; margin:0 auto; padding:30px;
-            display:grid; grid-template-columns:1fr 300px; gap:30px;
+            max-width: 1380px; margin: 0 auto; padding: 28px;
+            display: grid; grid-template-columns: 1fr 290px; gap: 24px;
         }
 
-        /* ── Question Area ── */
+        /* ══════════════════════════════
+           QUESTION SECTION
+        ══════════════════════════════ */
         .question-section {
-            background:white; border-radius:20px; padding:40px;
-            box-shadow:0 4px 20px rgba(0,0,0,0.08); min-height:500px;
-        }
-        .question-header {
-            display:flex; justify-content:space-between; align-items:center;
-            margin-bottom:30px; padding-bottom:20px; border-bottom:2px solid #e2e8f0;
-        }
-        .question-number { font-size:16px; color:#718096; font-weight:600; }
-        .question-marks {
-            display:flex; align-items:center; gap:8px;
-            padding:8px 16px; background:#f7fafc; border-radius:8px;
-            font-size:14px; font-weight:600; color:var(--color-primary);
-        }
-        .question-text {
-            font-size:20px; color:#2d3748; line-height:1.8;
-            margin-bottom:30px; font-weight:500;
+            background: var(--surface); border-radius: var(--radius);
+            padding: 36px; box-shadow: var(--shadow);
+            border: 1px solid var(--border); min-height: 500px;
         }
 
-        /* ── Options ── */
-        .options-container { display:flex; flex-direction:column; gap:15px; }
-        .option {
-            display:flex; align-items:center; padding:20px;
-            border:2px solid #e2e8f0; border-radius:12px;
-            cursor:pointer; transition:var(--transition); background:white;
+        .question-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 28px; padding-bottom: 18px;
+            border-bottom: 1.5px solid var(--border);
         }
-        .option:hover { border-color:var(--color-primary); background:#f7fafc; transform:translateX(5px); }
+
+        .question-number {
+            font-family: 'Sora', sans-serif;
+            font-size: 14px; color: var(--text-soft); font-weight: 700;
+            text-transform: uppercase; letter-spacing: .06em;
+        }
+
+        .question-marks {
+            display: flex; align-items: center; gap: 7px;
+            padding: 7px 14px;
+            background: var(--surface2); border: 1px solid var(--border);
+            border-radius: 8px;
+            font-family: 'Sora', sans-serif; font-size: 13px; font-weight: 700; color: var(--accent);
+        }
+
+        .question-text {
+            font-size: 18px; color: var(--text); line-height: 1.8;
+            margin-bottom: 28px; font-weight: 500;
+        }
+
+        /* ══════════════════════════════
+           OPTIONS
+        ══════════════════════════════ */
+        .options-container { display: flex; flex-direction: column; gap: 12px; }
+
+        .option {
+            display: flex; align-items: center; padding: 18px 20px;
+            border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+            cursor: pointer; transition: var(--transition); background: var(--surface);
+        }
+        .option:hover {
+            border-color: var(--accent); background: #f0f9ff;
+            transform: translateX(4px);
+            box-shadow: 0 2px 8px rgba(14,165,233,.1);
+        }
         .option.selected {
-            border-color:#4facfe;
-            background:linear-gradient(135deg, rgba(79,172,254,0.1), rgba(0,242,254,0.1));
-            box-shadow:0 4px 15px rgba(79,172,254,0.2);
+            border-color: var(--accent);
+            background: linear-gradient(135deg, rgba(14,165,233,.08), rgba(6,182,212,.08));
+            box-shadow: 0 0 0 3px var(--accent-glow);
         }
         .option input[type="radio"] {
-            width:20px; height:20px; margin-right:15px; cursor:pointer; accent-color:var(--color-primary);
+            width: 18px; height: 18px; margin-right: 14px;
+            cursor: pointer; accent-color: var(--accent); flex-shrink: 0;
         }
-        .option-label { font-size:16px; color:#2d3748; cursor:pointer; flex:1; }
+        .option-label { font-size: 15px; color: var(--text); cursor: pointer; flex: 1; line-height: 1.5; }
 
-        /* ── Navigation ── */
+        /* ══════════════════════════════
+           NAVIGATION
+        ══════════════════════════════ */
         .navigation-controls {
-            display:flex; justify-content:space-between;
-            margin-top:40px; padding-top:30px; border-top:2px solid #e2e8f0;
+            display: flex; justify-content: space-between; align-items: center;
+            margin-top: 36px; padding-top: 24px;
+            border-top: 1.5px solid var(--border);
         }
+
         .nav-btn {
-            padding:12px 30px; border:2px solid var(--color-primary);
-            background:white; color:#4facfe; border-radius:10px;
-            font-weight:700; font-size:14px; cursor:pointer;
-            transition:var(--transition);
-            display:flex; align-items:center; gap:8px;
+            padding: 10px 24px;
+            border: 1.5px solid var(--accent);
+            background: var(--surface); color: var(--accent);
+            border-radius: var(--radius-sm);
+            font-family: 'Inter', sans-serif; font-weight: 700; font-size: 13.5px;
+            cursor: pointer; transition: var(--transition);
+            display: flex; align-items: center; gap: 8px;
         }
         .nav-btn:hover:not(:disabled) {
-            background:var(--color-primary); color:white;
-            transform:translateY(-2px); box-shadow:0 4px 12px rgba(79,172,254,0.3);
+            background: var(--accent); color: white;
+            transform: translateY(-2px); box-shadow: 0 4px 12px rgba(14,165,233,.3);
         }
-        .nav-btn:disabled { opacity:0.5; cursor:not-allowed; }
+        .nav-btn:disabled { opacity: .4; cursor: not-allowed; border-color: var(--border); color: var(--text-soft); }
+
         .mark-review-btn {
-            padding:12px 24px; background:#fff3cd; color:#856404;
-            border:2px solid #ffc107; border-radius:10px;
-            font-weight:700; font-size:14px; cursor:pointer; transition:var(--transition);
+            padding: 10px 20px;
+            background: #fefce8; color: #92400e;
+            border: 1.5px solid var(--warning); border-radius: var(--radius-sm);
+            font-family: 'Inter', sans-serif; font-weight: 700; font-size: 13.5px;
+            cursor: pointer; transition: var(--transition);
         }
-        .mark-review-btn:hover { background:#ffc107; color:white; transform:translateY(-2px); }
-        .mark-review-btn.marked { background:#ffc107; color:white; }
+        .mark-review-btn:hover { background: var(--warning); color: white; transform: translateY(-2px); }
+        .mark-review-btn.marked { background: var(--warning); color: white; }
 
-        /* ── Sidebar ── */
-        .sidebar { display:flex; flex-direction:column; gap:20px; }
+        /* ══════════════════════════════
+           SIDEBAR
+        ══════════════════════════════ */
+        .sidebar { display: flex; flex-direction: column; gap: 18px; }
+
         .sidebar-card {
-            background:white; border-radius:20px; padding:25px;
-            box-shadow:0 4px 20px rgba(0,0,0,0.08);
+            background: var(--surface); border-radius: var(--radius);
+            padding: 22px; box-shadow: var(--shadow); border: 1px solid var(--border);
         }
-        .sidebar-title { font-size:18px; font-weight:700; color:#2d3748; margin-bottom:20px; }
-        .status-legend { display:grid; grid-template-columns:1fr; gap:10px; margin-bottom:20px; }
-        .legend-item { display:flex; align-items:center; gap:10px; font-size:13px; color:#718096; }
+
+        .sidebar-title {
+            font-family: 'Sora', sans-serif;
+            font-size: 15px; font-weight: 700; color: var(--text);
+            margin-bottom: 18px; padding-bottom: 14px;
+            border-bottom: 1.5px solid var(--border);
+        }
+
+        .status-legend { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+        .legend-item { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-mid); }
         .legend-color {
-            width:30px; height:30px; border-radius:6px;
-            display:flex; align-items:center; justify-content:center;
-            font-size:11px; font-weight:700;
+            width: 28px; height: 28px; border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 10px; font-weight: 700; flex-shrink: 0;
         }
-        .legend-color.answered   { background:#c6f6d5; color:#22543d; }
-        .legend-color.not-answered { background:#e2e8f0; color:#718096; }
-        .legend-color.marked     { background:#feebc8; color:#7c2d12; }
-        .legend-color.current    { background:linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color:white; }
-        .question-palette { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
+        .legend-color.answered     { background: #dcfce7; color: #166534; }
+        .legend-color.not-answered { background: var(--surface2); color: var(--text-soft); border: 1px solid var(--border); }
+        .legend-color.marked       { background: #fef3c7; color: #92400e; }
+        .legend-color.current      { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: white; }
+
+        .question-palette {
+            display: grid; grid-template-columns: repeat(5,1fr); gap: 8px;
+        }
         .palette-item {
-            aspect-ratio:1; border-radius:8px;
-            display:flex; align-items:center; justify-content:center;
-            font-size:14px; font-weight:700; cursor:pointer;
-            transition:var(--transition); border:2px solid transparent;
+            aspect-ratio: 1; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-family: 'Sora', sans-serif; font-size: 12px; font-weight: 700;
+            cursor: pointer; transition: var(--transition);
+            border: 1.5px solid transparent;
         }
-        .palette-item:hover { transform:scale(1.1); box-shadow:0 4px 12px rgba(0,0,0,0.15); }
-        .palette-item.answered   { background:#c6f6d5; color:#22543d; }
-        .palette-item.not-answered { background:#e2e8f0; color:#718096; }
-        .palette-item.marked     { background:#feebc8; color:#7c2d12; }
-        .palette-item.current    {
-            background:linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            color:white; border-color:#4facfe; box-shadow:0 4px 15px rgba(79,172,254,0.4);
+        .palette-item:hover { transform: scale(1.12); box-shadow: 0 3px 10px rgba(0,0,0,.12); }
+        .palette-item.answered     { background: #dcfce7; color: #166534; }
+        .palette-item.not-answered { background: var(--surface2); color: var(--text-soft); border-color: var(--border); }
+        .palette-item.marked       { background: #fef3c7; color: #92400e; }
+        .palette-item.current      {
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            color: white; border-color: var(--accent);
+            box-shadow: 0 3px 12px rgba(14,165,233,.4);
         }
-        .test-summary { padding:20px; background:#f7fafc; border-radius:12px; margin-top:15px; }
+
+        .test-summary {
+            padding: 16px; background: var(--surface2);
+            border-radius: var(--radius-sm); border: 1px solid var(--border);
+            margin-top: 16px;
+        }
         .summary-item {
-            display:flex; justify-content:space-between;
-            padding:10px 0; border-bottom:1px solid #e2e8f0;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 9px 0; border-bottom: 1px solid var(--border);
         }
-        .summary-item:last-child { border-bottom:none; }
-        .summary-label { font-size:13px; color:#718096; }
-        .summary-value { font-size:14px; font-weight:700; color:#2d3748; }
+        .summary-item:last-child { border-bottom: none; padding-bottom: 0; }
+        .summary-label { font-size: 12.5px; color: var(--text-soft); }
+        .summary-value { font-family: 'Sora', sans-serif; font-size: 14px; font-weight: 800; color: var(--text); }
 
-        /* ── Submit Modal ── */
+        /* ══════════════════════════════
+           SUBMIT MODAL
+        ══════════════════════════════ */
         .submit-modal {
-            display:none; position:fixed; top:0; left:0; width:100%; height:100%;
-            background:rgba(0,0,0,0.7); z-index:1001;
-            align-items:center; justify-content:center;
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,.65); z-index: 1001;
+            align-items: center; justify-content: center;
         }
-        .submit-modal.active { display:flex; }
+        .submit-modal.active { display: flex; }
+
         .modal-content {
-            background:white; border-radius:20px; padding:40px; max-width:500px;
-            text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.3);
+            background: var(--surface); border-radius: var(--radius);
+            padding: 40px; max-width: 480px; width: 90%;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,.25);
+            animation: fadeUp .25s ease both;
         }
-        .modal-icon    { font-size:64px; margin-bottom:20px; }
-        .modal-title   { font-size:24px; font-weight:700; color:#2d3748; margin-bottom:15px; }
-        .modal-message { font-size:16px; color:#718096; margin-bottom:30px; line-height:1.6; }
-        .modal-buttons { display:flex; gap:15px; justify-content:center; }
+        .modal-icon    { font-size: 60px; margin-bottom: 18px; }
+        .modal-title   { font-family: 'Sora', sans-serif; font-size: 22px; font-weight: 800; color: var(--text); margin-bottom: 14px; }
+        .modal-message { font-size: 14.5px; color: var(--text-mid); margin-bottom: 28px; line-height: 1.7; }
+        .modal-buttons { display: flex; gap: 12px; justify-content: center; }
         .modal-btn {
-            padding:12px 30px; border:none; border-radius:10px;
-            font-weight:700; font-size:14px; cursor:pointer; transition:var(--transition);
+            padding: 11px 28px; border: none; border-radius: var(--radius-sm);
+            font-family: 'Inter', sans-serif; font-weight: 700; font-size: 13.5px;
+            cursor: pointer; transition: var(--transition);
         }
-        .modal-btn.primary   { background:linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color:white; }
-        .modal-btn.secondary { background:#e2e8f0; color:#718096; }
-        .modal-btn:hover     { transform:translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,0.2); }
-        .modal-btn:disabled  { opacity:0.6; cursor:not-allowed; transform:none; }
+        .modal-btn.primary   { background: linear-gradient(135deg, var(--success), #34d399); color: white; box-shadow: 0 2px 8px rgba(16,185,129,.3); }
+        .modal-btn.primary:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(16,185,129,.45); }
+        .modal-btn.secondary { background: var(--surface2); color: var(--text-mid); border: 1.5px solid var(--border); }
+        .modal-btn.secondary:hover { background: var(--border); color: var(--text); }
+        .modal-btn:disabled  { opacity: .6; cursor: not-allowed; transform: none; }
 
-        /* ── Loading Overlay ── */
+        /* ══════════════════════════════
+           LOADING OVERLAY
+        ══════════════════════════════ */
         .loading-overlay {
-            display:none; position:fixed; top:0; left:0; width:100%; height:100%;
-            background:rgba(255,255,255,0.95); z-index:1002;
-            align-items:center; justify-content:center; flex-direction:column; gap:20px;
+            display: none; position: fixed; inset: 0;
+            background: rgba(255,255,255,.96); z-index: 1002;
+            align-items: center; justify-content: center; flex-direction: column; gap: 20px;
         }
-        .loading-overlay.active { display:flex; }
+        .loading-overlay.active { display: flex; }
         .spinner {
-            width:50px; height:50px;
-            border:5px solid #e2e8f0; border-top-color:var(--color-primary);
-            border-radius:50%; animation:spin 0.8s linear infinite;
+            width: 48px; height: 48px;
+            border: 4px solid var(--border); border-top-color: var(--accent);
+            border-radius: 50%; animation: spin .8s linear infinite;
         }
-        .loading-text { font-size:16px; color:#718096; font-weight:600; }
-        @keyframes spin { to { transform:rotate(360deg); } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text {
+            font-family: 'Sora', sans-serif;
+            font-size: 15px; color: var(--text-mid); font-weight: 600;
+        }
 
-        /* ── Responsive ── */
-        @media (max-width:1024px) {
-            .container { grid-template-columns:1fr; }
-            .sidebar   { order:-1; }
-            .question-palette { grid-template-columns:repeat(8,1fr); }
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(16px); }
+            to   { opacity: 1; transform: translateY(0); }
         }
-        @media (max-width:768px) {
-            .test-header { flex-direction:column; gap:15px; padding:15px; }
-            .container   { padding:15px; }
-            .question-section { padding:25px 20px; }
-            .navigation-controls { flex-direction:column; gap:15px; }
-            .nav-btn     { width:100%; justify-content:center; }
-            .question-palette { grid-template-columns:repeat(5,1fr); }
+
+        /* ══════════════════════════════
+           RESPONSIVE
+        ══════════════════════════════ */
+        @media (max-width: 1024px) {
+            .container { grid-template-columns: 1fr; }
+            .sidebar   { order: -1; }
+            .question-palette { grid-template-columns: repeat(8,1fr); }
+        }
+        @media (max-width: 768px) {
+            .test-header { padding: 0 16px; height: auto; min-height: var(--header-h); flex-direction: column; gap: 10px; padding: 12px 16px; }
+            body { padding-top: 110px; }
+            .container { padding: 16px; gap: 16px; }
+            .question-section { padding: 24px 18px; }
+            .navigation-controls { flex-direction: column; gap: 12px; }
+            .nav-btn { width: 100%; justify-content: center; }
+            .question-palette { grid-template-columns: repeat(5,1fr); }
+            .test-title { max-width: 100%; font-size: 14px; }
         }
     </style>
 </head>
@@ -497,16 +602,16 @@ $savedJson     = json_encode(
             <h3 class="sidebar-title">Question Palette</h3>
             <div class="status-legend">
                 <div class="legend-item">
-                    <div class="legend-color answered">1</div><span>Answered</span>
+                    <div class="legend-color answered">✓</div><span>Answered</span>
                 </div>
                 <div class="legend-item">
-                    <div class="legend-color not-answered">2</div><span>Not Answered</span>
+                    <div class="legend-color not-answered">—</div><span>Not Answered</span>
                 </div>
                 <div class="legend-item">
-                    <div class="legend-color marked">3</div><span>Marked for Review</span>
+                    <div class="legend-color marked">🔖</div><span>Marked for Review</span>
                 </div>
                 <div class="legend-item">
-                    <div class="legend-color current">4</div><span>Current Question</span>
+                    <div class="legend-color current">→</div><span>Current Question</span>
                 </div>
             </div>
             <div class="question-palette" id="questionPalette"></div>
@@ -555,17 +660,16 @@ $savedJson     = json_encode(
 <script>
 /* ============================================================
    DATA FROM PHP — injected server-side, no AJAX needed
-   correct_answer is never sent here; grading is server-side
    ============================================================ */
 const ATTEMPT_ID     = <?= $attemptId ?>;
-const TIME_REMAINING = <?= $timeRemaining ?>;   // seconds left
-const questionData   = <?= $questionsJson ?>;   // array of question objects
+const TIME_REMAINING = <?= $timeRemaining ?>;
+const questionData   = <?= $questionsJson ?>;
 
 /* ============================================================
    STATE
    ============================================================ */
 let currentQuestionIndex = 0;
-let userAnswers          = {};   // { questionId: { label, option_id } }
+let userAnswers          = {};
 let markedQuestions      = new Set();
 let timeLeft             = TIME_REMAINING;
 let timerInterval        = null;
@@ -589,7 +693,6 @@ questionData.forEach(q => {
    INIT
    ============================================================ */
 window.addEventListener('load', async function () {
-    /* Fetch CSRF token before anything that needs to POST */
     try {
         const res  = await fetch('api/csrf-token.php');
         const data = await res.json();
@@ -602,7 +705,7 @@ window.addEventListener('load', async function () {
     loadQuestion(0);
     startTimer();
     setupNavigationGuard();
-    autoSaveInterval = setInterval(autoSave, 30000); // every 30s
+    autoSaveInterval = setInterval(autoSave, 30000);
 });
 
 /* ============================================================
@@ -650,11 +753,9 @@ function loadQuestion(index) {
     document.getElementById('currentQuestion').textContent = index + 1;
     document.getElementById('questionMarks').textContent   = q.marks;
 
-    /* Negative marks hint */
     const marksEl = document.getElementById('questionMarks').parentElement;
     marksEl.title = q.negMarks > 0 ? `−${q.negMarks} for wrong answer` : 'No negative marking';
 
-    /* Build options */
     const container = document.getElementById('optionsContainer');
     const fragment  = document.createDocumentFragment();
 
@@ -685,16 +786,13 @@ function loadQuestion(index) {
     container.innerHTML = '';
     container.appendChild(fragment);
 
-    /* Option selection via event delegation */
     container.addEventListener('change', e => {
         if (e.target.type === 'radio') selectOption(e.target.value);
     });
 
-    /* Prev / Next buttons */
     document.getElementById('prevBtn').disabled = index === 0;
     document.getElementById('nextBtn').disabled = index === questionData.length - 1;
 
-    /* Mark button state */
     const markBtn = document.getElementById('markBtn');
     if (markedQuestions.has(q.id)) {
         markBtn.classList.add('marked');
@@ -751,23 +849,23 @@ function updatePalette() {
         if (!item) return;
         item.className = 'palette-item';
 
-        if (index === currentQuestionIndex)     item.classList.add('current');
-        else if (markedQuestions.has(q.id))     item.classList.add('marked');
-        else if (userAnswers[q.id])             item.classList.add('answered');
-        else                                    item.classList.add('not-answered');
+        if (index === currentQuestionIndex)    item.classList.add('current');
+        else if (markedQuestions.has(q.id))    item.classList.add('marked');
+        else if (userAnswers[q.id])            item.classList.add('answered');
+        else                                   item.classList.add('not-answered');
     });
 }
 
 function updateStats() {
-    const answered   = Object.values(userAnswers).filter(Boolean).length;
-    const total      = questionData.length;
+    const answered = Object.values(userAnswers).filter(Boolean).length;
+    const total    = questionData.length;
     document.getElementById('answeredCount').textContent    = answered;
     document.getElementById('notAnsweredCount').textContent = total - answered;
     document.getElementById('markedCount').textContent      = markedQuestions.size;
 }
 
 /* ============================================================
-   TIMER — counts down from server-calculated time remaining
+   TIMER
    ============================================================ */
 function startTimer() {
     renderTimer(timeLeft);
@@ -794,13 +892,11 @@ function renderTimer(secs) {
 }
 
 /* ============================================================
-   AUTO-SAVE — POST to api/assessment/autosave.php every 30s
-   Saves answers to the DB so a page refresh doesn't lose work
+   AUTO-SAVE
    ============================================================ */
 async function autoSave() {
     if (isSubmitting) return;
 
-    /* Build answers payload: { question_id: option_id } */
     const answersToSend = {};
     for (const [qid, ans] of Object.entries(userAnswers)) {
         if (ans && ans.option_id) answersToSend[qid] = ans.option_id;
@@ -811,8 +907,8 @@ async function autoSave() {
             method:  'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
             body:    JSON.stringify({
-                attempt_id:   ATTEMPT_ID,
-                answers:      answersToSend,
+                attempt_id:     ATTEMPT_ID,
+                answers:        answersToSend,
                 time_remaining: timeLeft
             })
         });
@@ -825,7 +921,7 @@ async function autoSave() {
    SUBMIT FLOW
    ============================================================ */
 function confirmSubmit() {
-    const answered   = Object.keys(userAnswers).length;
+    const answered = Object.keys(userAnswers).length;
     document.getElementById('finalAnswered').textContent   = answered;
     document.getElementById('finalUnanswered').textContent = questionData.length - answered;
     document.getElementById('submitModal').classList.add('active');
@@ -845,7 +941,6 @@ async function submitTest(autoSubmit = false) {
     document.getElementById('submitModal').classList.remove('active');
     document.getElementById('loadingOverlay').classList.add('active');
 
-    /* Build answers payload: { question_id: option_id } */
     const answersToSend = {};
     for (const [qid, ans] of Object.entries(userAnswers)) {
         if (ans && ans.option_id) answersToSend[qid] = ans.option_id;
@@ -865,7 +960,6 @@ async function submitTest(autoSubmit = false) {
         const data = await res.json();
 
         if (data.success) {
-            /* Remove beforeunload guard so redirect works cleanly */
             window.onbeforeunload = null;
             window.location.href = `test-results.php?attempt_id=${ATTEMPT_ID}`;
         } else {
@@ -881,7 +975,7 @@ async function submitTest(autoSubmit = false) {
 }
 
 /* ============================================================
-   NAVIGATION GUARD — prevents accidental page leave
+   NAVIGATION GUARD
    ============================================================ */
 function setupNavigationGuard() {
     window.addEventListener('beforeunload', e => {
@@ -903,12 +997,10 @@ function setupNavigationGuard() {
         }
     };
 
-    /* Tab-switch logging */
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) autoSave();
     });
 
-    /* Block right-click */
     document.addEventListener('contextmenu', e => e.preventDefault());
 }
 
