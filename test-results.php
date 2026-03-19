@@ -14,6 +14,31 @@ if ($attemptId <= 0) {
     exit;
 }
 
+// ── Fetch all submitted attempts for this assessment (for dropdown) ──
+$allAttempts = [];
+$thisAttemptRow = safePreparedQuery($conn,
+    "SELECT aa.assessment_id FROM assessment_attempts aa
+     WHERE aa.attempt_id = ? AND aa.user_id = ?",
+    "ii", [$attemptId, (int)($currentUser['user_id'])]
+);
+if ($thisAttemptRow['success'] && $thisAttemptRow['result'] && $thisAttemptRow['result']->num_rows > 0) {
+    $tar = $thisAttemptRow['result']->fetch_assoc();
+    $thisAttemptRow['result']->free();
+    $asmId = (int)$tar['assessment_id'];
+    $allAttR = safePreparedQuery($conn,
+        "SELECT attempt_id, attempt_number, submitted_at, score, percentage
+         FROM assessment_attempts
+         WHERE assessment_id = ? AND user_id = ? AND status = 'submitted'
+         ORDER BY attempt_number ASC",
+        "ii", [$asmId, (int)($currentUser['user_id'])]
+    );
+    if ($allAttR['success'] && $allAttR['result']) {
+        while ($r = $allAttR['result']->fetch_assoc()) $allAttempts[] = $r;
+        $allAttR['result']->free();
+    }
+}
+
+
 $userName     = $currentUser['full_name'] ?? 'Student';
 $userEmail    = $currentUser['email']     ?? '';
 $userInitials = strtoupper(substr($userName, 0, 2));
@@ -88,7 +113,7 @@ function timeAgo(string $datetime): string {
             --shadow:        0 1px 3px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.06);
             --shadow-md:     0 4px 24px rgba(0,0,0,.10);
             --nav-h:         68px;
-            --sidebar-w:     230px;
+            --sidebar-w:     260px;
             --transition:    .2s cubic-bezier(.4,0,.2,1);
         }
 
@@ -321,6 +346,48 @@ function timeAgo(string $datetime): string {
             display: inline-block; padding: 10px 24px;
             background: var(--accent); color: white;
             text-decoration: none; border-radius: var(--radius-sm); font-weight: 700;
+        }
+
+        /* ══ ATTEMPT HISTORY SIDEBAR ══ */
+        .attempt-history-label {
+            font-size: 10.5px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .1em;
+            color: var(--text-soft); padding: 18px 12px 8px;
+            border-top: 1px solid var(--border); margin-top: 6px;
+        }
+        .attempt-card {
+            display: flex; flex-direction: column; gap: 3px;
+            padding: 10px 13px; border-radius: var(--radius-sm);
+            text-decoration: none; font-size: 13px; font-weight: 500;
+            color: var(--text-mid); transition: var(--transition);
+            border: 1.5px solid transparent; cursor: pointer;
+            background: none; width: 100%; text-align: left;
+            font-family: 'Inter', sans-serif;
+        }
+        .attempt-card:hover { background: var(--surface2); color: var(--primary); border-color: var(--border); }
+        .attempt-card.active {
+            background: linear-gradient(135deg, #e0f2fe, #e0f9ff);
+            border-color: var(--accent); color: var(--accent);
+        }
+        .attempt-card .ac-top {
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .attempt-card .ac-num { font-weight: 700; font-size: 13px; }
+        .attempt-card .ac-pct {
+            font-family: 'Sora', sans-serif; font-weight: 700; font-size: 14px;
+            color: var(--success);
+        }
+        .attempt-card.active .ac-pct { color: var(--accent); }
+        .attempt-card .ac-pct.fail { color: var(--danger); }
+        .attempt-card .ac-date { font-size: 11px; color: var(--text-soft); margin-top: 1px; }
+        .attempt-card .ac-bar {
+            height: 4px; border-radius: 99px;
+            background: var(--border); margin-top: 5px; overflow: hidden;
+        }
+        .attempt-card .ac-bar-fill {
+            height: 100%; border-radius: 99px;
+            background: linear-gradient(90deg, var(--accent), var(--success));
+            transition: width .6s ease;
         }
 
         /* ══ RESULTS HEADER ══ */
@@ -670,6 +737,26 @@ function timeAgo(string $datetime): string {
         <a href="student-dashboard.php"><i class="fa fa-home"></i> Dashboard</a>
         <a href="student-assessments.php" class="active"><i class="fa fa-clipboard-list"></i> Assessments</a>
         <a href="student-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
+
+        <?php if (!empty($allAttempts)): ?>
+        <span class="attempt-history-label"><i class="fa fa-history" style="margin-right:6px"></i>Attempt History</span>
+        <?php foreach ($allAttempts as $att):
+            $isActive = (int)$att['attempt_id'] === $attemptId;
+            $pct      = round((float)$att['percentage'], 1);
+            $isFail   = $pct < 50;
+            $dateStr  = $att['submitted_at'] ? date('d M Y, h:i A', strtotime($att['submitted_at'])) : 'In progress';
+        ?>
+        <button class="attempt-card <?= $isActive ? 'active' : '' ?>"
+                onclick="window.location.href='test-results.php?attempt_id=<?= $att['attempt_id'] ?>'">
+            <div class="ac-top">
+                <span class="ac-num"><i class="fa fa-file-alt" style="margin-right:5px;font-size:11px"></i>Attempt <?= $att['attempt_number'] ?></span>
+                <span class="ac-pct <?= $isFail ? 'fail' : '' ?>"><?= $pct ?>%</span>
+            </div>
+            <div class="ac-date"><?= $dateStr ?></div>
+            <div class="ac-bar"><div class="ac-bar-fill" style="width:<?= $pct ?>%"></div></div>
+        </button>
+        <?php endforeach; endif; ?>
+
         <div class="left-sidebar-bottom">
             <button onclick="handleLogout()"><i class="fa fa-sign-out-alt"></i> Logout</button>
         </div>

@@ -182,9 +182,8 @@ if ($result['success'] && $result['insert_id'] > 0) {
     // ── Auto-notify group students when assessment is published ──
     if ($status === 'published' && !empty($targets)) {
         $notifTitle   = 'New Assessment Assigned';
-        $notifMessage = 'A new assessment has been assigned to you.';
+        $notifMessage = 'A new assessment "' . $title . '" has been assigned to you.';
         $notifType    = 'assessment';
-        $actionUrl    = 'student-assessments.php';
 
         $studentIds = [];
 
@@ -208,12 +207,12 @@ if ($result['success'] && $result['insert_id'] > 0) {
 
         if (!empty($studentIds)) {
             $stmt = $conn->prepare(
-                "INSERT INTO notifications (user_id, title, message, notification_type, action_url, created_at)
+                "INSERT INTO notifications (user_id, title, message, type, related_entity_id, created_at)
                  VALUES (?, ?, ?, ?, ?, NOW())"
             );
             if ($stmt) {
                 foreach ($studentIds as $uid) {
-                    $stmt->bind_param("issss", $uid, $notifTitle, $notifMessage, $notifType, $actionUrl);
+                    $stmt->bind_param("isssi", $uid, $notifTitle, $notifMessage, $notifType, $newId);
                     $stmt->execute();
                 }
                 $stmt->close();

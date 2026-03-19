@@ -96,9 +96,26 @@ $assignedResult = safePreparedQuery($conn,
      FROM assessments a
      JOIN users u ON u.user_id = a.created_by
      WHERE a.status = 'published'
+       AND (a.start_time IS NULL OR a.start_time <= NOW())
+       AND (a.end_time   IS NULL OR a.end_time   >= NOW())
+       AND (
+           EXISTS (
+               SELECT 1 FROM assessment_targets at2
+               WHERE at2.assessment_id = a.assessment_id
+                 AND at2.target_type = 'student'
+                 AND at2.target_id = ?
+           )
+           OR EXISTS (
+               SELECT 1 FROM assessment_targets at2
+               JOIN group_members gm ON gm.group_id = at2.target_id
+               WHERE at2.assessment_id = a.assessment_id
+                 AND at2.target_type = 'group'
+                 AND gm.student_id = ?
+           )
+       )
      ORDER BY a.start_time IS NULL ASC, a.start_time DESC, a.created_at DESC",
-    "iiiii",
-    [$userId, $userId, $userId, $userId, $userId]
+    "iiiiiii",
+    [$userId, $userId, $userId, $userId, $userId, $userId, $userId]
 );
 
 $assessments     = [];

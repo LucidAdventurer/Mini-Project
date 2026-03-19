@@ -30,7 +30,7 @@ require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
-$conn = createDatabaseConnection();
+/* $conn is already created by config.php — no need to reconnect */
 if (!$conn) { http_response_code(503); echo json_encode(['success'=>false,'error'=>'Database unavailable.']); exit; }
 
 /* Support GET ?attempt_id=X for server-side timeout redirect */
@@ -89,12 +89,22 @@ if (!empty($answers) && is_array($answers)) {
         $questionId = (int)$questionId;
         if ($questionId <= 0) continue;
 
-        $optionId = isset($answer['option_id']) && $answer['option_id'] !== null
-                        ? (int)$answer['option_id']
-                        : null;
-        $textAns  = isset($answer['text']) && (string)$answer['text'] !== ''
-                        ? mb_substr(trim((string)$answer['text']), 0, 1000)
-                        : null;
+        /* Accept two formats from the client:
+         *   Flat:   { "123": 45 }            → option_id = 45
+         *   Object: { "123": {"option_id":45} } → option_id = 45
+         */
+        if (is_array($answer)) {
+            $optionId = isset($answer['option_id']) && $answer['option_id'] !== null
+                            ? (int)$answer['option_id']
+                            : null;
+            $textAns  = isset($answer['text']) && (string)$answer['text'] !== ''
+                            ? mb_substr(trim((string)$answer['text']), 0, 1000)
+                            : null;
+        } else {
+            // Flat integer value = option_id
+            $optionId = is_numeric($answer) ? (int)$answer : null;
+            $textAns  = null;
+        }
 
         if ($optionId === null && $textAns === null) continue;
 
@@ -233,7 +243,7 @@ foreach ($questions as $qid => $q) {
         "INSERT INTO answers (attempt_id, question_id, selected_option_id, text_answer, marks_awarded)
          VALUES (?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE marks_awarded = VALUES(marks_awarded)",
-        "iiisf",
+        "iiisd",
         [
             $attemptId,
             $qid,

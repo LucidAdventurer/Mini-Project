@@ -50,14 +50,29 @@ if ($notifResult['success'] && $notifResult['result']) {
     $notifResult['result']->free();
 }
 
-// ── Available assessment count ──
+// ── Available assessment count (only assigned to this student) ──
 $availCountResult = safePreparedQuery($conn,
     "SELECT COUNT(DISTINCT a.assessment_id) AS cnt
      FROM assessments a
      WHERE a.status = 'published'
        AND (a.start_time IS NULL OR a.start_time <= NOW())
-       AND (a.end_time   IS NULL OR a.end_time   >= NOW())",
-    "", []
+       AND (a.end_time   IS NULL OR a.end_time   >= NOW())
+       AND (
+           EXISTS (
+               SELECT 1 FROM assessment_targets at2
+               WHERE at2.assessment_id = a.assessment_id
+                 AND at2.target_type = 'student'
+                 AND at2.target_id = ?
+           )
+           OR EXISTS (
+               SELECT 1 FROM assessment_targets at2
+               JOIN group_members gm ON gm.group_id = at2.target_id
+               WHERE at2.assessment_id = a.assessment_id
+                 AND at2.target_type = 'group'
+                 AND gm.student_id = ?
+           )
+       )",
+    "ii", [$userId, $userId]
 );
 
 $availableTests = 0;
@@ -67,7 +82,7 @@ if ($availCountResult['success'] && $availCountResult['result']) {
     $availCountResult['result']->free();
 }
 
-// ── Fetch assessments for the dashboard list (latest 20) ──
+// ── Fetch assessments for the dashboard list (only assigned to this student) ──
 $assessmentsResult = safePreparedQuery($conn,
     "SELECT
         a.assessment_id,
@@ -94,9 +109,24 @@ $assessmentsResult = safePreparedQuery($conn,
      WHERE a.status = 'published'
        AND (a.start_time IS NULL OR a.start_time <= NOW())
        AND (a.end_time   IS NULL OR a.end_time   >= NOW())
+       AND (
+           EXISTS (
+               SELECT 1 FROM assessment_targets at2
+               WHERE at2.assessment_id = a.assessment_id
+                 AND at2.target_type = 'student'
+                 AND at2.target_id = ?
+           )
+           OR EXISTS (
+               SELECT 1 FROM assessment_targets at2
+               JOIN group_members gm ON gm.group_id = at2.target_id
+               WHERE at2.assessment_id = a.assessment_id
+                 AND at2.target_type = 'group'
+                 AND gm.student_id = ?
+           )
+       )
      ORDER BY a.created_at DESC
      LIMIT 3",
-    "ii", [$userId, $userId]
+    "iiii", [$userId, $userId, $userId, $userId]
 );
 
 $assessments      = [];
@@ -133,7 +163,7 @@ if ($activityResult['success'] && $activityResult['result']) {
 
 // ── All notifications for dropdown (scroll, latest first) ──
 $notifDropResult = safePreparedQuery($conn,
-    "SELECT notification_id, title, message, is_read, created_at
+    "SELECT notification_id, title, message, is_read, created_at, type, related_entity_id
      FROM notifications WHERE user_id = ?
      ORDER BY created_at DESC",
     "i", [$userId]
@@ -873,7 +903,19 @@ function timeAgo(string $datetime): string {
                             $isUnread = !$n['is_read'];
                             $icon = '🔔';
                         ?>
-                        <div class="notif-item <?= $isUnread ? 'unread' : '' ?>">
+                        <?php
+                            $entityId  = (int)($n['related_entity_id'] ?? 0);
+                            $nType     = $n['type'] ?? '';
+                            $notifLink = '';
+                            if ($nType === 'assessment' && $entityId > 0) {
+                                $notifLink = 'test-preview.php?id=' . $entityId;
+                            } elseif ($nType === 'result' && $entityId > 0) {
+                                $notifLink = 'test-results.php?attempt_id=' . $entityId;
+                            }
+                        ?>
+                        <div class="notif-item <?= $isUnread ? 'unread' : '' ?>"
+                             <?= $notifLink ? 'onclick="window.location.href=\'' . $notifLink . '\'"' : '' ?>
+                             style="<?= $notifLink ? 'cursor:pointer;' : '' ?>">
                             <div class="notif-dot <?= $isUnread ? '' : 'read' ?>"></div>
                             <div class="notif-item-body">
                                 <div class="notif-item-title"><?= $icon ?> <?= htmlspecialchars($n['title']) ?></div>

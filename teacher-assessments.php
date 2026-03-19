@@ -55,6 +55,28 @@ if ($r3['success'] && $r3['result']) {
     $assessmentError = true;
 }
 
+// ── Fetch teacher's groups for publish modal ──
+$pubGroups = [];
+$pgRes = safePreparedQuery($conn,
+    "SELECT group_id, name FROM groups WHERE teacher_id = ? ORDER BY name",
+    "i", [$teacherId]
+);
+if ($pgRes['success'] && $pgRes['result']) {
+    while ($row = $pgRes['result']->fetch_assoc()) $pubGroups[] = $row;
+    $pgRes['result']->free();
+}
+
+// ── Fetch all students for publish modal ──
+$pubStudents = [];
+$psRes = safePreparedQuery($conn,
+    "SELECT user_id, full_name, email, department FROM users WHERE role = 'student' AND is_active = 1 ORDER BY full_name",
+    "", []
+);
+if ($psRes['success'] && $psRes['result']) {
+    while ($row = $psRes['result']->fetch_assoc()) $pubStudents[] = $row;
+    $psRes['result']->free();
+}
+
 $totalAll       = count($assessments);
 $totalPublished = 0; $totalDraft = 0; $totalArchived = 0;
 foreach ($assessments as $a) {
@@ -880,17 +902,55 @@ function applyFilters() {
   noRes.classList.toggle('hidden', visible > 0);
 }
 
-// ── Publish ──
+// ── Publish — opens assign modal first ──
 function publishAssessment(id) {
-  if (!confirm('Publish this assessment? Students will be able to see and take it.')) return;
-  fetch('api/assessments/update-status.php', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
-    body: JSON.stringify({ assessment_id: id, status: 'published' })
-  }).then(r => r.json()).then(data => {
+  currentPublishId = id;
+  // Reset modal state
+  document.querySelectorAll('.pub-group-cb').forEach(cb => cb.checked = false);
+  document.querySelectorAll('.pub-student-row').forEach(r => r.querySelector('input[type=checkbox]').checked = false);
+  document.getElementById('pubStudentSearch').value = '';
+  filterPubStudents('');
+  document.getElementById('publishModal').style.display = 'flex';
+}
+
+let currentPublishId = null;
+
+async function confirmPublish() {
+  if (!currentPublishId) return;
+  const targets = [];
+  document.querySelectorAll('.pub-group-cb:checked').forEach(cb => {
+    targets.push({ type: 'group', id: parseInt(cb.value) });
+  });
+  document.querySelectorAll('.pub-student-cb:checked').forEach(cb => {
+    targets.push({ type: 'student', id: parseInt(cb.value) });
+  });
+  if (targets.length === 0) {
+    alert('Please select at least one group or student to assign this assessment to.');
+    return;
+  }
+  closePublishModal();
+  try {
+    const res = await fetch('api/assessments/update-status.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+      body: JSON.stringify({ assessment_id: currentPublishId, status: 'published', targets })
+    });
+    const data = await res.json();
     if (data.success) location.reload();
     else alert('Failed to publish: ' + (data.message || 'Unknown error'));
-  }).catch(() => alert('Network error. Please try again.'));
+  } catch { alert('Network error. Please try again.'); }
+}
+
+function closePublishModal() {
+  document.getElementById('publishModal').style.display = 'none';
+  currentPublishId = null;
+}
+
+function filterPubStudents(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('.pub-student-row').forEach(row => {
+    row.style.display = row.dataset.name.includes(q) || row.dataset.email.includes(q) ? '' : 'none';
+  });
 }
 
 // ── Delete ──
@@ -1032,5 +1092,56 @@ window.addEventListener('load', () => {
   }
 });
 </script>
+
+<!-- ── Publish & Assign Modal ── -->
+<div id="publishModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2000;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:16px;width:100%;max-width:520px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,0.18);overflow:hidden;">
+    <div style="padding:22px 24px 16px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-family:'Sora',sans-serif;font-size:17px;font-weight:700;color:#0f172a;">Assign & Publish</div>
+        <div style="font-size:13px;color:#64748b;margin-top:2px;">Select who can see this assessment</div>
+      </div>
+      <button onclick="closePublishModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#94a3b8;line-height:1;">✕</button>
+    </div>
+    <div style="overflow-y:auto;flex:1;padding:20px 24px;">
+
+      <?php if (!empty($pubGroups)): ?>
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:10px;">👥 Groups</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
+        <?php foreach ($pubGroups as $g): ?>
+        <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid #e2e8f0;border-radius:10px;cursor:pointer;transition:.15s;" onmouseover="this.style.borderColor='#7c3aed'" onmouseout="this.style.borderColor='#e2e8f0'">
+          <input type="checkbox" class="pub-group-cb" value="<?= (int)$g['group_id'] ?>" style="accent-color:#7c3aed;width:16px;height:16px;">
+          <span style="font-size:14px;font-weight:600;color:#0f172a;"><?= htmlspecialchars($g['name']) ?></span>
+        </label>
+        <?php endforeach; ?>
+      </div>
+      <?php endif; ?>
+
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:10px;">🎓 Individual Students</div>
+      <input type="text" id="pubStudentSearch" placeholder="Search by name or email…" oninput="filterPubStudents(this.value)"
+        style="width:100%;padding:9px 14px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;margin-bottom:10px;outline:none;font-family:'Inter',sans-serif;">
+      <div style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
+        <?php foreach ($pubStudents as $s): ?>
+        <label class="pub-student-row" data-name="<?= strtolower(htmlspecialchars($s['full_name'])) ?>" data-email="<?= strtolower(htmlspecialchars($s['email'])) ?>"
+          style="display:flex;align-items:center;gap:10px;padding:9px 14px;border:1.5px solid #e2e8f0;border-radius:9px;cursor:pointer;transition:.15s;" onmouseover="this.style.borderColor='#7c3aed'" onmouseout="this.style.borderColor='#e2e8f0'">
+          <input type="checkbox" class="pub-student-cb" value="<?= (int)$s['user_id'] ?>" style="accent-color:#7c3aed;width:16px;height:16px;">
+          <div>
+            <div style="font-size:13.5px;font-weight:600;color:#0f172a;"><?= htmlspecialchars($s['full_name']) ?></div>
+            <div style="font-size:11.5px;color:#64748b;"><?= htmlspecialchars($s['email']) ?><?= $s['department'] ? ' · ' . htmlspecialchars($s['department']) : '' ?></div>
+          </div>
+        </label>
+        <?php endforeach; ?>
+        <?php if (empty($pubStudents)): ?>
+        <div style="text-align:center;padding:24px;color:#94a3b8;font-size:13px;">No students found.</div>
+        <?php endif; ?>
+      </div>
+    </div>
+    <div style="padding:16px 24px;border-top:1px solid #e2e8f0;display:flex;gap:10px;justify-content:flex-end;">
+      <button onclick="closePublishModal()" style="padding:10px 20px;border:1.5px solid #e2e8f0;border-radius:9px;background:#fff;font-size:13.5px;font-weight:600;cursor:pointer;color:#475569;">Cancel</button>
+      <button onclick="confirmPublish()" style="padding:10px 24px;background:#7c3aed;color:#fff;border:none;border-radius:9px;font-size:13.5px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(124,58,237,0.3);">🚀 Publish</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
