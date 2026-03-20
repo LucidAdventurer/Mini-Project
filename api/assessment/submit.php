@@ -70,7 +70,7 @@ $aResult = safePreparedQuery($conn,
      FROM assessment_attempts aa
      JOIN assessments a ON a.assessment_id = aa.assessment_id
      WHERE aa.attempt_id = ? AND aa.user_id = ?
-       AND aa.status IN ('in_progress', 'timeout')",
+       AND aa.status IN ('in_progress', 'timeout', 'completed')",
     "ii", [$attemptId, $userId]
 );
 
@@ -261,7 +261,7 @@ $percentage = $totalMark > 0 ? round(($finalScore / $totalMark) * 100, 2) : 0.0;
 /* ── Mark attempt as submitted ── */
 safePreparedQuery($conn,
     "UPDATE assessment_attempts SET
-        status       = 'submitted',
+        status       = 'completed',
         submitted_at = NOW(),
         score        = ?,
         percentage   = ?

@@ -28,7 +28,7 @@ if ($thisAttemptRow['success'] && $thisAttemptRow['result'] && $thisAttemptRow['
     $allAttR = safePreparedQuery($conn,
         "SELECT attempt_id, attempt_number, submitted_at, score, percentage
          FROM assessment_attempts
-         WHERE assessment_id = ? AND user_id = ? AND status = 'submitted'
+         WHERE assessment_id = ? AND user_id = ? AND status = 'completed'
          ORDER BY attempt_number ASC",
         "ii", [$asmId, (int)($currentUser['user_id'])]
     );

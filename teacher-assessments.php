@@ -930,7 +930,7 @@ async function confirmPublish() {
   }
   closePublishModal();
   try {
-    const res = await fetch('api/assessments/update-status.php', {
+    const res = await fetch('api/assessment/update-status.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
       body: JSON.stringify({ assessment_id: currentPublishId, status: 'published', targets })
@@ -956,7 +956,7 @@ function filterPubStudents(q) {
 // ── Delete ──
 function deleteAssessment(id, title) {
   if (!confirm(`Delete "${title}"?\n\nThis will permanently remove the assessment and all associated data.`)) return;
-  fetch('api/assessments/delete.php', {
+  fetch('api/assessment/delete.php', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
     body: JSON.stringify({ assessment_id: id })
@@ -978,7 +978,7 @@ function viewResults(id, title) {
   document.getElementById('resultsModal').classList.add('show');
   document.getElementById('modalSearch').value = '';
   document.getElementById('modalStatusFilter').value = 'all';
-  fetch(`api/assessments/results.php?assessment_id=${id}`)
+  fetch(`api/assessment/results.php?assessment_id=${id}`)
     .then(r => r.json())
     .then(data => {
       if (!data.success) throw new Error(data.message || 'Failed to load');
@@ -1013,7 +1013,7 @@ function renderResultsTable(results, meta) {
       <td>${r.score ?? '—'} / ${meta?.total_marks ?? '—'}</td>
       <td>${pass ? '<span style="color:var(--emerald);font-weight:700;">✅ Pass</span>' : '<span style="color:var(--rose);font-weight:700;">❌ Fail</span>'}</td>
       <td style="font-size:12px;color:var(--text-3);">${r.submitted_at ? new Date(r.submitted_at).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—'}</td>
-      <td><a href="test-results.php?attempt_id=${r.attempt_id}" style="color:var(--violet);font-size:12px;font-weight:600;text-decoration:none;">View →</a></td>
+      <td><a href="assessment-results.php?id=${currentModalAssessmentId}" style="color:var(--violet);font-size:12px;font-weight:600;text-decoration:none;">View →</a></td>
     </tr>`;
   });
   document.getElementById('modalBody').innerHTML = `
@@ -1041,12 +1041,12 @@ document.getElementById('resultsModal').addEventListener('click', function(e) {
   if (e.target === this) closeResultsModal();
 });
 
-function downloadResults(id, type) { window.location.href = `api/assessments/export-results.php?assessment_id=${id}&format=${type}`; }
+function downloadResults(id, type) { window.location.href = `api/assessment/export-results.php?assessment_id=${id}&format=${type}`; }
 function downloadCurrentCSV()      { if (currentModalAssessmentId) downloadResults(currentModalAssessmentId, 'csv'); }
-function downloadCurrentPDF()      { if (currentModalAssessmentId) window.location.href = `api/assessments/export-results.php?assessment_id=${currentModalAssessmentId}&format=pdf`; }
+function downloadCurrentPDF()      { if (currentModalAssessmentId) window.location.href = `api/assessment/export-results.php?assessment_id=${currentModalAssessmentId}&format=pdf`; }
 
 function printResults(id) {
-  const w = window.open(`api/assessments/export-results.php?assessment_id=${id}&format=print`, '_blank');
+  const w = window.open(`api/assessment/export-results.php?assessment_id=${id}&format=print`, '_blank');
   if (w) w.focus();
 }
 function printModal() {
