@@ -100,6 +100,25 @@ elseif ($action === 'resource_viewed') {
     }
 }
 
+// ── Rule 4: Dismiss single notification by ID ──
+elseif ($action === 'dismiss_one') {
+    $notifId = (int)($body['notification_id'] ?? 0);
+    if ($notifId <= 0) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Invalid notification_id.']);
+        exit;
+    }
+
+    $del = safePreparedQuery(
+        $conn,
+        "DELETE FROM notifications WHERE notification_id = ? AND user_id = ?",
+        'ii', [$notifId, $userId]
+    );
+    if ($del['success']) {
+        $deleted += max(0, (int)($del['affected_rows'] ?? 0));
+    }
+}
+
 elseif ($action !== '') {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => 'Unknown action.']);

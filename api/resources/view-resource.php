@@ -13,8 +13,12 @@ require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
 
 // ── Optional session: guests get null ────────────────────────────────────
-$currentUser = optionalSession($conn);
-$role        = $currentUser ? $currentUser['user_type'] : 'guest';
+// Resolve current user from session (guests get null)
+$sessionRole = $_SESSION['role'] ?? $_SESSION['user_type'] ?? '';
+$sessionUid  = (int)($_SESSION['user_id'] ?? 0);
+$currentUser = ($sessionUid > 0) ? getUserData($conn, $sessionUid) : null;
+$userId      = $currentUser ? (int)$currentUser['user_id'] : null;
+$role        = $currentUser ? ($currentUser['role'] ?? $sessionRole) : 'guest';
 $isGuest     = $currentUser === null;
 
 $materialId = (int)($_GET['material_id'] ?? 0);
@@ -57,6 +61,14 @@ if ($role === 'student' && $material['visibility'] === 'private') {
 }
 
 $title = htmlspecialchars($material['title'], ENT_QUOTES, 'UTF-8');
+
+// ── Student viewed this resource — dismiss its notification immediately ───
+if (!$isGuest && $role === 'student') {
+    safePreparedQuery($conn,
+        "DELETE FROM notifications WHERE user_id = ? AND related_entity_id = ? AND type IN ('material','resource')",
+        "ii", [$userId, $materialId]
+    );
+}
 
 // Derive type from stored data — no material_type column in schema
 $hasCloudinary = !empty($material['cloudinary_public_id']);

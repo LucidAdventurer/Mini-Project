@@ -490,7 +490,24 @@ function timeAgo(string $datetime): string {
         .notif-item-body { flex: 1; }
         .notif-item-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
         .notif-item-msg { font-size: 12px; color: var(--text-mid); line-height: 1.45; }
-        .notif-item-time { font-size: 11px; color: var(--text-soft); margin-top: 4px; }
+        .notif-dismiss-btn {
+    background: none;
+    border: none;
+    color: var(--text-soft, #94a3b8);
+    font-size: 13px;
+    line-height: 1;
+    padding: 2px 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity .15s, background .15s, color .15s;
+    align-self: flex-start;
+    margin-top: 2px;
+}
+.notif-item:hover .notif-dismiss-btn { opacity: 1; }
+.notif-dismiss-btn:hover { background: rgba(239,68,68,.1); color: #ef4444; }
+.notif-item-time { font-size: 11px; color: var(--text-soft); margin-top: 4px; }
         .notif-empty { padding: 32px 20px; text-align: center; color: var(--text-soft); font-size: 13px; }
 
         .notification-badge {
@@ -1000,7 +1017,7 @@ function timeAgo(string $datetime): string {
                                 $dismissAction = 'resource_viewed';
                             }
                         ?>
-                        <div class="notif-item <?= $isUnread ? 'unread' : '' ?>"
+                        <div class="notif-item <?= $isUnread ? 'unread' : '' ?>" id="notif-<?= $n['notification_id'] ?>"
                              <?php if ($notifLink): ?>
                              onclick="handleNotifClick('<?= $dismissAction ?>', <?= $entityId ?>, '<?= $notifLink ?>')"
                              style="cursor:pointer;"
@@ -1013,6 +1030,9 @@ function timeAgo(string $datetime): string {
                                 <?php endif; ?>
                                 <div class="notif-item-time"><?= timeAgo($n['created_at']) ?></div>
                             </div>
+                            <button class="notif-dismiss-btn" title="Dismiss"
+                                onclick="event.stopPropagation(); dismissNotification(<?= $n['notification_id'] ?>)"
+                                aria-label="Dismiss notification">✕</button>
                         </div>
                         <?php endforeach; endif; ?>
                     </div>
@@ -1254,11 +1274,11 @@ function timeAgo(string $datetime): string {
             if (pos) window.scrollTo(0, parseInt(pos));
         });
 
-        // Purge old notifications (3-day rule) silently on page load
-        fetch('api/notifications/dismiss-notification.php', {
+        // Smart notification cleanup on page load:
+        // removes completed/expired assessment and viewed/expired resource notifications
+        fetch('api/notifications/cleanup-notifications.php', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: '' })
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': document.querySelector('meta[name=csrf]')?.content || '' },
         }).catch(() => {});
 
         function toggleProfileDropdown() {
@@ -1301,6 +1321,32 @@ function timeAgo(string $datetime): string {
                     document.querySelectorAll('.notif-item.unread').forEach(el => el.classList.remove('unread'));
                     document.querySelectorAll('.notif-dot:not(.read)').forEach(el => el.classList.add('read'));
                 }).catch(() => {});
+            }
+        }
+
+        // Dismiss a single notification by ID (X button)
+        async function dismissNotification(notifId) {
+            const el = document.getElementById('notif-' + notifId);
+            if (el) { el.style.opacity = '0.4'; el.style.pointerEvents = 'none'; }
+            try {
+                await fetch('api/notifications/dismiss-notification.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'dismiss_one', notification_id: notifId })
+                });
+            } catch(e) {}
+            if (el) el.remove();
+            // Update badge count
+            const badge = document.querySelector('.notification-badge');
+            if (badge) {
+                const cur = parseInt(badge.textContent) || 0;
+                if (cur <= 1) badge.remove();
+                else badge.textContent = cur - 1;
+            }
+            // Show empty state if no items left
+            const list = document.querySelector('.notif-list');
+            if (list && list.querySelectorAll('.notif-item').length === 0) {
+                list.innerHTML = '<div class="notif-empty">No notifications yet.</div>';
             }
         }
 

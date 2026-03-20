@@ -694,11 +694,14 @@ body {
     <a href="student-assessments.php"><i class="fa fa-clipboard-list"></i> Assessments</a>
     <a href="student-resources.php" class="active"><i class="fa fa-folder-open"></i> Resources</a>
 
-    <span class="sidebar-section">Filter by Type</span>
-    <a href="#" id="t-all"   onclick="setType('',this)"><i class="fa fa-layer-group"></i> All Types</a>
-    <a href="#" id="t-pdf"   onclick="setType('pdf',this)"><i class="fa fa-file-pdf"   style="color:#ef4444"></i> PDF</a>
-    <a href="#" id="t-video" onclick="setType('video',this)"><i class="fa fa-file-video" style="color:#f59e0b"></i> Video</a>
-    <a href="#" id="t-image" onclick="setType('image',this)"><i class="fa fa-image"      style="color:#8b5cf6"></i> Images</a>
+    <span class="sidebar-section">Filter by Category</span>
+    <a href="#" id="c-all"       onclick="setSidebarCat('',this)"><i class="fa fa-layer-group"></i> All</a>
+    <a href="#" id="c-aptitude"  onclick="setSidebarCat('aptitude',this)"><i class="fa fa-calculator" style="color:#0ea5e9"></i> Aptitude</a>
+    <a href="#" id="c-technical" onclick="setSidebarCat('technical',this)"><i class="fa fa-microchip" style="color:#8b5cf6"></i> Technical</a>
+    <a href="#" id="c-coding"    onclick="setSidebarCat('coding',this)"><i class="fa fa-code" style="color:#10b981"></i> Coding</a>
+    <a href="#" id="c-reasoning" onclick="setSidebarCat('reasoning',this)"><i class="fa fa-brain" style="color:#f59e0b"></i> Reasoning</a>
+    <a href="#" id="c-english"   onclick="setSidebarCat('english',this)"><i class="fa fa-book" style="color:#ef4444"></i> English</a>
+    <a href="#" id="c-general"   onclick="setSidebarCat('general',this)"><i class="fa fa-globe" style="color:#06b6d4"></i> General</a>
 
     <div class="sidebar-bottom">
         <button onclick="if(confirm('Are you sure you want to logout?')) window.location.href='logout.php'">
@@ -902,8 +905,9 @@ function renderGrid(mats, total) {
             ? `<a class="btn-view" href="${esc(m.external_url)}" target="_blank" rel="noopener" onclick="dismissResourceNotif(${m.material_id})"><i class="fa fa-external-link-alt"></i> Open</a>`
             : `<button class="btn-view" onclick="openFile(${m.material_id},'${esc(m.material_type)}')"><i class="fa fa-eye"></i> View</button>`;
 
-        const dlBtn = (!isLink && m.file_path)
-            ? `<button class="btn-dl" onclick="dlFile(${m.material_id},'${esc(m.title)}')"><i class="fa fa-download"></i></button>`
+        // Show download button for all non-link resources (file_path replaced by external_url)
+        const dlBtn = !isLink
+            ? `<button class="btn-dl" onclick="dlFile(${m.material_id},'${esc(m.title)}')"><i class="fa fa-download"></i> Download</button>`
             : '';
 
         return `
@@ -977,6 +981,13 @@ function setCat(cat, el) {
     document.querySelectorAll('.filter-bar .filter-tab').forEach(b=>b.classList.remove('active'));
     el.classList.add('active'); load();
 }
+
+function setSidebarCat(cat, el) {
+    activeCat = cat; currentPage = 1;
+    document.querySelectorAll('.sidebar a[id^="c-"]').forEach(a => a.classList.remove('active'));
+    el.classList.add('active');
+    load();
+}
 function setType(type, el) {
     activeType=type; currentPage=1;
     document.querySelectorAll('.sidebar a[id^="t-"]').forEach(a=>a.classList.remove('active'));
@@ -1000,7 +1011,7 @@ function showError(msg) {
     document.getElementById('sectionLabel').textContent='Error';
 }
 
-document.getElementById('t-all').classList.add('active');
+document.getElementById('c-all').classList.add('active');
 load();
 
 // ── Live notification badge polling ──

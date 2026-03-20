@@ -44,6 +44,15 @@ $userEmail    = $currentUser['email']     ?? '';
 $userInitials = strtoupper(substr($userName, 0, 2));
 $userId       = (int) $currentUser['user_id'];
 
+// Fetch profile image
+$imgRes = safePreparedQuery($conn, "SELECT profile_image FROM users WHERE user_id = ?", "i", [$userId]);
+$userProfileImage = '';
+if ($imgRes['success'] && $imgRes['result']) {
+    $imgRow = $imgRes['result']->fetch_assoc();
+    $userProfileImage = $imgRow['profile_image'] ?? '';
+    $imgRes['result']->free();
+}
+
 // ── Unread notification count ──
 $notifResult = safePreparedQuery($conn,
     "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
@@ -700,13 +709,21 @@ function timeAgo(string $datetime): string {
         </div>
         <div class="profile-dropdown-container">
             <button class="profile-button" onclick="toggleProfileDropdown()" aria-label="Profile menu">
-                <div class="profile-avatar"><?= $userInitials ?></div>
+                <?php if ($userProfileImage && file_exists($userProfileImage)): ?>
+                    <img src="<?= htmlspecialchars($userProfileImage) ?>?v=<?= time() ?>" alt="Avatar" style="width:32px;height:32px;border-radius:8px;object-fit:cover;flex-shrink:0;">
+                <?php else: ?>
+                    <div class="profile-avatar"><?= $userInitials ?></div>
+                <?php endif; ?>
                 <span class="profile-name"><?= htmlspecialchars($userName) ?></span>
                 <span class="dropdown-arrow">▼</span>
             </button>
             <div class="profile-dropdown" id="profileDropdown">
                 <div class="dropdown-header">
-                    <div class="dropdown-avatar"><?= $userInitials ?></div>
+                    <?php if ($userProfileImage && file_exists($userProfileImage)): ?>
+                        <img src="<?= htmlspecialchars($userProfileImage) ?>?v=<?= time() ?>" alt="Avatar" style="width:44px;height:44px;border-radius:50%;object-fit:cover;">
+                    <?php else: ?>
+                        <div class="dropdown-avatar"><?= $userInitials ?></div>
+                    <?php endif; ?>
                     <div class="dropdown-user-info">
                         <div class="dropdown-user-name"><?= htmlspecialchars($userName) ?></div>
                         <div class="dropdown-user-email"><?= htmlspecialchars($userEmail) ?></div>

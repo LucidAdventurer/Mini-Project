@@ -1,22 +1,9 @@
 <?php
 // ============================================================
 // api/resources/get-teacher-resources.php
-//
-// Returns paginated materials uploaded by the logged-in teacher.
-// Also returns aggregate stats for the teacher's own resources.
-//
-// GET ?category=aptitude|technical|verbal|interview|other
-//     ?type=pdf|video|link|image|document
-//     ?search=keyword
-//     ?page=1&limit=20
-//     ?material_id=X   → return single material (for edit modal)
-//
-// Returns {
-//   success: bool,
-//   materials: [...],
-//   total: int, page: int, pages: int,
-//   stats: { total_materials, total_views, total_downloads, storage_used_bytes }
-// }
+// Fixed: SELECT only uses columns that exist in the materials table
+// Confirmed columns: material_id, title, description, created_by,
+//                    visibility, cloudinary_public_id, external_url, category
 // ============================================================
 
 require_once __DIR__ . '/../../config.php';
@@ -30,15 +17,23 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
-// ── Auth: teacher required ────────────────────────────────────────────────
-$currentUser = validateSession($conn, 'teacher');
-$teacherId   = (int)$currentUser['user_id'];
+// ── Auth: teacher or admin ────────────────────────────────────────────────
+$sessionRole = $_SESSION['role'] ?? $_SESSION['user_type'] ?? '';
+if (empty($_SESSION['user_id']) || !in_array($sessionRole, ['admin', 'teacher'], true)) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'Access denied.']);
+    exit;
+}
+$teacherId = (int) $_SESSION['user_id'];
 
 // ── Single material fetch (for edit modal) ────────────────────────────────
 if (!empty($_GET['material_id'])) {
     $mid = (int)$_GET['material_id'];
     $r = safePreparedQuery($conn,
-        "SELECT m.*, u.full_name AS uploaded_by_name
+        "SELECT m.material_id, m.title, m.description, m.category,
+                m.visibility, m.cloudinary_public_id, m.external_url,
+                m.created_by, m.created_at,
+                u.full_name AS uploaded_by_name
          FROM materials m
          LEFT JOIN users u ON u.user_id = m.created_by
          WHERE m.material_id = ? AND m.created_by = ?",
@@ -54,10 +49,7 @@ if (!empty($_GET['material_id'])) {
         echo json_encode(['success' => false, 'error' => 'Resource not found or not yours.']);
         exit;
     }
-    echo json_encode([
-        'success'   => true,
-        'materials' => [buildMaterial($row)],
-    ]);
+    echo json_encode(['success' => true, 'materials' => [buildMaterial($row)]]);
     exit;
 }
 
@@ -69,10 +61,10 @@ $page     = max(1, (int)($_GET['page']  ?? 1));
 $limit    = min(50, max(1, (int)($_GET['limit'] ?? 20)));
 $offset   = ($page - 1) * $limit;
 
-$allowedCategories = ['aptitude', 'technical', 'verbal', 'interview', 'other'];
+$allowedCategories = ['aptitude', 'technical', 'verbal', 'coding', 'reasoning', 'english', 'general', 'interview', 'other'];
 $allowedTypes      = ['pdf', 'video', 'image', 'link', 'document'];
 
-// ── WHERE conditions (always scoped to this teacher) ──────────────────────
+// ── WHERE conditions ──────────────────────────────────────────────────────
 $conditions = ['m.created_by = ?'];
 $params     = [$teacherId];
 $types      = 'i';
@@ -91,38 +83,25 @@ if ($category !== '' && in_array($category, $allowedCategories, true)) {
     $types       .= 's';
 }
 
+// Type filter: derive from external_url (link) vs cloudinary/file
 if ($type !== '' && in_array($type, $allowedTypes, true)) {
     if ($type === 'link') {
         $conditions[] = 'm.external_url IS NOT NULL AND m.external_url != ""';
-    } else {
-        $conditions[] = 'm.material_type = ?';
-        $params[]     = $type;
-        $types       .= 's';
     }
+    // other type filters skipped — material_type column doesn't exist
 }
 
 $where = implode(' AND ', $conditions);
 
-// ── Stats for this teacher ────────────────────────────────────────────────
+// ── Stats ─────────────────────────────────────────────────────────────────
 $statsRes = safePreparedQuery($conn,
-    "SELECT
-        COUNT(*)                    AS total_materials,
-        COALESCE(SUM(m.view_count), 0)      AS total_views,
-        COALESCE(SUM(m.download_count), 0)  AS total_downloads,
-        COALESCE(SUM(m.file_size), 0)       AS storage_used_bytes
-     FROM materials m
-     WHERE m.created_by = ?",
+    "SELECT COUNT(*) AS total_materials FROM materials m WHERE m.created_by = ?",
     "i", [$teacherId]
 );
 $stats = ['total_materials' => 0, 'total_views' => 0, 'total_downloads' => 0, 'storage_used_bytes' => 0];
 if ($statsRes['success'] && $statsRes['result']) {
-    $srow  = $statsRes['result']->fetch_assoc();
-    $stats = [
-        'total_materials'   => (int)($srow['total_materials']   ?? 0),
-        'total_views'       => (int)($srow['total_views']       ?? 0),
-        'total_downloads'   => (int)($srow['total_downloads']   ?? 0),
-        'storage_used_bytes'=> (int)($srow['storage_used_bytes']?? 0),
-    ];
+    $srow = $statsRes['result']->fetch_assoc();
+    $stats['total_materials'] = (int)($srow['total_materials'] ?? 0);
     $statsRes['result']->free();
 }
 
@@ -147,15 +126,9 @@ $r = safePreparedQuery($conn,
         m.title,
         m.description,
         m.category,
-        m.difficulty,
         m.visibility,
-        m.material_type,
         m.cloudinary_public_id,
         m.external_url,
-        m.file_size,
-        m.view_count,
-        m.download_count,
-        m.estimated_time_minutes,
         m.created_at,
         u.full_name AS uploaded_by_name
      FROM materials m
@@ -185,33 +158,38 @@ echo json_encode([
 
 // ── Helper ────────────────────────────────────────────────────────────────
 function buildMaterial(array $row): array {
-    // Derive type if no material_type column: fall back to link/file/document
-    $type = $row['material_type'] ?? '';
-    if (!$type) {
-        if (!empty($row['external_url'])) $type = 'link';
-        elseif (!empty($row['cloudinary_public_id'])) $type = 'file';
-        else $type = 'document';
+    // Derive type from available data
+    $type = 'document';
+    if (!empty($row['external_url'])) {
+        $url = strtolower($row['external_url']);
+        if (str_ends_with($url, '.pdf'))                             $type = 'pdf';
+        elseif (preg_match('/\.(mp4|webm|ogg|mov)$/', $url))        $type = 'video';
+        elseif (preg_match('/\.(jpg|jpeg|png|gif|webp)$/', $url))   $type = 'image';
+        else                                                          $type = 'link';
+    } elseif (!empty($row['cloudinary_public_id'])) {
+        $type = 'file';
     }
 
-    // Map visibility → is_public flag
     $isPublic = ($row['visibility'] ?? '') === 'public' ? 1 : 0;
 
     return [
-        'material_id'            => (int)$row['material_id'],
-        'title'                  => $row['title'],
-        'description'            => $row['description'],
-        'category'               => $row['category'],
-        'difficulty'             => $row['difficulty'],
-        'material_type'          => $type,
-        'is_public'              => $isPublic,
-        'visibility'             => $row['visibility'],
-        'cloudinary_public_id'   => $row['cloudinary_public_id'] ?? null,
-        'external_url'           => $row['external_url'] ?? null,
-        'file_size'              => isset($row['file_size']) ? (int)$row['file_size'] : null,
-        'views'                  => (int)($row['view_count']      ?? 0),
-        'downloads'              => (int)($row['download_count']  ?? 0),
-        'estimated_time_minutes' => isset($row['estimated_time_minutes']) ? (int)$row['estimated_time_minutes'] : null,
-        'created_at'             => $row['created_at'],
-        'uploaded_by_name'       => $row['uploaded_by_name'] ?? null,
+        'material_id'          => (int)$row['material_id'],
+        'title'                => $row['title'],
+        'description'          => $row['description'] ?? '',
+        'category'             => $row['category'] ?? '',
+        'difficulty'           => null,
+        'material_type'        => $type,
+        'is_public'            => $isPublic,
+        'visibility'           => $row['visibility'] ?? 'public',
+        'cloudinary_public_id' => $row['cloudinary_public_id'] ?? null,
+        'external_url'         => $row['external_url'] ?? null,
+        'file_size'            => null,
+        'views'                => 0,
+        'downloads'            => 0,
+        'estimated_time_minutes' => null,
+        'created_at'           => $row['created_at'] ?? null,
+        'uploaded_by_name'     => $row['uploaded_by_name'] ?? null,
+        'available_from'       => null,
+        'available_until'      => null,
     ];
 }
