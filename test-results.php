@@ -58,7 +58,7 @@ if ($notifResult['success'] && $notifResult['result']) {
 
 // ── All notifications for dropdown ──
 $notifDropResult = safePreparedQuery($conn,
-    "SELECT notification_id, title, message, notification_type, is_read, created_at
+    "SELECT notification_id, title, message, type, is_read, created_at
      FROM notifications WHERE user_id = ?
      ORDER BY created_at DESC",
     "i", [$userId]
@@ -682,7 +682,7 @@ function timeAgo(string $datetime): string {
                     <?php else: foreach ($notifItems as $n):
                         $isUnread = !$n['is_read'];
                         $typeIcons = ['info'=>'ℹ️','success'=>'✅','warning'=>'⚠️','error'=>'❌','assessment'=>'📝','result'=>'🏆','material'=>'📚'];
-                        $icon = $typeIcons[$n['notification_type']] ?? '🔔';
+                        $icon = $typeIcons[$n['type']] ?? '🔔';
                     ?>
                     <div class="notif-item <?= $isUnread ? 'unread' : '' ?>">
                         <div class="notif-dot <?= $isUnread ? '' : 'read' ?>"></div>

@@ -13,9 +13,85 @@ $userDept     = $user['department'] ?? '';
 $userInitials = strtoupper(substr($userName, 0, 2));
 $userId       = (int) $user['user_id'];
 
+// Fetch fresh profile image
+$imgRes = safePreparedQuery($conn, "SELECT profile_image FROM users WHERE user_id = ?", "i", [$userId]);
+$userProfileImage = '';
+if ($imgRes['success'] && $imgRes['result']) {
+    $imgRow = $imgRes['result']->fetch_assoc();
+    $userProfileImage = $imgRow['profile_image'] ?? '';
+    $imgRes['result']->free();
+}
+
 // Ensure CSRF token exists
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+// ── Due soon popup (show once per login session) ──
+$duePopupAssessments = [];
+$showDuePopup = false;
+
+if (!empty($_SESSION['login_time']) && empty($_SESSION['due_popup_shown'])) {
+    $_SESSION['due_popup_shown'] = true;
+
+    $dueResult = safePreparedQuery($conn,
+        "SELECT a.assessment_id, a.title, a.end_time,
+                TIMESTAMPDIFF(HOUR, NOW(), a.end_time) AS hours_left
+         FROM assessments a
+         WHERE a.status = 'published'
+           AND a.end_time IS NOT NULL
+           AND a.end_time > NOW()
+           AND a.end_time <= DATE_ADD(NOW(), INTERVAL 3 DAY)
+           AND (
+               EXISTS (
+                   SELECT 1 FROM assessment_targets at2
+                   WHERE at2.assessment_id = a.assessment_id
+                     AND at2.target_type = 'student'
+                     AND at2.target_id = ?
+               )
+               OR EXISTS (
+                   SELECT 1 FROM assessment_targets at2
+                   JOIN group_members gm ON gm.group_id = at2.target_id
+                   WHERE at2.assessment_id = a.assessment_id
+                     AND at2.target_type = 'group'
+                     AND gm.student_id = ?
+               )
+           )
+           AND NOT EXISTS (
+               SELECT 1 FROM assessment_attempts aa
+               WHERE aa.assessment_id = a.assessment_id
+                 AND aa.user_id = ?
+                 AND aa.status = 'submitted'
+           )
+         ORDER BY a.end_time ASC",
+        "iii", [$userId, $userId, $userId]
+    );
+
+    if ($dueResult['success'] && $dueResult['result']) {
+        while ($row = $dueResult['result']->fetch_assoc()) {
+            $hoursLeft = (int)$row['hours_left'];
+            if ($hoursLeft < 24) {
+                $urgency = 'today';
+                $label   = 'Due Today!';
+            } elseif ($hoursLeft < 48) {
+                $urgency = 'tomorrow';
+                $label   = 'Due Tomorrow';
+            } else {
+                $days    = ceil($hoursLeft / 24);
+                $urgency = 'soon';
+                $label   = "Due in $days days";
+            }
+            $duePopupAssessments[] = [
+                'id'       => (int)$row['assessment_id'],
+                'title'    => $row['title'],
+                'end_time' => $row['end_time'],
+                'urgency'  => $urgency,
+                'label'    => $label,
+            ];
+        }
+        $dueResult['result']->free();
+        $showDuePopup = !empty($duePopupAssessments);
+    }
 }
 
 // ── Student statistics ──
@@ -124,9 +200,15 @@ $assessmentsResult = safePreparedQuery($conn,
                  AND gm.student_id = ?
            )
        )
+       AND (
+           SELECT COUNT(*) FROM assessment_attempts aa3
+           WHERE aa3.assessment_id = a.assessment_id
+             AND aa3.user_id = ?
+             AND aa3.status  = 'submitted'
+       ) < a.max_attempts
      ORDER BY a.created_at DESC
      LIMIT 3",
-    "iiii", [$userId, $userId, $userId, $userId]
+    "iiiii", [$userId, $userId, $userId, $userId, $userId]
 );
 
 $assessments      = [];
@@ -907,15 +989,22 @@ function timeAgo(string $datetime): string {
                             $entityId  = (int)($n['related_entity_id'] ?? 0);
                             $nType     = $n['type'] ?? '';
                             $notifLink = '';
+                            $dismissAction = '';
                             if ($nType === 'assessment' && $entityId > 0) {
-                                $notifLink = 'test-preview.php?id=' . $entityId;
+                                $notifLink     = 'test-preview.php?id=' . $entityId;
+                                $dismissAction = 'assessment_done';
                             } elseif ($nType === 'result' && $entityId > 0) {
                                 $notifLink = 'test-results.php?attempt_id=' . $entityId;
+                            } elseif ($nType === 'material' && $entityId > 0) {
+                                $notifLink     = 'student-resources.php';
+                                $dismissAction = 'resource_viewed';
                             }
                         ?>
                         <div class="notif-item <?= $isUnread ? 'unread' : '' ?>"
-                             <?= $notifLink ? 'onclick="window.location.href=\'' . $notifLink . '\'"' : '' ?>
-                             style="<?= $notifLink ? 'cursor:pointer;' : '' ?>">
+                             <?php if ($notifLink): ?>
+                             onclick="handleNotifClick('<?= $dismissAction ?>', <?= $entityId ?>, '<?= $notifLink ?>')"
+                             style="cursor:pointer;"
+                             <?php endif; ?>>
                             <div class="notif-dot <?= $isUnread ? '' : 'read' ?>"></div>
                             <div class="notif-item-body">
                                 <div class="notif-item-title"><?= $icon ?> <?= htmlspecialchars($n['title']) ?></div>
@@ -931,13 +1020,23 @@ function timeAgo(string $datetime): string {
             </div>
             <div class="profile-dropdown-container">
                 <button class="profile-button" onclick="toggleProfileDropdown()" aria-label="Profile menu" aria-expanded="false">
-                    <div class="profile-avatar" aria-hidden="true"><?php echo $userInitials; ?></div>
+                    <?php if ($userProfileImage && file_exists($userProfileImage)): ?>
+                        <img src="<?= htmlspecialchars($userProfileImage) ?>?v=<?= time() ?>" alt="Avatar" style="width:32px;height:32px;border-radius:8px;object-fit:cover;flex-shrink:0;">
+                    <?php else: ?>
+                        <div class="profile-avatar" aria-hidden="true"><?php echo $userInitials; ?></div>
+                    <?php endif; ?>
                     <span class="profile-name"><?php echo htmlspecialchars($userName); ?></span>
                     <span class="dropdown-arrow">▼</span>
                 </button>
                 <div class="profile-dropdown" id="profileDropdown">
                     <div class="dropdown-header">
-                        <div class="dropdown-avatar"><?php echo $userInitials; ?></div>
+                        <div class="dropdown-avatar">
+                            <?php if ($userProfileImage && file_exists($userProfileImage)): ?>
+                                <img src="<?= htmlspecialchars($userProfileImage) ?>?v=<?= time() ?>" alt="Avatar" style="width:44px;height:44px;border-radius:12px;object-fit:cover;">
+                            <?php else: ?>
+                                <?php echo $userInitials; ?>
+                            <?php endif; ?>
+                        </div>
                         <div class="dropdown-user-info">
                             <div class="dropdown-user-name"><?php echo htmlspecialchars($userName); ?></div>
                             <div class="dropdown-user-email"><?php echo htmlspecialchars($userEmail); ?></div>
@@ -949,7 +1048,7 @@ function timeAgo(string $datetime): string {
                             <span>My Profile</span>
                         </a>
                         <a href="help.html" target="_blank" rel="noopener noreferrer" class="dropdown-item">
-                            <span>❓</span>
+                            <span class="dropdown-item-icon">❓</span>
                             <span>Help & Support</span>
                         </a>
                         <div class="dropdown-divider"></div>
@@ -1146,6 +1245,22 @@ function timeAgo(string $datetime): string {
     <script>
         const CSRF_TOKEN = <?= json_encode($_SESSION['csrf_token']) ?>;
 
+        // Preserve scroll position on refresh
+        window.addEventListener('beforeunload', () => {
+            sessionStorage.setItem('scrollPos', window.scrollY);
+        });
+        window.addEventListener('load', () => {
+            const pos = sessionStorage.getItem('scrollPos');
+            if (pos) window.scrollTo(0, parseInt(pos));
+        });
+
+        // Purge old notifications (3-day rule) silently on page load
+        fetch('api/notifications/dismiss-notification.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: '' })
+        }).catch(() => {});
+
         function toggleProfileDropdown() {
             const dropdown = document.getElementById('profileDropdown');
             const overlay = document.getElementById('dropdownOverlay');
@@ -1186,6 +1301,21 @@ function timeAgo(string $datetime): string {
                     document.querySelectorAll('.notif-item.unread').forEach(el => el.classList.remove('unread'));
                     document.querySelectorAll('.notif-dot:not(.read)').forEach(el => el.classList.add('read'));
                 }).catch(() => {});
+            }
+        }
+
+        // Dismiss notification then navigate
+        function handleNotifClick(action, entityId, url) {
+            if (action && entityId > 0) {
+                fetch('api/notifications/dismiss-notification.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: action, assessment_id: entityId, material_id: entityId })
+                }).catch(() => {}).finally(() => {
+                    window.location.href = url;
+                });
+            } else {
+                window.location.href = url;
             }
         }
 
@@ -1337,5 +1467,123 @@ function timeAgo(string $datetime): string {
         });
         <?php endif; ?>
     </script>
+<?php if ($showDuePopup): ?>
+<!-- ══ DUE SOON POPUP ══ -->
+<div id="duePopupOverlay" style="
+    position:fixed;inset:0;background:rgba(0,0,0,.5);
+    z-index:9000;display:flex;align-items:center;justify-content:center;
+    backdrop-filter:blur(4px);animation:fadeIn .25s ease;">
+    <div style="
+        background:#fff;border-radius:20px;width:100%;max-width:460px;
+        box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden;
+        animation:slideUp .3s cubic-bezier(.4,0,.2,1);">
+
+        <!-- Header -->
+        <div style="
+            background:linear-gradient(135deg,#1a3a52,#1e5276);
+            padding:24px 28px 20px;position:relative;">
+            <div style="font-size:28px;margin-bottom:6px;">⏰</div>
+            <div style="font-family:'Sora',sans-serif;font-size:18px;font-weight:800;color:#fff;">
+                Upcoming Deadlines
+            </div>
+            <div style="font-size:13px;color:rgba(255,255,255,.65);margin-top:3px;">
+                You have <?= count($duePopupAssessments) ?> test<?= count($duePopupAssessments) > 1 ? 's' : '' ?> due soon
+            </div>
+            <button onclick="closeDuePopup()" style="
+                position:absolute;top:16px;right:16px;
+                background:rgba(255,255,255,.15);border:none;border-radius:8px;
+                color:#fff;width:32px;height:32px;font-size:18px;cursor:pointer;
+                display:flex;align-items:center;justify-content:center;
+                transition:.2s;">✕</button>
+        </div>
+
+        <!-- List -->
+        <div style="padding:16px 20px;max-height:340px;overflow-y:auto;">
+            <?php foreach ($duePopupAssessments as $da):
+                $urgencyColor = match($da['urgency']) {
+                    'today'    => '#ef4444',
+                    'tomorrow' => '#f59e0b',
+                    default    => '#0ea5e9',
+                };
+                $urgencyBg = match($da['urgency']) {
+                    'today'    => '#fef2f2',
+                    'tomorrow' => '#fffbeb',
+                    default    => '#eff8ff',
+                };
+                $formattedDate = date('d M Y, h:i A', strtotime($da['end_time']));
+            ?>
+            <div style="
+                display:flex;align-items:center;gap:14px;
+                padding:14px 16px;border-radius:12px;margin-bottom:10px;
+                background:<?= $urgencyBg ?>;border:1.5px solid <?= $urgencyColor ?>22;">
+                <div style="
+                    width:42px;height:42px;border-radius:10px;flex-shrink:0;
+                    background:<?= $urgencyColor ?>;
+                    display:flex;align-items:center;justify-content:center;
+                    font-size:20px;">
+                    <?= $da['urgency'] === 'today' ? '🔴' : ($da['urgency'] === 'tomorrow' ? '🟡' : '🔵') ?>
+                </div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-weight:700;font-size:14px;color:#0f172a;
+                        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                        <?= htmlspecialchars($da['title']) ?>
+                    </div>
+                    <div style="font-size:11.5px;color:#64748b;margin-top:2px;">
+                        📅 <?= $formattedDate ?>
+                    </div>
+                </div>
+                <span style="
+                    background:<?= $urgencyColor ?>;color:#fff;
+                    font-size:11px;font-weight:700;padding:4px 10px;
+                    border-radius:20px;white-space:nowrap;flex-shrink:0;">
+                    <?= htmlspecialchars($da['label']) ?>
+                </span>
+            </div>
+            <?php endforeach; ?>
+        </div>
+
+        <!-- Footer -->
+        <div style="padding:16px 20px;border-top:1px solid #e2e8f0;display:flex;gap:10px;">
+            <button onclick="closeDuePopup()" style="
+                flex:1;padding:11px;border-radius:10px;border:1.5px solid #e2e8f0;
+                background:#fff;color:#475569;font-size:13.5px;font-weight:600;
+                cursor:pointer;font-family:'Inter',sans-serif;transition:.2s;">
+                Remind me later
+            </button>
+            <button onclick="closeDuePopup();window.location.href='student-assessments.php'" style="
+                flex:1;padding:11px;border-radius:10px;border:none;
+                background:linear-gradient(135deg,#0ea5e9,#06b6d4);
+                color:#fff;font-size:13.5px;font-weight:700;
+                cursor:pointer;font-family:'Inter',sans-serif;transition:.2s;">
+                View Tests →
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+@keyframes fadeIn  { from { opacity:0 } to { opacity:1 } }
+@keyframes slideUp { from { opacity:0;transform:translateY(20px) scale(.97) } to { opacity:1;transform:translateY(0) scale(1) } }
+</style>
+
+<script>
+function closeDuePopup() {
+    const overlay = document.getElementById('duePopupOverlay');
+    if (overlay) {
+        overlay.style.animation = 'fadeIn .2s ease reverse';
+        setTimeout(() => overlay.remove(), 200);
+    }
+}
+// Close on overlay click
+document.getElementById('duePopupOverlay').addEventListener('click', function(e) {
+    if (e.target === this) closeDuePopup();
+});
+// Close on Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeDuePopup();
+});
+</script>
+<?php endif; ?>
+
 </body>
 </html>

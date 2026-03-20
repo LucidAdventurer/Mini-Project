@@ -8,6 +8,17 @@ require_once "db-guard.php";
 
 $user = validateSession($conn, 'student');
 
+// Always re-fetch fresh user data from DB (so profile_image is current)
+$freshUser = safePreparedQuery($conn,
+    "SELECT * FROM users WHERE user_id = ?",
+    "i", [(int)$user['user_id']]
+);
+if ($freshUser['success'] && $freshUser['result']) {
+    $row = $freshUser['result']->fetch_assoc();
+    if ($row) $user = array_merge($user, $row);
+    $freshUser['result']->free();
+}
+
 $userName     = $user['full_name']           ?? 'Student';
 $userEmail    = $user['email']               ?? '';
 $userDept     = $user['department']          ?? '';
@@ -129,6 +140,25 @@ if ($categoryResult['success'] && $categoryResult['result']) {
     $categoryResult['result']->free();
 }
 
+// ── Answer accuracy (correct vs wrong) ──
+$totalCorrect = 0;
+$totalWrong   = 0;
+$accResult = safePreparedQuery($conn,
+    "SELECT
+        SUM(CASE WHEN a.marks_awarded > 0 THEN 1 ELSE 0 END) AS correct,
+        SUM(CASE WHEN a.marks_awarded <= 0 AND a.selected_option_id IS NOT NULL THEN 1 ELSE 0 END) AS wrong
+     FROM answers a
+     JOIN assessment_attempts aa ON aa.attempt_id = a.attempt_id
+     WHERE aa.user_id = ? AND aa.status = 'submitted'",
+    "i", [$userId]
+);
+if ($accResult['success'] && $accResult['result']) {
+    $accRow       = $accResult['result']->fetch_assoc();
+    $totalCorrect = (int)($accRow['correct'] ?? 0);
+    $totalWrong   = (int)($accRow['wrong']   ?? 0);
+    $accResult['result']->free();
+}
+
 // ── Notifications (unread count) ──
 $notifResult = safePreparedQuery(
     $conn,
@@ -149,8 +179,127 @@ $updateType    = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     if ($_POST['action'] === 'update_profile') {
-        $updateMessage = 'Additional profile fields are not available yet.';
-        $updateType    = 'error';
+        $newName    = trim($_POST['full_name']           ?? '');
+        $newEmail   = trim($_POST['email']               ?? '');
+        $newDept    = trim($_POST['department']          ?? '');
+        $newRegNo   = trim($_POST['registration_number'] ?? '');
+        $confirmPw  = $_POST['confirm_password_profile'] ?? '';
+
+        if ($newName === '') {
+            $updateMessage = 'Full name is required.';
+            $updateType    = 'error';
+        } elseif ($newEmail === '' || !filter_var($newEmail, FILTER_VALIDATE_EMAIL)) {
+            $updateMessage = 'A valid email address is required.';
+            $updateType    = 'error';
+        } else {
+            // Email change requires password confirmation
+            $emailChanged = ($newEmail !== $userEmail);
+            if ($emailChanged) {
+                if ($confirmPw === '') {
+                    $updateMessage = 'Please enter your current password to change your email.';
+                    $updateType    = 'error';
+                } else {
+                    $pwCheck = safePreparedQuery($conn, "SELECT password_hash FROM users WHERE user_id = ?", "i", [$userId]);
+                    $pwRow   = null;
+                    if ($pwCheck['success'] && $pwCheck['result']) {
+                        $pwRow = $pwCheck['result']->fetch_assoc();
+                        $pwCheck['result']->free();
+                    }
+                    if (!$pwRow || !password_verify($confirmPw, $pwRow['password_hash'])) {
+                        $updateMessage = 'Incorrect password. Email not updated.';
+                        $updateType    = 'error';
+                        $emailChanged  = false;
+                    }
+                }
+            }
+
+            if ($updateType !== 'error') {
+                // Check email uniqueness if changed
+                if ($emailChanged) {
+                    $emailCheck = safePreparedQuery($conn,
+                        "SELECT user_id FROM users WHERE email = ? AND user_id != ?",
+                        "si", [$newEmail, $userId]
+                    );
+                    if ($emailCheck['success'] && $emailCheck['result'] && $emailCheck['result']->num_rows > 0) {
+                        $updateMessage = 'That email address is already in use.';
+                        $updateType    = 'error';
+                        $emailCheck['result']->free();
+                    }
+                }
+
+                if ($updateType !== 'error') {
+                    $upRes = safePreparedQuery($conn,
+                        "UPDATE users SET full_name = ?, email = ?, department = ?, registration_number = ? WHERE user_id = ?",
+                        "ssssi",
+                        [$newName, $newEmail, $newDept ?: null, $newRegNo ?: null, $userId]
+                    );
+                    if ($upRes['success']) {
+                        $userName     = $newName;
+                        $userEmail    = $newEmail;
+                        $userDept     = $newDept;
+                        $userRegNo    = $newRegNo;
+                        $userInitials = strtoupper(substr($userName, 0, 2));
+                        $user['full_name']           = $newName;
+                        $user['email']               = $newEmail;
+                        $user['department']          = $newDept;
+                        $user['registration_number'] = $newRegNo;
+                        $updateMessage = 'Profile updated successfully!';
+                        $updateType    = 'success';
+                        header('Location: student-profile.php?t=' . time() . '&msg=profile_updated');
+                        exit;
+                    } else {
+                        $updateMessage = 'Failed to update profile. Please try again.';
+                        $updateType    = 'error';
+                    }
+                }
+            }
+        }
+    }
+
+    if ($_POST['action'] === 'upload_avatar') {
+        if (!isset($_FILES['avatar']) || $_FILES['avatar']['error'] !== UPLOAD_ERR_OK) {
+            $updateMessage = 'Upload error. Please try again.';
+            $updateType    = 'error';
+        } else {
+            $file    = $_FILES['avatar'];
+            $allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            $maxSize = 2 * 1024 * 1024;
+            $ext     = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+
+            if ($file['size'] > $maxSize) {
+                $updateMessage = 'Image must be under 2MB.';
+                $updateType    = 'error';
+            } elseif (!in_array($file['type'], $allowed)) {
+                $updateMessage = 'Only JPG, PNG, GIF or WEBP images allowed.';
+                $updateType    = 'error';
+            } else {
+                $uploadDir  = 'uploads/avatars/';
+                $storedName = 'student_' . $userId . '_' . time() . '.' . $ext;
+                $fullPath   = $uploadDir . $storedName;
+                if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+                // Delete old avatar
+                $oldImg = $user['profile_image'] ?? '';
+                if ($oldImg && file_exists($oldImg)) @unlink($oldImg);
+                if (move_uploaded_file($file['tmp_name'], $fullPath)) {
+                    $upRes = safePreparedQuery($conn, "UPDATE users SET profile_image = ? WHERE user_id = ?", "si", [$fullPath, $userId]);
+                    if ($upRes['success']) {
+                        $_SESSION['profile_image'] = $fullPath;
+                        $user['profile_image']     = $fullPath;
+                        $updateMessage = 'Profile picture updated!';
+                        $updateType    = 'success';
+                        // Redirect to avoid re-POST on refresh
+                        header('Location: student-profile.php?t=' . time() . '&msg=avatar_updated');
+                        exit;
+                    } else {
+                        $updateMessage = 'File saved but DB update failed.';
+                        $updateType    = 'error';
+                    }
+                } else {
+                    $updateMessage = 'Failed to save file. Check folder permissions.';
+                    $updateType    = 'error';
+                }
+            }
+        }
     }
 
     if ($_POST['action'] === 'change_password') {
@@ -519,6 +668,32 @@ function parseUA(string $ua): string {
             box-shadow: 0 0 0 6px rgba(14,165,233,.08);
         }
 
+        .avatar-wrap {
+            position: relative; width: 110px; margin: 0 auto 16px; cursor: pointer;
+        }
+        .avatar-wrap .avatar-large { margin: 0; }
+        .avatar-pencil {
+            position: absolute; bottom: 4px; right: 4px;
+            width: 28px; height: 28px; border-radius: 50%;
+            background: var(--accent); color: white;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px; border: 2px solid white;
+            box-shadow: 0 2px 6px rgba(0,0,0,.2); transition: .2s; pointer-events: none;
+        }
+        .avatar-wrap:hover .avatar-pencil { background: var(--accent2); transform: scale(1.1); }
+        .avatar-wrap:hover .avatar-large  { opacity: .85; }
+        #avatarModal {
+            display:none; position:fixed; inset:0; z-index:9100;
+            background:rgba(0,0,0,.5); backdrop-filter:blur(4px);
+            align-items:center; justify-content:center;
+        }
+        #avatarModal.open { display:flex; animation:fadeIn .2s ease; }
+        #avatarModalBox {
+            background:#fff; border-radius:20px; width:100%; max-width:380px;
+            box-shadow:0 20px 60px rgba(0,0,0,.25); overflow:hidden;
+            animation:slideUp .25s cubic-bezier(.4,0,.2,1);
+        }
+        .avatar-large { overflow:hidden; }
         .profile-card-name {
             font-family: 'Sora', sans-serif;
             font-size: 18px; font-weight: 800; color: var(--text); margin-bottom: 8px;
@@ -787,14 +962,25 @@ function parseUA(string $ua): string {
         <!-- Profile dropdown -->
         <div style="position:relative" id="profileWrapper">
             <button class="profile-button" onclick="toggleProfileDropdown()" aria-expanded="false" aria-haspopup="true">
-                <div class="profile-avatar-sm"><?= htmlspecialchars($userInitials) ?></div>
+                <?php $navImg = $user['profile_image'] ?? ''; ?>
+                <?php if ($navImg && file_exists($navImg)): ?>
+                    <img src="<?= htmlspecialchars($navImg) ?>?v=<?= time() ?>" alt="Avatar" style="width:32px;height:32px;border-radius:8px;object-fit:cover;flex-shrink:0;">
+                <?php else: ?>
+                    <div class="profile-avatar-sm"><?= htmlspecialchars($userInitials) ?></div>
+                <?php endif; ?>
                 <span class="profile-name-nav"><?= htmlspecialchars($userName) ?></span>
                 <span class="dropdown-arrow">▼</span>
             </button>
 
             <div class="nav-profile-dropdown" id="profileDropdown">
                 <div class="nav-dropdown-header">
-                    <div class="nav-dropdown-avatar"><?= htmlspecialchars($userInitials) ?></div>
+                    <div class="nav-dropdown-avatar">
+                        <?php if ($navImg && file_exists($navImg)): ?>
+                            <img src="<?= htmlspecialchars($navImg) ?>?v=<?= time() ?>" alt="Avatar" style="width:44px;height:44px;border-radius:12px;object-fit:cover;">
+                        <?php else: ?>
+                            <?= htmlspecialchars($userInitials) ?>
+                        <?php endif; ?>
+                    </div>
                     <div class="nav-dropdown-info">
                         <div class="nav-dropdown-name"><?= htmlspecialchars($userName) ?></div>
                         <div class="nav-dropdown-email"><?= htmlspecialchars($userEmail) ?></div>
@@ -803,6 +989,9 @@ function parseUA(string $ua): string {
                 <div class="nav-dropdown-menu">
                     <a href="student-dashboard.php" class="nav-dropdown-item">
                         <i class="fa fa-home"></i><span>Dashboard</span>
+                    </a>
+                    <a href="student-profile.php" class="nav-dropdown-item">
+                        <i class="fa fa-user"></i><span>My Profile</span>
                     </a>
                     <a href="help.html" target="_blank" rel="noopener noreferrer" class="nav-dropdown-item">
                         <i class="fa fa-circle-question"></i><span>Help &amp; Support</span>
@@ -838,7 +1027,17 @@ function parseUA(string $ua): string {
     <aside>
         <div class="profile-card">
 
-            <div class="avatar-large"><?= htmlspecialchars($userInitials) ?></div>
+            <?php $profileImg = $user['profile_image'] ?? ''; ?>
+            <div class="avatar-wrap" onclick="openAvatarModal()" title="Change profile picture">
+                <?php if ($profileImg && file_exists(__DIR__ . '/' . $profileImg)): ?>
+                    <img src="<?= htmlspecialchars($profileImg) ?>?v=<?= time() ?>"
+                         class="avatar-large" alt="Profile"
+                         style="width:110px;height:110px;border-radius:50%;object-fit:cover;border:4px solid var(--accent-glow);box-shadow:0 0 0 6px rgba(14,165,233,.08);display:block;">
+                <?php else: ?>
+                    <div class="avatar-large"><?= htmlspecialchars($userInitials) ?></div>
+                <?php endif; ?>
+                <div class="avatar-pencil">✏️</div>
+            </div>
 
             <div class="profile-card-name"><?= htmlspecialchars($userName) ?></div>
             <div class="role-badge">🎓 Student</div>
@@ -957,38 +1156,53 @@ function parseUA(string $ua): string {
         <div class="tab-panel active" id="panel-info">
             <div class="card">
                 <div class="card-title">👤 Personal Information</div>
+                <form method="POST" action="">
+                    <input type="hidden" name="action" value="update_profile">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                 <div class="form-grid">
 
                     <div class="form-group">
-                        <label class="form-label">Full Name</label>
-                        <input type="text" class="form-control" value="<?= htmlspecialchars($userName) ?>" disabled>
-                        <span class="form-hint">Managed by admin.</span>
+                        <label class="form-label">Full Name <span class="req">*</span></label>
+                        <input type="text" name="full_name" class="form-control"
+                               value="<?= htmlspecialchars($userName) ?>" required maxlength="100">
                     </div>
 
                     <div class="form-group">
-                        <label class="form-label">Email Address</label>
-                        <input type="email" class="form-control" value="<?= htmlspecialchars($userEmail) ?>" disabled>
-                        <span class="form-hint">Managed by admin.</span>
+                        <label class="form-label">Email Address <span class="req">*</span></label>
+                        <input type="email" name="email" class="form-control" id="profileEmail"
+                               value="<?= htmlspecialchars($userEmail) ?>" required maxlength="100"
+                               oninput="checkEmailChange(this.value)">
+                        <span class="form-hint">Changing email requires password confirmation.</span>
                     </div>
 
                     <div class="form-group">
                         <label class="form-label">Department</label>
-                        <input type="text" class="form-control" value="<?= htmlspecialchars($userDept ?: '—') ?>" disabled>
-                        <span class="form-hint">Managed by admin.</span>
+                        <input type="text" name="department" class="form-control"
+                               value="<?= htmlspecialchars($userDept ?: '') ?>" maxlength="50">
                     </div>
 
                     <div class="form-group">
                         <label class="form-label">Registration Number</label>
-                        <input type="text" class="form-control" value="<?= htmlspecialchars($userRegNo ?: '—') ?>" disabled>
-                        <span class="form-hint">Managed by admin.</span>
+                        <input type="text" name="registration_number" class="form-control"
+                               value="<?= htmlspecialchars($userRegNo ?: '') ?>" maxlength="50">
+                    </div>
+
+                    <div class="form-group full-width" id="emailConfirmWrap" style="display:none;">
+                        <label class="form-label">Current Password <span class="req">*</span> <span style="font-weight:400;color:var(--text-soft);font-size:11px;">(required to change email)</span></label>
+                        <div class="pw-wrap">
+                            <input type="password" name="confirm_password_profile" class="form-control"
+                                   id="profilePwConfirm" placeholder="Enter your current password" autocomplete="current-password">
+                            <button type="button" class="pw-eye" onclick="togglePw('profilePwConfirm',this)">👁️</button>
+                        </div>
                     </div>
 
                 </div>
-
-                <div style="margin-top:20px;padding:14px;background:#eff8ff;border:1px solid #bae6fd;border-radius:var(--radius-sm);font-size:13px;color:#075985;">
-                    ℹ️ Additional profile fields (phone, bio, degree, etc.) will be available in a future update.
-                    Contact your administrator to update your core details.
+                <div class="form-actions">
+                    <div class="form-actions-right">
+                        <button type="submit" class="btn btn-primary">💾 Save Changes</button>
+                    </div>
                 </div>
+                </form>
             </div>
 
             <!-- Account Details -->
@@ -1107,6 +1321,7 @@ function parseUA(string $ua): string {
                 <div class="card-title">🔒 Change Password</div>
                 <form method="POST" action="">
                     <input type="hidden" name="action" value="change_password">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                     <div class="form-grid">
 
                         <div class="form-group full-width">
@@ -1264,6 +1479,20 @@ function parseUA(string $ua): string {
         }
     });
 
+    const ORIGINAL_EMAIL = <?= json_encode($userEmail) ?>;
+    function checkEmailChange(val) {
+        const wrap = document.getElementById('emailConfirmWrap');
+        const inp  = document.getElementById('profilePwConfirm');
+        if (val.trim() !== ORIGINAL_EMAIL) {
+            wrap.style.display = 'block';
+            inp.required = true;
+        } else {
+            wrap.style.display = 'none';
+            inp.required = false;
+            inp.value = '';
+        }
+    }
+
     function handleLogout() {
         if (confirm('Are you sure you want to logout?')) window.location.href = 'logout.php';
     }
@@ -1324,5 +1553,91 @@ function parseUA(string $ua): string {
     });
 </script>
 
+<!-- AVATAR MODAL -->
+<div id="avatarModal" onclick="if(event.target===this)closeAvatarModal()">
+    <div id="avatarModalBox">
+        <div style="background:linear-gradient(135deg,#1a3a52,#1e5276);padding:20px 24px;display:flex;align-items:center;justify-content:space-between;">
+            <div>
+                <div style="font-family:'Sora',sans-serif;font-size:16px;font-weight:800;color:#fff;">Change Profile Picture</div>
+                <div style="font-size:12px;color:rgba(255,255,255,.6);margin-top:2px;">JPG, PNG, GIF or WEBP · Max 2MB</div>
+            </div>
+            <button type="button" onclick="closeAvatarModal()" style="background:rgba(255,255,255,.15);border:none;border-radius:8px;color:#fff;width:30px;height:30px;font-size:16px;cursor:pointer;">✕</button>
+        </div>
+
+        <!-- Simple form — same pattern as teacher profile, no fetch/CSRF issues -->
+        <form method="POST" enctype="multipart/form-data" id="avatarForm">
+            <input type="hidden" name="action" value="upload_avatar">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+            <div style="padding:24px;text-align:center;">
+                <?php $profileImg2 = $user['profile_image'] ?? ''; ?>
+                <?php if ($profileImg2 && file_exists($profileImg2)): ?>
+                    <img id="avatarPreview" src="<?= htmlspecialchars($profileImg2) ?>?v=<?= time() ?>"
+                         style="width:120px;height:120px;border-radius:50%;object-fit:cover;border:4px solid var(--accent);display:block;margin:0 auto 8px;">
+                    <div id="avatarInitials" style="display:none;width:120px;height:120px;border-radius:50%;background:linear-gradient(135deg,#1a3a52,#234C6A);align-items:center;justify-content:center;font-family:'Sora',sans-serif;font-size:40px;font-weight:800;color:white;margin:0 auto 8px;"><?= htmlspecialchars($userInitials) ?></div>
+                <?php else: ?>
+                    <img id="avatarPreview" src="" style="width:120px;height:120px;border-radius:50%;object-fit:cover;border:4px solid var(--accent);display:none;margin:0 auto 8px;">
+                    <div id="avatarInitials" style="width:120px;height:120px;border-radius:50%;background:linear-gradient(135deg,#1a3a52,#234C6A);display:flex;align-items:center;justify-content:center;font-family:'Sora',sans-serif;font-size:40px;font-weight:800;color:white;margin:0 auto 8px;"><?= htmlspecialchars($userInitials) ?></div>
+                <?php endif; ?>
+                <div style="font-size:12px;color:#94a3b8;margin-bottom:16px;">Click pencil or drop image below</div>
+                <label for="avatarFileInput" id="dropZone" style="display:block;border:2px dashed #cbd5e1;border-radius:12px;padding:20px;cursor:pointer;background:#f8fafc;transition:.2s;">
+                    <div style="font-size:28px;margin-bottom:6px;">📷</div>
+                    <div style="font-size:13.5px;font-weight:600;color:#475569;">Click to choose a photo</div>
+                    <div style="font-size:12px;color:#94a3b8;margin-top:3px;">or drag and drop here</div>
+                </label>
+                <input type="file" name="avatar" id="avatarFileInput" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none;" onchange="previewAvatar(this)">
+            </div>
+            <div style="padding:0 24px 20px;display:flex;gap:10px;">
+                <button type="button" onclick="closeAvatarModal()" style="flex:1;padding:11px;border-radius:10px;border:1.5px solid #e2e8f0;background:#fff;color:#475569;font-size:13.5px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">Cancel</button>
+                <button type="submit" id="saveAvatarBtn" disabled style="flex:1;padding:11px;border-radius:10px;border:none;background:linear-gradient(135deg,#0ea5e9,#06b6d4);color:#fff;font-size:13.5px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;opacity:.5;transition:.2s;">Save Photo</button>
+            </div>
+        </form>
+    </div>
+</div>
+<script>
+function openAvatarModal() {
+    document.getElementById('avatarModal').classList.add('open');
+    document.addEventListener('keydown', escAvatar);
+}
+function closeAvatarModal() {
+    document.getElementById('avatarModal').classList.remove('open');
+    document.removeEventListener('keydown', escAvatar);
+    document.getElementById('avatarFileInput').value = '';
+    const btn = document.getElementById('saveAvatarBtn');
+    btn.disabled = true; btn.style.opacity = '.5';
+    // Reset preview
+    document.getElementById('avatarPreview').style.display = 'none';
+    document.getElementById('avatarInitials').style.display = 'flex';
+}
+function escAvatar(e) { if (e.key === 'Escape') closeAvatarModal(); }
+function previewAvatar(input) {
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { alert('Image must be under 2MB.'); input.value=''; return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+        const preview  = document.getElementById('avatarPreview');
+        const initials = document.getElementById('avatarInitials');
+        preview.src = e.target.result;
+        preview.style.display = 'block';
+        if (initials) initials.style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+    const btn = document.getElementById('saveAvatarBtn');
+    btn.disabled = false; btn.style.opacity = '1';
+}
+// Drag and drop
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor='#0ea5e9'; dz.style.background='#eff8ff'; });
+dz.addEventListener('dragleave', () => { dz.style.borderColor='#cbd5e1'; dz.style.background='#f8fafc'; });
+dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.style.borderColor='#cbd5e1'; dz.style.background='#f8fafc';
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+        const input = document.getElementById('avatarFileInput');
+        try { const dt = new DataTransfer(); dt.items.add(file); input.files = dt.files; } catch(e) {}
+        previewAvatar(input);
+    }
+});
+</script>
 </body>
 </html>

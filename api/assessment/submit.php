@@ -270,6 +270,22 @@ safePreparedQuery($conn,
     [$finalScore, $percentage, $attemptId, $userId]
 );
 
+/* ── Rule 1: Remove 'assessment' notifications for this assessment ── */
+safePreparedQuery($conn,
+    "DELETE FROM notifications
+     WHERE user_id = ?
+       AND type = 'assessment'
+       AND related_entity_id = ?",
+    'ii', [$userId, $assessmentId]
+);
+
+/* ── Rule 3: Purge any notifications older than 3 days for this user ── */
+safePreparedQuery($conn,
+    "DELETE FROM notifications
+     WHERE user_id = ? AND created_at < NOW() - INTERVAL 3 DAY",
+    'i', [$userId]
+);
+
 /* ── Timeout redirect (GET) ── */
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     header("Location: ../../test-results.php?attempt_id=$attemptId");

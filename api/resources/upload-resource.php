@@ -125,4 +125,49 @@ if (!$ins['success']) {
 
 $newId = $conn->insert_id;
 
+// ── Notify all students about the new resource ────────────────────────────
+// Only send notifications for public resources
+if ($visibility === 'public') {
+    $notifTitle   = '📚 New Resource Available';
+    $notifMessage = 'A new resource "' . $title . '" has been shared with you.';
+
+    // Fetch all active student user IDs
+    $students = safePreparedQuery(
+        $conn,
+        "SELECT user_id FROM users WHERE role = 'student'",
+        '',
+        []
+    );
+
+    if ($students['success'] && $students['result']) {
+        $studentIds = [];
+        while ($row = $students['result']->fetch_assoc()) {
+            $studentIds[] = (int)$row['user_id'];
+        }
+        $students['result']->free();
+
+        if (!empty($studentIds)) {
+            // Build bulk INSERT — one row per student
+            $placeholders = implode(', ', array_fill(0, count($studentIds), '(?, ?, ?, ?, ?)'));
+            $types  = str_repeat('isssi', count($studentIds));
+            $params = [];
+            foreach ($studentIds as $sid) {
+                $params[] = $sid;
+                $params[] = $notifTitle;
+                $params[] = $notifMessage;
+                $params[] = 'material';
+                $params[] = $newId; // related_entity_id = material id
+            }
+
+            safePreparedQuery(
+                $conn,
+                "INSERT INTO notifications (user_id, title, message, type, related_entity_id)
+                 VALUES $placeholders",
+                $types,
+                $params
+            );
+        }
+    }
+}
+
 echo json_encode(['success' => true, 'material_id' => $newId]);

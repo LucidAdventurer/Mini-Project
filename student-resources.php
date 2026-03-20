@@ -8,6 +8,15 @@ $userName     = htmlspecialchars($currentUser['full_name']);
 $userInitials = strtoupper(substr($currentUser['full_name'], 0, 2));
 $userId       = (int) $currentUser['user_id'];
 
+// Fetch fresh profile image
+$imgRes = safePreparedQuery($conn, "SELECT profile_image FROM users WHERE user_id = ?", "i", [$userId]);
+$userProfileImage = '';
+if ($imgRes['success'] && $imgRes['result']) {
+    $imgRow = $imgRes['result']->fetch_assoc();
+    $userProfileImage = $imgRow['profile_image'] ?? '';
+    $imgRes['result']->free();
+}
+
 // Ensure CSRF token exists
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -27,8 +36,7 @@ if ($notifResult['success'] && $notifResult['result']) {
 
 // ── All notifications for dropdown (scroll, latest first) ──
 $notifDropResult = safePreparedQuery($conn,
-    "SELECT notification_id, title, message, type, is_read, created_at,
-            link_url, material_id
+    "SELECT notification_id, title, message, type, is_read, created_at
      FROM notifications WHERE user_id = ?
      ORDER BY created_at DESC LIMIT 50",
     "i", [$userId]
@@ -551,68 +559,9 @@ body {
 .empty-state i { font-size: 3rem; margin-bottom: 16px; display: block; opacity: .4; }
 .empty-state p { font-size: 14px; line-height: 1.6; }
 
-/* ── Highlighted card (scrolled-to from notification) ── */
-@keyframes highlightPulse {
-    0%   { box-shadow: 0 0 0 0 rgba(14,165,233,.6), var(--shadow); border-color: var(--accent); }
-    50%  { box-shadow: 0 0 0 8px rgba(14,165,233,0), var(--shadow); border-color: var(--accent); }
-    100% { box-shadow: var(--shadow); border-color: var(--border); }
-}
-.resource-card.highlight-card {
-    animation: highlightPulse 2.5s ease forwards;
-    border-color: var(--accent);
-}
-
-/* ── New-resource popup toast ── */
-.new-resource-popup {
-    position: fixed; bottom: 32px; right: 28px;
-    background: var(--surface); border: 1.5px solid var(--accent);
-    border-radius: var(--radius); box-shadow: 0 8px 32px rgba(14,165,233,.22);
-    padding: 16px 20px; max-width: 320px; width: calc(100vw - 56px);
-    display: flex; align-items: flex-start; gap: 14px;
-    transform: translateY(20px); opacity: 0; pointer-events: none;
-    transition: opacity .3s ease, transform .3s ease;
-    z-index: 3000;
-}
-.new-resource-popup.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
-.new-resource-popup .pop-icon {
-    width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    display: flex; align-items: center; justify-content: center;
-    font-size: 20px; color: white;
-}
-.new-resource-popup .pop-body { flex: 1; min-width: 0; }
-.new-resource-popup .pop-title { font-family:'Sora',sans-serif; font-size:13px; font-weight:700; color:var(--text); margin-bottom:3px; }
-.new-resource-popup .pop-msg   { font-size:12px; color:var(--text-mid); line-height:1.45; margin-bottom:10px; }
-.new-resource-popup .pop-actions { display:flex; gap:8px; }
-.pop-btn-view {
-    padding: 6px 14px; border-radius: 8px; font-size:12px; font-weight:600;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    color: white; border: none; cursor: pointer; transition: var(--transition);
-}
-.pop-btn-view:hover { opacity: .88; }
-.pop-btn-dismiss {
-    padding: 6px 12px; border-radius: 8px; font-size:12px; font-weight:600;
-    background: var(--surface2); color: var(--text-mid);
-    border: 1.5px solid var(--border); cursor: pointer; transition: var(--transition);
-}
-.pop-btn-dismiss:hover { border-color: var(--text-soft); }
-.new-resource-popup .pop-close {
-    position: absolute; top: 10px; right: 12px;
-    background: none; border: none; font-size: 16px;
-    color: var(--text-soft); cursor: pointer; line-height: 1;
-}
-
-/* ── Resource-type notification highlight in dropdown ── */
-.notif-item[data-material]:not([data-material="0"]),
-.notif-item[data-link]:not([data-link=""]) {
-    cursor: pointer;
-}
-.notif-item[data-material]:not([data-material="0"]):hover,
-.notif-item[data-link]:not([data-link=""]):hover {
-    border-left: 3px solid var(--accent);
-    padding-left: 17px;
-}
-
+/* ══════════════════════════════
+   SKELETON
+══════════════════════════════ */
 .skeleton { animation: pulse 1.4s ease-in-out infinite; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 .skel { background: var(--border); border-radius: 8px; }
@@ -686,11 +635,7 @@ body {
                         $typeIcons = ['info'=>'ℹ️','success'=>'✅','warning'=>'⚠️','error'=>'❌','assessment'=>'📝','result'=>'🏆','material'=>'📚'];
                         $icon = $typeIcons[$n['type']] ?? '🔔';
                     ?>
-                    <div class="notif-item <?= $isUnread ? 'unread' : '' ?>"
-                         data-notif-id="<?= (int)$n['notification_id'] ?>"
-                         data-link="<?= htmlspecialchars($n['link_url'] ?? '') ?>"
-                         data-material="<?= (int)($n['material_id'] ?? 0) ?>"
-                         onclick="handleNotifClick(this)">
+                    <div class="notif-item <?= $isUnread ? 'unread' : '' ?>">
                         <div class="notif-dot <?= $isUnread ? '' : 'read' ?>"></div>
                         <div class="notif-item-body">
                             <div class="notif-item-title"><?= $icon ?> <?= htmlspecialchars($n['title']) ?></div>
@@ -699,9 +644,6 @@ body {
                             <?php endif; ?>
                             <div class="notif-item-time"><?= timeAgoPhp($n['created_at']) ?></div>
                         </div>
-                        <?php if ($n['material_id'] || $n['link_url']): ?>
-                        <div style="align-self:center;color:var(--accent);font-size:12px;flex-shrink:0;"><i class="fa fa-arrow-right"></i></div>
-                        <?php endif; ?>
                     </div>
                     <?php endforeach; endif; ?>
                 </div>
@@ -710,13 +652,23 @@ body {
 
         <div class="profile-wrapper" id="profileWrapper">
             <button class="profile-button" onclick="toggleDropdown()">
-                <div class="profile-avatar"><?= $userInitials ?></div>
+                <?php if ($userProfileImage && file_exists($userProfileImage)): ?>
+                    <img src="<?= htmlspecialchars($userProfileImage) ?>?v=<?= time() ?>" alt="Avatar" style="width:32px;height:32px;border-radius:8px;object-fit:cover;flex-shrink:0;">
+                <?php else: ?>
+                    <div class="profile-avatar"><?= $userInitials ?></div>
+                <?php endif; ?>
                 <span class="profile-name"><?= $userName ?></span>
                 <span class="dropdown-arrow">▼</span>
             </button>
             <div class="profile-dropdown" id="profileDropdown">
                 <div class="dropdown-header">
-                    <div class="dropdown-avatar"><?= $userInitials ?></div>
+                    <div class="dropdown-avatar">
+                        <?php if ($userProfileImage && file_exists($userProfileImage)): ?>
+                            <img src="<?= htmlspecialchars($userProfileImage) ?>?v=<?= time() ?>" alt="Avatar" style="width:44px;height:44px;border-radius:12px;object-fit:cover;">
+                        <?php else: ?>
+                            <?= $userInitials ?>
+                        <?php endif; ?>
+                    </div>
                     <div class="dropdown-user-info">
                         <div class="dropdown-name"><?= $userName ?></div>
                         <div class="dropdown-email"><?= htmlspecialchars($currentUser['email'] ?? '') ?></div>
@@ -868,7 +820,6 @@ function toggleNotifDropdown() {
     document.getElementById('profileDropdown').classList.remove('open');
     dd.classList.toggle('show', !isOpen);
     if (!isOpen) {
-        // Mark all as read when dropdown opens
         fetch('api/notifications/mark-read.php', {
             method: 'POST',
             headers: { 'X-CSRF-Token': CSRF_TOKEN, 'Content-Type': 'application/json' }
@@ -877,88 +828,7 @@ function toggleNotifDropdown() {
             if (badge) badge.remove();
             document.querySelectorAll('.notif-item.unread').forEach(el => el.classList.remove('unread'));
             document.querySelectorAll('.notif-dot:not(.read)').forEach(el => el.classList.add('read'));
-            lastUnreadCount = 0;
         }).catch(() => {});
-    }
-}
-
-/**
- * Called when a notification item is clicked.
- * If it carries a material_id, scroll to / highlight that card on this page.
- * If it carries a link_url, navigate there.
- * Otherwise just close the dropdown.
- */
-function handleNotifClick(el) {
-    const materialId = parseInt(el.dataset.material || '0');
-    const linkUrl    = el.dataset.link || '';
-
-    // Close dropdown first
-    document.getElementById('notifDropdown').classList.remove('show');
-
-    if (materialId > 0) {
-        // If we're already on the resources page, scroll to + highlight the card
-        scrollToMaterial(materialId);
-    } else if (linkUrl) {
-        window.location.href = linkUrl;
-    }
-}
-
-/**
- * Scroll to a resource card by material_id.
- * If the card isn't rendered (different page/filter), reload with ?highlight=ID
- * so the page can load it and scroll to it automatically.
- */
-function scrollToMaterial(materialId) {
-    const existing = document.querySelector(`[data-material-id="${materialId}"]`);
-    if (existing) {
-        existing.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        existing.classList.add('highlight-card');
-        setTimeout(() => existing.classList.remove('highlight-card'), 2500);
-        return;
-    }
-    // Card not in current view — reset filters and reload to show it
-    activeCat   = '';
-    activeType  = '';
-    searchQ     = '';
-    currentPage = 1;
-    document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.sidebar a[id^="t-"]').forEach(a => a.classList.remove('active'));
-    document.getElementById('t-all').classList.add('active');
-    document.getElementById('searchInput').value = '';
-    pendingHighlight = materialId; // will be used after renderGrid completes
-    load();
-}
-
-/* ── New-resource popup ── */
-let pendingHighlight  = 0;  // material_id to highlight after next renderGrid
-let popupMaterialId   = 0;  // what the current popup points to
-let popupDismissTimer = null;
-
-function showNewResourcePopup(title, msg, materialId) {
-    popupMaterialId = materialId || 0;
-    document.getElementById('popTitle').textContent = title || 'New Resource Available!';
-    document.getElementById('popMsg').textContent   = msg   || 'A teacher just added a new study material.';
-    const popup = document.getElementById('newResourcePopup');
-    popup.classList.add('show');
-
-    // Auto-dismiss after 8 seconds
-    clearTimeout(popupDismissTimer);
-    popupDismissTimer = setTimeout(dismissPopup, 8000);
-}
-
-function dismissPopup() {
-    clearTimeout(popupDismissTimer);
-    document.getElementById('newResourcePopup').classList.remove('show');
-}
-
-function goToResource() {
-    dismissPopup();
-    if (popupMaterialId > 0) {
-        scrollToMaterial(popupMaterialId);
-    } else {
-        // Just refresh the grid to show the newest materials
-        currentPage = 1;
-        load();
     }
 }
 
@@ -988,11 +858,11 @@ async function load() {
         if (!data.success) { showError(data.error||'Failed to load.'); return; }
 
         const s = data.stats||{};
-        document.getElementById('st-total').textContent       = fmtNum(s.total_materials);
+        document.getElementById('st-total').textContent = fmtNum(s.total_materials);
         document.getElementById('st-total-banner').textContent = fmtNum(s.total_materials);
-        document.getElementById('st-views').textContent       = fmtNum(s.total_views);
-        document.getElementById('st-dl').textContent          = fmtNum(s.total_downloads);
-        document.getElementById('st-size').textContent        = fmtSize(s.storage_used_bytes)||'0 B';
+        document.getElementById('st-views').textContent = fmtNum(s.total_views);
+        document.getElementById('st-dl').textContent    = fmtNum(s.total_downloads);
+        document.getElementById('st-size').textContent  = fmtSize(s.storage_used_bytes)||'0 B';
 
         renderGrid(data.materials||[], data.total||0);
         renderPagination(data.pages||1);
@@ -1029,15 +899,15 @@ function renderGrid(mats, total) {
         const isLink = m.material_type === 'link';
 
         const primaryBtn = isLink
-            ? `<a class="btn-view" href="${esc(m.external_url)}" target="_blank" rel="noopener"><i class="fa fa-external-link-alt"></i> Open</a>`
+            ? `<a class="btn-view" href="${esc(m.external_url)}" target="_blank" rel="noopener" onclick="dismissResourceNotif(${m.material_id})"><i class="fa fa-external-link-alt"></i> Open</a>`
             : `<button class="btn-view" onclick="openFile(${m.material_id},'${esc(m.material_type)}')"><i class="fa fa-eye"></i> View</button>`;
 
-        const dlBtn = (!isLink && m.file_path !== undefined)
+        const dlBtn = (!isLink && m.file_path)
             ? `<button class="btn-dl" onclick="dlFile(${m.material_id},'${esc(m.title)}')"><i class="fa fa-download"></i></button>`
             : '';
 
         return `
-        <div class="resource-card" data-material-id="${m.material_id}">
+        <div class="resource-card">
             <div class="card-top">
                 <div class="ricon ${ic}"><i class="fa ${fa}"></i></div>
                 <div style="flex:1;min-width:0">
@@ -1047,9 +917,9 @@ function renderGrid(mats, total) {
             </div>
             ${m.description ? `<div class="card-desc">${esc(m.description)}</div>` : ''}
             <div class="card-meta">
-                ${m.uploaded_by_name       ? `<span><i class="fa fa-user"></i>${esc(m.uploaded_by_name)}</span>` : ''}
-                ${m.file_size              ? `<span><i class="fa fa-database"></i>${fmtSize(m.file_size)}</span>` : ''}
-                ${m.estimated_time_minutes ? `<span><i class="fa fa-clock"></i>${m.estimated_time_minutes} min</span>` : ''}
+                ${m.uploaded_by_name        ? `<span><i class="fa fa-user"></i>${esc(m.uploaded_by_name)}</span>` : ''}
+                ${m.file_size               ? `<span><i class="fa fa-database"></i>${fmtSize(m.file_size)}</span>` : ''}
+                ${m.estimated_time_minutes  ? `<span><i class="fa fa-clock"></i>${m.estimated_time_minutes} min</span>` : ''}
                 <span><i class="fa fa-eye"></i>${m.views||0}</span>
                 <span><i class="fa fa-download"></i>${m.downloads||0}</span>
                 ${m.created_at ? `<span><i class="fa fa-clock"></i>${timeAgo(m.created_at)}</span>` : ''}
@@ -1058,19 +928,6 @@ function renderGrid(mats, total) {
             <div class="card-actions">${primaryBtn}${dlBtn}</div>
         </div>`;
     }).join('');
-
-    // After render: scroll to pending highlight (from notification click)
-    if (pendingHighlight > 0) {
-        const target = document.querySelector(`[data-material-id="${pendingHighlight}"]`);
-        if (target) {
-            setTimeout(() => {
-                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                target.classList.add('highlight-card');
-                setTimeout(() => target.classList.remove('highlight-card'), 2500);
-            }, 120);
-        }
-        pendingHighlight = 0;
-    }
 }
 
 /* ── Pagination ── */
@@ -1089,8 +946,18 @@ function renderPagination(totalPages) {
 }
 function goPage(p) { currentPage=p; window.scrollTo({top:0,behavior:'smooth'}); load(); }
 
+/* ── Dismiss material notification when resource is viewed ── */
+function dismissResourceNotif(materialId) {
+    fetch('api/notifications/dismiss-notification.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'resource_viewed', material_id: materialId })
+    }).catch(() => {});
+}
+
 /* ── Actions ── */
 function openFile(id, type) {
+    dismissResourceNotif(id);
     if (['pdf','video'].includes(type))
         window.open('api/resources/view-resource.php?material_id='+id, '_blank');
     else
@@ -1136,8 +1003,7 @@ function showError(msg) {
 document.getElementById('t-all').classList.add('active');
 load();
 
-/* ── Live notification polling — checks every 30s for new unread notifications.
-       If count rises AND a new 'material' type notification appears, show popup. ── */
+// ── Live notification badge polling ──
 let lastUnreadCount = <?= $unreadCount ?>;
 
 function updateNotifBadge(count) {
@@ -1155,94 +1021,19 @@ function updateNotifBadge(count) {
     }
 }
 
-function injectNotifItem(n) {
-    const list = document.querySelector('.notif-list');
-    if (!list) return;
-
-    // Remove "no notifications" placeholder if present
-    const empty = list.querySelector('.notif-empty');
-    if (empty) empty.remove();
-
-    const typeIcons = {info:'ℹ️',success:'✅',warning:'⚠️',error:'❌',assessment:'📝',result:'🏆',material:'📚'};
-    const icon = typeIcons[n.type] || '🔔';
-    const ago  = (() => {
-        const s = Math.floor((Date.now() - new Date(n.created_at)) / 1000);
-        if (s < 60)    return 'just now';
-        if (s < 3600)  return Math.floor(s/60)+'m ago';
-        if (s < 86400) return Math.floor(s/3600)+'h ago';
-        return Math.floor(s/86400)+'d ago';
-    })();
-
-    const matId = n.material_id || 0;
-    const link  = n.link_url    || '';
-    const arrow = (matId || link) ? `<div style="align-self:center;color:var(--accent);font-size:12px;flex-shrink:0;"><i class="fa fa-arrow-right"></i></div>` : '';
-
-    const div = document.createElement('div');
-    div.className = 'notif-item unread';
-    div.dataset.notifId  = n.notification_id;
-    div.dataset.material = matId;
-    div.dataset.link     = link;
-    div.setAttribute('onclick', 'handleNotifClick(this)');
-    div.innerHTML = `
-        <div class="notif-dot"></div>
-        <div class="notif-item-body">
-            <div class="notif-item-title">${icon} ${n.title}</div>
-            ${n.message ? `<div class="notif-item-msg">${n.message}</div>` : ''}
-            <div class="notif-item-time">${ago}</div>
-        </div>${arrow}`;
-
-    list.prepend(div);
-}
-
 function pollNotifications() {
-    // Use the richer endpoint that also returns the latest unread notification detail
-    fetch('api/notifications/unread-count.php?with_latest=1')
+    fetch('api/notifications/unread-count.php')
         .then(r => r.json())
         .then(data => {
-            if (!data.success) return;
-            const newCount = typeof data.count === 'number' ? data.count : 0;
-
-            if (newCount > lastUnreadCount) {
-                // New notification(s) arrived since last poll
-                updateNotifBadge(newCount);
-
-                // If the latest one is a new resource notification, show popup
-                const latest = data.latest;
-                if (latest && latest.type === 'material') {
-                    injectNotifItem(latest);
-                    showNewResourcePopup(
-                        latest.title,
-                        latest.message,
-                        parseInt(latest.material_id || 0)
-                    );
-                } else if (latest) {
-                    injectNotifItem(latest);
-                    toast('🔔 ' + latest.title);
-                }
+            if (data.success && typeof data.count === 'number') {
+                updateNotifBadge(data.count);
+                lastUnreadCount = data.count;
             }
-
-            lastUnreadCount = newCount;
         })
         .catch(() => {});
 }
 
 setInterval(pollNotifications, 30000);
 </script>
-
-<!-- NEW RESOURCE POPUP -->
-<div class="new-resource-popup" id="newResourcePopup">
-    <button class="pop-close" onclick="dismissPopup()" title="Dismiss">✕</button>
-    <div class="pop-icon">📚</div>
-    <div class="pop-body">
-        <div class="pop-title" id="popTitle">New Resource Available!</div>
-        <div class="pop-msg"  id="popMsg">A teacher just added a new study material.</div>
-        <div class="pop-actions">
-            <button class="pop-btn-view"    onclick="goToResource()">View Now</button>
-            <button class="pop-btn-dismiss" onclick="dismissPopup()">Later</button>
-        </div>
-    </div>
-</div>
-
-<div id="toast" class="toast"></div>
 </body>
 </html>
