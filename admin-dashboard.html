@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard - PTA Portal</title>
+    <title>Admin Dashboard - PREPAURA</title>
     <style>
         :root {
             --blue-400: #3385FF;
@@ -1454,11 +1454,12 @@
     <aside class="sidebar">
         <div class="sidebar-brand">
             <div class="brand-logo">
-                <svg viewBox="0 0 24 24">
-                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                <svg viewBox="0 0 24 24" fill="none">
+                    <path d="M12 2L4 5.5V11c0 4.5 3.3 8.7 8 9.9 4.7-1.2 8-5.4 8-9.9V5.5L12 2z" fill="rgba(255,255,255,0.3)" stroke="white" stroke-width="1.5"/>
+                    <path d="M8.5 12l2.5 2.5 5-5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
             </div>
-            <div class="brand-text">PTA Portal <span>Admin Panel</span></div>
+            <div class="brand-text">PREPAURA <span>Admin Login</span></div>
         </div>
 
         <nav class="sidebar-nav">
@@ -1505,6 +1506,15 @@
             </a>
 
             <div class="nav-section-label">System</div>
+
+            <a class="nav-item" onclick="showPage('database', this)">
+                <svg viewBox="0 0 24 24">
+                    <ellipse cx="12" cy="5" rx="9" ry="3" />
+                    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                </svg>
+                Database Manager
+            </a>
 
             <a class="nav-item" onclick="showPage('logs', this)">
                 <svg viewBox="0 0 24 24">
@@ -2215,6 +2225,47 @@
                 </div>
             </div>
 
+
+        <!-- DATABASE MANAGER PAGE -->
+        <div class="page" id="page-database">
+            <div class="section-header">
+                <div>
+                    <h2>Database Manager</h2>
+                    <p>Run SQL queries directly on your remote database</p>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+                    <h3>⚡ SQL Terminal</h3>
+                    <span style="font-size:11px;color:#f59e0b;">⚠ All queries are logged &nbsp;|&nbsp; Ctrl+Enter to run</span>
+                </div>
+                <div class="card-body">
+                    <textarea id="dbQueryInput" rows="10"
+                        placeholder="-- Type any SQL query here&#10;-- Examples:&#10;-- SHOW TABLES;&#10;-- SELECT * FROM users LIMIT 20;&#10;-- UPDATE users SET is_active=1 WHERE user_id=5;"
+                        style="width:100%;padding:16px;background:#0a0c10;border:1px solid rgba(0,255,136,0.2);border-radius:8px;color:#00ff88;font-family:'Courier New',monospace;font-size:14px;resize:vertical;outline:none;line-height:1.8;caret-color:#00ff88;"
+                        onkeydown="if((event).ctrlKey&&event.key==='Enter')dbRunQuery()"></textarea>
+                    <div style="display:flex;gap:10px;margin-top:12px;">
+                        <button class="btn btn-primary" onclick="dbRunQuery()">▶ Run Query</button>
+                        <button class="btn" onclick="document.getElementById('dbQueryInput').value=''" style="background:var(--surface2);color:var(--muted);border:1px solid var(--border2);">✕ Clear</button>
+                        <button class="btn" onclick="dbExportQueryCSV()" style="background:var(--surface2);color:#10b981;border:1px solid var(--border2);">⬇ Export CSV</button>
+                    </div>
+                </div>
+            </div>
+            <div class="card" id="dbQueryResultCard" style="display:none;margin-top:16px;">
+                <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+                    <h3>Results <span id="dbQueryRowCount" style="font-size:12px;color:var(--muted);font-weight:400;"></span></h3>
+                </div>
+                <div class="card-body" style="overflow-x:auto;overflow-y:auto;max-height:500px;">
+                    <div id="dbQueryResult" style="min-width:max-content;"></div>
+                </div>
+            </div>
+            <div class="card" id="dbQueryErrorCard" style="display:none;margin-top:16px;border-left:3px solid #ef4444;">
+                <div class="card-body">
+                    <p style="color:#ef4444;font-family:monospace;font-size:13px;" id="dbQueryError"></p>
+                </div>
+            </div>
+        </div>
+
         </div><!-- end .content -->
     </div><!-- end .main -->
     </div><!-- end body wrapper -->
@@ -2548,6 +2599,7 @@
                 logs: 'System Logs <span>/ Activity</span>',
                 profile: 'Profile <span>/ Account</span>',
                 settings: 'Settings <span>/ Configuration</span>',
+                database: 'Database Manager <span>/ SQL Terminal</span>',
             };
             document.getElementById('topbarTitle').innerHTML = titles[id] || id;
 
@@ -2557,6 +2609,7 @@
             if (id === 'settings') loadSettings();
             if (id === 'resources') loadResources();
             if (id === 'profile') loadMe(true);
+            if (id === 'database') { /* SQL terminal ready */ }
         }
 
         function setTab(el) {
@@ -3771,6 +3824,70 @@
         function fmtNum(n) { return Number(n).toLocaleString(); }
         function esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
         function ucwords(s) { return s.replace(/\b\w/g, c => c.toUpperCase()); }
+
+        // ════════════════════════════════════════
+        // DATABASE MANAGER — SQL Terminal
+        // ════════════════════════════════════════
+        let dbLastQueryData = [];
+
+        async function dbRunQuery() {
+            const sql = document.getElementById('dbQueryInput').value.trim();
+            if (!sql) return;
+            document.getElementById('dbQueryResultCard').style.display = 'none';
+            document.getElementById('dbQueryErrorCard').style.display = 'none';
+            document.getElementById('dbQueryResult').innerHTML = '<p style="color:var(--muted);padding:10px;">Running…</p>';
+            document.getElementById('dbQueryResultCard').style.display = '';
+
+            try {
+                const res = await fetch('api/db-manager.php', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'query', sql })
+                });
+                const d = await res.json();
+                if (!d.success) {
+                    document.getElementById('dbQueryResultCard').style.display = 'none';
+                    document.getElementById('dbQueryErrorCard').style.display = '';
+                    document.getElementById('dbQueryError').textContent = d.error;
+                    return;
+                }
+                dbLastQueryData = d.rows || [];
+                const count = d.rows ? d.rows.length : d.affected_rows;
+                document.getElementById('dbQueryRowCount').textContent = `— ${count} row(s) ${d.affected_rows !== undefined ? 'affected' : 'returned'}`;
+                if (d.rows && d.rows.length) {
+                    dbRenderTable('dbQueryResult', d.rows);
+                } else {
+                    document.getElementById('dbQueryResult').innerHTML = `<p style="color:#10b981;padding:10px;">✓ Query executed. ${d.affected_rows ?? 0} row(s) affected.</p>`;
+                }
+            } catch(e) {
+                document.getElementById('dbQueryResultCard').style.display = 'none';
+                document.getElementById('dbQueryErrorCard').style.display = '';
+                document.getElementById('dbQueryError').textContent = 'Network error: ' + e.message;
+            }
+        }
+
+        function dbRenderTable(containerId, rows) {
+            if (!rows || !rows.length) { document.getElementById(containerId).innerHTML = '<p style="color:var(--muted);padding:10px;">No rows returned.</p>'; return; }
+            const keys = Object.keys(rows[0]);
+            const html = `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead><tr style="border-bottom:1px solid var(--border2);color:var(--muted);">
+                    ${keys.map(k => `<th style="padding:8px 14px;text-align:left;white-space:nowrap;position:sticky;top:0;background:var(--surface2);z-index:1;">${k}</th>`).join('')}
+                </tr></thead>
+                <tbody>${rows.map(r => `<tr style="border-bottom:1px solid var(--border2);">
+                    ${keys.map(k => `<td style="padding:8px 14px;white-space:nowrap;border-bottom:1px solid var(--border2);" title="${String(r[k]??'')}">${String(r[k]??'—')}</td>`).join('')}
+                </tr>`).join('')}</tbody></table>`;
+            document.getElementById(containerId).innerHTML = html;
+        }
+
+        function dbExportQueryCSV() {
+            if (!dbLastQueryData.length) return;
+            const keys = Object.keys(dbLastQueryData[0]);
+            const rows = [keys.join(','), ...dbLastQueryData.map(r => keys.map(k => JSON.stringify(r[k] ?? '')).join(','))];
+            const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'query_result.csv'; a.click();
+        }
+
     </script>
 </body>
 
