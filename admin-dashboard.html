@@ -1898,7 +1898,7 @@
                 <!-- Status filter tabs -->
                 <div class="tabs">
                     <button class="tab active" onclick="filterByStatus('all',this)">All</button>
-                    <button class="tab" onclick="filterByStatus('active',this)">Published</button>
+                    <button class="tab" onclick="filterByStatus('published',this)">Published</button>
                     <button class="tab" onclick="filterByStatus('draft',this)">Draft</button>
                     <button class="tab" onclick="filterByStatus('archived',this)">Archived</button>
                 </div>
@@ -2837,11 +2837,26 @@
         });
 
         async function fetchCsrf() {
+            // First try: token stored in sessionStorage by login.php on successful login
+            const stored = sessionStorage.getItem('csrf_token');
+            if (stored && stored.length > 10) {
+                csrfToken = stored;
+                return;
+            }
+            // Second try: fetch from csrf-token.php
             try {
                 const r = await fetch(API.csrf, { credentials: 'same-origin' });
-                const d = await r.json();
-                if (d.success) csrfToken = d.token;
+                const text = await r.text();
+                try {
+                    const d = JSON.parse(text);
+                    if (d.success && d.token) {
+                        csrfToken = d.token;
+                        sessionStorage.setItem('csrf_token', csrfToken);
+                        return;
+                    }
+                } catch(e) {}
             } catch (e) { console.error('CSRF fetch failed', e); }
+            console.warn('CSRF token not available — API calls will fail. Please log in again.');
         }
 
         async function safeJson(response) {
@@ -3541,7 +3556,7 @@
 
             // Tab counts
             const tabs = document.querySelectorAll('#page-tests .tab');
-            const sKeys = ['all', 'active', 'draft', 'archived'];
+            const sKeys = ['all', 'published', 'draft', 'archived'];
             const sLabel = ['All', 'Active', 'Draft', 'Archived'];
             tabs.forEach((tab, i) => {
                 const cnt = d.counts[sKeys[i]];
@@ -3560,7 +3575,7 @@
         function renderTestRow(t) {
             const diffBadge = `<span class="badge ${t.difficulty}">${esc(t.difficulty)}</span>`;
             const statusClass = t.status;
-            const statusLabel = { active: 'Published', draft: 'Draft', archived: 'Archived' }[t.status] || t.status;
+            const statusLabel = { published: 'Published', draft: 'Draft', archived: 'Archived' }[t.status] || t.status;
             const statusBadge = `<span class="badge ${statusClass}">${esc(statusLabel)}</span>`;
             const passRate = t.pass_rate !== null ? t.pass_rate + '%' : '—';
             const avgScore = t.avg_score ? t.avg_score + '%' : '—';
@@ -3569,13 +3584,13 @@
             let actions = `<button class="btn btn-ghost btn-sm" onclick="viewQuestions(${t.assessment_id})">Questions</button>`;
 
             if (t.status === 'draft') {
-                actions += ` <button class="btn btn-primary btn-sm" onclick="changeTestStatus(${t.assessment_id},'active')">Publish</button>`;
+                actions += ` <button class="btn btn-primary btn-sm" onclick="changeTestStatus(${t.assessment_id},'published')">Publish</button>`;
                 actions += ` <button class="btn btn-danger btn-sm" onclick="deleteTest(${t.assessment_id},'${esc(t.title)}')">Delete</button>`;
-            } else if (t.status === 'active') {
+            } else if (t.status === 'published') {
                 actions += ` <button class="btn btn-ghost btn-sm" onclick="changeTestStatus(${t.assessment_id},'draft')">Unpublish</button>`;
                 actions += ` <button class="btn btn-danger btn-sm" onclick="changeTestStatus(${t.assessment_id},'archived')">Archive</button>`;
             } else if (t.status === 'archived') {
-                actions += ` <button class="btn btn-primary btn-sm" onclick="changeTestStatus(${t.assessment_id},'active')">Restore</button>`;
+                actions += ` <button class="btn btn-primary btn-sm" onclick="changeTestStatus(${t.assessment_id},'published')">Restore</button>`;
                 actions += ` <button class="btn btn-danger btn-sm" onclick="deleteTest(${t.assessment_id},'${esc(t.title)}')">Delete</button>`;
             }
 
@@ -3598,7 +3613,7 @@
         }
 
         async function changeTestStatus(assessmentId, newStatus) {
-            const label = { active: 'Publish', draft: 'Unpublish', archived: 'Archive' }[newStatus] || newStatus;
+            const label = { published: 'Publish', draft: 'Unpublish', archived: 'Archive' }[newStatus] || newStatus;
             if (!confirm(`${label} this assessment?`)) return;
             try {
                 const d = await apiPost(API.updateTestStatus, { assessment_id: assessmentId, status: newStatus });
@@ -3866,7 +3881,7 @@
 
             const fd=new FormData(); fd.append('document',file);
             try {
-                const r=await fetch(API.parseDocument, {method:'POST', credentials:'same-origin', body:fd});
+                const r=await fetch(API.parseDocument, {method:'POST', credentials:'same-origin', headers:{'X-CSRF-Token':csrfToken}, body:fd});
                 document.getElementById('qImportProgressBar').style.width='100%';
                 document.getElementById('qImportProgressText').textContent='Parsing complete';
                 const d=await r.json();

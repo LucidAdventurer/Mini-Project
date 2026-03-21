@@ -802,8 +802,7 @@
             try {
                 // FIX: use a root-relative URL so the request works regardless
                 // of where admin-login.html is served from in the directory tree.
-                const loginUrl = new URL('login.php', window.location.href).href;
-                const res = await fetch(loginUrl, {
+                const res = await fetch('/pta/Mini-Project/login.php', {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json' },
@@ -813,8 +812,8 @@
                 const text = await res.text();
                 let data;
                 try { data = JSON.parse(text); }
-                catch (e) {
-                    showError('PHP error: ' + text.replace(/<[^>]+>/g, '').trim().substring(0, 300));
+                catch(e) {
+                    showError('PHP error: ' + text.replace(/<[^>]+>/g,'').trim().substring(0,300));
                     resetBtn(btn); return;
                 }
 

@@ -96,7 +96,7 @@ $r = safePreparedQuery(
          duration_minutes, total_marks, passing_marks, max_attempts,
          visibility, status, randomize_questions, randomize_options)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)",
-    "issssiiiiiss",
+    "issssiiiiss",
     [
         $adminId, $title,
         $description ?: null,
