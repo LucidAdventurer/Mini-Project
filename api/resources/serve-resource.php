@@ -39,7 +39,8 @@ if ($materialId <= 0) {
 
 // ── Fetch material ────────────────────────────────────────────────────────
 $r = safePreparedQuery($conn,
-    "SELECT material_id, title, cloudinary_public_id, external_url, visibility
+    "SELECT material_id, title, cloudinary_public_id, external_url,
+            (visibility = 'public') AS is_public
      FROM materials WHERE material_id = ?",
     'i', [$materialId]
 );
@@ -54,12 +55,12 @@ $material = $r['result']->fetch_assoc();
 $r['result']->free();
 
 // ── Access control ────────────────────────────────────────────────────────
-if ($isGuest && $material['visibility'] !== 'public') {
+if ($isGuest && !$material['is_public']) {
     http_response_code(403);
     echo 'Access denied.';
     exit;
 }
-if ($role === 'student' && $material['visibility'] === 'private') {
+if ($role === 'student' && !$material['is_public']) {
     http_response_code(403);
     echo 'Access denied.';
     exit;

@@ -162,10 +162,12 @@ function buildMaterial(array $row): array {
     $type = 'document';
     if (!empty($row['external_url'])) {
         $url = strtolower($row['external_url']);
-        if (str_ends_with($url, '.pdf'))                             $type = 'pdf';
-        elseif (preg_match('/\.(mp4|webm|ogg|mov)$/', $url))        $type = 'video';
-        elseif (preg_match('/\.(jpg|jpeg|png|gif|webp)$/', $url))   $type = 'image';
-        else                                                          $type = 'link';
+        $ext = pathinfo(parse_url($url, PHP_URL_PATH) ?: $url, PATHINFO_EXTENSION);
+        if ($ext === 'pdf')                                                      $type = 'pdf';
+        elseif (in_array($ext, ['mp4','webm','ogg','mov'], true))               $type = 'video';
+        elseif (in_array($ext, ['jpg','jpeg','png','gif','webp'], true))        $type = 'image';
+        elseif (in_array($ext, ['doc','docx','xls','xlsx','ppt','pptx'], true)) $type = 'document';
+        elseif ($ext === '')                                                     $type = 'link';
     } elseif (!empty($row['cloudinary_public_id'])) {
         $type = 'file';
     }

@@ -8,7 +8,9 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../config.php'; // loads $conn + session
+ob_start(); // capture any stray PHP warnings/notices
+require_once __DIR__ . '/../config.php';
+ob_end_clean(); // discard them before we send JSON // loads $conn + session
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');

@@ -855,7 +855,7 @@ function goPage(p) { currentPage=p; window.scrollTo({top:0,behavior:'smooth'}); 
 
 /* ── File actions ── */
 function openFile(id, type) {
-    if (['pdf','video'].includes(type))
+    if (['pdf','video','document','file','image'].includes(type))
         window.open('api/resources/view-resource.php?material_id='+id, '_blank');
     else
         window.open('api/resources/serve-resource.php?material_id='+id+'&action=download', '_blank');
