@@ -3,18 +3,13 @@
    CSRF Token Endpoint
    File: api/csrf-token.php
 
-   GET only. Returns the session CSRF token so your
-   JS can attach it to all POST requests.
-
-   Usage in JS (call once after page load):
-     const { token } = await fetch('/api/csrf-token.php').then(r => r.json());
-     // store token, then on every POST:
-     headers: { 'X-CSRF-Token': token, 'Content-Type': 'application/json' }
+   Returns the session CSRF token for authenticated pages.
+   Does NOT call validateSession() — that does a full DB
+   round-trip and fails if the session cookie path doesn't
+   match. Instead just checks session variables directly.
    ======================================== */
 
-// config.php owns session_start() — do NOT call it here.
 require_once __DIR__ . '/../config.php';
-require_once __DIR__ . '/../db-guard.php';
 
 header('Content-Type: application/json');
 
@@ -24,7 +19,19 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
-// validateSession() aborts if no session exists
-validateSession($conn);
+// Check session has a logged-in user
+$uid  = $_SESSION['uid']       ?? $_SESSION['user_id']   ?? 0;
+$role = $_SESSION['role']      ?? $_SESSION['user_type'] ?? '';
 
-echo json_encode(['success' => true, 'token' => getCsrfToken()]);
+if (!$uid || !$role) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'error' => 'Session expired. Please log in again.']);
+    exit;
+}
+
+// Seed token if somehow missing
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+echo json_encode(['success' => true, 'token' => $_SESSION['csrf_token']]);
