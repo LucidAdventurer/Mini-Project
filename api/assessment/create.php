@@ -179,28 +179,40 @@ if ($result['success'] && $result['insert_id'] > 0) {
         }
     }
 
-    // ── Auto-notify group students when assessment is published ──
-    if ($status === 'published' && !empty($targets)) {
-        $notifTitle   = 'New Assessment Assigned';
-        $notifMessage = 'A new assessment has been assigned to you.';
+    // ── Auto-notify students when assessment is published ──
+    if ($status === 'published') {
+        $notifTitle   = '📝 New Assessment Assigned';
+        $notifMessage = 'A new assessment "' . $title . '" has been assigned to you.';
         $notifType    = 'assessment';
-        $actionUrl    = 'student-assessments.php';
+        $studentIds   = [];
 
-        $studentIds = [];
-
-        foreach ($targets as $t) {
-            if ($t['type'] === 'group') {
-                $r = safePreparedQuery($conn,
-                    "SELECT student_id FROM group_members WHERE group_id = ?",
-                    "i", [$t['id']]);
-                if ($r['success'] && $r['result']) {
-                    while ($row = $r['result']->fetch_assoc()) {
-                        $studentIds[] = (int)$row['student_id'];
-                    }
-                    $r['result']->free();
+        if ($visibility === 'public') {
+            // Public assessment — notify ALL active students
+            $r = safePreparedQuery($conn,
+                "SELECT user_id FROM users WHERE role = 'student' AND is_active = 1",
+                '', []);
+            if ($r['success'] && $r['result']) {
+                while ($row = $r['result']->fetch_assoc()) {
+                    $studentIds[] = (int)$row['user_id'];
                 }
-            } elseif ($t['type'] === 'student') {
-                $studentIds[] = $t['id'];
+                $r['result']->free();
+            }
+        } elseif (!empty($targets)) {
+            // Private/targeted — notify only assigned students/groups
+            foreach ($targets as $t) {
+                if ($t['type'] === 'group') {
+                    $r = safePreparedQuery($conn,
+                        "SELECT student_id FROM group_members WHERE group_id = ?",
+                        "i", [$t['id']]);
+                    if ($r['success'] && $r['result']) {
+                        while ($row = $r['result']->fetch_assoc()) {
+                            $studentIds[] = (int)$row['student_id'];
+                        }
+                        $r['result']->free();
+                    }
+                } elseif ($t['type'] === 'student') {
+                    $studentIds[] = $t['id'];
+                }
             }
         }
 
@@ -208,12 +220,12 @@ if ($result['success'] && $result['insert_id'] > 0) {
 
         if (!empty($studentIds)) {
             $stmt = $conn->prepare(
-                "INSERT INTO notifications (user_id, title, message, notification_type, action_url, created_at)
+                "INSERT IGNORE INTO notifications (user_id, title, message, type, related_entity_id, created_at)
                  VALUES (?, ?, ?, ?, ?, NOW())"
             );
             if ($stmt) {
                 foreach ($studentIds as $uid) {
-                    $stmt->bind_param("issss", $uid, $notifTitle, $notifMessage, $notifType, $actionUrl);
+                    $stmt->bind_param("isssi", $uid, $notifTitle, $notifMessage, $notifType, $newId);
                     $stmt->execute();
                 }
                 $stmt->close();

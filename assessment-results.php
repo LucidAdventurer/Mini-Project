@@ -1,1039 +1,649 @@
 <?php
-/* ========================================
- * ASSESSMENT RESULTS
- * File: assessment-results.php
- *
- * Requires: ?id=<assessment_id>
- * Access:   Teachers only — ownership verified
- *
- * Shows:
- *   - Assessment summary + aggregate stats
- *   - Per-student attempt list (paginated, searchable)
- *   - Score distribution breakdown
- * ======================================== */
+// ============================================================
+// assessment-results.php  — Teacher view
+// Shows all student attempts for a given assessment.
+// URL: assessment-results.php?id=ASSESSMENT_ID
+// ============================================================
 
-require 'config.php';
-require_once 'db-guard.php';
+require_once "config.php";
+require_once "db-guard.php";
 
-$currentUser  = validateSession($conn, 'teacher');
-$teacherId    = (int) $currentUser['user_id'];
-$userName     = htmlspecialchars($currentUser['full_name'] ?? 'Teacher');
-$userInitials = strtoupper(substr($currentUser['full_name'] ?? 'T', 0, 2));
+$currentUser = validateSession($conn, 'teacher');
+$teacherId   = (int) $currentUser['user_id'];
+$userName    = $currentUser['full_name'] ?? 'Teacher';
+$userEmail   = $currentUser['email']     ?? '';
+$userInitials = strtoupper(substr($userName, 0, 2));
 
-// ── Validate assessment ID ──
-$assessmentId = isset($_GET['id']) ? (int) $_GET['id'] : 0;
+// Fetch teacher profile picture
+$picStmt = $conn->prepare("SELECT profile_image FROM users WHERE user_id = ?");
+$picStmt->bind_param("i", $teacherId);
+$picStmt->execute();
+$picRow = $picStmt->get_result()->fetch_assoc();
+$picStmt->close();
+$userPicture = $picRow['profile_image'] ?? '';
+
+// Ensure CSRF token
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+// ── Get assessment ID ──
+$assessmentId = (int)($_GET['id'] ?? 0);
 if ($assessmentId <= 0) {
-    header('Location: teacher-dashboard.php?error=invalid_id');
+    header('Location: teacher-dashboard.php?error=invalid_assessment');
     exit;
 }
 
-// ── Load assessment — verify ownership ──
-$assessment = null;
-$r = safePreparedQuery($conn,
-    "SELECT assessment_id, title, category, difficulty, status,
-            duration_minutes, total_marks, passing_marks,
-            available_from, available_until, created_at, updated_at
-     FROM assessments
-     WHERE assessment_id = ? AND created_by = ?",
+// ── Verify teacher owns this assessment ──
+$asmResult = safePreparedQuery($conn,
+    "SELECT assessment_id, title, category, difficulty, duration_minutes,
+            total_marks, passing_marks, max_attempts, status,
+            (SELECT COUNT(*) FROM questions q WHERE q.assessment_id = a.assessment_id) AS question_count
+     FROM assessments a
+     WHERE a.assessment_id = ? AND a.created_by = ?",
     "ii", [$assessmentId, $teacherId]
 );
-if ($r['success'] && $r['result']) {
-    $assessment = $r['result']->fetch_assoc();
-    $r['result']->free();
-}
-if (!$assessment) {
+
+if (!$asmResult['success'] || !$asmResult['result'] || $asmResult['result']->num_rows === 0) {
     header('Location: teacher-dashboard.php?error=not_found');
     exit;
 }
+$asm = $asmResult['result']->fetch_assoc();
+$asmResult['result']->free();
 
-// ── Aggregate stats ──
-$stats = [
-    'total_attempts'   => 0,
-    'completed'        => 0,
-    'avg_score'        => 0,
-    'highest_score'    => 0,
-    'lowest_score'     => 0,
-    'pass_count'       => 0,
-    'avg_time_minutes' => 0,
-    'unique_students'  => 0,
-];
-
-$rs = safePreparedQuery($conn,
-    "SELECT
-        COUNT(*)                                                        AS total_attempts,
-        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END)          AS completed,
-        ROUND(AVG(CASE WHEN status='completed' THEN percentage END), 1) AS avg_score,
-        ROUND(MAX(percentage), 1)                                       AS highest_score,
-        ROUND(MIN(CASE WHEN status='completed' THEN percentage END), 1) AS lowest_score,
-        SUM(CASE WHEN status='completed'
-                  AND percentage >= ? THEN 1 ELSE 0 END)               AS pass_count,
-        ROUND(AVG(CASE WHEN status='completed'
-                  THEN TIMESTAMPDIFF(MINUTE, aa.start_time, aa.submitted_at)
-                  END), 0)                                             AS avg_time,
-        COUNT(DISTINCT user_id)                                         AS unique_students
-     FROM assessment_attempts
-     WHERE assessment_id = ?",
-    "di", [
-        ($assessment['total_marks'] > 0
-            ? ($assessment['passing_marks'] / $assessment['total_marks']) * 100
-            : 0),
-        $assessmentId
-    ]
-);
-if ($rs['success'] && $rs['result']) {
-    $row = $rs['result']->fetch_assoc();
-    if ($row) {
-        $stats['total_attempts']   = (int)($row['total_attempts'] ?? 0);
-        $stats['completed']        = (int)($row['completed']       ?? 0);
-        $stats['avg_score']        = (float)($row['avg_score']      ?? 0);
-        $stats['highest_score']    = (float)($row['highest_score']  ?? 0);
-        $stats['lowest_score']     = (float)($row['lowest_score']   ?? 0);
-        $stats['pass_count']       = (int)($row['pass_count']       ?? 0);
-        $stats['avg_time_minutes'] = (int)($row['avg_time']         ?? 0);
-        $stats['unique_students']  = (int)($row['unique_students']  ?? 0);
-    }
-    $rs['result']->free();
-}
-
-$passRate = $stats['completed'] > 0
-    ? round(($stats['pass_count'] / $stats['completed']) * 100, 1)
-    : 0;
-
-// ── Score distribution (buckets: 0-20, 20-40, 40-60, 60-80, 80-100) ──
-$distribution = [0, 0, 0, 0, 0];
-$rd = safePreparedQuery($conn,
-    "SELECT percentage FROM assessment_attempts
-     WHERE assessment_id = ? AND status = 'completed' AND percentage IS NOT NULL",
-    "i", [$assessmentId]
-);
-if ($rd['success'] && $rd['result']) {
-    while ($row = $rd['result']->fetch_assoc()) {
-        $p = (float)$row['percentage'];
-        if ($p <= 20)      $distribution[0]++;
-        elseif ($p <= 40)  $distribution[1]++;
-        elseif ($p <= 60)  $distribution[2]++;
-        elseif ($p <= 80)  $distribution[3]++;
-        else               $distribution[4]++;
-    }
-    $rd['result']->free();
-}
-$maxBucket = max(1, max($distribution)); // avoid division by zero
-
-// ── All attempts (for the table) ──
-$attempts = [];
-$ra = safePreparedQuery($conn,
+// ── Fetch all attempts with student info ──
+// Use direct query (no prepared stmt) to avoid IN() issue with safePreparedQuery
+$_aid = (int)$assessmentId;
+$attemptsRaw = $conn->query(
     "SELECT
         aa.attempt_id,
-        aa.user_id,
-        COALESCE(u.full_name,  aa.guest_name,  'Guest')    AS student_name,
-        COALESCE(u.email,      aa.guest_email, '')          AS student_email,
-        COALESCE(u.registration_number, '—')                AS reg_number,
         aa.attempt_number,
-        aa.status,
         aa.score,
         aa.percentage,
-        aa.correct_answers,
-        aa.wrong_answers,
-        aa.unanswered,
-        aa.total_questions,
         aa.start_time,
         aa.submitted_at,
-        TIMESTAMPDIFF(MINUTE, aa.start_time, aa.submitted_at) AS time_taken
+        TIMESTAMPDIFF(MINUTE, aa.start_time, aa.submitted_at) AS time_taken_min,
+        u.user_id,
+        u.full_name,
+        u.email,
+        u.registration_number,
+        u.department
      FROM assessment_attempts aa
      LEFT JOIN users u ON u.user_id = aa.user_id
-     WHERE aa.assessment_id = ?
-     ORDER BY aa.submitted_at DESC, aa.created_at DESC",
-    "i", [$assessmentId]
+     WHERE aa.assessment_id = $_aid
+       AND aa.status IN ('submitted','completed','timeout')
+     ORDER BY aa.submitted_at DESC"
 );
-if ($ra['success'] && $ra['result']) {
-    while ($row = $ra['result']->fetch_assoc()) {
+$attemptsResult = ['success' => ($attemptsRaw !== false), 'result' => $attemptsRaw ?: null, 'error' => $conn->error];
+
+$attempts = [];
+
+if ($attemptsResult['success'] && $attemptsResult['result']) {
+    while ($row = $attemptsResult['result']->fetch_assoc()) {
         $attempts[] = $row;
     }
-    $ra['result']->free();
+    $attemptsResult['result']->free();
 }
 
-// ── Question count ──
-$questionCount = 0;
-$rqc = safePreparedQuery($conn,
-    "SELECT COUNT(*) AS cnt FROM questions WHERE assessment_id = ?",
-    "i", [$assessmentId]
-);
-if ($rqc['success'] && $rqc['result']) {
-    $row = $rqc['result']->fetch_assoc();
-    $questionCount = (int)($row['cnt'] ?? 0);
-    $rqc['result']->free();
+// ── Summary stats ──
+$totalAttempts  = count($attempts);
+$passCount      = 0;
+$totalPct       = 0;
+$highScore      = 0;
+$studentIds     = [];
+foreach ($attempts as $a) {
+    $pct = (float)($a['percentage'] ?? 0);
+    $totalPct += $pct;
+    if ($pct >= ($asm['passing_marks'] / max($asm['total_marks'], 1) * 100)) $passCount++;
+    if ($pct > $highScore) $highScore = $pct;
+    $studentIds[$a['user_id']] = true;
 }
+$avgScore      = $totalAttempts > 0 ? round($totalPct / $totalAttempts, 1) : 0;
+$uniqueStudents = count($studentIds);
+$passRate       = $totalAttempts > 0 ? round($passCount / $totalAttempts * 100) : 0;
 
-// ── Top performers (up to 5, submitted attempts only) ──
-$topPerformers = [];
-$rtp = safePreparedQuery($conn,
-    "SELECT
-        COALESCE(u.full_name, aa.guest_name, 'Guest') AS student_name,
-        COALESCE(u.registration_number, '—')           AS reg_number,
-        aa.percentage,
-        aa.score
-     FROM assessment_attempts aa
-     LEFT JOIN users u ON u.user_id = aa.user_id
-     WHERE aa.assessment_id = ? AND aa.status = 'completed' AND aa.percentage IS NOT NULL
-     ORDER BY aa.percentage DESC, aa.score DESC
-     LIMIT 5",
-    "i", [$assessmentId]
-);
-if ($rtp['success'] && $rtp['result']) {
-    while ($row = $rtp['result']->fetch_assoc()) {
-        $topPerformers[] = $row;
-    }
-    $rtp['result']->free();
+function diffBadge(string $d): string {
+    $map = ['easy' => ['#dcfce7','#166534'], 'medium' => ['#fef3c7','#92400e'], 'hard' => ['#fee2e2','#991b1b']];
+    [$bg, $col] = $map[$d] ?? ['#f3f4f6','#374151'];
+    return "<span style=\"background:$bg;color:$col;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;\">$d</span>";
 }
-
-// ── Question-wise analysis ──
-$questionAnalysis = [];
-$rqa = safePreparedQuery($conn,
-    "SELECT
-        q.question_id,
-        q.question_order,
-        q.question_text,
-        q.marks,
-        COUNT(ans.answer_id)                                             AS total_answers,
-        SUM(CASE WHEN ans.marks_awarded >= q.marks THEN 1 ELSE 0 END)   AS correct_count,
-        SUM(CASE WHEN ans.marks_awarded = 0 AND ans.selected_option_id IS NOT NULL
-                  AND ans.text_answer IS NULL THEN 1 ELSE 0 END)        AS incorrect_count,
-        SUM(CASE WHEN ans.selected_option_id IS NULL
-                  AND ans.text_answer IS NULL THEN 1 ELSE 0 END)        AS skipped_count
-     FROM questions q
-     LEFT JOIN answers ans ON ans.question_id = q.question_id
-     LEFT JOIN assessment_attempts aa ON aa.attempt_id = ans.attempt_id
-         AND aa.status = 'completed'
-     WHERE q.assessment_id = ?
-     GROUP BY q.question_id
-     ORDER BY q.question_order ASC",
-    "i", [$assessmentId]
-);
-if ($rqa['success'] && $rqa['result']) {
-    while ($row = $rqa['result']->fetch_assoc()) {
-        $questionAnalysis[] = $row;
-    }
-    $rqa['result']->free();
-}
-
-// ── Helpers ──
-function fmtDate(?string $dt): string {
-    if (!$dt) return '—';
-    return date('M j, Y', strtotime($dt));
-}
-function fmtDateTime(?string $dt): string {
-    if (!$dt) return '—';
-    return date('M j, Y g:i A', strtotime($dt));
-}
-function passBadge(float $pct, float $passingPct): string {
-    if ($pct >= $passingPct) {
-        return '<span class="badge badge-pass">Pass</span>';
-    }
-    return '<span class="badge badge-fail">Fail</span>';
+function scoreColor(float $pct, float $passPct): string {
+    if ($pct >= $passPct) return '#10b981';
+    if ($pct >= $passPct * 0.7) return '#f59e0b';
+    return '#f43f5e';
 }
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Results: <?= htmlspecialchars($assessment['title']) ?> - Placement Portal</title>
-    <style>
-        :root {
-            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            --color-teacher-primary: #2E073F;
-            --color-teacher-secondary: #AD49E1;
-            --color-text: #2d3748;
-            --color-text-light: #718096;
-            --color-bg: #D3DAD9;
-            --color-bg-light: #f5f7fa;
-            --color-white: #ffffff;
-            --color-border: #e2e8f0;
-            --color-success: #48bb78;
-            --color-error: #f56565;
-            --shadow-sm: 0 2px 10px rgba(0,0,0,0.08);
-            --shadow-md: 0 4px 20px rgba(0,0,0,0.08);
-            --shadow-lg: 0 8px 30px rgba(0,0,0,0.15);
-            --radius: 10px;
-            --radius-lg: 20px;
-            --transition: all 0.3s ease;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title><?= htmlspecialchars($asm['title']) ?> — Results | PREPAURA</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet">
+<style>
+/* ── DESIGN TOKENS ── */
+:root {
+  --ink:         #0d0a14;
+  --ink-2:       #1a1425;
+  --ink-3:       #261d35;
+  --surface:     #f7f5fb;
+  --surface-2:   #ede9f6;
+  --surface-3:   #ffffff;
+  --violet:      #7c3aed;
+  --violet-lt:   #9f67f5;
+  --violet-dim:  rgba(124,58,237,0.12);
+  --violet-glow: rgba(124,58,237,0.25);
+  --orchid:      #c084fc;
+  --gold:        #f59e0b;
+  --emerald:     #10b981;
+  --rose:        #f43f5e;
+  --sky:         #38bdf8;
+  --text-1:      #1a1425;
+  --text-2:      #4b4565;
+  --text-3:      #8b7fa8;
+  --border:      rgba(124,58,237,0.1);
+  --border-2:    rgba(124,58,237,0.18);
+  --shadow-xs:   0 1px 3px rgba(13,10,20,0.06);
+  --shadow-sm:   0 2px 12px rgba(13,10,20,0.08);
+  --shadow-md:   0 8px 32px rgba(13,10,20,0.12);
+  --shadow-lg:   0 20px 60px rgba(13,10,20,0.18);
+  --r-sm:        8px;
+  --r-md:        14px;
+  --r-lg:        20px;
+  --r-xl:        28px;
+  --ease:        cubic-bezier(0.22,1,0.36,1);
+  --t:           0.22s var(--ease);
+  --font-head:   'Syne', system-ui, sans-serif;
+  --font-body:   'DM Sans', system-ui, sans-serif;
+  --nav-h:       64px;
+}
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
+body {
+  font-family: var(--font-body);
+  background: var(--surface);
+  color: var(--text-1);
+  min-height: 100vh;
+  padding-top: var(--nav-h);
+}
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+}
 
-        body {
-            font-family: var(--font-family);
-            background: var(--color-bg);
-            min-height: 100vh;
-            color: var(--color-text);
-            padding-top: 71px;
-        }
+/* ── NAVBAR ── */
+.navbar {
+  height: var(--nav-h);
+  background: rgba(13,10,20,0.96);
+  backdrop-filter: blur(20px) saturate(1.6);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding: 0 28px;
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
+  position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+}
+.navbar-brand { display: flex; align-items: center; gap: 12px; text-decoration: none; flex-shrink: 0; }
+.brand-logo-img { width: 36px; height: 36px; border-radius: 9px; object-fit: contain; background: white; padding: 3px; }
+.brand-text-group { display: flex; flex-direction: column; line-height: 1.15; }
+.brand-name { font-family: var(--font-head); font-size: 16px; font-weight: 800; letter-spacing: 0.06em; color: white; }
+.brand-tagline { font-size: 10px; font-weight: 400; color: rgba(255,255,255,0.45); letter-spacing: 0.03em; }
+.nav-right { display: flex; align-items: center; gap: 12px; }
+.profile-wrap { position: relative; }
+.profile-button {
+  display: flex; align-items: center; gap: 9px;
+  padding: 6px 12px 6px 6px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 40px; cursor: pointer;
+  transition: var(--t); color: white;
+}
+.profile-button:hover { background: rgba(255,255,255,0.13); border-color: rgba(255,255,255,0.18); }
+.profile-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--violet), var(--orchid));
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-head); font-weight: 700; font-size: 12px; color: white;
+  overflow: hidden; flex-shrink: 0;
+}
+.profile-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.profile-name { font-size: 13px; font-weight: 500; }
+.profile-caret { font-size: 9px; color: rgba(255,255,255,0.5); margin-left: 2px; }
+.profile-dropdown {
+  position: absolute; top: calc(100% + 10px); right: 0;
+  background: var(--surface-3); border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg), 0 0 0 1px var(--border);
+  min-width: 230px;
+  opacity: 0; visibility: hidden; transform: translateY(-6px) scale(0.98);
+  transition: var(--t); z-index: 1001; overflow: hidden;
+}
+.profile-dropdown.open { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
+.dropdown-header {
+  padding: 18px 20px;
+  background: linear-gradient(135deg, var(--ink) 0%, var(--ink-3) 100%);
+  border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left;
+}
+.dd-avatar {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--violet), var(--orchid));
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-head); font-weight: 700; font-size: 16px; color: white;
+  overflow: hidden; margin-bottom: 10px;
+}
+.dd-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.dropdown-name { font-weight: 600; font-size: 14px; color: white; }
+.dropdown-email { font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 2px; }
+.dropdown-role {
+  display: inline-block; margin-top: 8px; padding: 2px 10px;
+  background: var(--violet-dim); border: 1px solid rgba(124,58,237,0.3);
+  color: var(--orchid); border-radius: 20px; font-size: 11px; font-weight: 600;
+  letter-spacing: 0.04em; text-transform: uppercase;
+}
+.dropdown-menu { padding: 6px 0; }
+.dropdown-item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 10px 18px; color: var(--text-2);
+  text-decoration: none; font-size: 13.5px; transition: var(--t);
+  cursor: pointer; border: none; background: none; width: 100%; text-align: left;
+  font-family: var(--font-body);
+}
+.dropdown-item i { width: 16px; text-align: center; color: var(--text-3); }
+.dropdown-item:hover { background: var(--surface-2); color: var(--text-1); }
+.dropdown-item.danger { color: var(--rose); }
+.dropdown-item.danger i { color: var(--rose); }
+.dropdown-item.danger:hover { background: rgba(244,63,94,0.06); }
+.dropdown-divider { height: 1px; background: var(--border); margin: 4px 0; }
 
-        /* ── NAVBAR ── */
-        .navbar {
-            background: var(--color-teacher-primary);
-            padding: 12px 28px;
-            display: flex; align-items: center; justify-content: space-between;
-            position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.15);
-        }
-        .navbar-brand {
-            display: flex; align-items: center; gap: 12px;
-            font-size: 20px; font-weight: 700; color: white; text-decoration: none;
-        }
-        .brand-logo {
-            width: 44px; height: 44px;
-            background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
-            border-radius: 10px;
-            display: flex; align-items: center; justify-content: center;
-            color: white; font-weight: 700; font-size: 16px;
-        }
-        .nav-actions { display: flex; gap: 12px; align-items: center; }
-        .btn-nav {
-            padding: 9px 18px;
-            background: rgba(255,255,255,0.15);
-            color: white;
-            border: 2px solid rgba(255,255,255,0.3);
-            border-radius: var(--radius);
-            font-weight: 600; font-size: 13px;
-            cursor: pointer; text-decoration: none;
-            display: inline-flex; align-items: center; gap: 6px;
-            transition: var(--transition);
-        }
-        .btn-nav:hover { background: rgba(255,255,255,0.25); }
+/* ── LAYOUT ── */
+.page-wrapper { display: flex; min-height: calc(100vh - var(--nav-h)); position: relative; z-index: 1; }
+.left-sidebar {
+  width: 230px; flex-shrink: 0;
+  padding: 28px 12px;
+  display: flex; flex-direction: column; gap: 2px;
+  background: rgba(255,255,255,0.6);
+  backdrop-filter: blur(12px);
+  border-right: 1px solid var(--border);
+  min-height: calc(100vh - var(--nav-h));
+  position: sticky; top: var(--nav-h); align-self: flex-start;
+}
+.sidebar-section-label {
+  font-family: var(--font-head);
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--text-3);
+  padding: 14px 14px 6px;
+}
+.sidebar-link {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: var(--r-sm);
+  text-decoration: none; font-size: 13.5px; font-weight: 500;
+  color: var(--text-2); transition: var(--t);
+}
+.sidebar-link i { width: 18px; text-align: center; font-size: 14px; color: var(--text-3); transition: var(--t); }
+.sidebar-link:hover { background: var(--violet-dim); color: var(--violet); }
+.sidebar-link:hover i { color: var(--violet); }
+.sidebar-link.active {
+  background: linear-gradient(135deg, rgba(124,58,237,0.12), rgba(192,132,252,0.08));
+  color: var(--violet); font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--violet);
+}
+.sidebar-link.active i { color: var(--violet); }
+.sidebar-bottom { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); }
+.sidebar-logout {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: var(--r-sm);
+  font-size: 13.5px; font-weight: 500; color: var(--rose);
+  background: none; border: none; cursor: pointer; width: 100%;
+  transition: var(--t); font-family: var(--font-body);
+}
+.sidebar-logout i { width: 18px; text-align: center; font-size: 14px; }
+.sidebar-logout:hover { background: rgba(244,63,94,0.07); }
+.page-content { flex: 1; min-width: 0; padding: 36px 36px 48px 28px; }
 
-        /* ── CONTAINER ── */
-        .container { max-width: 1200px; margin: 0 auto; padding: 30px 20px; }
+/* ── PAGE SPECIFIC ── */
+.back-link {
+  display: inline-flex; align-items: center; gap: 8px;
+  color: var(--text-3); font-size: 13px; text-decoration: none;
+  margin-bottom: 24px; transition: var(--t);
+}
+.back-link:hover { color: var(--violet); }
 
-        /* ── PAGE HEADER ── */
-        .page-header {
-            background: white; border-radius: var(--radius-lg); padding: 28px 30px;
-            margin-bottom: 24px; box-shadow: var(--shadow-sm);
-        }
-        .header-top {
-            display: flex; justify-content: space-between; align-items: flex-start;
-            gap: 20px; flex-wrap: wrap;
-        }
-        .page-title { font-size: 26px; font-weight: 700; color: var(--color-text); margin-bottom: 6px; }
-        .page-meta  { font-size: 14px; color: var(--color-text-light); margin-bottom: 14px; }
-        .badge-row  { display: flex; gap: 8px; flex-wrap: wrap; }
-        .meta-badge {
-            padding: 5px 12px; border-radius: 7px;
-            font-size: 12px; font-weight: 600;
-            display: inline-flex; align-items: center; gap: 5px;
-        }
-        .meta-badge.active    { background: #d1fae5; color: #065f46; }
-        .meta-badge.draft     { background: #fef3c7; color: #92400e; }
-        .meta-badge.archived  { background: #dbeafe; color: #1e40af; }
-        .meta-badge.scheduled { background: #e0e7ff; color: #3730a3; }
-        .meta-badge.info      { background: #e6f7ff; color: #0c5460; }
+.page-header { margin-bottom: 28px; }
+.page-title {
+  font-family: var(--font-head);
+  font-size: 26px; font-weight: 800; color: var(--text-1);
+  margin-bottom: 6px;
+}
+.page-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.meta-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 12px; color: var(--text-2); font-weight: 500;
+}
+.meta-chip i { color: var(--text-3); font-size: 11px; }
 
-        .btn-export {
-            padding: 10px 22px;
-            background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
-            color: white; border: none; border-radius: var(--radius);
-            font-weight: 700; font-size: 13px; cursor: pointer;
-            transition: var(--transition); white-space: nowrap;
-            display: inline-flex; align-items: center; gap: 7px;
-        }
-        .btn-export:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(46,7,63,0.3); }
+/* ── SUMMARY CARDS ── */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.summary-card {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 20px 22px;
+  box-shadow: var(--shadow-xs);
+}
+.summary-label {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--text-3); margin-bottom: 10px;
+}
+.summary-value {
+  font-family: var(--font-head);
+  font-size: 32px; font-weight: 800; color: var(--text-1);
+  line-height: 1;
+}
+.summary-sub { font-size: 12px; color: var(--text-3); margin-top: 6px; }
 
-        /* ── STATS GRID ── */
-        .stats-grid {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-            gap: 16px; margin-bottom: 24px;
-        }
-        .stat-card {
-            background: white; border-radius: var(--radius); padding: 22px 18px;
-            box-shadow: var(--shadow-sm); text-align: center;
-            border-top: 4px solid var(--color-teacher-secondary);
-            transition: var(--transition);
-        }
-        .stat-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
-        .stat-icon  { font-size: 28px; margin-bottom: 8px; }
-        .stat-value { font-size: 30px; font-weight: 700; color: var(--color-text); margin-bottom: 4px; }
-        .stat-label { font-size: 12px; color: var(--color-text-light); font-weight: 500; }
+/* ── TABLE ── */
+.table-card {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+.table-card-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.table-card-title {
+  font-family: var(--font-head);
+  font-size: 15px; font-weight: 700; color: var(--text-1);
+}
+.search-bar {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 7px 12px;
+}
+.search-bar input {
+  border: none; background: none; outline: none;
+  font-family: var(--font-body); font-size: 13px; color: var(--text-1);
+  width: 200px;
+}
+.search-bar input::placeholder { color: var(--text-3); }
+.search-bar i { color: var(--text-3); font-size: 12px; }
 
-        /* ── TWO-COL LAYOUT ── */
-        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
-        .performers-list { display:flex; flex-direction:column; gap:10px; }
-        .performer-item { display:flex; align-items:center; gap:12px; padding:10px; background:var(--color-bg-light); border-radius:10px; }
-        .performer-rank { width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; flex-shrink:0; background:linear-gradient(135deg,var(--color-teacher-primary),var(--color-teacher-secondary)); color:white; }
-        .performer-rank.gold   { background:linear-gradient(135deg,#ffd700,#ffed4e); color:#7c2d12; }
-        .performer-rank.silver { background:linear-gradient(135deg,#c0c0c0,#e8e8e8); color:#2d3748; }
-        .performer-rank.bronze { background:linear-gradient(135deg,#cd7f32,#e59b5f); color:white; }
-        .performer-info { flex:1; }
-        .performer-name { font-size:14px; font-weight:600; color:var(--color-text); }
-        .performer-reg  { font-size:12px; color:var(--color-text-light); }
-        .performer-score { font-size:17px; font-weight:700; color:var(--color-teacher-primary); }
+table { width: 100%; border-collapse: collapse; }
+thead tr { background: var(--surface); }
+th {
+  padding: 11px 16px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--text-3);
+  text-align: left; border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+td {
+  padding: 13px 16px;
+  font-size: 13.5px; color: var(--text-2);
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr { transition: var(--t); }
+tbody tr:hover { background: var(--surface); }
 
-        /* ── CARD ── */
-        .card {
-            background: white; border-radius: var(--radius-lg); padding: 26px 28px;
-            box-shadow: var(--shadow-sm);
-        }
-        .card-title {
-            font-size: 17px; font-weight: 700; color: var(--color-text);
-            margin-bottom: 20px; display: flex; align-items: center; gap: 8px;
-        }
-        .card-icon {
-            width: 34px; height: 34px; border-radius: 9px;
-            background: linear-gradient(135deg, var(--color-teacher-primary), var(--color-teacher-secondary));
-            display: flex; align-items: center; justify-content: center;
-            color: white; font-size: 16px; flex-shrink: 0;
-        }
+.student-name { font-weight: 600; color: var(--text-1); }
+.student-meta { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
 
-        /* ── DISTRIBUTION CHART ── */
-        .dist-bars { display: flex; flex-direction: column; gap: 12px; }
-        .dist-row  { display: flex; align-items: center; gap: 12px; }
-        .dist-label { font-size: 12px; color: var(--color-text-light); min-width: 60px; text-align: right; }
-        .dist-bar-wrap { flex: 1; background: var(--color-bg-light); border-radius: 6px; overflow: hidden; height: 22px; }
-        .dist-bar {
-            height: 100%; border-radius: 6px;
-            background: linear-gradient(90deg, var(--color-teacher-primary), var(--color-teacher-secondary));
-            display: flex; align-items: center; justify-content: flex-end;
-            padding-right: 8px; min-width: 28px;
-            transition: width 0.6s ease;
-        }
-        .dist-bar-num { font-size: 11px; font-weight: 700; color: white; }
-        .dist-bar.zero { background: var(--color-border); }
-        .dist-bar.zero .dist-bar-num { color: var(--color-text-light); }
+.score-pill {
+  display: inline-flex; align-items: center;
+  padding: 4px 12px; border-radius: 20px;
+  font-size: 12px; font-weight: 700;
+}
+.pass  { background: rgba(16,185,129,0.12); color: #065f46; }
+.fail  { background: rgba(244,63,94,0.1);   color: #9f1239; }
+.mid   { background: rgba(245,158,11,0.12); color: #92400e; }
 
-        /* ── ASSESSMENT INFO ── */
-        .info-list { display: flex; flex-direction: column; gap: 12px; }
-        .info-row  { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--color-border); }
-        .info-row:last-child { border-bottom: none; padding-bottom: 0; }
-        .info-key   { font-size: 13px; color: var(--color-text-light); }
-        .info-value { font-size: 13px; font-weight: 600; color: var(--color-text); text-align: right; }
+.attempt-badge {
+  display: inline-block; padding: 2px 8px;
+  background: var(--violet-dim); color: var(--violet);
+  border-radius: 20px; font-size: 11px; font-weight: 600;
+}
 
-        /* ── ATTEMPTS TABLE SECTION ── */
-        .table-section {
-            background: white; border-radius: var(--radius-lg); padding: 26px 28px;
-            box-shadow: var(--shadow-sm); margin-bottom: 30px;
-        }
-        .table-controls {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 18px; gap: 14px; flex-wrap: wrap;
-        }
-        .search-wrap { position: relative; flex: 1; min-width: 200px; max-width: 340px; }
-        .search-input {
-            width: 100%; padding: 10px 38px 10px 14px;
-            border: 2px solid var(--color-border); border-radius: var(--radius);
-            font-size: 14px; font-family: var(--font-family);
-            transition: var(--transition);
-        }
-        .search-input:focus { outline: none; border-color: var(--color-teacher-secondary); }
-        .search-icon { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #a0aec0; }
+.empty-state {
+  text-align: center; padding: 60px 24px;
+  color: var(--text-3);
+}
+.empty-state i { font-size: 40px; margin-bottom: 16px; display: block; color: var(--border-2); }
+.empty-state p { font-size: 14px; }
 
-        .filter-select {
-            padding: 10px 14px; border: 2px solid var(--color-border); border-radius: var(--radius);
-            font-size: 13px; background: white; cursor: pointer; font-family: var(--font-family);
-        }
-        .filter-select:focus { outline: none; border-color: var(--color-teacher-secondary); }
-
-        .results-count { font-size: 13px; color: var(--color-text-light); white-space: nowrap; }
-
-        /* Table */
-        .table-wrap { overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        thead th {
-            padding: 12px 14px; text-align: left;
-            font-size: 11px; font-weight: 700; color: var(--color-text-light);
-            text-transform: uppercase; letter-spacing: 0.5px;
-            border-bottom: 2px solid var(--color-border);
-            white-space: nowrap; cursor: pointer; user-select: none;
-        }
-        thead th:hover { color: var(--color-teacher-secondary); }
-        thead th .sort-icon { margin-left: 4px; opacity: 0.4; }
-        thead th.sorted .sort-icon { opacity: 1; color: var(--color-teacher-secondary); }
-        tbody tr { transition: var(--transition); }
-        tbody tr:hover { background: var(--color-bg-light); }
-        tbody td { padding: 13px 14px; border-bottom: 1px solid var(--color-border); vertical-align: middle; }
-        tbody tr:last-child td { border-bottom: none; }
-
-        .student-info .name  { font-weight: 600; color: var(--color-text); margin-bottom: 2px; }
-        .student-info .email { font-size: 12px; color: var(--color-text-light); }
-        .student-info .reg   { font-size: 11px; color: #a0aec0; }
-
-        .score-cell .score { font-size: 16px; font-weight: 700; color: var(--color-text); }
-        .score-cell .pct   { font-size: 12px; color: var(--color-text-light); margin-top: 2px; }
-
-        .badge {
-            display: inline-block; padding: 3px 10px; border-radius: 5px;
-            font-size: 11px; font-weight: 700;
-        }
-        .badge-pass      { background: #c6f6d5; color: #22543d; }
-        .badge-fail      { background: #fed7d7; color: #742a2a; }
-        .badge-completed { background: #d1fae5; color: #065f46; }
-        .badge-progress  { background: #fef3c7; color: #92400e; }
-        .badge-abandoned { background: #e2e8f0; color: #4a5568; }
-        .badge-timeout   { background: #fee2e2; color: #c53030; }
-
-        .answers-split { display: flex; gap: 8px; font-size: 12px; }
-        .ans-correct { color: #22543d; font-weight: 600; }
-        .ans-wrong   { color: #c53030; font-weight: 600; }
-        .ans-skip    { color: #a0aec0; }
-
-        .btn-detail {
-            padding: 6px 14px; background: var(--color-bg-light);
-            border: 1px solid var(--color-border); border-radius: 7px;
-            font-size: 12px; font-weight: 600; cursor: pointer;
-            transition: var(--transition); white-space: nowrap;
-        }
-        .btn-detail:hover { background: var(--color-border); }
-
-        /* Empty / no attempts */
-        .empty-state {
-            text-align: center; padding: 60px 20px; color: var(--color-text-light);
-        }
-        .empty-icon { font-size: 52px; opacity: 0.3; margin-bottom: 14px; }
-        .empty-text { font-size: 16px; }
-
-        /* Pagination */
-        .pagination {
-            display: flex; justify-content: center; align-items: center;
-            gap: 8px; margin-top: 20px; flex-wrap: wrap;
-        }
-        .page-btn {
-            padding: 7px 14px; border: 2px solid var(--color-border);
-            border-radius: 8px; background: white; cursor: pointer;
-            font-size: 13px; font-weight: 600; transition: var(--transition);
-        }
-        .page-btn:hover { border-color: var(--color-teacher-secondary); color: var(--color-teacher-secondary); }
-        .page-btn.active {
-            background: var(--color-teacher-secondary); border-color: var(--color-teacher-secondary);
-            color: white;
-        }
-        .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-        /* ── TOAST ── */
-        .toast {
-            position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(80px);
-            background: #1a202c; color: white; padding: 13px 26px;
-            border-radius: var(--radius); font-size: 14px; font-weight: 600;
-            box-shadow: var(--shadow-lg); z-index: 9999;
-            transition: transform 0.3s ease, opacity 0.3s ease;
-            opacity: 0; pointer-events: none;
-        }
-        .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
-        .toast.success { background: #276749; }
-        .toast.error   { background: #c53030; }
-
-        /* ── RESPONSIVE ── */
-        @media (max-width: 900px) {
-            .two-col { grid-template-columns: 1fr; }
-        }
-        @media (max-width: 768px) {
-            .container { padding: 16px; }
-            .navbar { padding: 10px 14px; }
-            .stats-grid { grid-template-columns: repeat(2, 1fr); }
-            .table-controls { flex-direction: column; align-items: flex-start; }
-            .search-wrap { max-width: 100%; }
-        }
-        @media (max-width: 480px) {
-            .stats-grid { grid-template-columns: 1fr 1fr; }
-            .page-title { font-size: 20px; }
-        }
-    </style>
+@media (max-width: 900px) {
+  .summary-grid { grid-template-columns: repeat(2, 1fr); }
+  .left-sidebar { display: none; }
+  .page-content { padding: 24px 16px; }
+  th:nth-child(4), td:nth-child(4),
+  th:nth-child(5), td:nth-child(5) { display: none; }
+}
+</style>
 </head>
 <body>
 
 <!-- ── NAVBAR ── -->
 <nav class="navbar">
-    <a href="teacher-dashboard.php" class="navbar-brand">
-        <div class="brand-logo">PT</div>
-        <span>Placement Portal</span>
-    </a>
-    <div class="nav-actions">
-        <a href="edit-assessment.php?id=<?= $assessmentId ?>" class="btn-nav">✏️ Edit Assessment</a>
-        <a href="teacher-dashboard.php" class="btn-nav">← Dashboard</a>
+  <a href="teacher-dashboard.php" class="navbar-brand">
+    <img src="prepaura-logo.png" alt="PREPAURA" class="brand-logo-img">
+    <div class="brand-text-group">
+      <span class="brand-name">PREPAURA</span>
+      <span class="brand-tagline">Placement Training Platform</span>
     </div>
+  </a>
+  <div class="nav-right">
+    <div class="profile-wrap">
+      <button class="profile-button" id="profileBtn">
+        <div class="profile-avatar">
+          <?php if (!empty($userPicture) && file_exists($userPicture)): ?>
+            <img src="<?= htmlspecialchars($userPicture) ?>" alt="Profile">
+          <?php else: ?>
+            <?= $userInitials ?>
+          <?php endif; ?>
+        </div>
+        <span class="profile-name"><?= htmlspecialchars($userName) ?></span>
+        <i class="fa fa-chevron-down profile-caret"></i>
+        <div class="profile-dropdown" id="profileDropdown">
+          <div class="dropdown-header">
+            <div class="dd-avatar">
+              <?php if (!empty($userPicture) && file_exists($userPicture)): ?>
+                <img src="<?= htmlspecialchars($userPicture) ?>" alt="Profile">
+              <?php else: ?>
+                <?= $userInitials ?>
+              <?php endif; ?>
+            </div>
+            <div class="dropdown-name"><?= htmlspecialchars($userName) ?></div>
+            <div class="dropdown-email"><?= htmlspecialchars($userEmail) ?></div>
+            <span class="dropdown-role">Teacher</span>
+          </div>
+          <div class="dropdown-menu">
+            <a href="teacher-profile.php" class="dropdown-item"><i class="fa fa-user"></i> My Profile</a>
+            <a href="help.html" target="_blank" rel="noopener" class="dropdown-item"><i class="fa fa-circle-question"></i> Help &amp; Support</a>
+            <div class="dropdown-divider"></div>
+            <a href="#" onclick="handleLogout()" class="dropdown-item danger"><i class="fa fa-right-from-bracket"></i> Logout</a>
+          </div>
+        </div>
+      </button>
+    </div>
+  </div>
 </nav>
 
 <!-- ── MAIN ── -->
-<div class="container">
+<div class="page-wrapper">
+
+  <!-- Sidebar -->
+  <aside class="left-sidebar">
+    <span class="sidebar-section-label">Navigation</span>
+    <a href="teacher-dashboard.php" class="sidebar-link active"><i class="fa fa-house"></i> Dashboard</a>
+    <a href="teacher-assessments.php" class="sidebar-link"><i class="fa fa-clipboard-list"></i> Assessments</a>
+    <a href="manage-groups.php" class="sidebar-link"><i class="fa fa-users"></i> Manage Groups</a>
+    <a href="teacher-resources.php" class="sidebar-link"><i class="fa fa-folder-open"></i> Resources</a>
+    <div class="sidebar-bottom">
+      <button onclick="handleLogout()" class="sidebar-logout"><i class="fa fa-right-from-bracket"></i> Logout</button>
+    </div>
+  </aside>
+
+  <!-- Content -->
+  <div class="page-content">
+
+    <a href="teacher-dashboard.php" class="back-link">
+      <i class="fa fa-arrow-left"></i> Back to Dashboard
+    </a>
 
     <!-- Page Header -->
     <div class="page-header">
-        <div class="header-top">
-            <div>
-                <h1 class="page-title"><?= htmlspecialchars($assessment['title']) ?></h1>
-                <p class="page-meta">
-                    Assessment #<?= $assessmentId ?> &nbsp;·&nbsp;
-                    <?= $questionCount ?> question<?= $questionCount !== 1 ? 's' : '' ?> &nbsp;·&nbsp;
-                    <?= (int)$assessment['duration_minutes'] ?> min &nbsp;·&nbsp;
-                    <?= (int)$assessment['total_marks'] ?> marks &nbsp;·&nbsp;
-                    Pass: <?= (int)$assessment['passing_marks'] ?> marks
-                </p>
-                <div class="badge-row">
-                    <span class="meta-badge <?= htmlspecialchars($assessment['status']) ?>">
-                        ● <?= ucfirst($assessment['status']) ?>
-                    </span>
-                    <span class="meta-badge info">📚 <?= ucfirst($assessment['category'] ?? 'General') ?></span>
-                    <span class="meta-badge info">🎯 <?= ucfirst($assessment['difficulty'] ?? 'Medium') ?></span>
-                    <?php if ($assessment['available_from']): ?>
-                        <span class="meta-badge info">📅 From: <?= fmtDate($assessment['available_from']) ?></span>
-                    <?php endif; ?>
-                    <?php if ($assessment['available_until']): ?>
-                        <span class="meta-badge info">📅 Until: <?= fmtDate($assessment['available_until']) ?></span>
-                    <?php endif; ?>
-                </div>
-            </div>
-            <button class="btn-export" onclick="exportCSV()">⬇️ Export CSV</button>
-        </div>
+      <div class="page-title"><?= htmlspecialchars($asm['title']) ?></div>
+      <div class="page-meta">
+        <?= diffBadge($asm['difficulty'] ?? 'medium') ?>
+        <span class="meta-chip"><i class="fa fa-tag"></i><?= htmlspecialchars(ucfirst($asm['category'] ?? '')) ?></span>
+        <span class="meta-chip"><i class="fa fa-clock"></i><?= (int)$asm['duration_minutes'] ?> min</span>
+        <span class="meta-chip"><i class="fa fa-circle-question"></i><?= (int)$asm['question_count'] ?> questions</span>
+        <span class="meta-chip"><i class="fa fa-star"></i><?= (int)$asm['total_marks'] ?> marks</span>
+        <span class="meta-chip"><i class="fa fa-check-circle"></i>Pass: <?= (int)$asm['passing_marks'] ?></span>
+      </div>
     </div>
 
-    <!-- Stats -->
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-icon">👥</div>
-            <div class="stat-value"><?= $stats['unique_students'] ?></div>
-            <div class="stat-label">Unique Students</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon">📋</div>
-            <div class="stat-value"><?= $stats['total_attempts'] ?></div>
-            <div class="stat-label">Total Attempts</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon">✅</div>
-            <div class="stat-value"><?= $stats['completed'] ?></div>
-            <div class="stat-label">Completed</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon">📈</div>
-            <div class="stat-value"><?= $stats['avg_score'] ?>%</div>
-            <div class="stat-label">Average Score</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon">🏆</div>
-            <div class="stat-value"><?= $stats['highest_score'] ?>%</div>
-            <div class="stat-label">Highest Score</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon">🎯</div>
-            <div class="stat-value"><?= $passRate ?>%</div>
-            <div class="stat-label">Pass Rate</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon">⏱️</div>
-            <div class="stat-value"><?= $stats['avg_time_minutes'] ?>m</div>
-            <div class="stat-label">Avg. Time Taken</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon">📉</div>
-            <div class="stat-value"><?= $stats['lowest_score'] ?>%</div>
-            <div class="stat-label">Lowest Score</div>
-        </div>
-    </div>
-
-    <!-- Distribution + Info -->
-    <div class="two-col">
-
-        <!-- Score Distribution -->
-        <div class="card">
-            <div class="card-title">
-                <div class="card-icon">📊</div>
-                Score Distribution
-            </div>
-            <div class="dist-bars">
-                <?php
-                $buckets = [
-                    '0 – 20%'   => $distribution[0],
-                    '21 – 40%'  => $distribution[1],
-                    '41 – 60%'  => $distribution[2],
-                    '61 – 80%'  => $distribution[3],
-                    '81 – 100%' => $distribution[4],
-                ];
-                foreach ($buckets as $label => $count):
-                    $width = $maxBucket > 0 ? round(($count / $maxBucket) * 100) : 0;
-                ?>
-                <div class="dist-row">
-                    <div class="dist-label"><?= $label ?></div>
-                    <div class="dist-bar-wrap">
-                        <div class="dist-bar <?= $count === 0 ? 'zero' : '' ?>"
-                             style="width: <?= max(28, $width) ?>%">
-                            <span class="dist-bar-num"><?= $count ?></span>
-                        </div>
-                    </div>
-                </div>
-                <?php endforeach; ?>
-            </div>
-        </div>
-
-        <!-- Assessment Info -->
-        <div class="card">
-            <div class="card-title">
-                <div class="card-icon">📝</div>
-                Assessment Info
-            </div>
-            <div class="info-list">
-                <div class="info-row">
-                    <span class="info-key">Category</span>
-                    <span class="info-value"><?= ucfirst($assessment['category'] ?? '—') ?></span>
-                </div>
-                <div class="info-row">
-                    <span class="info-key">Difficulty</span>
-                    <span class="info-value"><?= ucfirst($assessment['difficulty'] ?? '—') ?></span>
-                </div>
-                <div class="info-row">
-                    <span class="info-key">Duration</span>
-                    <span class="info-value"><?= (int)$assessment['duration_minutes'] ?> minutes</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-key">Total Marks</span>
-                    <span class="info-value"><?= (int)$assessment['total_marks'] ?></span>
-                </div>
-                <div class="info-row">
-                    <span class="info-key">Passing Marks</span>
-                    <span class="info-value"><?= (int)$assessment['passing_marks'] ?></span>
-                </div>
-                <div class="info-row">
-                    <span class="info-key">Questions</span>
-                    <span class="info-value"><?= $questionCount ?></span>
-                </div>
-                <div class="info-row">
-                    <span class="info-key">Created</span>
-                    <span class="info-value"><?= fmtDate($assessment['created_at']) ?></span>
-                </div>
-                <div class="info-row">
-                    <span class="info-key">Last Updated</span>
-                    <span class="info-value"><?= fmtDate($assessment['updated_at']) ?></span>
-                </div>
-            </div>
-        </div>
-
-    </div>
-
-    <!-- Top Performers + Question Analysis -->
-    <div class="two-col" style="margin-bottom:24px;">
-
-        <!-- Top Performers -->
-        <div class="card">
-            <div class="card-title">
-                <div class="card-icon">🏆</div>
-                Top Performers
-            </div>
-            <?php if (empty($topPerformers)): ?>
-                <div style="color:var(--color-text-light);font-size:14px;padding:12px 0;">No completed attempts yet.</div>
-            <?php else: ?>
-            <div class="performers-list">
-                <?php
-                $rankClasses = ['gold', 'silver', 'bronze'];
-                foreach ($topPerformers as $i => $p):
-                    $rankCls = $rankClasses[$i] ?? '';
-                    $pct     = $p['percentage'] !== null ? number_format((float)$p['percentage'], 1) . '%' : '—';
-                ?>
-                <div class="performer-item">
-                    <div class="performer-rank <?= $rankCls ?>"><?= $i + 1 ?></div>
-                    <div class="performer-info">
-                        <div class="performer-name"><?= htmlspecialchars($p['student_name']) ?></div>
-                        <div class="performer-reg"><?= htmlspecialchars($p['reg_number']) ?></div>
-                    </div>
-                    <div class="performer-score"><?= $pct ?></div>
-                </div>
-                <?php endforeach; ?>
-            </div>
-            <?php endif; ?>
-        </div>
-
-        <!-- Question-wise Analysis -->
-        <div class="card">
-            <div class="card-title">
-                <div class="card-icon">📋</div>
-                Question Analysis
-            </div>
-            <?php if (empty($questionAnalysis)): ?>
-                <div style="color:var(--color-text-light);font-size:14px;padding:12px 0;">No question data available.</div>
-            <?php else: ?>
-            <div style="display:flex;flex-direction:column;gap:10px;max-height:340px;overflow-y:auto;padding-right:4px;">
-                <?php foreach ($questionAnalysis as $qi => $q):
-                    $total      = max(1, (int)$q['total_answers']);
-                    $correct    = (int)$q['correct_count'];
-                    $incorrect  = (int)$q['incorrect_count'];
-                    $skipped    = (int)$q['skipped_count'];
-                    $successPct = $total > 0 ? round(($correct / $total) * 100) : 0;
-                    $barColor   = $successPct >= 70 ? '#48bb78' : ($successPct >= 40 ? '#ffc107' : '#f56565');
-                ?>
-                <div style="background:var(--color-bg-light);border-radius:8px;padding:10px 12px;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                        <span style="font-size:13px;font-weight:600;color:var(--color-teacher-primary);">
-                            Q<?= $qi + 1 ?>
-                        </span>
-                        <span style="font-size:12px;color:var(--color-text-light);">
-                            ✓ <?= $correct ?> &nbsp; ✗ <?= $incorrect ?> &nbsp; — <?= $skipped ?>
-                        </span>
-                        <span style="font-size:13px;font-weight:700;color:var(--color-text);"><?= $successPct ?>%</span>
-                    </div>
-                    <div style="width:100%;height:6px;background:#e2e8f0;border-radius:4px;overflow:hidden;">
-                        <div style="width:<?= $successPct ?>%;height:100%;background:<?= $barColor ?>;border-radius:4px;transition:width 0.4s;"></div>
-                    </div>
-                </div>
-                <?php endforeach; ?>
-            </div>
-            <?php endif; ?>
-        </div>
-
+    <!-- Summary Cards -->
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="summary-label">Total Attempts</div>
+        <div class="summary-value"><?= $totalAttempts ?></div>
+        <div class="summary-sub"><?= $uniqueStudents ?> unique student<?= $uniqueStudents !== 1 ? 's' : '' ?></div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Average Score</div>
+        <div class="summary-value" style="color:var(--violet)"><?= $avgScore ?>%</div>
+        <div class="summary-sub">across all attempts</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Pass Rate</div>
+        <div class="summary-value" style="color:<?= $passRate >= 60 ? 'var(--emerald)' : 'var(--rose)' ?>"><?= $passRate ?>%</div>
+        <div class="summary-sub"><?= $passCount ?> of <?= $totalAttempts ?> passed</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">High Score</div>
+        <div class="summary-value" style="color:var(--gold)"><?= round($highScore, 1) ?>%</div>
+        <div class="summary-sub">best attempt</div>
+      </div>
     </div>
 
     <!-- Attempts Table -->
-    <div class="table-section">
-        <div class="table-controls">
-            <div class="card-title" style="margin-bottom:0;">
-                <div class="card-icon">📋</div>
-                Student Attempts
-            </div>
-            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                <div class="search-wrap">
-                    <input type="text" class="search-input" id="searchInput"
-                           placeholder="Search by name, email or reg…" oninput="filterTable()">
-                    <span class="search-icon">🔍</span>
-                </div>
-                <select class="filter-select" id="statusFilter" onchange="filterTable()">
-                    <option value="">All statuses</option>
-                    <option value="completed">Completed</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="timeout">Timeout</option>
-                </select>
-                <select class="filter-select" id="resultFilter" onchange="filterTable()">
-                    <option value="">Pass &amp; Fail</option>
-                    <option value="pass">Pass only</option>
-                    <option value="fail">Fail only</option>
-                </select>
-                <span class="results-count" id="resultsCount">
-                    <?= count($attempts) ?> attempt<?= count($attempts) !== 1 ? 's' : '' ?>
-                </span>
-            </div>
+    <div class="table-card">
+      <div class="table-card-header">
+        <div class="table-card-title">
+          <i class="fa fa-list-ul" style="color:var(--violet);margin-right:8px;"></i>
+          All Attempts
         </div>
+        <div class="search-bar">
+          <i class="fa fa-search"></i>
+          <input type="text" id="searchInput" placeholder="Search by name or reg. no…" oninput="filterTable(this.value)">
+        </div>
+      </div>
 
-        <?php if (empty($attempts)): ?>
-            <div class="empty-state">
-                <div class="empty-icon">📭</div>
-                <div class="empty-text">No attempts yet for this assessment.</div>
-            </div>
-        <?php else: ?>
-            <div class="table-wrap">
-                <table id="attemptsTable">
-                    <thead>
-                        <tr>
-                            <th onclick="sortTable(0)">Student <span class="sort-icon">↕</span></th>
-                            <th onclick="sortTable(1)">Reg. No. <span class="sort-icon">↕</span></th>
-                            <th onclick="sortTable(2)"># <span class="sort-icon">↕</span></th>
-                            <th onclick="sortTable(3)">Score <span class="sort-icon">↕</span></th>
-                            <th onclick="sortTable(4)">Result <span class="sort-icon">↕</span></th>
-                            <th onclick="sortTable(5)">Answers <span class="sort-icon">↕</span></th>
-                            <th onclick="sortTable(6)">Time <span class="sort-icon">↕</span></th>
-                            <th onclick="sortTable(7)">Status <span class="sort-icon">↕</span></th>
-                            <th onclick="sortTable(8)">Submitted <span class="sort-icon">↕</span></th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableBody">
-                        <?php
-                        $passingPct = $assessment['total_marks'] > 0
-                            ? ($assessment['passing_marks'] / $assessment['total_marks']) * 100
-                            : 0;
+      <?php if (empty($attempts)): ?>
+        <div class="empty-state">
+          <i class="fa fa-inbox"></i>
+          <p>No attempts yet. Students haven't taken this assessment.</p>
+        </div>
+      <?php else: ?>
+      <div style="overflow-x:auto;">
+        <table id="attemptsTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Student</th>
+              <th>Score</th>
+              <th>Time Taken</th>
+              <th>Submitted</th>
+              <th>Attempt</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php
+            $passPct = $asm['total_marks'] > 0
+                ? ($asm['passing_marks'] / $asm['total_marks'] * 100)
+                : 50;
+            $i = 1;
+            foreach ($attempts as $att):
+                $pct     = (float)($att['percentage'] ?? 0);
+                $col     = scoreColor($pct, $passPct);
+                $pillCls = $pct >= $passPct ? 'pass' : ($pct >= $passPct * 0.7 ? 'mid' : 'fail');
+                $pillLbl = $pct >= $passPct ? 'PASS' : 'FAIL';
+                $timeTaken = $att['time_taken_min'] !== null ? (int)$att['time_taken_min'] . ' min' : '—';
+                $submitted = $att['submitted_at'] ? date('d M Y, g:i a', strtotime($att['submitted_at'])) : '—';
+            ?>
+            <tr>
+              <td style="color:var(--text-3);font-size:12px;"><?= $i++ ?></td>
+              <td>
+                <div class="student-name"><?= htmlspecialchars($att['full_name']) ?></div>
+                <div class="student-meta">
+                  <?= htmlspecialchars($att['email']) ?>
+                  <?php if ($att['registration_number']): ?>
+                    · <?= htmlspecialchars($att['registration_number']) ?>
+                  <?php endif; ?>
+                  <?php if ($att['department']): ?>
+                    · <?= htmlspecialchars($att['department']) ?>
+                  <?php endif; ?>
+                </div>
+              </td>
+              <td>
+                <div style="font-weight:700;font-size:15px;color:<?= $col ?>;"><?= round($pct, 1) ?>%</div>
+                <div style="font-size:11.5px;color:var(--text-3);"><?= round((float)($att['score'] ?? 0), 1) ?> / <?= (int)$asm['total_marks'] ?></div>
+              </td>
 
-                        foreach ($attempts as $a):
-                            $pct      = $a['percentage'] !== null ? (float)$a['percentage'] : null;
-                            $isPassed = $pct !== null && $pct >= $passingPct;
-                            $statusCls = match($a['status']) {
-                                'completed'   => 'badge-completed',
-                                'in_progress' => 'badge-progress',
-                                'timeout'     => 'badge-timeout',
-                                default       => 'badge-abandoned',  // fallback for unknown statuses
-                            };
-                        ?>
-                        <tr data-status="<?= htmlspecialchars($a['status']) ?>"
-                            data-result="<?= ($a['status'] === 'completed' ? ($isPassed ? 'pass' : 'fail') : '') ?>"
-                            data-search="<?= strtolower(htmlspecialchars($a['student_name'] . ' ' . $a['student_email'] . ' ' . $a['reg_number'])) ?>"><?php // data attrs use new status ?>
-                            <td>
-                                <div class="student-info">
-                                    <div class="name"><?= htmlspecialchars($a['student_name']) ?></div>
-                                    <div class="email"><?= htmlspecialchars($a['student_email']) ?></div>
-                                </div>
-                            </td>
-                            <td><?= htmlspecialchars($a['reg_number']) ?></td>
-                            <td><?= (int)$a['attempt_number'] ?></td>
-                            <td>
-                                <div class="score-cell">
-                                    <div class="score"><?= $a['score'] !== null ? number_format((float)$a['score'], 1) : '—' ?></div>
-                                    <div class="pct"><?= $pct !== null ? number_format($pct, 1) . '%' : '—' ?></div>
-                                </div>
-                            </td>
-                            <td>
-                                <?php if ($a['status'] === 'completed' && $pct !== null): ?>
-                                    <?= passBadge($pct, $passingPct) ?>
-                                <?php else: ?>
-                                    <span style="color:var(--color-text-light);font-size:12px;">—</span>
-                                <?php endif; ?>
-                            </td>
-                            <td>
-                                <?php if ($a['status'] === 'completed'): ?>
-                                    <div class="answers-split">
-                                        <span class="ans-correct">✓ <?= (int)$a['correct_answers'] ?></span>
-                                        <span class="ans-wrong">✗ <?= (int)$a['wrong_answers'] ?></span>
-                                        <span class="ans-skip">– <?= (int)$a['unanswered'] ?></span>
-                                    </div>
-                                <?php else: ?>
-                                    <span style="color:var(--color-text-light);font-size:12px;">—</span>
-                                <?php endif; ?>
-                            </td>
-                            <td>
-                                <?= $a['time_taken'] !== null ? (int)$a['time_taken'] . ' min' : '—' ?>
-                            </td>
-                            <td>
-                                <span class="badge <?= $statusCls ?>">
-                                    <?= ucfirst(str_replace('_', ' ', $a['status'])) ?>
-                                </span>
-                            </td>
-                            <td style="white-space:nowrap; font-size:12px; color:var(--color-text-light);">
-                                <?= fmtDateTime($a['submitted_at']) ?>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="pagination" id="pagination"></div>
-        <?php endif; ?>
+              <td><?= $timeTaken ?></td>
+              <td style="font-size:12.5px;"><?= $submitted ?></td>
+              <td>
+                <span class="attempt-badge">Attempt <?= (int)$att['attempt_number'] ?></span>
+                <div style="margin-top:4px;">
+                  <span class="score-pill <?= $pillCls ?>"><?= $pillLbl ?></span>
+                </div>
+              </td>
+            </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+      <?php endif; ?>
     </div>
 
-</div><!-- /container -->
-
-<div class="toast" id="toast"></div>
+  </div><!-- /page-content -->
+</div><!-- /page-wrapper -->
 
 <script>
-// ── Toast ──
-function showToast(msg, type = 'success') {
-    const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.className   = 'toast ' + type;
-    t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 3000);
-}
-
-// ── Filter & Search ──
-const PAGE_SIZE = 20;
-let currentPage = 1;
-let visibleRows = [];
-
-function filterTable() {
-    const search       = document.getElementById('searchInput').value.toLowerCase().trim();
-    const statusFilter = document.getElementById('statusFilter').value;
-    const resultFilter = document.getElementById('resultFilter').value;
-    const rows         = Array.from(document.querySelectorAll('#tableBody tr'));
-
-    visibleRows = rows.filter(row => {
-        const matchSearch = !search || row.dataset.search.includes(search);
-        const matchStatus = !statusFilter || row.dataset.status === statusFilter;
-        const matchResult = !resultFilter || row.dataset.result === resultFilter;
-        return matchSearch && matchStatus && matchResult;
-    });
-
-    currentPage = 1;
-    renderPage();
-    document.getElementById('resultsCount').textContent =
-        visibleRows.length + ' attempt' + (visibleRows.length !== 1 ? 's' : '');
-}
-
-function renderPage() {
-    const allRows = Array.from(document.querySelectorAll('#tableBody tr'));
-    allRows.forEach(r => r.style.display = 'none');
-
-    const start = (currentPage - 1) * PAGE_SIZE;
-    const end   = start + PAGE_SIZE;
-    visibleRows.slice(start, end).forEach(r => r.style.display = '');
-
-    renderPagination();
-}
-
-function renderPagination() {
-    const total = Math.ceil(visibleRows.length / PAGE_SIZE);
-    const pg    = document.getElementById('pagination');
-    if (!pg) return;
-    pg.innerHTML = '';
-    if (total <= 1) return;
-
-    const mkBtn = (label, page, active = false, disabled = false) => {
-        const b = document.createElement('button');
-        b.className   = 'page-btn' + (active ? ' active' : '');
-        b.textContent = label;
-        b.disabled    = disabled;
-        b.onclick     = () => { currentPage = page; renderPage(); };
-        return b;
-    };
-
-    pg.appendChild(mkBtn('‹ Prev', currentPage - 1, false, currentPage === 1));
-    for (let i = 1; i <= total; i++) {
-        if (i === 1 || i === total || Math.abs(i - currentPage) <= 1) {
-            pg.appendChild(mkBtn(i, i, i === currentPage));
-        } else if (Math.abs(i - currentPage) === 2) {
-            const dots = document.createElement('span');
-            dots.textContent = '…'; dots.style.padding = '0 4px';
-            pg.appendChild(dots);
-        }
-    }
-    pg.appendChild(mkBtn('Next ›', currentPage + 1, false, currentPage === total));
-}
-
-// ── Sort ──
-let sortDir = {};
-function sortTable(colIdx) {
-    const tbody = document.getElementById('tableBody');
-    const rows  = Array.from(tbody.querySelectorAll('tr'));
-    sortDir[colIdx] = !sortDir[colIdx];
-    const asc = sortDir[colIdx];
-
-    rows.sort((a, b) => {
-        const av = a.cells[colIdx]?.textContent?.trim() ?? '';
-        const bv = b.cells[colIdx]?.textContent?.trim() ?? '';
-        const an = parseFloat(av), bn = parseFloat(bv);
-        if (!isNaN(an) && !isNaN(bn)) return asc ? an - bn : bn - an;
-        return asc ? av.localeCompare(bv) : bv.localeCompare(av);
-    });
-
-    rows.forEach(r => tbody.appendChild(r));
-    document.querySelectorAll('thead th').forEach((th, i) => {
-        th.classList.toggle('sorted', i === colIdx);
-        const icon = th.querySelector('.sort-icon');
-        if (icon) icon.textContent = i === colIdx ? (asc ? '↑' : '↓') : '↕';
-    });
-
-    // Re-filter after sort
-    filterTable();
-}
-
-// ── Export CSV ──
-function exportCSV() {
-    const rows   = Array.from(document.querySelectorAll('#tableBody tr'));
-    const header = ['Student Name', 'Email', 'Reg No.', 'Attempt #', 'Score', 'Percentage', 'Result', 'Correct', 'Wrong', 'Unanswered', 'Time (min)', 'Status', 'Submitted'];
-
-    const lines = [header.join(',')];
-
-    rows.forEach(row => {
-        const cells = Array.from(row.cells).map(c => {
-            const text = c.innerText.replace(/\n/g, ' ').replace(/,/g, ';').trim();
-            return '"' + text + '"';
-        });
-        lines.push(cells.join(','));
-    });
-
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = 'results_assessment_<?= $assessmentId ?>_<?= date('Ymd') ?>.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast('CSV exported successfully!');
-}
-
-// ── Init ──
-window.addEventListener('DOMContentLoaded', () => {
-    visibleRows = Array.from(document.querySelectorAll('#tableBody tr'));
-    renderPage();
+document.getElementById('profileBtn').addEventListener('click', function(e) {
+    e.stopPropagation();
+    document.getElementById('profileDropdown').classList.toggle('open');
 });
+document.addEventListener('click', function() {
+    document.getElementById('profileDropdown').classList.remove('open');
+});
+
+function handleLogout() {
+    if (confirm('Are you sure you want to logout?')) window.location.href = 'logout.php';
+}
+
+function filterTable(val) {
+    const q = val.toLowerCase();
+    document.querySelectorAll('#attemptsTable tbody tr').forEach(tr => {
+        const text = tr.textContent.toLowerCase();
+        tr.style.display = text.includes(q) ? '' : 'none';
+    });
+}
 </script>
 </body>
 </html>

@@ -1,177 +1,174 @@
 <?php
-// ============================================================
-// api/resources/get-resources.php
-//
-// Returns paginated materials.
-// Works for logged-in students (with progress) AND guests
-// (public materials only, no progress).
-//
-// Table: materials(material_id, title, description, created_by,
-//   visibility, cloudinary_public_id, external_url, category,
-//   difficulty, created_at)
-// Table: material_progress(material_id, user_id,
-//   progress_percentage, completed, last_accessed)
-// Table: material_targets(id, material_id, target_type, target_id)
-//
-// GET ?category=aptitude|technical|coding|reasoning|english|general
-//     ?search=keyword
-//     ?page=1&limit=20
-//
-// Returns {
-//   success: bool,
-//   materials: [...],
-//   total: int, page: int, pages: int
-// }
-// ============================================================
+/* ========================================
+ * GET RESOURCES API
+ * File: api/resources/get-resources.php
+ *
+ * Fixed to match actual `materials` table schema:
+ *   material_id, title, description, created_by,
+ *   visibility, cloudinary_public_id, external_url,
+ *   category, + 2 more (created_at, updated_at)
+ *
+ * Students only see public materials uploaded by teachers.
+ * ======================================== */
 
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    http_response_code(405);
-    echo json_encode(['success' => false, 'error' => 'Method not allowed.']);
-    exit;
-}
+// ── Auth: student only ────────────────────────────────────────────────────
+$currentUser = validateSession($conn, 'student');
+$userId      = (int) $currentUser['user_id'];
 
-// ── Optional session: guests get null ────────────────────────────────────
-$currentUser = optionalSession($conn);
-$userId      = $currentUser ? (int)$currentUser['user_id'] : null;
-$isGuest     = $userId === null;
-
-// ── Query params ──────────────────────────────────────────────────────────
-$search   = trim($_GET['search']   ?? '');
-$category = trim($_GET['category'] ?? '');
-$page     = max(1, (int)($_GET['page']  ?? 1));
-$limit    = min(50, max(1, (int)($_GET['limit'] ?? 20)));
+// ── Input ─────────────────────────────────────────────────────────────────
+$page     = max(1, (int) ($_GET['page']  ?? 1));
+$limit    = min(50, max(1, (int) ($_GET['limit'] ?? 12)));
 $offset   = ($page - 1) * $limit;
+$category = trim($_GET['category'] ?? '');
+$search   = trim($_GET['search']   ?? '');
 
-$allowedCategories = ['aptitude', 'technical', 'coding', 'reasoning', 'english', 'general'];
+$allowedTypes     = ['pdf', 'video', 'document', 'link', 'image'];
+$allowedCategories = ['aptitude', 'technical', 'verbal', 'coding', 'reasoning', 'english', 'general'];
+$typeRaw          = trim($_GET['type'] ?? '');
 
-// ── Access clause ─────────────────────────────────────────────────────────
-// Guests: public only.
-// Students: public OR group-targeted at them or their groups.
-if ($isGuest) {
-    $accessClause = "m.visibility = 'public'";
-} else {
-    $accessClause = "(
-        m.visibility = 'public'
-        OR (m.visibility = 'group' AND EXISTS (
-            SELECT 1 FROM material_targets mt
-            WHERE mt.material_id = m.material_id
-              AND (
-                  (mt.target_type = 'student' AND mt.target_id = {$userId})
-                  OR (mt.target_type = 'group' AND mt.target_id IN (
-                      SELECT gm.group_id FROM group_members gm WHERE gm.student_id = {$userId}
-                  ))
-              )
-        ))
-    )";
+// ── WHERE: students only see public, teacher-uploaded materials ───────────
+$conditions = [
+    "m.visibility = 'public'",  // only public materials
+    "u.role = 'teacher'",       // only teacher-uploaded (never admin)
+];
+$types  = "";
+$params = [];
+
+if ($category !== '' && in_array($category, $allowedCategories, true)) {
+    $conditions[] = "m.category = ?";
+    $types       .= "s";
+    $params[]     = $category;
 }
 
-// ── Build WHERE conditions ─────────────────────────────────────────────────
-$conditions = [$accessClause];
-$params     = [];
-$types      = '';
+// Type filter: derived from external_url since material_type col doesn't exist
+if ($typeRaw !== '' && in_array($typeRaw, $allowedTypes, true)) {
+    if ($typeRaw === 'link') {
+        $conditions[] = "m.external_url IS NOT NULL AND m.cloudinary_public_id IS NULL";
+    } elseif ($typeRaw === 'pdf') {
+        $conditions[] = "m.external_url LIKE '%.pdf'";
+    } elseif ($typeRaw === 'video') {
+        $conditions[] = "(m.external_url LIKE '%.mp4' OR m.external_url LIKE '%.webm')";
+    } elseif ($typeRaw === 'image') {
+        $conditions[] = "(m.external_url LIKE '%.jpg' OR m.external_url LIKE '%.png' OR m.external_url LIKE '%.jpeg')";
+    }
+}
 
 if ($search !== '') {
-    $conditions[] = '(m.title LIKE ? OR m.description LIKE ?)';
+    $conditions[] = "(m.title LIKE ? OR m.description LIKE ?)";
+    $types       .= "ss";
     $like         = '%' . $search . '%';
     $params[]     = $like;
     $params[]     = $like;
-    $types       .= 'ss';
-}
-
-if ($category !== '' && in_array($category, $allowedCategories, true)) {
-    $conditions[] = 'm.category = ?';
-    $params[]     = $category;
-    $types       .= 's';
 }
 
 $where = implode(' AND ', $conditions);
 
-// ── Total count for pagination ─────────────────────────────────────────────
-$countRes = safePreparedQuery($conn,
-    "SELECT COUNT(*) AS total FROM materials m WHERE {$where}",
-    $types ?: '', $params ?: []
-);
-$total = 0;
-if ($countRes['success'] && $countRes['result']) {
-    $row   = $countRes['result']->fetch_assoc();
-    $total = (int)($row['total'] ?? 0);
-    $countRes['result']->free();
-}
-
-// ── Fetch paginated rows ───────────────────────────────────────────────────
-// Progress subqueries are included only for logged-in users.
-if ($isGuest) {
-    $selectProgress = 'NULL AS user_progress, NULL AS is_completed';
-    $listTypes      = $types . 'ii';
-    $listParams     = array_merge($params, [$limit, $offset]);
-} else {
-    $selectProgress = "(SELECT mp.progress_percentage FROM material_progress mp
-                        WHERE mp.material_id = m.material_id AND mp.user_id = ?) AS user_progress,
-                       (SELECT mp.completed FROM material_progress mp
-                        WHERE mp.material_id = m.material_id AND mp.user_id = ?) AS is_completed";
-    $listTypes      = 'ii' . $types . 'ii';
-    $listParams     = array_merge([$userId, $userId], $params, [$limit, $offset]);
-}
-
-$r = safePreparedQuery($conn,
-    "SELECT
-        m.material_id,
-        m.title,
-        m.description,
-        m.category,
-        m.difficulty,
-        m.visibility,
-        m.cloudinary_public_id,
-        m.external_url,
-        m.created_at,
-        u.full_name AS uploaded_by_name,
-        {$selectProgress}
+// ── Stats ─────────────────────────────────────────────────────────────────
+$statsResult = safePreparedQuery(
+    $conn,
+    "SELECT COUNT(m.material_id) AS total_materials
      FROM materials m
-     LEFT JOIN users u ON u.user_id = m.created_by
-     WHERE {$where}
+     JOIN users u ON u.user_id = m.created_by
+     WHERE u.role = 'teacher' AND m.visibility = 'public'",
+    "", []
+);
+$stats = ['total_materials' => 0, 'total_views' => 0, 'total_downloads' => 0, 'storage_used_bytes' => 0];
+if ($statsResult['success'] && $statsResult['result']) {
+    $row = $statsResult['result']->fetch_assoc();
+    $stats['total_materials'] = (int)($row['total_materials'] ?? 0);
+    $statsResult['result']->free();
+}
+
+// ── Count total matching rows ─────────────────────────────────────────────
+$countResult = safePreparedQuery(
+    $conn,
+    "SELECT COUNT(*) AS total
+     FROM materials m
+     JOIN users u ON u.user_id = m.created_by
+     WHERE $where",
+    $types, $params
+);
+$totalRows = 0;
+if ($countResult['success'] && $countResult['result']) {
+    $row       = $countResult['result']->fetch_assoc();
+    $totalRows = (int)($row['total'] ?? 0);
+    $countResult['result']->free();
+}
+$totalPages = max(1, (int) ceil($totalRows / $limit));
+
+// ── Fetch materials ───────────────────────────────────────────────────────
+$listTypes  = $types . "ii";
+$listParams = array_merge($params, [$limit, $offset]);
+
+$matResult = safePreparedQuery(
+    $conn,
+    "SELECT
+         m.material_id,
+         m.title,
+         m.description,
+         m.category,
+         m.visibility,
+         m.cloudinary_public_id,
+         m.external_url,
+         m.created_at,
+         u.full_name AS uploaded_by_name
+     FROM materials m
+     JOIN users u ON u.user_id = m.created_by
+     WHERE $where
      ORDER BY m.created_at DESC
      LIMIT ? OFFSET ?",
     $listTypes, $listParams
 );
 
 $materials = [];
-if ($r['success'] && $r['result']) {
-    while ($row = $r['result']->fetch_assoc()) {
-        // Derive material_type from stored data — no material_type column in schema
-        $materialType = 'document';
-        if (!empty($row['external_url'])) {
-            $materialType = 'link';
+if ($matResult['success'] && $matResult['result']) {
+    while ($row = $matResult['result']->fetch_assoc()) {
+        // Derive material_type from URL for frontend compatibility
+        $type = 'document';
+        $url  = strtolower($row['external_url'] ?? '');
+        if ($url !== '') {
+            if (str_ends_with($url, '.pdf'))                           $type = 'pdf';
+            elseif (preg_match('/\.(mp4|webm|ogg|mov)$/', $url))      $type = 'video';
+            elseif (preg_match('/\.(jpg|jpeg|png|gif|webp)$/', $url)) $type = 'image';
+            elseif (empty($row['cloudinary_public_id']))               $type = 'link';
         } elseif (!empty($row['cloudinary_public_id'])) {
-            $materialType = 'file';
+            $type = 'file';
         }
 
         $materials[] = [
-            'material_id'          => (int)$row['material_id'],
+            'material_id'          => (int) $row['material_id'],
             'title'                => $row['title'],
-            'description'          => $row['description'],
-            'category'             => $row['category'],
-            'difficulty'           => $row['difficulty'],
-            'material_type'        => $materialType,
-            'cloudinary_public_id' => $row['cloudinary_public_id'],
-            'external_url'         => $row['external_url'],
-            'created_at'           => $row['created_at'],
-            'uploaded_by_name'     => $row['uploaded_by_name'],
-            'user_progress'        => $row['user_progress'] !== null ? (int)$row['user_progress'] : null,
-            'is_completed'         => $row['is_completed']  !== null ? (bool)$row['is_completed']  : null,
+            'description'          => $row['description'] ?? '',
+            'category'             => $row['category'] ?? '',
+            'material_type'        => $type,
+            'is_public'            => 1,
+            'visibility'           => $row['visibility'],
+            'cloudinary_public_id' => $row['cloudinary_public_id'] ?? null,
+            'external_url'         => $row['external_url'] ?? null,
+            'file_size'            => null,
+            'views'                => 0,
+            'downloads'            => 0,
+            'difficulty'           => null,
+            'estimated_time_minutes' => null,
+            'created_at'           => $row['created_at'] ?? null,
+            'uploaded_by_name'     => $row['uploaded_by_name'] ?? null,
+            'user_progress'        => null,
+            'is_completed'         => 0,
         ];
     }
-    $r['result']->free();
+    $matResult['result']->free();
 }
 
 echo json_encode([
     'success'   => true,
     'materials' => $materials,
-    'total'     => $total,
+    'total'     => $totalRows,
     'page'      => $page,
-    'pages'     => (int)ceil($total / max(1, $limit)),
+    'pages'     => $totalPages,
+    'stats'     => $stats,
 ]);

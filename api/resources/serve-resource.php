@@ -2,8 +2,7 @@
 // ============================================================
 // api/resources/serve-resource.php
 //
-// Proxies a Cloudinary file through the server, or redirects
-// to an external URL for link/article types.
+// Serves a locally-stored file or redirects to an external URL.
 // Works for logged-in users AND guests (public materials only).
 //
 // GET ?material_id=int&action=view|download
@@ -12,15 +11,25 @@
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
 
-// ── Optional session: guests get null ────────────────────────────────────
-$currentUser = optionalSession($conn);
+// ── Optional session: resolve from session, guests get null ──────────────
+$sessionUid  = (int)($_SESSION['user_id'] ?? 0);
+$sessionRole = $_SESSION['role'] ?? $_SESSION['user_type'] ?? '';
+$currentUser = ($sessionUid > 0) ? getUserData($conn, $sessionUid) : null;
 $userId      = $currentUser ? (int)$currentUser['user_id'] : null;
-$role        = $currentUser ? $currentUser['user_type']    : 'guest';
+$role        = $currentUser ? ($currentUser['role'] ?? $sessionRole) : 'guest';
 $isGuest     = $userId === null;
 
 $materialId = (int)($_GET['material_id'] ?? 0);
 $action     = $_GET['action'] ?? 'view';
 $action     = in_array($action, ['view', 'download'], true) ? $action : 'view';
+
+// ── When a logged-in student views a resource, dismiss its notification ───
+if ($userId && $materialId > 0 && $role === 'student') {
+    safePreparedQuery($conn,
+        "DELETE FROM notifications WHERE user_id = ? AND type = 'material' AND related_entity_id = ?",
+        "ii", [$userId, $materialId]
+    );
+}
 
 if ($materialId <= 0) {
     http_response_code(400);
@@ -29,8 +38,6 @@ if ($materialId <= 0) {
 }
 
 // ── Fetch material ────────────────────────────────────────────────────────
-// Columns that actually exist in the materials table.
-// material_type is derived below from cloudinary_public_id / external_url.
 $r = safePreparedQuery($conn,
     "SELECT material_id, title, cloudinary_public_id, external_url, visibility
      FROM materials WHERE material_id = ?",
@@ -47,112 +54,137 @@ $material = $r['result']->fetch_assoc();
 $r['result']->free();
 
 // ── Access control ────────────────────────────────────────────────────────
-// Guests may only access public materials.
-// Logged-in students follow the same rule for now (group-targeted
-// materials are enforced in get-resources; serving is public-or-authed).
 if ($isGuest && $material['visibility'] !== 'public') {
     http_response_code(403);
     echo 'Access denied.';
     exit;
 }
-
-// Derive type — no material_type column; infer from stored data
-$hasCloudinary = !empty($material['cloudinary_public_id']);
-$hasUrl        = !empty($material['external_url']);
-
-// External link — redirect directly, no proxying needed
-if (!$hasCloudinary && $hasUrl) {
-    header('Location: ' . $material['external_url']);
+if ($role === 'student' && $material['visibility'] === 'private') {
+    http_response_code(403);
+    echo 'Access denied.';
     exit;
 }
 
-if (!$hasCloudinary) {
-    http_response_code(404);
-    echo 'File not found in storage.';
-    exit;
-}
+$externalUrl       = $material['external_url']        ?? '';
+$cloudinaryPublicId = $material['cloudinary_public_id'] ?? '';
 
-// ── Determine Cloudinary resource_type from public_id prefix convention ──
-// Cloudinary public_ids for video are typically stored under a video/ folder
-// or with a resource_type prefix. Fall back to 'raw' for PDFs/documents.
-$publicId     = $material['cloudinary_public_id'];
-$resourceType = (strpos($publicId, 'video/') === 0) ? 'video' : 'raw';
+// ── Case 1: External / local URL stored in external_url ──────────────────
+if ($externalUrl !== '') {
+    // Local file saved by upload-resource.php (e.g. uploads/materials/abc.pdf)
+    $localPath = __DIR__ . '/../../' . $externalUrl;
 
-$attachment = $action === 'download' ? 'true' : 'false';
-$timestamp  = time();
-$expiresAt  = $timestamp + 300; // 5-minute signed URL
+    if (file_exists($localPath)) {
+        // Stream local file to browser
+        $ext = strtolower(pathinfo($localPath, PATHINFO_EXTENSION));
+        $mimeMap = [
+            'pdf'  => 'application/pdf',
+            'mp4'  => 'video/mp4',
+            'webm' => 'video/webm',
+            'ogg'  => 'video/ogg',
+            'mov'  => 'video/quicktime',
+            'jpg'  => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'png'  => 'image/png',
+            'gif'  => 'image/gif',
+            'webp' => 'image/webp',
+            'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'doc'  => 'application/msword',
+        ];
+        $mimeType = $mimeMap[$ext] ?? mime_content_type($localPath) ?? 'application/octet-stream';
+        $safeName = preg_replace('/[^a-zA-Z0-9_\-.]/', '_', $material['title']) . '.' . $ext;
 
-// ── Cloudinary signed download URL ───────────────────────────────────────
-$sigString = "attachment={$attachment}&expires_at={$expiresAt}&public_id={$publicId}&timestamp={$timestamp}&type=upload"
-           . CLOUDINARY_API_SECRET;
-$signature = sha1($sigString);
+        header('Content-Type: ' . $mimeType);
+        header('Content-Length: ' . filesize($localPath));
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: no-store');
 
-$apiUrl = 'https://api.cloudinary.com/v1_1/' . CLOUDINARY_CLOUD_NAME . "/{$resourceType}/download";
-
-$postFields = http_build_query([
-    'attachment' => $attachment,
-    'expires_at' => $expiresAt,
-    'public_id'  => $publicId,
-    'timestamp'  => $timestamp,
-    'type'       => 'upload',
-    'api_key'    => CLOUDINARY_API_KEY,
-    'signature'  => $signature,
-]);
-
-$cloudinaryHeaders = [];
-$ch = curl_init($apiUrl);
-curl_setopt_array($ch, [
-    CURLOPT_POST           => true,
-    CURLOPT_POSTFIELDS     => $postFields,
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_TIMEOUT        => 30,
-    CURLOPT_HEADERFUNCTION => function ($curl, $header) use (&$cloudinaryHeaders) {
-        $parts = explode(':', $header, 2);
-        if (count($parts) === 2) {
-            $cloudinaryHeaders[strtolower(trim($parts[0]))] = trim($parts[1]);
+        if ($action === 'download') {
+            header('Content-Disposition: attachment; filename="' . $safeName . '"');
+        } else {
+            header('Content-Disposition: inline; filename="' . $safeName . '"');
         }
-        return strlen($header);
-    },
-]);
-$fileData = curl_exec($ch);
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
 
-if ($httpCode !== 200) {
-    error_log("serve-resource.php Cloudinary API failed: HTTP {$httpCode}, body: " . substr((string)$fileData, 0, 300));
-    http_response_code(502);
-    echo 'Failed to fetch file. Please try again.';
+        readfile($localPath);
+        exit;
+    }
+
+    // External URL (YouTube, Google Drive, etc.) — redirect
+    if (filter_var($externalUrl, FILTER_VALIDATE_URL)) {
+        header('Location: ' . $externalUrl);
+        exit;
+    }
+}
+
+// ── Case 2: Cloudinary-stored file ───────────────────────────────────────
+if ($cloudinaryPublicId !== '') {
+    // Only attempt if Cloudinary constants are defined
+    if (!defined('CLOUDINARY_CLOUD_NAME') || !defined('CLOUDINARY_API_KEY') || !defined('CLOUDINARY_API_SECRET')) {
+        http_response_code(501);
+        echo 'Cloudinary is not configured on this server.';
+        exit;
+    }
+
+    $resourceType = (strpos($cloudinaryPublicId, 'video/') === 0) ? 'video' : 'raw';
+    $attachment   = $action === 'download' ? 'true' : 'false';
+    $timestamp    = time();
+    $expiresAt    = $timestamp + 300;
+
+    $sigString = "attachment={$attachment}&expires_at={$expiresAt}&public_id={$cloudinaryPublicId}&timestamp={$timestamp}&type=upload"
+               . CLOUDINARY_API_SECRET;
+    $signature = sha1($sigString);
+
+    $apiUrl     = 'https://api.cloudinary.com/v1_1/' . CLOUDINARY_CLOUD_NAME . "/{$resourceType}/download";
+    $postFields = http_build_query([
+        'attachment' => $attachment,
+        'expires_at' => $expiresAt,
+        'public_id'  => $cloudinaryPublicId,
+        'timestamp'  => $timestamp,
+        'type'       => 'upload',
+        'api_key'    => CLOUDINARY_API_KEY,
+        'signature'  => $signature,
+    ]);
+
+    $cloudinaryHeaders = [];
+    $ch = curl_init($apiUrl);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $postFields,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_HEADERFUNCTION => function ($curl, $header) use (&$cloudinaryHeaders) {
+            $parts = explode(':', $header, 2);
+            if (count($parts) === 2) {
+                $cloudinaryHeaders[strtolower(trim($parts[0]))] = trim($parts[1]);
+            }
+            return strlen($header);
+        },
+    ]);
+    $fileData = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode !== 200) {
+        http_response_code(502);
+        echo 'Failed to fetch file from Cloudinary.';
+        exit;
+    }
+
+    $ext      = strtolower(pathinfo($cloudinaryPublicId, PATHINFO_EXTENSION));
+    $mimeType = ['pdf'=>'application/pdf','mp4'=>'video/mp4','webm'=>'video/webm'][$ext]
+                ?? ($cloudinaryHeaders['content-type'] ?? 'application/octet-stream');
+    $safeName = preg_replace('/[^a-zA-Z0-9_\-.]/', '_', $material['title']) . ($ext ? '.'.$ext : '');
+
+    header('Content-Type: ' . $mimeType);
+    header('Content-Length: ' . strlen($fileData));
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: no-store');
+    header($action === 'download'
+        ? 'Content-Disposition: attachment; filename="' . $safeName . '"'
+        : 'Content-Disposition: inline; filename="' . $safeName . '"');
+
+    echo $fileData;
     exit;
 }
 
-// ── Determine MIME type ───────────────────────────────────────────────────
-$ext = strtolower(pathinfo($publicId, PATHINFO_EXTENSION));
-$mimeByExt = [
-    'pdf'  => 'application/pdf',
-    'mp4'  => 'video/mp4',
-    'webm' => 'video/webm',
-    'mov'  => 'video/quicktime',
-];
-$mimeType = $mimeByExt[$ext]
-    ?? ($cloudinaryHeaders['content-type'] ?? 'application/octet-stream');
-
-// ── Safe filename ─────────────────────────────────────────────────────────
-$safeName = preg_replace('/[^a-zA-Z0-9_\-.]/', '_', $material['title']);
-if ($ext) {
-    $safeName .= '.' . $ext;
-}
-
-// ── Stream to browser ─────────────────────────────────────────────────────
-header('Content-Type: ' . $mimeType);
-header('Content-Length: ' . strlen($fileData));
-header('X-Content-Type-Options: nosniff');
-header('Cache-Control: no-store, no-cache, must-revalidate');
-
-if ($action === 'download') {
-    header('Content-Disposition: attachment; filename="' . $safeName . '"');
-} else {
-    header('Content-Disposition: inline; filename="' . $safeName . '"');
-}
-
-echo $fileData;
-exit;
+http_response_code(404);
+echo 'No file associated with this resource.';

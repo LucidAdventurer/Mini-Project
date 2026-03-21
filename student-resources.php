@@ -3,10 +3,19 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db-guard.php';
 
 
-$currentUser  = validateSession($conn);
+$currentUser  = validateSession($conn, 'student');
 $userName     = htmlspecialchars($currentUser['full_name']);
 $userInitials = strtoupper(substr($currentUser['full_name'], 0, 2));
 $userId       = (int) $currentUser['user_id'];
+
+// Fetch fresh profile image
+$imgRes = safePreparedQuery($conn, "SELECT profile_image FROM users WHERE user_id = ?", "i", [$userId]);
+$userProfileImage = '';
+if ($imgRes['success'] && $imgRes['result']) {
+    $imgRow = $imgRes['result']->fetch_assoc();
+    $userProfileImage = $imgRow['profile_image'] ?? '';
+    $imgRes['result']->free();
+}
 
 // Ensure CSRF token exists
 if (empty($_SESSION['csrf_token'])) {
@@ -29,7 +38,7 @@ if ($notifResult['success'] && $notifResult['result']) {
 $notifDropResult = safePreparedQuery($conn,
     "SELECT notification_id, title, message, type, is_read, created_at
      FROM notifications WHERE user_id = ?
-     ORDER BY created_at DESC",
+     ORDER BY created_at DESC LIMIT 50",
     "i", [$userId]
 );
 $notifItems = [];
@@ -643,13 +652,23 @@ body {
 
         <div class="profile-wrapper" id="profileWrapper">
             <button class="profile-button" onclick="toggleDropdown()">
-                <div class="profile-avatar"><?= $userInitials ?></div>
+                <?php if ($userProfileImage && file_exists($userProfileImage)): ?>
+                    <img src="<?= htmlspecialchars($userProfileImage) ?>?v=<?= time() ?>" alt="Avatar" style="width:32px;height:32px;border-radius:8px;object-fit:cover;flex-shrink:0;">
+                <?php else: ?>
+                    <div class="profile-avatar"><?= $userInitials ?></div>
+                <?php endif; ?>
                 <span class="profile-name"><?= $userName ?></span>
                 <span class="dropdown-arrow">▼</span>
             </button>
             <div class="profile-dropdown" id="profileDropdown">
                 <div class="dropdown-header">
-                    <div class="dropdown-avatar"><?= $userInitials ?></div>
+                    <div class="dropdown-avatar">
+                        <?php if ($userProfileImage && file_exists($userProfileImage)): ?>
+                            <img src="<?= htmlspecialchars($userProfileImage) ?>?v=<?= time() ?>" alt="Avatar" style="width:44px;height:44px;border-radius:12px;object-fit:cover;">
+                        <?php else: ?>
+                            <?= $userInitials ?>
+                        <?php endif; ?>
+                    </div>
                     <div class="dropdown-user-info">
                         <div class="dropdown-name"><?= $userName ?></div>
                         <div class="dropdown-email"><?= htmlspecialchars($currentUser['email'] ?? '') ?></div>
@@ -675,11 +694,14 @@ body {
     <a href="student-assessments.php"><i class="fa fa-clipboard-list"></i> Assessments</a>
     <a href="student-resources.php" class="active"><i class="fa fa-folder-open"></i> Resources</a>
 
-    <span class="sidebar-section">Filter by Type</span>
-    <a href="#" id="t-all"   onclick="setType('',this)"><i class="fa fa-layer-group"></i> All Types</a>
-    <a href="#" id="t-pdf"   onclick="setType('pdf',this)"><i class="fa fa-file-pdf"   style="color:#ef4444"></i> PDF</a>
-    <a href="#" id="t-video" onclick="setType('video',this)"><i class="fa fa-file-video" style="color:#f59e0b"></i> Video</a>
-    <a href="#" id="t-image" onclick="setType('image',this)"><i class="fa fa-image"      style="color:#8b5cf6"></i> Images</a>
+    <span class="sidebar-section">Filter by Category</span>
+    <a href="#" id="c-all"       onclick="setSidebarCat('',this)"><i class="fa fa-layer-group"></i> All</a>
+    <a href="#" id="c-aptitude"  onclick="setSidebarCat('aptitude',this)"><i class="fa fa-calculator" style="color:#0ea5e9"></i> Aptitude</a>
+    <a href="#" id="c-technical" onclick="setSidebarCat('technical',this)"><i class="fa fa-microchip" style="color:#8b5cf6"></i> Technical</a>
+    <a href="#" id="c-coding"    onclick="setSidebarCat('coding',this)"><i class="fa fa-code" style="color:#10b981"></i> Coding</a>
+    <a href="#" id="c-reasoning" onclick="setSidebarCat('reasoning',this)"><i class="fa fa-brain" style="color:#f59e0b"></i> Reasoning</a>
+    <a href="#" id="c-english"   onclick="setSidebarCat('english',this)"><i class="fa fa-book" style="color:#ef4444"></i> English</a>
+    <a href="#" id="c-general"   onclick="setSidebarCat('general',this)"><i class="fa fa-globe" style="color:#06b6d4"></i> General</a>
 
     <div class="sidebar-bottom">
         <button onclick="if(confirm('Are you sure you want to logout?')) window.location.href='logout.php'">
@@ -827,7 +849,8 @@ document.addEventListener('click', e => {
 
 /* ── Fetch ── */
 async function load() {
-    const p = new URLSearchParams({ page: currentPage, limit: LIMIT });
+    // Students only see materials uploaded by teachers (never admins)
+    const p = new URLSearchParams({ page: currentPage, limit: LIMIT, uploader_role: 'teacher' });
     if (activeCat)  p.set('category', activeCat);
     if (activeType) p.set('type', activeType);
     if (searchQ)    p.set('search', searchQ);
@@ -879,11 +902,12 @@ function renderGrid(mats, total) {
         const isLink = m.material_type === 'link';
 
         const primaryBtn = isLink
-            ? `<a class="btn-view" href="${esc(m.external_url)}" target="_blank" rel="noopener"><i class="fa fa-external-link-alt"></i> Open</a>`
+            ? `<a class="btn-view" href="${esc(m.external_url)}" target="_blank" rel="noopener" onclick="dismissResourceNotif(${m.material_id})"><i class="fa fa-external-link-alt"></i> Open</a>`
             : `<button class="btn-view" onclick="openFile(${m.material_id},'${esc(m.material_type)}')"><i class="fa fa-eye"></i> View</button>`;
 
-        const dlBtn = (!isLink && m.file_path)
-            ? `<button class="btn-dl" onclick="dlFile(${m.material_id},'${esc(m.title)}')"><i class="fa fa-download"></i></button>`
+        // Show download button for all non-link resources (file_path replaced by external_url)
+        const dlBtn = !isLink
+            ? `<button class="btn-dl" onclick="dlFile(${m.material_id},'${esc(m.title)}')"><i class="fa fa-download"></i> Download</button>`
             : '';
 
         return `
@@ -926,8 +950,18 @@ function renderPagination(totalPages) {
 }
 function goPage(p) { currentPage=p; window.scrollTo({top:0,behavior:'smooth'}); load(); }
 
+/* ── Dismiss material notification when resource is viewed ── */
+function dismissResourceNotif(materialId) {
+    fetch('api/notifications/dismiss-notification.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'resource_viewed', material_id: materialId })
+    }).catch(() => {});
+}
+
 /* ── Actions ── */
 function openFile(id, type) {
+    dismissResourceNotif(id);
     if (['pdf','video'].includes(type))
         window.open('api/resources/view-resource.php?material_id='+id, '_blank');
     else
@@ -946,6 +980,13 @@ function setCat(cat, el) {
     activeCat=cat; currentPage=1;
     document.querySelectorAll('.filter-bar .filter-tab').forEach(b=>b.classList.remove('active'));
     el.classList.add('active'); load();
+}
+
+function setSidebarCat(cat, el) {
+    activeCat = cat; currentPage = 1;
+    document.querySelectorAll('.sidebar a[id^="c-"]').forEach(a => a.classList.remove('active'));
+    el.classList.add('active');
+    load();
 }
 function setType(type, el) {
     activeType=type; currentPage=1;
@@ -970,7 +1011,7 @@ function showError(msg) {
     document.getElementById('sectionLabel').textContent='Error';
 }
 
-document.getElementById('t-all').classList.add('active');
+document.getElementById('c-all').classList.add('active');
 load();
 
 // ── Live notification badge polling ──

@@ -18,6 +18,15 @@ $userDept     = $user['department'] ?? null;
 $userInitials = strtoupper(substr($userName, 0, 2));
 $userId       = (int) $user['user_id'];
 
+// Fetch fresh profile image
+$imgRes = safePreparedQuery($conn, "SELECT profile_image FROM users WHERE user_id = ?", "i", [$userId]);
+$userProfileImage = '';
+if ($imgRes['success'] && $imgRes['result']) {
+    $imgRow = $imgRes['result']->fetch_assoc();
+    $userProfileImage = $imgRow['profile_image'] ?? '';
+    $imgRes['result']->free();
+}
+
 // ── Unread notification count ──
 $notifResult = safePreparedQuery($conn,
     "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
@@ -96,9 +105,26 @@ $assignedResult = safePreparedQuery($conn,
      FROM assessments a
      JOIN users u ON u.user_id = a.created_by
      WHERE a.status = 'published'
+       AND (a.start_time IS NULL OR a.start_time <= NOW())
+       AND (a.end_time   IS NULL OR a.end_time   >= NOW())
+       AND (
+           EXISTS (
+               SELECT 1 FROM assessment_targets at2
+               WHERE at2.assessment_id = a.assessment_id
+                 AND at2.target_type = 'student'
+                 AND at2.target_id = ?
+           )
+           OR EXISTS (
+               SELECT 1 FROM assessment_targets at2
+               JOIN group_members gm ON gm.group_id = at2.target_id
+               WHERE at2.assessment_id = a.assessment_id
+                 AND at2.target_type = 'group'
+                 AND gm.student_id = ?
+           )
+       )
      ORDER BY a.start_time IS NULL ASC, a.start_time DESC, a.created_at DESC",
-    "iiiii",
-    [$userId, $userId, $userId, $userId, $userId]
+    "iiiiiii",
+    [$userId, $userId, $userId, $userId, $userId, $userId, $userId]
 );
 
 $assessments     = [];
@@ -739,13 +765,23 @@ function deadlineLabel(?string $until): string {
         <!-- Profile -->
         <div class="profile-dropdown-container">
             <button class="profile-button" onclick="toggleProfileDropdown()">
-                <div class="profile-avatar"><?= htmlspecialchars($userInitials) ?></div>
+                <?php if ($userProfileImage && file_exists($userProfileImage)): ?>
+                    <img src="<?= htmlspecialchars($userProfileImage) ?>?v=<?= time() ?>" alt="Avatar" style="width:32px;height:32px;border-radius:8px;object-fit:cover;flex-shrink:0;">
+                <?php else: ?>
+                    <div class="profile-avatar"><?= htmlspecialchars($userInitials) ?></div>
+                <?php endif; ?>
                 <span class="profile-name"><?= htmlspecialchars($userName) ?></span>
                 <span class="dropdown-arrow">▼</span>
             </button>
             <div class="profile-dropdown" id="profileDropdown">
                 <div class="dropdown-header">
-                    <div class="dropdown-avatar"><?= htmlspecialchars($userInitials) ?></div>
+                    <div class="dropdown-avatar">
+                        <?php if ($userProfileImage && file_exists($userProfileImage)): ?>
+                            <img src="<?= htmlspecialchars($userProfileImage) ?>?v=<?= time() ?>" alt="Avatar" style="width:44px;height:44px;border-radius:12px;object-fit:cover;">
+                        <?php else: ?>
+                            <?= htmlspecialchars($userInitials) ?>
+                        <?php endif; ?>
+                    </div>
                     <div class="dropdown-user-info">
                         <div class="dropdown-user-name"><?= htmlspecialchars($userName) ?></div>
                         <div class="dropdown-user-email"><?= htmlspecialchars($userEmail) ?></div>

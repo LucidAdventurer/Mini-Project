@@ -112,10 +112,12 @@ return date('M j, Y', strtotime($dt));
 // ── Helper: status label map ──
 function statusLabel(string $status): string {
 return match($status) {
-'active' => 'Active',
-'draft'    => 'Draft',
-'archived' => 'Completed',
-default    => ucfirst($status),
+'active'    => 'Published',
+'published' => 'Published',
+'draft'     => 'Draft',
+'archived'  => 'Completed',
+'scheduled' => 'Scheduled',
+default     => ucfirst($status),
     };
 }
 
@@ -1009,7 +1011,8 @@ document.querySelectorAll('.filter-tab').forEach(tab => {
     tab.classList.add('active');
     const filter = tab.dataset.filter;
     document.querySelectorAll('.assessment-card').forEach(card => {
-      const match = filter === 'all' || card.dataset.status === filter;
+      const s = card.dataset.status === 'published' ? 'active' : card.dataset.status;
+      const match = filter === 'all' || s === filter;
       card.classList.toggle('hidden', !match);
     });
   });

@@ -594,26 +594,21 @@ body::before {
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Difficulty</label>
-          <select class="form-control" id="up-difficulty">
-            <option value="">Select difficulty</option>
-            <option value="beginner">Beginner</option>
-            <option value="intermediate">Intermediate</option>
-            <option value="advanced">Advanced</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
           <label class="form-label">Visibility</label>
           <select class="form-control" id="up-visibility">
             <option value="public">🌐 Public (all students)</option>
             <option value="private">🔒 Private (only me)</option>
           </select>
         </div>
+      </div>
+      <div class="form-row">
         <div class="form-group">
-          <label class="form-label">Est. Time (minutes)</label>
-          <input type="number" class="form-control" id="up-time" placeholder="e.g. 30" min="1">
+          <label class="form-label">Available From</label>
+          <input type="date" class="form-control" id="up-from">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Available To</label>
+          <input type="date" class="form-control" id="up-to">
         </div>
       </div>
       <div class="form-group">
@@ -680,26 +675,21 @@ body::before {
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Difficulty</label>
-          <select class="form-control" id="edit-difficulty">
-            <option value="">Select difficulty</option>
-            <option value="beginner">Beginner</option>
-            <option value="intermediate">Intermediate</option>
-            <option value="advanced">Advanced</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
           <label class="form-label">Visibility</label>
           <select class="form-control" id="edit-visibility">
             <option value="public">🌐 Public</option>
             <option value="private">🔒 Private</option>
           </select>
         </div>
+      </div>
+      <div class="form-row">
         <div class="form-group">
-          <label class="form-label">Est. Time (minutes)</label>
-          <input type="number" class="form-control" id="edit-time" min="1">
+          <label class="form-label">Available From</label>
+          <input type="date" class="form-control" id="edit-from">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Available To</label>
+          <input type="date" class="form-control" id="edit-to">
         </div>
       </div>
     </div>
@@ -891,9 +881,9 @@ document.getElementById('searchInput').addEventListener('input', e => {
 
 /* ── Upload modal ── */
 function openUploadModal() {
-    ['up-title','up-desc','up-time','up-link'].forEach(id => document.getElementById(id).value='');
+    ['up-title','up-desc','up-from','up-to','up-link'].forEach(id => document.getElementById(id).value='');
     document.getElementById('up-category').value   = '';
-    document.getElementById('up-difficulty').value = '';
+    
     document.getElementById('up-visibility').value = 'public';
     document.getElementById('up-file').value        = '';
     document.getElementById('fileNameDisplay').style.display = 'none';
@@ -943,14 +933,14 @@ async function submitUpload() {
             body.append('title', title);
             body.append('description', document.getElementById('up-desc').value.trim());
             body.append('category', document.getElementById('up-category').value);
-            body.append('difficulty', document.getElementById('up-difficulty').value);
+            body.append('available_from', document.getElementById('up-from').value || '');
             body.append('is_public', document.getElementById('up-visibility').value === 'public' ? 1 : 0);
-            body.append('estimated_time_minutes', document.getElementById('up-time').value || '');
+            body.append('available_until', document.getElementById('up-to').value || '');
             body.append('file', file);
         } else {
             const link = document.getElementById('up-link').value.trim();
             if (!link) { toast('Please enter a URL.', 'error'); btn.disabled=false; btn.innerHTML='<i class="fa fa-upload"></i> Upload'; return; }
-            body = JSON.stringify({ action:'upload_link', title, description: document.getElementById('up-desc').value.trim(), category: document.getElementById('up-category').value, difficulty: document.getElementById('up-difficulty').value, is_public: document.getElementById('up-visibility').value==='public'?1:0, estimated_time_minutes: document.getElementById('up-time').value||null, external_url: link });
+            body = JSON.stringify({ action:'upload_link', title, description: document.getElementById('up-desc').value.trim(), category: document.getElementById('up-category').value, is_public: document.getElementById('up-visibility').value==='public'?1:0, available_from: document.getElementById('up-from').value||null, available_until: document.getElementById('up-to').value||null, external_url: link });
             headers['Content-Type'] = 'application/json';
         }
         const res  = await fetch('api/resources/upload-resource.php', { method:'POST', credentials:'same-origin', headers, body });
@@ -979,9 +969,9 @@ async function openEditModal(id) {
         document.getElementById('edit-title').value      = m.title || '';
         document.getElementById('edit-desc').value       = m.description || '';
         document.getElementById('edit-category').value   = m.category || '';
-        document.getElementById('edit-difficulty').value = m.difficulty || '';
+        document.getElementById('edit-from').value = m.available_from ? m.available_from.substring(0,10) : '';
         document.getElementById('edit-visibility').value = m.is_public ? 'public' : 'private';
-        document.getElementById('edit-time').value       = m.estimated_time_minutes || '';
+        document.getElementById('edit-to').value   = m.available_until ? m.available_until.substring(0,10) : '';
         document.getElementById('editModal').classList.add('open');
     } catch(e) { toast('Error loading resource.', 'error'); }
 }
@@ -998,9 +988,9 @@ async function submitEdit() {
                 material_id: id, title,
                 description: document.getElementById('edit-desc').value.trim(),
                 category:    document.getElementById('edit-category').value,
-                difficulty:  document.getElementById('edit-difficulty').value,
+                available_from: document.getElementById('edit-from').value || null,
                 is_public:   document.getElementById('edit-visibility').value === 'public' ? 1 : 0,
-                estimated_time_minutes: document.getElementById('edit-time').value || null,
+                available_until: document.getElementById('edit-to').value || null,
             }),
         });
         const data = await res.json();

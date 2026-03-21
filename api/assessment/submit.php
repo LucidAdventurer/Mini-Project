@@ -30,7 +30,7 @@ require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
-$conn = createDatabaseConnection();
+/* $conn is already created by config.php — no need to reconnect */
 if (!$conn) { http_response_code(503); echo json_encode(['success'=>false,'error'=>'Database unavailable.']); exit; }
 
 /* Support GET ?attempt_id=X for server-side timeout redirect */
@@ -70,7 +70,7 @@ $aResult = safePreparedQuery($conn,
      FROM assessment_attempts aa
      JOIN assessments a ON a.assessment_id = aa.assessment_id
      WHERE aa.attempt_id = ? AND aa.user_id = ?
-       AND aa.status IN ('in_progress', 'timeout')",
+       AND aa.status IN ('in_progress', 'timeout', 'completed')",
     "ii", [$attemptId, $userId]
 );
 
@@ -89,12 +89,22 @@ if (!empty($answers) && is_array($answers)) {
         $questionId = (int)$questionId;
         if ($questionId <= 0) continue;
 
-        $optionId = isset($answer['option_id']) && $answer['option_id'] !== null
-                        ? (int)$answer['option_id']
-                        : null;
-        $textAns  = isset($answer['text']) && (string)$answer['text'] !== ''
-                        ? mb_substr(trim((string)$answer['text']), 0, 1000)
-                        : null;
+        /* Accept two formats from the client:
+         *   Flat:   { "123": 45 }            → option_id = 45
+         *   Object: { "123": {"option_id":45} } → option_id = 45
+         */
+        if (is_array($answer)) {
+            $optionId = isset($answer['option_id']) && $answer['option_id'] !== null
+                            ? (int)$answer['option_id']
+                            : null;
+            $textAns  = isset($answer['text']) && (string)$answer['text'] !== ''
+                            ? mb_substr(trim((string)$answer['text']), 0, 1000)
+                            : null;
+        } else {
+            // Flat integer value = option_id
+            $optionId = is_numeric($answer) ? (int)$answer : null;
+            $textAns  = null;
+        }
 
         if ($optionId === null && $textAns === null) continue;
 
@@ -233,7 +243,7 @@ foreach ($questions as $qid => $q) {
         "INSERT INTO answers (attempt_id, question_id, selected_option_id, text_answer, marks_awarded)
          VALUES (?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE marks_awarded = VALUES(marks_awarded)",
-        "iiisf",
+        "iiisd",
         [
             $attemptId,
             $qid,
@@ -251,13 +261,29 @@ $percentage = $totalMark > 0 ? round(($finalScore / $totalMark) * 100, 2) : 0.0;
 /* ── Mark attempt as submitted ── */
 safePreparedQuery($conn,
     "UPDATE assessment_attempts SET
-        status       = 'submitted',
+        status       = 'completed',
         submitted_at = NOW(),
         score        = ?,
         percentage   = ?
      WHERE attempt_id = ? AND user_id = ?",
     "ddii",
     [$finalScore, $percentage, $attemptId, $userId]
+);
+
+/* ── Rule 1: Remove 'assessment' notifications for this assessment ── */
+safePreparedQuery($conn,
+    "DELETE FROM notifications
+     WHERE user_id = ?
+       AND type = 'assessment'
+       AND related_entity_id = ?",
+    'ii', [$userId, $assessmentId]
+);
+
+/* ── Rule 3: Purge any notifications older than 3 days for this user ── */
+safePreparedQuery($conn,
+    "DELETE FROM notifications
+     WHERE user_id = ? AND created_at < NOW() - INTERVAL 3 DAY",
+    'i', [$userId]
 );
 
 /* ── Timeout redirect (GET) ── */
