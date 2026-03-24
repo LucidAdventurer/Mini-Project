@@ -1,19 +1,6 @@
 <?php
 // ============================================================
 // api/resources/track-resource.php
-//
-// Tracks progress on a material for logged-in users.
-// Guests receive a successful no-op — nothing is persisted.
-//
-// The materials table has no views/downloads counters.
-// Only material_progress is written (for logged-in users).
-//
-// POST JSON {
-//   material_id: int,
-//   action: "view" | "download" | "progress",
-//   progress_percentage?: int   (0–100, required for action=progress)
-// }
-// Returns { success: bool, error?: string }
 // ============================================================
 
 require_once __DIR__ . '/../../config.php';
@@ -28,10 +15,10 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 // ── Optional session: guests get null ────────────────────────────────────
-$currentUser = optionalSession($conn);
-$userId      = $currentUser ? (int)$currentUser['user_id'] : null;
-$role        = $currentUser ? $currentUser['user_type']    : 'guest';
-$isGuest     = $userId === null;
+$sessionUid = (int)($_SESSION['user_id'] ?? 0);
+$userId     = $sessionUid > 0 ? $sessionUid : null;
+$role       = $sessionUid > 0 ? ($_SESSION['role'] ?? 'guest') : 'guest';
+$isGuest    = $userId === null;
 
 $body       = json_decode(file_get_contents('php://input'), true);
 $materialId = (int)($body['material_id'] ?? 0);
@@ -51,16 +38,13 @@ if (!in_array($action, $allowedActions, true)) {
     exit;
 }
 
-// ── Guests: no-op for all actions ────────────────────────────────────────
-// Nothing to persist without a user_id; return success so the
-// front-end does not need to branch on authentication state.
+// ── Guests: no-op ─────────────────────────────────────────────────────────
 if ($isGuest) {
     echo json_encode(['success' => true]);
     exit;
 }
 
-// ── Verify material exists and check access ───────────────────────────────
-// Columns: material_id, visibility, created_by (no is_public / uploaded_by)
+// ── Verify material exists ────────────────────────────────────────────────
 $check = safePreparedQuery($conn,
     'SELECT material_id, visibility, created_by FROM materials WHERE material_id = ?',
     'i', [$materialId]
@@ -73,24 +57,19 @@ if (!$check['success'] || !$check['result'] || $check['result']->num_rows === 0)
 $material = $check['result']->fetch_assoc();
 $check['result']->free();
 
-// Students cannot track private materials
 if ($role === 'student' && $material['visibility'] === 'private') {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'Access denied.']);
     exit;
 }
 
-// ── view / download: no counter columns on materials — record as progress ─
-// We silently succeed for view/download to keep the API contract stable.
-// If you later add views/downloads columns to materials, add UPDATEs here.
+// ── view / download: no counter columns on materials — succeed silently ───
 if ($action === 'view' || $action === 'download') {
     echo json_encode(['success' => true]);
     exit;
 }
 
 // ── progress: upsert into material_progress ───────────────────────────────
-// Schema: material_progress(material_id PK, user_id PK,
-//   progress_percentage, completed, last_accessed)
 try {
     $isCompleted = ($progress >= 100) ? 1 : 0;
 
@@ -103,15 +82,12 @@ try {
              completed           = VALUES(completed),
              last_accessed       = NOW()'
     );
-    if (!$stmt) {
-        throw new Exception('Prepare failed: ' . $conn->error);
-    }
+    if (!$stmt) throw new Exception('Prepare failed: ' . $conn->error);
     $stmt->bind_param('iiii', $materialId, $userId, $progress, $isCompleted);
     $stmt->execute();
     $stmt->close();
 
     echo json_encode(['success' => true]);
-
 } catch (Exception $e) {
     error_log('track-resource.php failed: ' . $e->getMessage());
     http_response_code(500);

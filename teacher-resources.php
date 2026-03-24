@@ -601,16 +601,6 @@ body::before {
           </select>
         </div>
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Available From</label>
-          <input type="date" class="form-control" id="up-from">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Available To</label>
-          <input type="date" class="form-control" id="up-to">
-        </div>
-      </div>
       <div class="form-group">
         <label class="form-label">File or Link</label>
         <select class="form-control" id="up-type" onchange="toggleUploadType(this.value)" style="margin-bottom:10px;">
@@ -680,16 +670,6 @@ body::before {
             <option value="public">🌐 Public</option>
             <option value="private">🔒 Private</option>
           </select>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Available From</label>
-          <input type="date" class="form-control" id="edit-from">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Available To</label>
-          <input type="date" class="form-control" id="edit-to">
         </div>
       </div>
     </div>
@@ -881,7 +861,7 @@ document.getElementById('searchInput').addEventListener('input', e => {
 
 /* ── Upload modal ── */
 function openUploadModal() {
-    ['up-title','up-desc','up-from','up-to','up-link'].forEach(id => document.getElementById(id).value='');
+    ['up-title','up-desc','up-link'].forEach(id => document.getElementById(id).value='');
     document.getElementById('up-category').value   = '';
     
     document.getElementById('up-visibility').value = 'public';
@@ -933,14 +913,12 @@ async function submitUpload() {
             body.append('title', title);
             body.append('description', document.getElementById('up-desc').value.trim());
             body.append('category', document.getElementById('up-category').value);
-            body.append('available_from', document.getElementById('up-from').value || '');
             body.append('is_public', document.getElementById('up-visibility').value === 'public' ? 1 : 0);
-            body.append('available_until', document.getElementById('up-to').value || '');
             body.append('file', file);
         } else {
             const link = document.getElementById('up-link').value.trim();
             if (!link) { toast('Please enter a URL.', 'error'); btn.disabled=false; btn.innerHTML='<i class="fa fa-upload"></i> Upload'; return; }
-            body = JSON.stringify({ action:'upload_link', title, description: document.getElementById('up-desc').value.trim(), category: document.getElementById('up-category').value, is_public: document.getElementById('up-visibility').value==='public'?1:0, available_from: document.getElementById('up-from').value||null, available_until: document.getElementById('up-to').value||null, external_url: link });
+            body = JSON.stringify({ action:'upload_link', title, description: document.getElementById('up-desc').value.trim(), category: document.getElementById('up-category').value, is_public: document.getElementById('up-visibility').value==='public'?1:0, external_url: link });
             headers['Content-Type'] = 'application/json';
         }
         const res  = await fetch('api/resources/upload-resource.php', { method:'POST', credentials:'same-origin', headers, body });
@@ -969,9 +947,7 @@ async function openEditModal(id) {
         document.getElementById('edit-title').value      = m.title || '';
         document.getElementById('edit-desc').value       = m.description || '';
         document.getElementById('edit-category').value   = m.category || '';
-        document.getElementById('edit-from').value = m.available_from ? m.available_from.substring(0,10) : '';
-        document.getElementById('edit-visibility').value = m.is_public ? 'public' : 'private';
-        document.getElementById('edit-to').value   = m.available_until ? m.available_until.substring(0,10) : '';
+        document.getElementById('edit-visibility').value = m.visibility || (m.is_public ? 'public' : 'private');
         document.getElementById('editModal').classList.add('open');
     } catch(e) { toast('Error loading resource.', 'error'); }
 }
@@ -988,9 +964,7 @@ async function submitEdit() {
                 material_id: id, title,
                 description: document.getElementById('edit-desc').value.trim(),
                 category:    document.getElementById('edit-category').value,
-                available_from: document.getElementById('edit-from').value || null,
-                is_public:   document.getElementById('edit-visibility').value === 'public' ? 1 : 0,
-                available_until: document.getElementById('edit-to').value || null,
+                visibility:  document.getElementById('edit-visibility').value,
             }),
         });
         const data = await res.json();
@@ -1005,7 +979,7 @@ async function toggleVisibility(id, newPublic) {
         const res  = await fetch('api/resources/update-resource.php', {
             method: 'POST', credentials: 'same-origin',
             headers: { 'Content-Type':'application/json', 'X-CSRF-Token': CSRF_TOKEN },
-            body: JSON.stringify({ material_id: id, is_public: newPublic }),
+            body: JSON.stringify({ material_id: id, visibility: newPublic ? 'public' : 'private' }),
         });
         const data = await res.json();
         if (!data.success) throw new Error(data.error || 'Failed to update visibility.');

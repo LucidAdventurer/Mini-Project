@@ -1,17 +1,6 @@
 <?php
 // ============================================================
 // api/resources/delete-resource.php
-//
-// Deletes a material record from the `materials` table.
-// The Cloudinary asset is NOT deleted here — the returned
-// cloudinary_public_id lets the caller purge it separately
-// via the Cloudinary Management API if needed.
-//
-// Requires: admin session + valid CSRF token.
-//
-// POST JSON { material_id: int }
-//
-// Returns { success: bool, cloudinary_public_id: string|null }
 // ============================================================
 
 require_once __DIR__ . '/../../config.php';
@@ -25,12 +14,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-// ── Admin session guard ───────────────────────────────────────────────────
-if (empty($_SESSION['user_id']) || empty($_SESSION['user_type']) || $_SESSION['user_type'] !== 'admin') {
+// ── Session guard — use role, not user_type ───────────────────────────────
+$sessionRole = $_SESSION['role'] ?? '';
+if (empty($_SESSION['user_id']) || !in_array($sessionRole, ['admin', 'teacher'], true)) {
     http_response_code(403);
-    echo json_encode(['success' => false, 'error' => 'Admin access required.']);
+    echo json_encode(['success' => false, 'error' => 'Access denied.']);
     exit;
 }
+$userId = (int) $_SESSION['user_id'];
 
 // ── CSRF check ────────────────────────────────────────────────────────────
 $csrfHeader = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
@@ -50,11 +41,10 @@ if ($materialId <= 0) {
     exit;
 }
 
-// ── Fetch first to return cloudinary_public_id to caller ─────────────────
-// PK is material_id, not resource_id
+// ── Fetch first — verify ownership ───────────────────────────────────────
 $fetchRes = safePreparedQuery(
     $conn,
-    'SELECT material_id, cloudinary_public_id FROM materials WHERE material_id = ?',
+    'SELECT material_id, created_by, cloudinary_public_id, external_url FROM materials WHERE material_id = ?',
     'i', [$materialId]
 );
 
@@ -66,9 +56,26 @@ if (!$fetchRes['success'] || !$fetchRes['result'] || $fetchRes['result']->num_ro
 
 $row = $fetchRes['result']->fetch_assoc();
 $fetchRes['result']->free();
-$cloudinaryPublicId = $row['cloudinary_public_id'] ?: null;
 
-// ── Delete ────────────────────────────────────────────────────────────────
+// Teachers can only delete their own; admins can delete any
+if ($sessionRole !== 'admin' && (int)$row['created_by'] !== $userId) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'Access denied. You can only delete your own materials.']);
+    exit;
+}
+
+$cloudinaryPublicId = $row['cloudinary_public_id'] ?: null;
+$externalUrl        = $row['external_url'] ?: null;
+
+// ── Delete local file if stored on disk ──────────────────────────────────
+if ($externalUrl && strpos($externalUrl, 'uploads/') === 0) {
+    $localPath = __DIR__ . '/../../' . $externalUrl;
+    if (file_exists($localPath)) {
+        @unlink($localPath);
+    }
+}
+
+// ── Delete DB record ──────────────────────────────────────────────────────
 $del = safePreparedQuery(
     $conn,
     'DELETE FROM materials WHERE material_id = ?',

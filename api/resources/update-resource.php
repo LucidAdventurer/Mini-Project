@@ -1,20 +1,6 @@
 <?php
 // ============================================================
 // api/resources/update-resource.php
-//
-// Updates metadata of an existing material.
-// Admins can edit any material; teachers can only edit their own.
-//
-// POST JSON {
-//   material_id  : int      (required)
-//   title        : string   (required)
-//   description  : string
-//   category     : 'aptitude'|'verbal'|'logical'|'technical'|'general'
-//   difficulty   : 'beginner'|'intermediate'|'advanced'
-//   visibility   : 'public'|'group'|'private'
-//   external_url : string   (optional)
-// }
-// Returns { success: bool, error?: string }
 // ============================================================
 
 require_once __DIR__ . '/../../config.php';
@@ -24,7 +10,7 @@ header('Content-Type: application/json');
 
 $currentUser = validateSession($conn);
 $userId      = (int)$currentUser['user_id'];
-$role        = $currentUser['user_type'];
+$role        = $currentUser['role'];   // role, not user_type
 
 if (!in_array($role, ['admin', 'teacher'], true)) {
     http_response_code(403);
@@ -51,9 +37,14 @@ $materialId  = (int)($body['material_id']  ?? 0);
 $title       = trim($body['title']         ?? '');
 $description = trim($body['description']   ?? '');
 $category    = trim($body['category']      ?? '');
-$difficulty  = trim($body['difficulty']    ?? '');
-$visibility  = trim($body['visibility']    ?? '');
 $externalUrl = trim($body['external_url']  ?? '');
+
+// Accept either visibility string or is_public int from JS
+$visibility = trim($body['visibility'] ?? '');
+if ($visibility === '' || !in_array($visibility, ['public', 'group', 'private'], true)) {
+    $isPublic   = isset($body['is_public']) ? (int)$body['is_public'] : null;
+    $visibility = ($isPublic === 1) ? 'public' : (($isPublic === 0) ? 'private' : '');
+}
 
 if ($materialId <= 0) {
     http_response_code(400);
@@ -61,27 +52,28 @@ if ($materialId <= 0) {
     exit;
 }
 if ($title === '') {
-    http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Title is required.']);
-    exit;
+    // Allow partial update (visibility toggle only) — title may be empty
+    // Only require title when other fields are also provided
+    if ($description !== '' || $category !== '') {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Title is required.']);
+        exit;
+    }
 }
 
-$allowedCategories   = ['aptitude', 'verbal', 'logical', 'technical', 'general'];
-$allowedDifficulties = ['beginner', 'intermediate', 'advanced'];
+$allowedCategories   = ['aptitude', 'verbal', 'logical', 'technical', 'general', 'coding', 'reasoning', 'english'];
 $allowedVisibilities = ['public', 'group', 'private'];
 
-if (!in_array($category, $allowedCategories, true)) {
+if ($category !== '' && !in_array($category, $allowedCategories, true)) {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => 'Invalid category.']);
     exit;
 }
-if (!in_array($difficulty, $allowedDifficulties, true)) {
-    $difficulty = 'beginner';
+if ($visibility !== '' && !in_array($visibility, $allowedVisibilities, true)) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'error' => 'Invalid visibility.']);
+    exit;
 }
-if (!in_array($visibility, $allowedVisibilities, true)) {
-    $visibility = 'public';
-}
-
 if ($externalUrl !== '' && !filter_var($externalUrl, FILTER_VALIDATE_URL)) {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => 'Invalid URL format.']);
@@ -89,9 +81,9 @@ if ($externalUrl !== '' && !filter_var($externalUrl, FILTER_VALIDATE_URL)) {
 }
 
 // ── Verify material exists and check ownership ────────────────────────────
-// Column is created_by, not uploaded_by
 $check = safePreparedQuery($conn,
-    'SELECT material_id, created_by FROM materials WHERE material_id = ?',
+    'SELECT material_id, created_by, title, description, category, visibility, external_url
+     FROM materials WHERE material_id = ?',
     'i', [$materialId]
 );
 if (!$check['success'] || !$check['result'] || $check['result']->num_rows === 0) {
@@ -108,26 +100,30 @@ if ($role !== 'admin' && (int)$mRow['created_by'] !== $userId) {
     exit;
 }
 
-// ── Update ────────────────────────────────────────────────────────────────
-// Only columns that actually exist in the materials schema.
-// No: is_public, uploaded_by, tags, estimated_time_minutes, updated_at
+// ── Merge with existing values so partial updates work ───────────────────
+$finalTitle       = $title       !== '' ? $title       : $mRow['title'];
+$finalDescription = $description !== '' ? $description : ($mRow['description'] ?? '');
+$finalCategory    = $category    !== '' ? $category    : ($mRow['category']    ?? 'general');
+$finalVisibility  = $visibility  !== '' ? $visibility  : $mRow['visibility'];
+$finalExternalUrl = $externalUrl !== '' ? $externalUrl : ($mRow['external_url'] ?? null);
+
+// ── Update — only columns that exist on materials ─────────────────────────
+// No difficulty, no is_public, no available_from/until on this table
 $result = safePreparedQuery($conn,
     'UPDATE materials SET
-        title                = ?,
-        description          = ?,
-        category             = ?,
-        difficulty           = ?,
-        visibility           = ?,
-        external_url         = ?
+        title        = ?,
+        description  = ?,
+        category     = ?,
+        visibility   = ?,
+        external_url = ?
      WHERE material_id = ?',
-    'ssssssi',
+    'sssssi',
     [
-        $title,
-        $description,
-        $category,
-        $difficulty,
-        $visibility,
-        $externalUrl ?: null,
+        $finalTitle,
+        $finalDescription,
+        $finalCategory,
+        $finalVisibility,
+        $finalExternalUrl ?: null,
         $materialId,
     ]
 );
