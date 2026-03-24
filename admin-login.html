@@ -800,7 +800,7 @@
             try {
                 // FIX: use a root-relative URL so the request works regardless
                 // of where admin-login.html is served from in the directory tree.
-                const res = await fetch('/pta/Mini-Project/login.php', {
+                const res = await fetch('/pta/login.php', {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json' },
