@@ -36,7 +36,7 @@ if ($notifResult['success'] && $notifResult['result']) {
 
 // ── All notifications for dropdown (scroll, latest first) ──
 $notifDropResult = safePreparedQuery($conn,
-    "SELECT notification_id, title, message, type, is_read, created_at
+    "SELECT notification_id, title, message, type, is_read, created_at, related_entity_id
      FROM notifications WHERE user_id = ?
      ORDER BY created_at DESC LIMIT 50",
     "i", [$userId]
@@ -198,6 +198,15 @@ body {
 .notif-item-msg { font-size: 12px; color: var(--text-mid); line-height: 1.45; }
 .notif-item-time { font-size: 11px; color: var(--text-soft); margin-top: 4px; }
 .notif-empty { padding: 32px 20px; text-align: center; color: var(--text-soft); font-size: 13px; }
+.notif-item { position: relative; }
+.notif-item-dismiss {
+    position: absolute; top: 10px; right: 10px;
+    background: none; border: none; cursor: pointer;
+    color: #cbd5e0; font-size: 14px; line-height: 1;
+    padding: 2px 6px; border-radius: 4px;
+    transition: color .15s, background .15s;
+}
+.notif-item-dismiss:hover { color: #e53e3e; background: #fff5f5; }
 
 .notif-badge {
     position: absolute; top: -4px; right: -4px;
@@ -635,7 +644,7 @@ body {
                         $typeIcons = ['info'=>'ℹ️','success'=>'✅','warning'=>'⚠️','error'=>'❌','assessment'=>'📝','result'=>'🏆','material'=>'📚'];
                         $icon = $typeIcons[$n['type']] ?? '🔔';
                     ?>
-                    <div class="notif-item <?= $isUnread ? 'unread' : '' ?>">
+                    <div class="notif-item <?= $isUnread ? 'unread' : '' ?>" data-id="<?= $n['notification_id'] ?>" data-material-id="<?= $n['type'] === 'material' ? (int)$n['related_entity_id'] : '' ?>">
                         <div class="notif-dot <?= $isUnread ? '' : 'read' ?>"></div>
                         <div class="notif-item-body">
                             <div class="notif-item-title"><?= $icon ?> <?= htmlspecialchars($n['title']) ?></div>
@@ -644,6 +653,7 @@ body {
                             <?php endif; ?>
                             <div class="notif-item-time"><?= timeAgoPhp($n['created_at']) ?></div>
                         </div>
+                        <button class="notif-item-dismiss" title="Dismiss" onclick="dismissNotifItem(event, this, <?= $n['notification_id'] ?>)">&#x2715;</button>
                     </div>
                     <?php endforeach; endif; ?>
                 </div>
@@ -835,6 +845,24 @@ function toggleNotifDropdown() {
     }
 }
 
+/* ── Dismiss notification item ── */
+function dismissNotifItem(event, btn, id) {
+    event.stopPropagation();
+    const item = btn.closest('.notif-item');
+    item.style.transition = 'opacity .2s, max-height .25s, padding .25s';
+    item.style.overflow = 'hidden';
+    item.style.maxHeight = item.offsetHeight + 'px';
+    item.style.opacity = '0';
+    requestAnimationFrame(() => { item.style.maxHeight = '0'; item.style.padding = '0'; });
+    setTimeout(() => item.remove(), 280);
+
+    fetch('api/notifications/mark-read.php', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': CSRF_TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notification_id: id })
+    }).catch(() => {});
+}
+
 /* ── Profile dropdown ── */
 function toggleDropdown() {
     document.getElementById('profileDropdown').classList.toggle('open');
@@ -956,7 +984,25 @@ function dismissResourceNotif(materialId) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'resource_viewed', material_id: materialId })
-    }).catch(() => {});
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.success) return;
+        // Update bell badge count instantly
+        const badge = document.getElementById('notifBadge');
+        if (badge) {
+            if (data.unread_count <= 0) {
+                badge.remove();
+            } else {
+                badge.textContent = data.unread_count;
+            }
+        }
+        // Remove matching notification items from the dropdown
+        document.querySelectorAll('.notif-item').forEach(el => {
+            if (el.dataset.materialId == materialId) el.remove();
+        });
+    })
+    .catch(() => {});
 }
 
 /* ── Actions ── */

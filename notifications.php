@@ -276,6 +276,29 @@ body {
 .notif-see-all:hover { background: #f7fafc; }
 .notif-empty-dd { padding: 28px 20px; text-align: center; color: #a0aec0; font-size: 13px; }
 
+/* Dismiss X button — navbar dropdown */
+.nd-item { position: relative; }
+.nd-dismiss {
+    position: absolute; top: 10px; right: 10px;
+    background: none; border: none; cursor: pointer;
+    color: #cbd5e0; font-size: 15px; line-height: 1;
+    padding: 2px 5px; border-radius: 4px;
+    transition: color .15s, background .15s;
+    flex-shrink: 0;
+}
+.nd-dismiss:hover { color: #718096; background: #edf2f7; }
+
+/* Dismiss X button — main notification cards */
+.notif-card { position: relative; }
+.notif-card-dismiss {
+    position: absolute; top: 12px; right: 14px;
+    background: none; border: none; cursor: pointer;
+    color: #cbd5e0; font-size: 16px; line-height: 1;
+    padding: 3px 7px; border-radius: 6px;
+    transition: color .15s, background .15s;
+}
+.notif-card-dismiss:hover { color: #e53e3e; background: #fff5f5; }
+
 /* Profile dropdown */
 .profile-button {
     display: flex; align-items: center; gap: 10px;
@@ -585,15 +608,17 @@ body {
                         $isU = !$n['is_read'];
                         $ico = $typeIcons[$n['notification_type']] ?? ['🔔','#4facfe','#ebf8ff'];
                     ?>
-                    <div class="nd-item <?= $isU ? 'unread' : '' ?>">
+                    <div class="nd-item <?= $isU ? 'unread' : '' ?>" data-id="<?= $n['notification_id'] ?>">
                         <div class="nd-dot <?= $isU ? '' : 'read' ?>"></div>
                         <div class="nd-body">
                             <div class="nd-title"><?= $ico[0] ?> <?= htmlspecialchars($n['title']) ?></div>
                             <?php if ($n['message']): ?>
+
                             <div class="nd-msg"><?= htmlspecialchars($n['message']) ?></div>
                             <?php endif; ?>
                             <div class="nd-time"><?= timeAgoFull($n['created_at']) ?></div>
                         </div>
+                        <button class="nd-dismiss" title="Dismiss" onclick="dismissDropdownNotif(event, this, <?= $n['notification_id'] ?>)">&#x2715;</button>
                     </div>
                     <?php endforeach; endif; ?>
                 </div>
@@ -726,6 +751,7 @@ body {
                     </div>
                     <?php endif; ?>
                 </div>
+                <button class="notif-card-dismiss" title="Dismiss notification" onclick="dismissCardNotif(this, <?= $n['notification_id'] ?>)">&#x2715;</button>
             </div>
             <?php endforeach; ?>
         </div>
@@ -954,6 +980,83 @@ async function deleteNotification(id, btn) {
     } catch {
         showToast('Network error. Please try again.', 'error');
     }
+}
+
+// ── Dismiss notification (navbar dropdown) ───────────────
+function dismissDropdownNotif(event, btn, id) {
+    event.stopPropagation();
+    const item = btn.closest('.nd-item');
+    item.style.transition = 'opacity .2s, max-height .25s, padding .25s';
+    item.style.overflow = 'hidden';
+    item.style.opacity = '0';
+    item.style.maxHeight = item.offsetHeight + 'px';
+    requestAnimationFrame(() => { item.style.maxHeight = '0'; item.style.padding = '0'; });
+    setTimeout(() => item.remove(), 280);
+
+    // DELETE the notification permanently so it's gone on all pages
+    fetch('api/notifications/dismiss-notification.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notification_id: id })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            // Update bell badge count
+            const badge = document.getElementById('notifBadge');
+            if (badge) {
+                if (data.unread_count > 0) {
+                    badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+                } else {
+                    badge.remove();
+                }
+            }
+        }
+    })
+    .catch(() => {});
+}
+
+// ── Dismiss notification (main card list) ────────────────
+function dismissCardNotif(btn, id) {
+    const card = btn.closest('.notif-card');
+    card.style.transition = 'opacity .25s, transform .25s';
+    card.style.opacity = '0';
+    card.style.transform = 'translateX(30px)';
+    setTimeout(() => {
+        card.remove();
+        // Show empty state if no cards left
+        const list = document.getElementById('notifCardList');
+        if (list && list.querySelectorAll('.notif-card').length === 0) {
+            list.innerHTML = `
+                <div class="empty-state">
+                    <i class="fa fa-bell-slash"></i>
+                    <h3>No notifications</h3>
+                    <p>You're all caught up! Nothing here for this filter.</p>
+                </div>`;
+        }
+    }, 280);
+
+    // DELETE the notification permanently so it's gone on all pages
+    fetch('api/notifications/dismiss-notification.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notification_id: id })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            // Update bell badge count
+            const badge = document.getElementById('notifBadge');
+            if (badge) {
+                if (data.unread_count > 0) {
+                    badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+                } else {
+                    badge.remove();
+                }
+            }
+        }
+    })
+    .catch(() => {});
 }
 
 // ── Toast helper ─────────────────────────────────────────

@@ -1,10 +1,15 @@
 <?php
 /**
  * api/resources/get-resources.php
- * Table: resources (not materials, not study_materials)
- * Columns: resource_id, title, description, category, resource_type,
- *          file_path, cloudinary_public_id, file_size, external_url,
- *          views, downloads, is_public, uploaded_by, created_at
+ *
+ * Table  : materials
+ * Columns: material_id, title, description, created_by, visibility (enum: public/group/private),
+ *          cloudinary_public_id, external_url, category, created_at, updated_at
+ *
+ * Access:
+ *   admin   -> all materials
+ *   teacher -> only their own (created_by = user_id)
+ *   student -> only visibility = 'public', optionally filtered by uploader_role
  */
 
 require_once __DIR__ . '/../../config.php';
@@ -16,34 +21,47 @@ $currentUser = validateSession($conn);
 $role        = $currentUser['role'];
 $userId      = (int) $currentUser['user_id'];
 
-if (!in_array($role, ['admin', 'teacher'], true)) {
+if (!in_array($role, ['admin', 'teacher', 'student'], true)) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'Access denied.']);
     exit;
 }
 
-$page     = max(1, (int) ($_GET['page']     ?? 1));
-$limit    = min(100, max(1, (int) ($_GET['limit'] ?? 20)));
-$offset   = ($page - 1) * $limit;
-$category = trim($_GET['category'] ?? '');
-$search   = trim($_GET['search']   ?? '');
+$page         = max(1, (int) ($_GET['page']          ?? 1));
+$limit        = min(100, max(1, (int) ($_GET['limit'] ?? 20)));
+$offset       = ($page - 1) * $limit;
+$category     = trim($_GET['category']      ?? '');
+$search       = trim($_GET['search']        ?? '');
+$uploaderRole = trim($_GET['uploader_role'] ?? ''); // e.g. 'teacher'
 
 $conditions = [];
 $params     = [];
 $types      = '';
 
-if ($role === 'teacher') {
-    $conditions[] = 'r.uploaded_by = ?';
+if ($role === 'student') {
+    // Students only see public materials
+    $conditions[] = "m.visibility = 'public'";
+    // Optionally filter by uploader's role
+    if ($uploaderRole !== '') {
+        $conditions[] = 'u.role = ?';
+        $params[]     = $uploaderRole;
+        $types       .= 's';
+    }
+} elseif ($role === 'teacher') {
+    // Teachers only see their own uploads
+    $conditions[] = 'm.created_by = ?';
     $params[]     = $userId;
     $types       .= 'i';
 }
+// admin -> no extra condition
+
 if ($category !== '') {
-    $conditions[] = 'r.category = ?';
+    $conditions[] = 'm.category = ?';
     $params[]     = $category;
     $types       .= 's';
 }
 if ($search !== '') {
-    $conditions[] = '(r.title LIKE ? OR r.description LIKE ?)';
+    $conditions[] = '(m.title LIKE ? OR m.description LIKE ?)';
     $like         = '%' . $search . '%';
     $params[]     = $like;
     $params[]     = $like;
@@ -52,35 +70,47 @@ if ($search !== '') {
 
 $where = $conditions ? 'WHERE ' . implode(' AND ', $conditions) : '';
 
-// Count
-$countStmt = $conn->prepare("SELECT COUNT(*) AS total FROM resources r $where");
+// ── Count ─────────────────────────────────────────────────────────────────
+$countStmt = $conn->prepare(
+    "SELECT COUNT(*) AS total
+     FROM materials m
+     LEFT JOIN users u ON u.user_id = m.created_by
+     $where"
+);
 if ($types) $countStmt->bind_param($types, ...$params);
 $countStmt->execute();
 $totalRows  = (int) $countStmt->get_result()->fetch_assoc()['total'];
 $countStmt->close();
 $totalPages = max(1, (int) ceil($totalRows / $limit));
 
-// Fetch
+// ── Fetch ─────────────────────────────────────────────────────────────────
 $sql = "
     SELECT
-        r.resource_id  AS material_id,
-        r.title,
-        r.description,
-        r.category,
-        r.resource_type AS material_type,
-        r.cloudinary_public_id,
-        r.external_url,
-        r.file_size,
-        r.is_public,
-        r.views,
-        r.downloads,
-        r.created_at,
-        r.uploaded_by,
-        u.full_name AS created_by_name
-    FROM resources r
-    LEFT JOIN users u ON u.user_id = r.uploaded_by
+        m.material_id,
+        m.title,
+        m.description,
+        m.category,
+        m.visibility,
+        m.cloudinary_public_id,
+        m.external_url,
+        m.created_at,
+        m.created_by                AS uploaded_by,
+        u.full_name                 AS created_by_name,
+        u.full_name                 AS uploaded_by_name,
+        -- derive material_type from cloudinary_public_id / external_url
+        CASE
+            WHEN m.cloudinary_public_id IS NOT NULL AND m.cloudinary_public_id != '' THEN 'file'
+            WHEN m.external_url IS NOT NULL AND m.external_url != ''                 THEN 'link'
+            ELSE 'file'
+        END                         AS material_type,
+        0                           AS file_size,
+        0                           AS views,
+        0                           AS downloads,
+        (m.visibility = 'public')   AS is_public
+    FROM materials m
+    LEFT JOIN users u ON u.user_id = m.created_by
     $where
-    ORDER BY r.created_at DESC
+    ORDER BY m.created_at DESC
     LIMIT ? OFFSET ?
 ";
 
@@ -90,27 +120,43 @@ $stmt->execute();
 $result    = $stmt->get_result();
 $materials = [];
 while ($row = $result->fetch_assoc()) {
-    $row['visibility'] = $row['is_public'] ? 'public' : 'private';
     $materials[] = $row;
 }
 $stmt->close();
 
-// Stats
-$statsWhere  = ($role === 'teacher') ? 'WHERE uploaded_by = ?' : '';
-$statsParams = ($role === 'teacher') ? [$userId] : [];
-$statsTypes  = ($role === 'teacher') ? 'i' : '';
+// ── Stats ─────────────────────────────────────────────────────────────────
+$statsConditions = [];
+$statsParams     = [];
+$statsTypes      = '';
+
+if ($role === 'student') {
+    $statsConditions[] = "m.visibility = 'public'";
+    if ($uploaderRole !== '') {
+        $statsConditions[] = 'u.role = ?';
+        $statsParams[]     = $uploaderRole;
+        $statsTypes       .= 's';
+    }
+} elseif ($role === 'teacher') {
+    $statsConditions[] = 'm.created_by = ?';
+    $statsParams[]     = $userId;
+    $statsTypes       .= 'i';
+}
+
+$statsWhere = $statsConditions ? 'WHERE ' . implode(' AND ', $statsConditions) : '';
+$statsJoin  = ($role === 'student' && $uploaderRole !== '')
+    ? 'LEFT JOIN users u ON u.user_id = m.created_by'
+    : '';
 
 $statsStmt = $conn->prepare("
-    SELECT
-        COUNT(*)               AS total_materials,
-        COALESCE(SUM(views),0)     AS total_views,
-        COALESCE(SUM(downloads),0) AS total_downloads,
-        COALESCE(SUM(file_size),0) AS storage_used_bytes
-    FROM resources $statsWhere
+    SELECT COUNT(*) AS total_materials
+    FROM materials m $statsJoin $statsWhere
 ");
 if ($statsTypes) $statsStmt->bind_param($statsTypes, ...$statsParams);
 $statsStmt->execute();
 $stats = $statsStmt->get_result()->fetch_assoc();
+$stats['total_views']        = 0;
+$stats['total_downloads']    = 0;
+$stats['storage_used_bytes'] = 0;
 $statsStmt->close();
 
 echo json_encode([

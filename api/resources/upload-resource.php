@@ -17,6 +17,34 @@
 // Requires: teacher or admin session + valid CSRF token.
 // ============================================================
 
+// ── Must be ABSOLUTELY first — suppress HTML errors for this API endpoint ──
+// config.php sets display_errors=1 in development which outputs HTML and
+// corrupts our JSON response. Force errors to log only, never to output.
+ini_set('display_errors', 0);
+ini_set('display_startup_errors', 0);
+error_reporting(E_ALL);
+
+// ── Increase upload limits BEFORE anything else ───────────────────────────
+@ini_set('upload_max_filesize', '55M');
+@ini_set('post_max_size',       '60M');
+@ini_set('memory_limit',        '256M');
+
+// ── Catch PHP's own post_max_size overflow early ──────────────────────────
+// When POST data exceeds post_max_size, PHP empties $_POST and $_FILES.
+// Detect this and return clean JSON instead of broken HTML.
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST' &&
+    isset($_SERVER['CONTENT_LENGTH']) &&
+    (int) $_SERVER['CONTENT_LENGTH'] > 0 &&
+    empty($_POST) && empty($_FILES) &&
+    strpos($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') === false
+) {
+    header('Content-Type: application/json');
+    http_response_code(413);
+    echo json_encode(['success' => false, 'error' => 'File too large. Maximum upload size is 50 MB.']);
+    exit;
+}
+
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
 
@@ -58,26 +86,32 @@ if ($isJson) {
         echo json_encode(['success' => false, 'error' => 'Invalid JSON body.']);
         exit;
     }
-    $action      = $body['action']          ?? 'upload_link';
-    $title       = trim($body['title']       ?? '');
-    $description = trim($body['description'] ?? '');
-    $category    = trim($body['category']    ?? '');
-    $isPublic    = !empty($body['is_public']) ? 1 : 0;
-    $availFrom   = $body['available_from']   ?? null;
-    $availUntil  = $body['available_until']  ?? null;
-    $externalUrl = trim($body['external_url'] ?? '');
-    $uploadedFile = null;
+    $action             = $body['action']               ?? 'upload_link';
+    $title              = trim($body['title']            ?? '');
+    $description        = trim($body['description']      ?? '');
+    $category           = trim($body['category']         ?? '');
+    // FIX: accept both 'visibility' => 'public' and 'is_public' => 1 from JSON callers
+    $isPublic           = (($body['visibility'] ?? '') === 'public' || ($body['is_public'] ?? 0) == 1) ? 1 : 0;
+    $availFrom          = $body['available_from']        ?? null;
+    $availUntil         = $body['available_until']       ?? null;
+    $externalUrl        = trim($body['external_url']     ?? '');
+    $cloudinaryPublicId = trim($body['cloudinary_public_id'] ?? '');
+    $uploadedFile       = null;
 } else {
     // FormData (action = upload)
-    $action      = $_POST['action']          ?? 'upload';
-    $title       = trim($_POST['title']       ?? '');
-    $description = trim($_POST['description'] ?? '');
-    $category    = trim($_POST['category']    ?? '');
-    $isPublic    = !empty($_POST['is_public']) ? 1 : 0;
-    $availFrom   = $_POST['available_from']  ?? null;
-    $availUntil  = $_POST['available_until'] ?? null;
-    $externalUrl = '';
-    $uploadedFile = $_FILES['file'] ?? null;
+    $action             = $_POST['action']          ?? 'upload';
+    $title              = trim($_POST['title']       ?? '');
+    $description        = trim($_POST['description'] ?? '');
+    $category           = trim($_POST['category']    ?? '');
+    // FIX: frontend sends is_public="1" or is_public="0" (string).
+    // The old check used !empty($_POST['is_public']) which treats "0" as truthy.
+    // Now we check visibility first (preferred), then fall back to is_public === "1" strictly.
+    $isPublic           = (($_POST['visibility'] ?? '') === 'public' || ($_POST['is_public'] ?? '') === '1') ? 1 : 0;
+    $availFrom          = $_POST['available_from']   ?? null;
+    $availUntil         = $_POST['available_until']  ?? null;
+    $externalUrl        = '';
+    $cloudinaryPublicId = '';
+    $uploadedFile       = $_FILES['file'] ?? null;
 }
 
 // ── Validate title ────────────────────────────────────────────────────────
@@ -183,9 +217,8 @@ if ($action === 'upload' && $uploadedFile) {
 $visibility = $isPublic ? 'public' : 'private';
 
 // ── Insert into materials ─────────────────────────────────────────────────
-// Columns confirmed from DB: material_id(auto), title, description,
-// created_by, visibility, cloudinary_public_id, external_url, category
-// + 2 more (likely created_at/updated_at with defaults — not included)
+// Columns: material_id(auto), title, description, created_by, visibility,
+//          cloudinary_public_id, external_url, category
 $ins = safePreparedQuery(
     $conn,
     'INSERT INTO materials
@@ -196,10 +229,10 @@ $ins = safePreparedQuery(
     [
         $title,
         $description,
-        $createdBy,
-        $visibility,
-        null,          // cloudinary_public_id — not used for direct uploads
-        $fileUrl,
+        $createdBy,           // created_by: user_id of the uploader
+        $visibility,          // visibility: 'public' or 'private'
+        $cloudinaryPublicId ?: null,  // cloudinary_public_id from frontend
+        $fileUrl,             // external_url: Cloudinary URL or external link
         $category,
     ]
 );

@@ -2,23 +2,15 @@
 // ============================================================
 // api/notifications/dismiss-notification.php
 //
-// Deletes notifications based on three rules:
+// Two modes (auto-detected from request body):
 //
-//  1. ASSESSMENT DONE  — deletes all 'assessment' notifications
-//                        for a given assessment_id for this user
+//  1. X button click  → send { notification_id: 123 }
+//     Deletes that single notification for this student.
 //
-//  2. RESOURCE VIEWED  — deletes the 'material' notification
-//                        for a given material_id for this user
+//  2. Resource opened → send { material_id: 456 }
+//     Deletes ALL notifications for that material (original behaviour).
 //
-//  3. THREE-DAY PURGE  — deletes ALL notifications older than
-//                        3 days for this user (runs automatically
-//                        on every call, no extra param needed)
-//
-// POST JSON — one of:
-//   { "action": "assessment_done", "assessment_id": 5  }
-//   { "action": "resource_viewed", "material_id":   12 }
-//
-// Returns { success: bool, deleted: int }
+// Always returns updated unread_count so the bell badge stays in sync.
 // ============================================================
 
 require_once __DIR__ . '/../../config.php';
@@ -26,103 +18,68 @@ require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(['success' => false, 'error' => 'Method not allowed.']);
-    exit;
-}
-
-$currentUser = validateSession($conn);
+$currentUser = validateSession($conn, 'student');
 $userId      = (int) $currentUser['user_id'];
 
-$body = json_decode(file_get_contents('php://input'), true);
-if (!is_array($body)) {
-    http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Invalid JSON body.']);
+$body           = json_decode(file_get_contents('php://input'), true) ?? [];
+$notificationId = isset($body['notification_id']) ? (int)$body['notification_id'] : 0;
+$materialId     = isset($body['material_id'])     ? (int)$body['material_id']     : 0;
+
+// ── Validate: need at least one valid ID ──────────────────────
+if ($notificationId <= 0 && $materialId <= 0) {
+    echo json_encode(['success' => false, 'error' => 'Provide notification_id or material_id']);
     exit;
 }
 
-$action  = $body['action'] ?? '';
-$deleted = 0;
+// ── Mode 1: dismiss a single notification by ID ───────────────
+if ($notificationId > 0) {
+    $stmt = $conn->prepare(
+        "DELETE FROM notifications
+         WHERE notification_id = ?
+           AND user_id         = ?"   // user_id guard prevents deleting others' notifications
+    );
 
-// ── Rule 3: Always purge notifications older than 3 days for this user ──
-$purge = safePreparedQuery(
-    $conn,
-    "DELETE FROM notifications
-     WHERE user_id = ? AND created_at < NOW() - INTERVAL 3 DAY",
-    'i', [$userId]
+    if (!$stmt) {
+        echo json_encode(['success' => false, 'error' => 'Query prepare failed']);
+        exit;
+    }
+
+    $stmt->bind_param("ii", $notificationId, $userId);
+    $stmt->execute();
+    $deleted = $stmt->affected_rows;
+    $stmt->close();
+
+// ── Mode 2: dismiss all notifications for a material (original) ─
+} else {
+    $stmt = $conn->prepare(
+        "DELETE FROM notifications
+         WHERE user_id             = ?
+           AND related_entity_type = 'material'
+           AND related_entity_id   = ?"
+    );
+
+    if (!$stmt) {
+        echo json_encode(['success' => false, 'error' => 'Query prepare failed']);
+        exit;
+    }
+
+    $stmt->bind_param("ii", $userId, $materialId);
+    $stmt->execute();
+    $deleted = $stmt->affected_rows;
+    $stmt->close();
+}
+
+// ── Return fresh unread count so the bell badge updates ───────
+$countResult = $conn->prepare(
+    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0"
 );
-if ($purge['success']) {
-    $deleted += max(0, (int)($purge['affected_rows'] ?? 0));
-}
+$countResult->bind_param("i", $userId);
+$countResult->execute();
+$row = $countResult->get_result()->fetch_assoc();
+$countResult->close();
 
-// ── Rule 1: Assessment done → remove assessment notification ──
-if ($action === 'assessment_done') {
-    $assessmentId = (int)($body['assessment_id'] ?? 0);
-    if ($assessmentId <= 0) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Invalid assessment_id.']);
-        exit;
-    }
-
-    $del = safePreparedQuery(
-        $conn,
-        "DELETE FROM notifications
-         WHERE user_id = ?
-           AND type = 'assessment'
-           AND related_entity_id = ?",
-        'ii', [$userId, $assessmentId]
-    );
-    if ($del['success']) {
-        $deleted += max(0, (int)($del['affected_rows'] ?? 0));
-    }
-}
-
-// ── Rule 2: Resource viewed → remove material notification ──
-elseif ($action === 'resource_viewed') {
-    $materialId = (int)($body['material_id'] ?? 0);
-    if ($materialId <= 0) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Invalid material_id.']);
-        exit;
-    }
-
-    $del = safePreparedQuery(
-        $conn,
-        "DELETE FROM notifications
-         WHERE user_id = ?
-           AND type = 'material'
-           AND related_entity_id = ?",
-        'ii', [$userId, $materialId]
-    );
-    if ($del['success']) {
-        $deleted += max(0, (int)($del['affected_rows'] ?? 0));
-    }
-}
-
-// ── Rule 4: Dismiss single notification by ID ──
-elseif ($action === 'dismiss_one') {
-    $notifId = (int)($body['notification_id'] ?? 0);
-    if ($notifId <= 0) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Invalid notification_id.']);
-        exit;
-    }
-
-    $del = safePreparedQuery(
-        $conn,
-        "DELETE FROM notifications WHERE notification_id = ? AND user_id = ?",
-        'ii', [$notifId, $userId]
-    );
-    if ($del['success']) {
-        $deleted += max(0, (int)($del['affected_rows'] ?? 0));
-    }
-}
-
-elseif ($action !== '') {
-    http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Unknown action.']);
-    exit;
-}
-
-echo json_encode(['success' => true, 'deleted' => $deleted]);
+echo json_encode([
+    'success'      => true,
+    'deleted'      => $deleted,
+    'unread_count' => (int)($row['cnt'] ?? 0),
+]);

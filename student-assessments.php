@@ -41,7 +41,7 @@ if ($notifResult['success'] && $notifResult['result']) {
 
 // ── All notifications for dropdown (scroll, latest first) ──
 $notifDropResult = safePreparedQuery($conn,
-    "SELECT notification_id, title, message, is_read, created_at
+    "SELECT notification_id, title, message, notification_type, is_read, created_at
      FROM notifications WHERE user_id = ?
      ORDER BY created_at DESC",
     "i", [$userId]
@@ -162,6 +162,23 @@ function timeAgo(string $datetime): string {
     if ($diff < 604800) return floor($diff / 86400) . ' day ago';
     return date('d M Y', strtotime($datetime));
 }
+function timeAgoFull(string $datetime): string {
+    $diff = time() - strtotime($datetime);
+    if ($diff < 60)     return 'Just now';
+    if ($diff < 3600)   return floor($diff / 60)   . ' min ago';
+    if ($diff < 86400)  return floor($diff / 3600)  . ' hr ago';
+    if ($diff < 604800) return floor($diff / 86400) . ' day ago';
+    return date('d M Y, g:i A', strtotime($datetime));
+}
+$typeIcons = [
+    'info'       => ['ℹ️', '#4facfe', '#ebf8ff'],
+    'success'    => ['✅', '#48bb78', '#f0fff4'],
+    'warning'    => ['⚠️', '#ed8936', '#fffaf0'],
+    'error'      => ['❌', '#fc8181', '#fff5f5'],
+    'assessment' => ['📝', '#9f7aea', '#faf5ff'],
+    'result'     => ['🏆', '#f6ad55', '#fffbeb'],
+    'material'   => ['📚', '#4facfe', '#ebf8ff'],
+];
 
 /* Helper: deadline label */
 function deadlineLabel(?string $until): string {
@@ -343,22 +360,36 @@ function deadlineLabel(?string $until): string {
         }
         .notif-list::-webkit-scrollbar { width: 4px; }
         .notif-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
-        .notif-item {
-            display: flex; gap: 12px; align-items: flex-start;
+        .nd-item {
+            display: flex; gap: 10px; align-items: flex-start;
             padding: 13px 20px; border-bottom: 1px solid var(--border);
             cursor: pointer; transition: background var(--transition);
+            position: relative;
         }
-        .notif-item:last-child { border-bottom: none; }
-        .notif-item:hover { background: var(--surface2); }
-        .notif-item.unread { background: #eff8ff; }
-        .notif-item.unread:hover { background: #e0f2fe; }
-        .notif-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex-shrink: 0; margin-top: 5px; }
-        .notif-dot.read { background: transparent; }
-        .notif-item-body { flex: 1; }
-        .notif-item-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
-        .notif-item-msg { font-size: 12px; color: var(--text-mid); line-height: 1.45; }
-        .notif-item-time { font-size: 11px; color: var(--text-soft); margin-top: 4px; }
-        .notif-empty { padding: 32px 20px; text-align: center; color: var(--text-soft); font-size: 13px; }
+        .nd-item:last-child { border-bottom: none; }
+        .nd-item:hover { background: #f7fafc; }
+        .nd-item.unread { background: #f0f7ff; }
+        .nd-dot { width: 8px; height: 8px; border-radius: 50%; background: #4facfe; flex-shrink: 0; margin-top: 5px; }
+        .nd-dot.read { background: transparent; }
+        .nd-body { flex: 1; }
+        .nd-title { font-size: 13px; font-weight: 600; color: #2d3748; margin-bottom: 3px; }
+        .nd-msg   { font-size: 12px; color: #718096; line-height: 1.4; }
+        .nd-time  { font-size: 11px; color: #a0aec0; margin-top: 4px; }
+        .notif-see-all {
+            display: block; text-align: center; padding: 12px;
+            font-size: 13px; color: var(--accent); text-decoration: none;
+            border-top: 1px solid var(--border); font-weight: 600;
+        }
+        .notif-see-all:hover { background: #f7fafc; }
+        .notif-empty-dd { padding: 28px 20px; text-align: center; color: #a0aec0; font-size: 13px; }
+        .nd-dismiss {
+            position: absolute; top: 10px; right: 10px;
+            background: none; border: none; cursor: pointer;
+            color: #cbd5e0; font-size: 13px; padding: 3px 5px;
+            border-radius: 4px; line-height: 1;
+            transition: color .15s, background .15s;
+        }
+        .nd-dismiss:hover { color: #718096; background: #edf2f7; }
 
         .notification-badge {
             position: absolute; top: -4px; right: -4px;
@@ -748,18 +779,25 @@ function deadlineLabel(?string $until): string {
                 <div class="notif-dropdown-header">Notifications</div>
                 <div class="notif-list">
                     <?php if (empty($notifItems)): ?>
-                        <div class="notif-empty">No notifications yet.</div>
-                    <?php else: foreach ($notifItems as $n): ?>
-                        <div class="notif-item <?= $n['is_read'] ? '' : 'unread' ?>">
-                            <div class="notif-dot <?= $n['is_read'] ? 'read' : '' ?>"></div>
-                            <div class="notif-item-body">
-                                <div class="notif-item-title"><?= htmlspecialchars($n['title']) ?></div>
-                                <div class="notif-item-msg"><?= htmlspecialchars(mb_substr($n['message'] ?? '', 0, 80)) ?><?= strlen($n['message'] ?? '') > 80 ? '…' : '' ?></div>
-                                <div class="notif-item-time"><?= timeAgo($n['created_at']) ?></div>
-                            </div>
+                        <div class="notif-empty-dd">No notifications yet.</div>
+                    <?php else: foreach ($notifItems as $n):
+                        $isU = !$n['is_read'];
+                        $ico = $typeIcons[$n['notification_type']] ?? ['🔔','#4facfe','#ebf8ff'];
+                    ?>
+                    <div class="nd-item <?= $isU ? 'unread' : '' ?>" data-id="<?= $n['notification_id'] ?>">
+                        <div class="nd-dot <?= $isU ? '' : 'read' ?>"></div>
+                        <div class="nd-body">
+                            <div class="nd-title"><?= $ico[0] ?> <?= htmlspecialchars($n['title']) ?></div>
+                            <?php if ($n['message']): ?>
+                            <div class="nd-msg"><?= htmlspecialchars($n['message']) ?></div>
+                            <?php endif; ?>
+                            <div class="nd-time"><?= timeAgoFull($n['created_at']) ?></div>
                         </div>
+                        <button class="nd-dismiss" title="Dismiss" onclick="dismissDropdownNotif(event, this, <?= $n['notification_id'] ?>)">&#x2715;</button>
+                    </div>
                     <?php endforeach; endif ?>
                 </div>
+                <a href="notifications.php" class="notif-see-all">See All</a>
             </div>
         </div>
         <!-- Profile -->
@@ -1112,8 +1150,8 @@ function deadlineLabel(?string $until): string {
             }).then(() => {
                 const badge = document.querySelector('.notification-badge');
                 if (badge) badge.remove();
-                document.querySelectorAll('.notif-item.unread').forEach(el => el.classList.remove('unread'));
-                document.querySelectorAll('.notif-dot:not(.read)').forEach(el => el.classList.add('read'));
+                document.querySelectorAll('.nd-item.unread').forEach(el => el.classList.remove('unread'));
+                document.querySelectorAll('.nd-dot:not(.read)').forEach(el => el.classList.add('read'));
             }).catch(() => {});
         }
     }
@@ -1241,6 +1279,37 @@ function deadlineLabel(?string $until): string {
             }).catch(() => {});
     }
     setInterval(pollNotifications, 30000);
+
+    function dismissDropdownNotif(event, btn, id) {
+        event.stopPropagation();
+        const item = btn.closest('.nd-item');
+        item.style.transition = 'opacity .2s, max-height .25s, padding .25s';
+        item.style.overflow = 'hidden';
+        item.style.opacity = '0';
+        item.style.maxHeight = item.offsetHeight + 'px';
+        requestAnimationFrame(() => { item.style.maxHeight = '0'; item.style.padding = '0'; });
+        setTimeout(() => item.remove(), 280);
+
+        fetch('api/notifications/dismiss-notification.php', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': CSRF_TOKEN, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notification_id: id })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                const badge = document.getElementById('notifBadge') || document.querySelector('.notification-badge');
+                if (badge) {
+                    if (data.unread_count > 0) {
+                        badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+                    } else {
+                        badge.remove();
+                    }
+                }
+            }
+        })
+        .catch(() => {});
+    }
 </script>
 </body>
 </html>
