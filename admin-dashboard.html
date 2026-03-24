@@ -618,7 +618,7 @@
         <a href="javascript:void(0)" class="nav-item" onclick="showPage('tests',this)">
             <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
             Test Management
-            <span class="nav-badge">12</span>
+            <span class="nav-badge" id="sidebarTestCount">—</span>
         </a>
         <a href="javascript:void(0)" class="nav-item" onclick="showPage('resources',this)">
             <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
@@ -629,7 +629,7 @@
         <a href="javascript:void(0)" class="nav-item" onclick="showPage('logs',this)">
             <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
             System Logs
-            <span class="nav-badge">3</span>
+            <span class="nav-badge" id="sidebarLogsBadge" style="display:none;">0</span>
         </a>
 
         <div class="nav-section-label">Account</div>
@@ -1002,8 +1002,15 @@
             <div class="form-group"><label>Category *</label><select class="form-input" id="urCategory"><option value="aptitude">Aptitude</option><option value="verbal">Verbal</option><option value="logical">Logical</option><option value="technical">Technical</option><option value="general">General</option></select></div>
             <div class="form-group"><label>Difficulty</label><select class="form-input" id="urDifficulty"><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></div>
         </div>
-        <div class="form-group" id="urFileGroup"><label>File (PDF) <span id="urFileHint" style="font-weight:400;text-transform:none;color:var(--muted);font-size:10.5px;">(max 50 MB)</span></label><input class="form-input" id="urFile" type="file" accept=".pdf" style="padding:5px 11px;"/></div>
-        <div class="form-group"><label>External URL</label><input class="form-input" id="urUrl" type="url" placeholder="https://…"/></div>
+        <div class="form-group">
+            <label>Source</label>
+            <div style="display:flex;gap:0;border:1px solid var(--ink4);border-radius:8px;overflow:hidden;margin-bottom:10px;">
+                <button type="button" id="urToggleFile" onclick="urSetMode('file')" style="flex:1;padding:8px;font-size:12.5px;font-weight:600;border:none;cursor:pointer;background:var(--accent);color:#fff;transition:background 0.15s;">📎 Upload File</button>
+                <button type="button" id="urToggleUrl" onclick="urSetMode('url')" style="flex:1;padding:8px;font-size:12.5px;font-weight:600;border:none;cursor:pointer;background:var(--ink3);color:var(--muted);transition:background 0.15s;">🔗 External URL</button>
+            </div>
+            <div id="urFileGroup"><input class="form-input" id="urFile" type="file" accept=".pdf,.mp4,.mov,.webm,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx" style="padding:5px 11px;"/><div style="font-size:10.5px;color:var(--muted);margin-top:4px;">PDF, MP4, JPG, PNG, DOCX — max 50 MB</div></div>
+            <div id="urUrlGroup" style="display:none;"><input class="form-input" id="urUrl" type="url" placeholder="https://…"/></div>
+        </div>
         <div class="form-group"><label>Description</label><textarea class="form-input" id="urDescription" rows="3" placeholder="Brief description…" style="resize:vertical;"></textarea></div>
         <div class="form-group" style="display:flex;align-items:center;gap:9px;"><label class="toggle" style="margin:0;"><input type="checkbox" id="urPublic" checked><span class="toggle-slider"></span></label><span style="font-size:12.5px;">Make Public</span></div>
         <!-- hidden fields for compatibility -->
@@ -1137,6 +1144,8 @@
             if(tbody&&d.assessment_summary&&d.assessment_summary.length)tbody.innerHTML=d.assessment_summary.map(a=>`<tr><td>${esc(a.title)}</td><td>${esc(a.category||'—')}</td><td><span class="badge ${a.difficulty}">${esc(a.difficulty)}</span></td><td>${a.duration_minutes} min</td><td>${fmtNum(a.attempt_count)}</td><td>${a.pass_rate!==null?a.pass_rate+'%':'—'}</td><td><span class="badge ${a.status}">${esc(a.status)}</span></td></tr>`).join('');
             else if(tbody&&(!d.assessment_summary||!d.assessment_summary.length))tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted);">No assessments yet.</td></tr>';
             if(d.db_counts){setEl('dbUsers',fmtNum(d.db_counts.users||0));setEl('dbAssessments',fmtNum(d.db_counts.assessments||0));setEl('dbAttempts',fmtNum(d.db_counts.attempts||0));setEl('dbNotifications',fmtNum(d.db_counts.notifications||0));setEl('dbAuditLogs',fmtNum(d.db_counts.materials||0));const badge=document.getElementById('sidebarUserCount');if(badge)badge.textContent=fmtNum(d.db_counts.users||0);}
+            const testBadge=document.getElementById('sidebarTestCount');if(testBadge)testBadge.textContent=fmtNum(d.stats?.total_assessments||0);
+            const failedToday=d.stats?.failed_logins_today||0;const logsBadge=document.getElementById('sidebarLogsBadge');if(logsBadge){if(failedToday>0){logsBadge.textContent=failedToday;logsBadge.style.display='';logsBadge.style.background='var(--red)';}else logsBadge.style.display='none';}
         }
 
         // ════ ME ════
@@ -1178,19 +1187,32 @@
             if(d.stats)setEl('resTotalMaterials',fmtNum(d.stats.total_materials));
             const catBg={aptitude:'rgba(59,130,246,0.12)',verbal:'rgba(236,72,153,0.12)',logical:'rgba(34,197,94,0.12)',technical:'rgba(234,179,8,0.12)',general:'rgba(107,114,128,0.12)'};
             const catColor={aptitude:'#60a5fa',verbal:'#f0abfc',logical:'#4ade80',technical:'#fde047',general:'#9ca3af'};
+            function getFileType(m){
+                const pid=m.cloudinary_public_id||'';const ext=(pid.split('.').pop()||'').toLowerCase();
+                if(['mp4','webm','ogg','mov'].includes(ext))return 'video';
+                if(['jpg','jpeg','png','gif','webp'].includes(ext))return 'image';
+                if(['doc','docx'].includes(ext))return 'doc';
+                if(pid)return 'pdf';
+                return 'link';
+            }
+            const typeIcon={pdf:'📄',video:'🎬',image:'🖼️',doc:'📝',link:'🔗'};
+            const typeBg={pdf:'rgba(59,130,246,0.12)',video:'rgba(234,179,8,0.12)',image:'rgba(236,72,153,0.12)',doc:'rgba(107,114,128,0.12)',link:'rgba(234,179,8,0.12)'};
             let html=d.materials.map(m=>{
                 const rid=m.material_id;const hasFile=!!m.cloudinary_public_id;
+                const ftype=getFileType(m);
+                // Images and videos: serve-resource proxies/redirects correctly
+                // PDFs and docs: use view-resource for inline viewer
                 const viewUrl=hasFile?`${API.viewResource}?material_id=${rid}`:m.external_url;
-                // Download: use serve endpoint for Cloudinary files, direct URL for links
                 const dlUrl=hasFile?`${API.serveResource}?material_id=${rid}&action=download`:m.external_url||null;
                 const viewBtn=viewUrl?`<a href="${viewUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">View</a>`:'';
                 const dlBtn=dlUrl?`<a href="${dlUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">Download</a>`:'';
                 const cat=(m.category||'general').toLowerCase();
                 const catPill=`<span style="display:inline-block;padding:1px 7px;border-radius:99px;font-size:10px;font-weight:600;background:${catBg[cat]||catBg.general};color:${catColor[cat]||catColor.general};margin-left:5px;">${esc(cat)}</span>`;
-                const visIcon=m.visibility==='public'?'🌐':'🔒';const icon=hasFile?'📄':'🔗';const iconBg=hasFile?'rgba(59,130,246,0.12)':'rgba(234,179,8,0.12)';
+                const visIcon=m.visibility==='public'?'🌐':'🔒';
+                const icon=typeIcon[ftype]||'📄';const iconBg=typeBg[ftype]||typeBg.pdf;
                 const uploaderName=m.created_by_name||'Unknown';const uploaderInitial=uploaderName.trim()[0]?.toUpperCase()||'?';
                 const uploaderChip=`<span style="display:inline-flex;align-items:center;gap:5px;"><span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--accent);color:#fff;font-size:9px;font-weight:700;flex-shrink:0;">${uploaderInitial}</span><span style="color:var(--text);font-weight:500;">${esc(uploaderName)}</span></span>`;
-                return `<div class="resource-card"><div class="resource-icon" style="background:${iconBg};">${icon}</div><h4>${esc(m.title)}${catPill}</h4><p>${esc(m.description||'—')}</p><div class="resource-meta"><span>${hasFile?'PDF':'Link'} ${visIcon}</span><span style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;"><span style="color:var(--muted);">by</span> ${uploaderChip}</span></div><div style="display:flex;gap:5px;margin-top:9px;flex-wrap:wrap;">${viewBtn}${dlBtn}<button class="btn btn-danger btn-sm" onclick="deleteResource(${rid},'${esc(m.title)}')">Delete</button></div></div>`;
+                return `<div class="resource-card"><div class="resource-icon" style="background:${iconBg};">${icon}</div><h4>${esc(m.title)}${catPill}</h4><p>${esc(m.description||'—')}</p><div class="resource-meta"><span>${esc(ftype.toUpperCase())} ${visIcon}</span><span style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;"><span style="color:var(--muted);">by</span> ${uploaderChip}</span></div><div style="display:flex;gap:5px;margin-top:9px;flex-wrap:wrap;">${viewBtn}${dlBtn}<button class="btn btn-danger btn-sm" onclick="deleteResource(${rid},'${esc(m.title)}')">Delete</button></div></div>`;
             }).join('');
             html+=`<div class="resource-card" onclick="openUploadModal()" style="border-style:dashed;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;min-height:130px;"><div style="font-size:26px;margin-bottom:7px;">+</div><div style="font-size:12.5px;color:var(--muted);">Upload New Resource</div></div>`;
             grid.innerHTML=html;
@@ -1350,9 +1372,20 @@
 
         // ════ UPLOAD RESOURCE ════
         const CLOUDINARY_CLOUD='dmysg5azm';const CLOUDINARY_PRESET='ptauploads';
-        function openUploadModal(){document.getElementById('urTitle').value='';document.getElementById('urType').value='pdf';document.getElementById('urCategory').value='aptitude';document.getElementById('urDifficulty').value='easy';document.getElementById('urEstTime').value='';document.getElementById('urFile').value='';document.getElementById('urUrl').value='';document.getElementById('urDescription').value='';document.getElementById('urTags').value='';document.getElementById('urPublic').checked=true;document.getElementById('urError').style.display='none';document.getElementById('urProgress').style.display='none';document.getElementById('urProgressBar').style.width='0%';document.getElementById('btnUploadResource').disabled=false;document.getElementById('btnUploadResource').textContent='Upload';openModal('modalUploadResource');}
+        function urSetMode(mode){
+            const isFile=mode==='file';
+            document.getElementById('urFileGroup').style.display=isFile?'block':'none';
+            document.getElementById('urUrlGroup').style.display=isFile?'none':'block';
+            document.getElementById('urToggleFile').style.background=isFile?'var(--accent)':'var(--ink3)';
+            document.getElementById('urToggleFile').style.color=isFile?'#fff':'var(--muted)';
+            document.getElementById('urToggleUrl').style.background=isFile?'var(--ink3)':'var(--accent)';
+            document.getElementById('urToggleUrl').style.color=isFile?'var(--muted)':'#fff';
+            if(isFile)document.getElementById('urUrl').value='';
+            else document.getElementById('urFile').value='';
+        }
+        function openUploadModal(){document.getElementById('urTitle').value='';document.getElementById('urType').value='pdf';document.getElementById('urCategory').value='aptitude';document.getElementById('urDifficulty').value='easy';document.getElementById('urEstTime').value='';document.getElementById('urFile').value='';document.getElementById('urUrl').value='';document.getElementById('urDescription').value='';document.getElementById('urTags').value='';document.getElementById('urPublic').checked=true;document.getElementById('urError').style.display='none';document.getElementById('urProgress').style.display='none';document.getElementById('urProgressBar').style.width='0%';document.getElementById('btnUploadResource').disabled=false;document.getElementById('btnUploadResource').textContent='Upload';urSetMode('file');openModal('modalUploadResource');}
         function onUrTypeChange(){}
-        async function uploadToCloudinary(file,onProgress){const fd=new FormData();fd.append('file',file);fd.append('upload_preset',CLOUDINARY_PRESET);fd.append('folder','pta');const isVideo=file.type.startsWith('video/');const resourceType=isVideo?'video':'raw';return new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('POST',`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/${resourceType}/upload`);xhr.upload.addEventListener('progress',e=>{if(e.lengthComputable)onProgress(Math.round(e.loaded/e.total*90));});xhr.addEventListener('load',()=>{let data;try{data=JSON.parse(xhr.responseText);}catch(e){reject(new Error('Cloudinary returned unexpected response.'));return;}if(xhr.status===200&&data.secure_url){onProgress(100);resolve({url:data.secure_url,publicId:data.public_id||'',fileSize:data.bytes||0,mimeType:data.format||file.type});}else reject(new Error(data?.error?.message||'Cloudinary upload failed.'));});xhr.addEventListener('error',()=>reject(new Error('Network error during upload.')));xhr.send(fd);});}
+        async function uploadToCloudinary(file,onProgress){const fd=new FormData();fd.append('file',file);fd.append('upload_preset',CLOUDINARY_PRESET);fd.append('folder','pta');let resourceType='raw';if(file.type.startsWith('video/'))resourceType='video';else if(file.type.startsWith('image/'))resourceType='image';return new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('POST',`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/${resourceType}/upload`);xhr.upload.addEventListener('progress',e=>{if(e.lengthComputable)onProgress(Math.round(e.loaded/e.total*90));});xhr.addEventListener('load',()=>{let data;try{data=JSON.parse(xhr.responseText);}catch(e){reject(new Error('Cloudinary returned unexpected response.'));return;}if(xhr.status===200&&data.secure_url){onProgress(100);resolve({url:data.secure_url,publicId:data.public_id||'',fileSize:data.bytes||0,mimeType:data.format||file.type,resourceType});}else reject(new Error(data?.error?.message||'Cloudinary upload failed.'));});xhr.addEventListener('error',()=>reject(new Error('Network error during upload.')));xhr.send(fd);});}
         async function submitUploadResource(){
             const title=document.getElementById('urTitle').value.trim();const category=document.getElementById('urCategory').value;const diff=document.getElementById('urDifficulty').value;const desc=document.getElementById('urDescription').value.trim();const isPublic=document.getElementById('urPublic').checked;const fileEl=document.getElementById('urFile');const urlVal=document.getElementById('urUrl').value.trim();
             const errEl=document.getElementById('urError');const showErr=(msg)=>{errEl.textContent=msg;errEl.style.display='block';};errEl.style.display='none';

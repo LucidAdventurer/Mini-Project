@@ -74,9 +74,13 @@ if (!$isGuest && $role === 'student') {
 // Derive type from stored data — no material_type column in schema
 $hasCloudinary = !empty($material['cloudinary_public_id']);
 $publicId      = $material['cloudinary_public_id'] ?? '';
+$ext           = strtolower(pathinfo($publicId, PATHINFO_EXTENSION));
 
-// Detect video by public_id prefix convention (e.g. stored under video/)
-$isVideo = $hasCloudinary && (strpos($publicId, 'video/') === 0);
+$videoExts = ['mp4', 'webm', 'ogg', 'mov'];
+$imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+
+$isVideo = $hasCloudinary && in_array($ext, $videoExts, true);
+$isImage = $hasCloudinary && in_array($ext, $imageExts, true);
 
 $serveUrl = htmlspecialchars('serve-resource.php?material_id=' . $materialId . '&action=view',  ENT_QUOTES, 'UTF-8');
 $dlUrl    = htmlspecialchars('serve-resource.php?material_id=' . $materialId . '&action=download', ENT_QUOTES, 'UTF-8');
@@ -210,6 +214,10 @@ header('X-Frame-Options: SAMEORIGIN');
             <source src="<?= $serveUrl ?>" type="video/mp4">
             Your browser does not support the video tag.
         </video>
+    </div>
+<?php elseif ($isImage): ?>
+    <div class="video-wrap">
+        <img src="<?= $serveUrl ?>" alt="<?= $title ?>" style="max-width:100%;max-height:100%;object-fit:contain;">
     </div>
 <?php else: ?>
     <div class="loader-overlay" id="loader">

@@ -4,12 +4,7 @@
  *
  * Table  : materials
  * Columns: material_id, title, description, created_by, visibility (enum: public/group/private),
- *          cloudinary_public_id, external_url, category, created_at, updated_at
- *
- * Access:
- *   admin   -> all materials
- *   teacher -> only their own (created_by = user_id)
- *   student -> only visibility = 'public', optionally filtered by uploader_role
+ *          cloudinary_public_id, external_url, category, created_at
  */
 
 require_once __DIR__ . '/../../config.php';
@@ -32,28 +27,24 @@ $limit        = min(100, max(1, (int) ($_GET['limit'] ?? 20)));
 $offset       = ($page - 1) * $limit;
 $category     = trim($_GET['category']      ?? '');
 $search       = trim($_GET['search']        ?? '');
-$uploaderRole = trim($_GET['uploader_role'] ?? ''); // e.g. 'teacher'
+$uploaderRole = trim($_GET['uploader_role'] ?? '');
 
 $conditions = [];
 $params     = [];
 $types      = '';
 
 if ($role === 'student') {
-    // Students only see public materials
     $conditions[] = "m.visibility = 'public'";
-    // Optionally filter by uploader's role
     if ($uploaderRole !== '') {
         $conditions[] = 'u.role = ?';
         $params[]     = $uploaderRole;
         $types       .= 's';
     }
 } elseif ($role === 'teacher') {
-    // Teachers only see their own uploads
     $conditions[] = 'm.created_by = ?';
     $params[]     = $userId;
     $types       .= 'i';
 }
-// admin -> no extra condition
 
 if ($category !== '') {
     $conditions[] = 'm.category = ?';
@@ -77,7 +68,9 @@ $countStmt = $conn->prepare(
      LEFT JOIN users u ON u.user_id = m.created_by
      $where"
 );
-if ($types) $countStmt->bind_param($types, ...$params);
+if ($types !== '') {
+    $countStmt->bind_param($types, ...$params);
+}
 $countStmt->execute();
 $totalRows  = (int) $countStmt->get_result()->fetch_assoc()['total'];
 $countStmt->close();
@@ -97,7 +90,6 @@ $sql = "
         m.created_by                AS uploaded_by,
         u.full_name                 AS created_by_name,
         u.full_name                 AS uploaded_by_name,
-        -- derive material_type from cloudinary_public_id / external_url
         CASE
             WHEN m.cloudinary_public_id IS NOT NULL AND m.cloudinary_public_id != '' THEN 'file'
             WHEN m.external_url IS NOT NULL AND m.external_url != ''                 THEN 'link'
@@ -114,8 +106,11 @@ $sql = "
     LIMIT ? OFFSET ?
 ";
 
+$fetchTypes  = $types . 'ii';
+$fetchParams = array_merge($params, [$limit, $offset]);
+
 $stmt = $conn->prepare($sql);
-$stmt->bind_param($types . 'ii', ...array_merge($params, [$limit, $offset]));
+$stmt->bind_param($fetchTypes, ...$fetchParams);
 $stmt->execute();
 $result    = $stmt->get_result();
 $materials = [];
@@ -147,11 +142,12 @@ $statsJoin  = ($role === 'student' && $uploaderRole !== '')
     ? 'LEFT JOIN users u ON u.user_id = m.created_by'
     : '';
 
-$statsStmt = $conn->prepare("
-    SELECT COUNT(*) AS total_materials
-    FROM materials m $statsJoin $statsWhere
-");
-if ($statsTypes) $statsStmt->bind_param($statsTypes, ...$statsParams);
+$statsStmt = $conn->prepare(
+    "SELECT COUNT(*) AS total_materials FROM materials m $statsJoin $statsWhere"
+);
+if ($statsTypes !== '') {
+    $statsStmt->bind_param($statsTypes, ...$statsParams);
+}
 $statsStmt->execute();
 $stats = $statsStmt->get_result()->fetch_assoc();
 $stats['total_views']        = 0;

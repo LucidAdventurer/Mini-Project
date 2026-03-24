@@ -71,6 +71,11 @@ define('DB_PASS', $_env['DB_PASS'] ?? '6c50175d8af914603b87d5606b7bf4806f89644f'
 define('DB_NAME', $_env['DB_NAME'] ?? 'pta_solutionbe');
 define('DB_PORT', $_env['DB_PORT'] ?? '61000');
 
+// Cloudinary
+define('CLOUDINARY_CLOUD_NAME', $_env['CLOUDINARY_CLOUD_NAME'] ?? '');
+define('CLOUDINARY_API_KEY',    $_env['CLOUDINARY_API_KEY']    ?? '');
+define('CLOUDINARY_API_SECRET', $_env['CLOUDINARY_API_SECRET'] ?? '');
+
 // Connection settings for remote database
 define('DB_CONNECT_TIMEOUT', 10); // Shorter - fail fast if DB is down
 define('DB_READ_TIMEOUT', 30);     // Read timeout in seconds
