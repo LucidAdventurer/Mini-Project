@@ -2,12 +2,12 @@
 /* ========================================
  * STUDENT PROFILE PAGE
  * ======================================== */
-
+ 
 require_once "config.php";
 require_once "db-guard.php";
-
+ 
 $user = validateSession($conn, 'student');
-
+ 
 // Always re-fetch fresh user data from DB (so profile_image is current)
 $freshUser = safePreparedQuery($conn,
     "SELECT * FROM users WHERE user_id = ?",
@@ -18,7 +18,7 @@ if ($freshUser['success'] && $freshUser['result']) {
     if ($row) $user = array_merge($user, $row);
     $freshUser['result']->free();
 }
-
+ 
 $userName     = $user['full_name']           ?? 'Student';
 $userEmail    = $user['email']               ?? '';
 $userDept     = $user['department']          ?? '';
@@ -26,13 +26,54 @@ $userRegNo    = $user['registration_number'] ?? '';
 $userInitials = strtoupper(substr($userName, 0, 2));
 $userId       = $user['user_id'];
 $memberSince  = !empty($user['created_at']) ? date('F Y', strtotime($user['created_at'])) : 'N/A';
+ 
 
+// ── Report status ──
+$reportStatusResult = safePreparedQuery($conn,
+    "SELECT status FROM student_reports WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
+    "i", [$userId]
+);
+$latestReportStatus = null;
+if ($reportStatusResult['success'] && $reportStatusResult['result']) {
+    $rrow = $reportStatusResult['result']->fetch_assoc();
+    $latestReportStatus = $rrow['status'] ?? null;
+    $reportStatusResult['result']->free();
+}
+$hasOpenReport = in_array($latestReportStatus, ['pending', 'in_progress']);
+
+// ── Handle report submission ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submit_report') {
+    $reportTitle = trim($_POST['report_title'] ?? '');
+    $reportDesc  = trim($_POST['report_description'] ?? '');
+    $reportImage = null;
+    if (!empty($_FILES['report_image']) && $_FILES['report_image']['error'] === UPLOAD_ERR_OK) {
+        $file    = $_FILES['report_image'];
+        $allowed = ['image/jpeg','image/png','image/gif','image/webp'];
+        if ($file['size'] <= 5*1024*1024 && in_array($file['type'], $allowed)) {
+            $ext       = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+            $uploadDir = 'uploads/reports/';
+            if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+            $stored    = 'report_'.$userId.'_'.time().'.'.$ext;
+            $fullPath  = $uploadDir.$stored;
+            if (move_uploaded_file($file['tmp_name'], $fullPath)) $reportImage = $fullPath;
+        }
+    }
+    if ($reportTitle !== '' && $reportDesc !== '') {
+        safePreparedQuery($conn,
+            "INSERT INTO student_reports (user_id, title, description, image_path, status, created_at) VALUES (?,?,?,?,'pending',NOW())",
+            "isss", [$userId, $reportTitle, $reportDesc, $reportImage]
+        );
+        $hasOpenReport = true; $latestReportStatus = 'pending';
+    }
+    header('Location: '.$_SERVER['PHP_SELF'].'?report=sent');
+    exit;
+}
 // Ensure CSRF token exists
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 $lastLogin = $user['last_login'] ?? null;
-
+ 
 // ── Unread notification count ──
 $unreadResult = safePreparedQuery($conn,
     "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
@@ -44,7 +85,7 @@ if ($unreadResult['success'] && $unreadResult['result']) {
     $unreadCount = (int)($row['cnt'] ?? 0);
     $unreadResult['result']->free();
 }
-
+ 
 // ── All notifications for navbar dropdown (scroll, latest first) ──
 $notifDropResult = safePreparedQuery($conn,
     "SELECT notification_id, title, message, type, is_read, created_at
@@ -59,7 +100,7 @@ if ($notifDropResult['success'] && $notifDropResult['result']) {
     }
     $notifDropResult['result']->free();
 }
-
+ 
 function timeAgoProfile(string $datetime): string {
     $diff = time() - strtotime($datetime);
     if ($diff < 60)     return 'Just now';
@@ -68,7 +109,7 @@ function timeAgoProfile(string $datetime): string {
     if ($diff < 604800) return floor($diff / 86400) . ' day ago';
     return date('d M Y', strtotime($datetime));
 }
-
+ 
 $statsQuery = "
     SELECT
         COUNT(DISTINCT a.attempt_id)             AS tests_completed,
@@ -89,7 +130,7 @@ if ($statsResult['success'] && $statsResult['result']) {
     $activeDays     = (int)   ($s['active_days']     ?? 0);
     $statsResult['result']->free();
 }
-
+ 
 // ── Recent attempts (last 10) ──
 $recentQuery = "
     SELECT
@@ -116,7 +157,7 @@ if ($recentResult['success'] && $recentResult['result']) {
     }
     $recentResult['result']->free();
 }
-
+ 
 // ── Category performance breakdown ──
 $categoryQuery = "
     SELECT
@@ -139,7 +180,7 @@ if ($categoryResult['success'] && $categoryResult['result']) {
     }
     $categoryResult['result']->free();
 }
-
+ 
 // ── Answer accuracy (correct vs wrong) ──
 $totalCorrect = 0;
 $totalWrong   = 0;
@@ -158,7 +199,7 @@ if ($accResult['success'] && $accResult['result']) {
     $totalWrong   = (int)($accRow['wrong']   ?? 0);
     $accResult['result']->free();
 }
-
+ 
 // ── Notifications (unread count) ──
 $notifResult = safePreparedQuery(
     $conn,
@@ -171,20 +212,20 @@ if ($notifResult['success'] && $notifResult['result']) {
     $unreadCount = (int)($nr['cnt'] ?? 0);
     $notifResult['result']->free();
 }
-
+ 
 // ── Handle POST ──
 $updateMessage = '';
 $updateType    = '';
-
+ 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-
+ 
     if ($_POST['action'] === 'update_profile') {
         $newName    = trim($_POST['full_name']           ?? '');
         $newEmail   = trim($_POST['email']               ?? '');
         $newDept    = trim($_POST['department']          ?? '');
         $newRegNo   = trim($_POST['registration_number'] ?? '');
         $confirmPw  = $_POST['confirm_password_profile'] ?? '';
-
+ 
         if ($newName === '') {
             $updateMessage = 'Full name is required.';
             $updateType    = 'error';
@@ -212,7 +253,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     }
                 }
             }
-
+ 
             if ($updateType !== 'error') {
                 // Check email uniqueness if changed
                 if ($emailChanged) {
@@ -226,7 +267,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         $emailCheck['result']->free();
                     }
                 }
-
+ 
                 if ($updateType !== 'error') {
                     $upRes = safePreparedQuery($conn,
                         "UPDATE users SET full_name = ?, email = ?, department = ?, registration_number = ? WHERE user_id = ?",
@@ -255,7 +296,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             }
         }
     }
-
+ 
     if ($_POST['action'] === 'upload_avatar') {
         if (!isset($_FILES['avatar']) || $_FILES['avatar']['error'] !== UPLOAD_ERR_OK) {
             $updateMessage = 'Upload error. Please try again.';
@@ -265,7 +306,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
             $maxSize = 2 * 1024 * 1024;
             $ext     = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-
+ 
             if ($file['size'] > $maxSize) {
                 $updateMessage = 'Image must be under 2MB.';
                 $updateType    = 'error';
@@ -301,12 +342,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             }
         }
     }
-
+ 
     if ($_POST['action'] === 'change_password') {
         $current = $_POST['current_password'] ?? '';
         $new     = $_POST['new_password']     ?? '';
         $confirm = $_POST['confirm_password'] ?? '';
-
+ 
         if ($new !== $confirm) {
             $updateMessage = 'New passwords do not match.';
             $updateType    = 'error';
@@ -341,11 +382,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
     }
 }
-
+ 
 // ── student_profiles table does not exist in the current schema ──
 $profile  = [];
 $spExists = false;
-
+ 
 // ── Login activity (last 5 successful logins) ──
 $loginResult = safePreparedQuery(
     $conn,
@@ -362,7 +403,7 @@ if ($loginResult['success'] && $loginResult['result']) {
     }
     $loginResult['result']->free();
 }
-
+ 
 // ── Helpers ──
 function scoreColor(int $s): string {
     if ($s >= 80) return '#065f46';
@@ -440,9 +481,9 @@ function parseUA(string $ua): string {
             --sidebar-w:     230px;
             --transition:    .2s cubic-bezier(.4,0,.2,1);
         }
-
+ 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
+ 
         body {
             font-family: 'Inter', sans-serif;
             background: var(--bg);
@@ -451,7 +492,7 @@ function parseUA(string $ua): string {
             padding-top: var(--nav-h);
             -webkit-font-smoothing: antialiased;
         }
-
+ 
         /* ══════════════════════════════
            NAVBAR
         ══════════════════════════════ */
@@ -465,9 +506,9 @@ function parseUA(string $ua): string {
             box-shadow: 0 1px 0 rgba(255,255,255,.06), 0 4px 20px rgba(0,0,0,.18);
         }
         .navbar-brand { display: flex; align-items: center; gap: 12px; text-decoration: none; flex-shrink: 0; }
-
+ 
         .nav-profile { display: flex; align-items: center; gap: 10px; }
-
+ 
         .notification-btn {
             position: relative; width: 38px; height: 38px;
             background: rgba(255,255,255,.12); border-radius: 10px;
@@ -476,7 +517,7 @@ function parseUA(string $ua): string {
             transition: var(--transition); color: white; font-size: 16px;
         }
         .notification-btn:hover { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.3); }
-
+ 
         .notif-dropdown-wrap { position: relative; }
         .notif-dropdown-menu {
             position: absolute; top: calc(100% + 12px); right: 0;
@@ -510,7 +551,16 @@ function parseUA(string $ua): string {
         .notif-dd-msg   { font-size: 12px; color: var(--text-mid); line-height: 1.45; }
         .notif-dd-time  { font-size: 11px; color: var(--text-soft); margin-top: 4px; }
         .notif-dd-empty { padding: 32px 20px; text-align: center; color: var(--text-soft); font-size: 13px; }
-
+        .notif-dismiss-btn {
+            background: none; border: none; color: var(--text-soft);
+            font-size: 13px; line-height: 1; padding: 2px 5px;
+            border-radius: 4px; cursor: pointer; flex-shrink: 0;
+            opacity: 0; transition: opacity .15s, background .15s, color .15s;
+            align-self: flex-start; margin-top: 2px;
+        }
+        .notif-dd-item:hover .notif-dismiss-btn { opacity: 1; }
+        .notif-dismiss-btn:hover { background: rgba(239,68,68,.1); color: #ef4444; }
+ 
         .notif-badge {
             position: absolute; top: -4px; right: -4px;
             background: var(--danger); color: white;
@@ -524,7 +574,7 @@ function parseUA(string $ua): string {
             0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,.5); }
             60%       { box-shadow: 0 0 0 5px rgba(239,68,68,0); }
         }
-
+ 
         .profile-button {
             display: flex; align-items: center; gap: 9px;
             padding: 6px 12px 6px 6px;
@@ -544,7 +594,7 @@ function parseUA(string $ua): string {
         }
         .profile-name-nav { font-weight: 600; font-size: 13.5px; color: rgba(255,255,255,.95); }
         .dropdown-arrow { font-size: 10px; color: rgba(255,255,255,.6); }
-
+ 
         .nav-profile-dropdown {
             position: absolute; top: calc(100% + 12px); right: 0;
             background: var(--surface); border-radius: var(--radius);
@@ -585,12 +635,12 @@ function parseUA(string $ua): string {
         .nav-dropdown-item.danger { color: var(--danger); }
         .nav-dropdown-item.danger i { color: var(--danger); }
         .nav-dropdown-item.danger:hover { background: #fef2f2; }
-
+ 
         /* ══════════════════════════════
            PAGE LAYOUT
         ══════════════════════════════ */
         .page-wrapper { display: flex; min-height: calc(100vh - var(--nav-h)); }
-
+ 
         .left-sidebar {
             width: var(--sidebar-w); flex-shrink: 0;
             padding: 20px 12px;
@@ -633,11 +683,11 @@ function parseUA(string $ua): string {
         }
         .left-sidebar-bottom button:hover { background: #fef2f2; }
         .left-sidebar-bottom button i { width: 18px; text-align: center; font-size: 14px; }
-
+ 
         .page-content { flex: 1; min-width: 0; padding: 28px 28px 40px 0; }
-
+ 
         @media (max-width: 900px) { .left-sidebar { display: none; } .page-content { padding: 20px; } }
-
+ 
         /* ══════════════════════════════
            PROFILE CONTENT GRID
         ══════════════════════════════ */
@@ -645,7 +695,7 @@ function parseUA(string $ua): string {
             max-width: 100%; margin: 0;
             display: grid; grid-template-columns: 300px 1fr; gap: 24px;
         }
-
+ 
         /* ══════════════════════════════
            PROFILE CARD (left column)
         ══════════════════════════════ */
@@ -656,7 +706,7 @@ function parseUA(string $ua): string {
             text-align: center; height: fit-content;
             position: sticky; top: calc(var(--nav-h) + 16px);
         }
-
+ 
         .avatar-large {
             width: 110px; height: 110px; border-radius: 50%;
             background: linear-gradient(135deg, var(--primary), var(--primary-mid));
@@ -667,7 +717,7 @@ function parseUA(string $ua): string {
             border: 4px solid var(--accent-glow);
             box-shadow: 0 0 0 6px rgba(14,165,233,.08);
         }
-
+ 
         .avatar-wrap {
             position: relative; width: 110px; margin: 0 auto 16px; cursor: pointer;
         }
@@ -698,7 +748,7 @@ function parseUA(string $ua): string {
             font-family: 'Sora', sans-serif;
             font-size: 18px; font-weight: 800; color: var(--text); margin-bottom: 8px;
         }
-
+ 
         .role-badge {
             display: inline-block; padding: 4px 14px;
             background: linear-gradient(135deg, var(--primary), var(--primary-mid));
@@ -707,14 +757,14 @@ function parseUA(string $ua): string {
             font-size: 11.5px; font-weight: 700; letter-spacing: 0.5px;
             margin-bottom: 16px;
         }
-
+ 
         .profile-card-detail {
             font-size: 13px; color: var(--text-mid); margin-bottom: 6px;
             display: flex; align-items: center; justify-content: center; gap: 6px;
         }
-
+ 
         .profile-divider { height: 1px; background: var(--border); margin: 18px 0; }
-
+ 
         .stat-row { display: flex; justify-content: space-around; }
         .stat-item { text-align: center; }
         .stat-item-value {
@@ -722,13 +772,13 @@ function parseUA(string $ua): string {
             font-size: 22px; font-weight: 800; color: var(--accent);
         }
         .stat-item-label { font-size: 11px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.5px; }
-
+ 
         .cat-bar  { height: 7px; background: var(--border); border-radius: 9px; overflow: hidden; }
         .cat-fill { height: 100%; border-radius: 9px; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .6s ease; }
-
+ 
         /* Profile inner nav */
         .profile-nav { margin-top: 18px; display: flex; flex-direction: column; gap: 4px; }
-
+ 
         .profile-nav-item {
             display: flex; align-items: center; gap: 10px;
             padding: 11px 14px; border-radius: var(--radius-sm);
@@ -742,20 +792,20 @@ function parseUA(string $ua): string {
             background: linear-gradient(135deg, #e0f2fe, #e0f9ff);
             color: var(--accent); font-weight: 600;
         }
-
+ 
         /* ══════════════════════════════
            RIGHT COLUMN — PANELS
         ══════════════════════════════ */
         .tab-panel { display: none; }
         .tab-panel.active { display: block; }
-
+ 
         .card {
             background: var(--surface); border-radius: var(--radius);
             padding: 26px; box-shadow: var(--shadow);
             border: 1px solid var(--border);
             margin-bottom: 22px;
         }
-
+ 
         .card-title {
             font-family: 'Sora', sans-serif;
             font-size: 17px; font-weight: 700; color: var(--text);
@@ -763,18 +813,18 @@ function parseUA(string $ua): string {
             border-bottom: 1.5px solid var(--border);
             display: flex; align-items: center; gap: 10px;
         }
-
+ 
         /* Forms */
         .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
         .form-group { display: flex; flex-direction: column; gap: 6px; }
         .form-group.full-width { grid-column: 1 / -1; }
-
+ 
         .form-label {
             font-size: 11.5px; font-weight: 700; color: var(--text-soft);
             text-transform: uppercase; letter-spacing: 0.06em;
         }
         .form-label .req { color: var(--danger); margin-left: 2px; }
-
+ 
         .form-control {
             padding: 10px 14px; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
             font-size: 14px; font-family: 'Inter', sans-serif; color: var(--text);
@@ -784,14 +834,14 @@ function parseUA(string $ua): string {
         .form-control[disabled], .form-control[readonly] { background: var(--surface2); color: var(--text-soft); cursor: not-allowed; }
         textarea.form-control { resize: vertical; min-height: 88px; line-height: 1.5; }
         .form-hint { font-size: 11px; color: var(--text-soft); }
-
+ 
         .form-actions {
             display: flex; align-items: center; justify-content: space-between;
             margin-top: 24px; padding-top: 18px;
             border-top: 1px solid var(--border);
         }
         .form-actions-right { display: flex; gap: 12px; }
-
+ 
         .btn {
             padding: 10px 24px; border-radius: var(--radius-sm);
             font-size: 13.5px; font-weight: 700;
@@ -809,7 +859,7 @@ function parseUA(string $ua): string {
             border: 1.5px solid var(--border);
         }
         .btn-secondary:hover { background: var(--border); color: var(--text); }
-
+ 
         /* Alert banners */
         .alert {
             padding: 14px 18px; border-radius: var(--radius-sm);
@@ -818,7 +868,7 @@ function parseUA(string $ua): string {
         }
         .alert-success { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
         .alert-error   { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-
+ 
         /* Info boxes */
         .info-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 10px; }
         .info-box {
@@ -828,7 +878,7 @@ function parseUA(string $ua): string {
         .info-box-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-soft); margin-bottom: 4px; }
         .info-box-value { font-size: 15px; font-weight: 700; color: var(--primary-mid); }
         .info-box-value.mono { font-family: 'Courier New', monospace; font-size: 13px; }
-
+ 
         /* History table */
         .history-table { width: 100%; border-collapse: collapse; }
         .history-table th {
@@ -848,7 +898,7 @@ function parseUA(string $ua): string {
         .score-pill { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; }
         .test-name  { font-weight: 600; color: var(--text); margin-bottom: 2px; font-family: 'Sora', sans-serif; font-size: 13.5px; }
         .test-cat   { font-size: 11px; color: var(--text-soft); }
-
+ 
         /* Password */
         .pw-wrap { position: relative; }
         .pw-wrap .form-control { padding-right: 42px; }
@@ -858,7 +908,7 @@ function parseUA(string $ua): string {
             font-size: 16px; color: var(--text-soft); padding: 0;
         }
         .pw-eye:hover { color: var(--text); }
-
+ 
         .password-strength { margin-top: 6px; height: 5px; border-radius: 3px; background: var(--border); overflow: hidden; }
         .password-strength-bar { height: 100%; border-radius: 3px; transition: var(--transition); width: 0%; }
         .strength-weak   { width: 25%;  background: var(--danger); }
@@ -867,7 +917,7 @@ function parseUA(string $ua): string {
         .strength-strong { width: 100%; background: var(--success); }
         .strength-label  { font-size: 12px; font-weight: 600; margin-top: 4px; }
         .match-msg       { font-size: 12px; font-weight: 600; margin-top: 5px; min-height: 16px; }
-
+ 
         /* Login history */
         .login-row {
             display: flex; align-items: center; justify-content: space-between;
@@ -881,15 +931,15 @@ function parseUA(string $ua): string {
         .login-detail { font-size: 13px; font-weight: 600; color: var(--text); }
         .login-ip     { font-size: 11px; color: var(--text-soft); font-family: monospace; }
         .login-time   { font-size: 12px; color: var(--text-soft); }
-
+ 
         /* Empty state */
         .empty-state { text-align: center; padding: 44px 20px; color: var(--text-soft); }
         .empty-icon  { font-size: 38px; margin-bottom: 10px; }
         .empty-title { font-family: 'Sora', sans-serif; font-size: 15px; font-weight: 700; margin-bottom: 5px; color: var(--text); }
         .empty-sub   { font-size: 13px; }
-
+ 
         .divider { height: 1px; background: var(--border); margin: 22px 0; }
-
+ 
         /* ── RESPONSIVE ── */
         @media (max-width: 900px) {
             .container { grid-template-columns: 1fr; }
@@ -903,7 +953,7 @@ function parseUA(string $ua): string {
             .navbar { padding: 0 16px; }
             .profile-name-nav { display: none; }
         }
-
+ 
         /* Page load animation */
         @keyframes fadeUp {
             from { opacity: 0; transform: translateY(16px); }
@@ -911,10 +961,66 @@ function parseUA(string $ua): string {
         }
         .profile-card { animation: fadeUp .4s ease both; }
         .tab-panel.active { animation: fadeUp .35s ease both; }
-    </style>
+    
+        /* ── Report status dot ── */
+        .report-status-dot {
+            width:11px;height:11px;border-radius:50%;background:#ef4444;
+            border:2px solid var(--primary);display:inline-block;flex-shrink:0;
+            animation:reportPulse 2s ease-in-out infinite;
+        }
+        .report-status-dot.resolved{background:#10b981;animation:none;}
+        @keyframes reportPulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.5);}60%{box-shadow:0 0 0 6px rgba(239,68,68,0);}}
+        .report-dot-wrap {
+            display:flex;align-items:center;gap:7px;padding:6px 10px;
+            background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.15);
+            border-radius:9px;cursor:pointer;transition:var(--transition);
+            font-size:11px;font-weight:600;color:rgba(255,255,255,.8);
+        }
+        .report-dot-wrap:hover{background:rgba(255,255,255,.18);}
+        /* ── Report Modal ── */
+        .report-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9100;
+            display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);
+            opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;}
+        .report-modal-overlay.open{opacity:1;visibility:visible;}
+        .report-modal{background:#fff;border-radius:20px;width:100%;max-width:500px;margin:16px;
+            box-shadow:0 24px 64px rgba(0,0,0,.22);overflow:hidden;
+            transform:translateY(18px) scale(.97);transition:transform .28s cubic-bezier(.4,0,.2,1);}
+        .report-modal-overlay.open .report-modal{transform:translateY(0) scale(1);}
+        .report-modal-header{background:linear-gradient(135deg,#1a3a52,#1e5276);padding:22px 24px 18px;
+            display:flex;align-items:flex-start;justify-content:space-between;}
+        .report-modal-title{font-family:'Sora',sans-serif;font-size:17px;font-weight:800;color:#fff;margin-bottom:4px;}
+        .report-modal-sub{font-size:12px;color:rgba(255,255,255,.6);}
+        .report-modal-close{background:rgba(255,255,255,.15);border:none;border-radius:8px;color:#fff;
+            width:30px;height:30px;font-size:16px;cursor:pointer;display:flex;align-items:center;
+            justify-content:center;flex-shrink:0;transition:background .15s;margin-left:12px;}
+        .report-modal-close:hover{background:rgba(255,255,255,.28);}
+        .report-modal-body{padding:24px;display:flex;flex-direction:column;gap:16px;}
+        .report-field label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;
+            letter-spacing:.06em;color:#64748b;margin-bottom:6px;}
+        .report-field label span{color:#ef4444;margin-left:2px;}
+        .report-field input,.report-field textarea{width:100%;padding:11px 14px;border:1.5px solid #e2e8f0;
+            border-radius:10px;font-family:'Inter',sans-serif;font-size:13.5px;color:#0f172a;
+            outline:none;transition:border-color .15s,box-shadow .15s;resize:vertical;}
+        .report-field input:focus,.report-field textarea:focus{border-color:#0ea5e9;box-shadow:0 0 0 3px rgba(14,165,233,.15);}
+        .report-drop-zone{border:2px dashed #cbd5e1;border-radius:12px;padding:20px;text-align:center;
+            cursor:pointer;background:#f8fafc;transition:border-color .2s,background .2s;}
+        .report-drop-zone:hover,.report-drop-zone.dragover{border-color:#0ea5e9;background:#eff8ff;}
+        .report-drop-zone .dz-icon{font-size:28px;margin-bottom:6px;}
+        .report-drop-zone .dz-text{font-size:13.5px;font-weight:600;color:#475569;}
+        .report-drop-zone .dz-sub{font-size:12px;color:#94a3b8;margin-top:3px;}
+        .report-img-preview{max-width:100%;max-height:140px;border-radius:8px;object-fit:contain;display:none;margin:8px auto 0;}
+        .report-modal-footer{padding:0 24px 22px;display:flex;gap:10px;}
+        .btn-report-cancel{flex:1;padding:11px;border-radius:10px;border:1.5px solid #e2e8f0;background:#fff;
+            color:#475569;font-size:13.5px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;transition:.15s;}
+        .btn-report-cancel:hover{background:#f1f5f9;}
+        .btn-report-submit{flex:1;padding:11px;border-radius:10px;border:none;
+            background:linear-gradient(135deg,#0ea5e9,#06b6d4);color:#fff;font-size:13.5px;font-weight:700;
+            cursor:pointer;font-family:'Inter',sans-serif;transition:.15s;}
+        .btn-report-submit:hover{opacity:.9;}
+</style>
 </head>
 <body>
-
+ 
 <!-- NAVBAR -->
 <nav class="navbar">
     <a href="student-dashboard.php" class="navbar-brand">
@@ -924,7 +1030,7 @@ function parseUA(string $ua): string {
             <span style="font-size:10.5px;font-weight:400;color:rgba(255,255,255,.65);letter-spacing:.02em;">Placement Training Platform</span>
         </div>
     </a>
-
+ 
     <div class="nav-profile">
         <!-- Notification bell -->
         <div class="notif-dropdown-wrap">
@@ -944,7 +1050,7 @@ function parseUA(string $ua): string {
                         $typeIcons = ['info'=>'ℹ️','success'=>'✅','warning'=>'⚠️','error'=>'❌','assessment'=>'📝','result'=>'🏆','material'=>'📚'];
                         $ico = $typeIcons[$n['type']] ?? '🔔';
                     ?>
-                    <div class="notif-dd-item <?= $isU ? 'unread' : '' ?>">
+                    <div class="notif-dd-item <?= $isU ? 'unread' : '' ?>" id="notif-<?= (int)$n['notification_id'] ?>">
                         <div class="notif-dd-dot <?= $isU ? '' : 'read' ?>"></div>
                         <div class="notif-dd-body">
                             <div class="notif-dd-title"><?= $ico ?> <?= htmlspecialchars($n['title']) ?></div>
@@ -953,12 +1059,13 @@ function parseUA(string $ua): string {
                             <?php endif; ?>
                             <div class="notif-dd-time"><?= timeAgoProfile($n['created_at']) ?></div>
                         </div>
+                        <button class="notif-dismiss-btn" onclick="event.stopPropagation(); dismissNotification(<?= (int)$n['notification_id'] ?>)" title="Dismiss">✕</button>
                     </div>
                     <?php endforeach; endif; ?>
                 </div>
             </div>
         </div>
-
+ 
         <!-- Profile dropdown -->
         <div style="position:relative" id="profileWrapper">
             <button class="profile-button" onclick="toggleProfileDropdown()" aria-expanded="false" aria-haspopup="true">
@@ -971,7 +1078,7 @@ function parseUA(string $ua): string {
                 <span class="profile-name-nav"><?= htmlspecialchars($userName) ?></span>
                 <span class="dropdown-arrow">▼</span>
             </button>
-
+ 
             <div class="nav-profile-dropdown" id="profileDropdown">
                 <div class="nav-dropdown-header">
                     <div class="nav-dropdown-avatar">
@@ -990,12 +1097,9 @@ function parseUA(string $ua): string {
                     <a href="student-dashboard.php" class="nav-dropdown-item">
                         <i class="fa fa-home"></i><span>Dashboard</span>
                     </a>
-                    <a href="student-profile.php" class="nav-dropdown-item">
-                        <i class="fa fa-user"></i><span>My Profile</span>
-                    </a>
-                    <a href="help.html" target="_blank" rel="noopener noreferrer" class="nav-dropdown-item">
+                    <button onclick="openReportModal(); toggleProfileDropdown();" class="nav-dropdown-item">
                         <i class="fa fa-circle-question"></i><span>Help &amp; Support</span>
-                    </a>
+                    </button>
                     <div class="nav-dropdown-divider"></div>
                     <button onclick="handleLogout()" class="nav-dropdown-item danger">
                         <i class="fa fa-sign-out-alt"></i><span>Logout</span>
@@ -1005,28 +1109,27 @@ function parseUA(string $ua): string {
         </div>
     </div>
 </nav>
-
+ 
 <div class="page-wrapper">
-
+ 
 <!-- LEFT SIDEBAR -->
 <aside class="left-sidebar">
     <span class="left-sidebar-label">Navigation</span>
     <a href="student-dashboard.php"><i class="fa fa-home"></i> Dashboard</a>
     <a href="student-assessments.php"><i class="fa fa-clipboard-list"></i> Assessments</a>
     <a href="student-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
-    <a href="student-profile.php" class="active"><i class="fa fa-user"></i> Profile</a>
     <div class="left-sidebar-bottom">
         <button onclick="handleLogout()"><i class="fa fa-sign-out-alt"></i> Logout</button>
     </div>
 </aside>
-
+ 
 <div class="page-content">
 <div class="container">
-
+ 
     <!-- ── LEFT: Profile Card ── -->
     <aside>
         <div class="profile-card">
-
+ 
             <?php $profileImg = $user['profile_image'] ?? ''; ?>
             <div class="avatar-wrap" onclick="openAvatarModal()" title="Change profile picture">
                 <?php if ($profileImg && file_exists(__DIR__ . '/' . $profileImg)): ?>
@@ -1038,27 +1141,27 @@ function parseUA(string $ua): string {
                 <?php endif; ?>
                 <div class="avatar-pencil">✏️</div>
             </div>
-
+ 
             <div class="profile-card-name"><?= htmlspecialchars($userName) ?></div>
             <div class="role-badge">🎓 Student</div>
-
+ 
             <?php if ($userDept): ?>
                 <div class="profile-card-detail">🏛️ <?= htmlspecialchars($userDept) ?></div>
             <?php endif; ?>
             <?php if ($userRegNo): ?>
                 <div class="profile-card-detail">🆔 <?= htmlspecialchars($userRegNo) ?></div>
             <?php endif; ?>
-
+ 
             <div class="profile-card-detail">✉️ <?= htmlspecialchars($userEmail) ?></div>
-
+ 
             <?php if ($lastLogin): ?>
                 <div class="profile-card-detail">🕐 Last login <?= timeAgo($lastLogin) ?></div>
             <?php endif; ?>
-
+ 
             <div class="profile-card-detail">📅 Member since <?= htmlspecialchars($memberSince) ?></div>
-
+ 
             <div class="profile-divider"></div>
-
+ 
             <!-- Live stats -->
             <div class="stat-row">
                 <div class="stat-item">
@@ -1074,7 +1177,7 @@ function parseUA(string $ua): string {
                     <div class="stat-item-label">Best</div>
                 </div>
             </div>
-
+ 
             <?php if (!empty($categories)): ?>
             <div class="profile-divider"></div>
             <div style="text-align:left;">
@@ -1094,7 +1197,7 @@ function parseUA(string $ua): string {
                 </div>
             </div>
             <?php endif; ?>
-
+ 
             <?php if ($testsCompleted > 0):
                 $total   = $totalCorrect + $totalWrong;
                 $accRate = $total > 0 ? round(($totalCorrect / $total) * 100) : 0;
@@ -1124,9 +1227,9 @@ function parseUA(string $ua): string {
                 </div>
             </div>
             <?php endif; ?>
-
+ 
             <div class="profile-divider"></div>
-
+ 
             <!-- Inner tab nav -->
             <nav class="profile-nav">
                 <button class="profile-nav-item active" onclick="switchTab('info')" id="nav-info">
@@ -1141,17 +1244,17 @@ function parseUA(string $ua): string {
             </nav>
         </div>
     </aside>
-
+ 
     <!-- ── RIGHT: Tab Panels ── -->
     <main>
-
+ 
         <?php if ($updateMessage): ?>
             <div class="alert alert-<?= $updateType ?>">
                 <?= $updateType === 'success' ? '✅' : '⚠️' ?>
                 <?= htmlspecialchars($updateMessage) ?>
             </div>
         <?php endif; ?>
-
+ 
         <!-- ══ TAB: Personal Info ══ -->
         <div class="tab-panel active" id="panel-info">
             <div class="card">
@@ -1160,13 +1263,13 @@ function parseUA(string $ua): string {
                     <input type="hidden" name="action" value="update_profile">
                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                 <div class="form-grid">
-
+ 
                     <div class="form-group">
                         <label class="form-label">Full Name <span class="req">*</span></label>
                         <input type="text" name="full_name" class="form-control"
                                value="<?= htmlspecialchars($userName) ?>" required maxlength="100">
                     </div>
-
+ 
                     <div class="form-group">
                         <label class="form-label">Email Address <span class="req">*</span></label>
                         <input type="email" name="email" class="form-control" id="profileEmail"
@@ -1174,19 +1277,19 @@ function parseUA(string $ua): string {
                                oninput="checkEmailChange(this.value)">
                         <span class="form-hint">Changing email requires password confirmation.</span>
                     </div>
-
+ 
                     <div class="form-group">
                         <label class="form-label">Department</label>
                         <input type="text" name="department" class="form-control"
                                value="<?= htmlspecialchars($userDept ?: '') ?>" maxlength="50">
                     </div>
-
+ 
                     <div class="form-group">
                         <label class="form-label">Registration Number</label>
                         <input type="text" name="registration_number" class="form-control"
                                value="<?= htmlspecialchars($userRegNo ?: '') ?>" maxlength="50">
                     </div>
-
+ 
                     <div class="form-group full-width" id="emailConfirmWrap" style="display:none;">
                         <label class="form-label">Current Password <span class="req">*</span> <span style="font-weight:400;color:var(--text-soft);font-size:11px;">(required to change email)</span></label>
                         <div class="pw-wrap">
@@ -1195,7 +1298,7 @@ function parseUA(string $ua): string {
                             <button type="button" class="pw-eye" onclick="togglePw('profilePwConfirm',this)">👁️</button>
                         </div>
                     </div>
-
+ 
                 </div>
                 <div class="form-actions">
                     <div class="form-actions-right">
@@ -1204,7 +1307,7 @@ function parseUA(string $ua): string {
                 </div>
                 </form>
             </div>
-
+ 
             <!-- Account Details -->
             <div class="card">
                 <div class="card-title">🔧 Account Details</div>
@@ -1240,7 +1343,7 @@ function parseUA(string $ua): string {
                 </div>
             </div>
         </div>
-
+ 
         <!-- ══ TAB: Test History ══ -->
         <div class="tab-panel" id="panel-history">
             <div class="card">
@@ -1313,17 +1416,17 @@ function parseUA(string $ua): string {
                 <?php endif; ?>
             </div>
         </div>
-
+ 
         <!-- ══ TAB: Security ══ -->
         <div class="tab-panel" id="panel-security">
-
+ 
             <div class="card">
                 <div class="card-title">🔒 Change Password</div>
                 <form method="POST" action="">
                     <input type="hidden" name="action" value="change_password">
                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                     <div class="form-grid">
-
+ 
                         <div class="form-group full-width">
                             <label class="form-label">Current Password <span class="req">*</span></label>
                             <div class="pw-wrap">
@@ -1333,7 +1436,7 @@ function parseUA(string $ua): string {
                                 <button type="button" class="pw-eye" onclick="togglePw('pwCurrent',this)">👁️</button>
                             </div>
                         </div>
-
+ 
                         <div class="form-group">
                             <label class="form-label">New Password <span class="req">*</span></label>
                             <div class="pw-wrap">
@@ -1348,7 +1451,7 @@ function parseUA(string $ua): string {
                             </div>
                             <span class="strength-label" id="strengthLabel" style="color:var(--text-soft);"></span>
                         </div>
-
+ 
                         <div class="form-group">
                             <label class="form-label">Confirm New Password <span class="req">*</span></label>
                             <div class="pw-wrap">
@@ -1360,7 +1463,7 @@ function parseUA(string $ua): string {
                             </div>
                             <div class="match-msg" id="matchMsg"></div>
                         </div>
-
+ 
                     </div>
                     <div class="form-actions">
                         <span style="font-size:12px;color:var(--text-soft);">Use letters, numbers, and symbols.</span>
@@ -1368,7 +1471,7 @@ function parseUA(string $ua): string {
                     </div>
                 </form>
             </div>
-
+ 
             <div class="card">
                 <div class="card-title">ℹ️ Account Information</div>
                 <div class="info-grid" style="margin-bottom:<?= !empty($loginHistory) ? '22px' : '0' ?>;">
@@ -1401,7 +1504,7 @@ function parseUA(string $ua): string {
                     </div>
                     <?php endif; ?>
                 </div>
-
+ 
                 <?php if (!empty($loginHistory)): ?>
                 <div class="divider"></div>
                 <div class="card-title" style="margin-bottom:14px;">🔐 Recent Login Activity</div>
@@ -1422,14 +1525,14 @@ function parseUA(string $ua): string {
                 </div>
                 <?php endif; ?>
             </div>
-
+ 
         </div><!-- /panel-security -->
-
+ 
     </main>
 </div><!-- /.container -->
 </div><!-- /.page-content -->
 </div><!-- /.page-wrapper -->
-
+ 
 <script>
     /* ── Tab switching ── */
     function switchTab(tab) {
@@ -1440,17 +1543,17 @@ function parseUA(string $ua): string {
         if (panel) panel.classList.add('active');
         if (nav)   nav.classList.add('active');
     }
-
+ 
     /* ── Dropdowns ── */
     const CSRF_TOKEN = <?= json_encode($_SESSION['csrf_token']) ?>;
-
+ 
     function toggleProfileDropdown() {
         const dropdown = document.getElementById('profileDropdown');
         document.getElementById('notifDropdown').classList.remove('show');
         dropdown.classList.toggle('active');
         document.querySelector('.profile-button').setAttribute('aria-expanded', dropdown.classList.contains('active'));
     }
-
+ 
     function toggleNotifDropdown() {
         const dd = document.getElementById('notifDropdown');
         document.getElementById('profileDropdown').classList.remove('active');
@@ -1467,9 +1570,40 @@ function parseUA(string $ua): string {
             }).catch(() => {});
         }
     }
-
+ 
+    // Dismiss a single notification by ID (X button)
+    async function dismissNotification(notifId) {
+        const el = document.getElementById('notif-' + notifId);
+        if (el) { el.style.opacity = '0.4'; el.style.pointerEvents = 'none'; }
+        try {
+            const res = await fetch('api/notifications/dismiss-notification.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+                body: JSON.stringify({ action: 'dismiss_one', notification_id: notifId })
+            });
+            const data = await res.json();
+            if (!data.success) {
+                if (el) { el.style.opacity = '1'; el.style.pointerEvents = ''; }
+                return;
+            }
+        } catch(e) {
+            if (el) { el.style.opacity = '1'; el.style.pointerEvents = ''; }
+            return;
+        }
+        if (el) el.remove();
+        const badge = document.getElementById('notifBadge');
+        if (badge) {
+            const cur = parseInt(badge.textContent) || 0;
+            if (cur <= 1) badge.remove();
+            else badge.textContent = cur - 1;
+        }
+        const list = document.querySelector('.notif-dd-list');
+        if (list && list.querySelectorAll('.notif-dd-item').length === 0) {
+            list.innerHTML = '<div class="notif-dd-empty">No notifications yet.</div>';
+        }
+    }
+ 
     document.addEventListener('click', function(e) {
-        const pw = document.getElementById('profileWrapper');
         const nw = document.querySelector('.notif-dropdown-wrap');
         if (pw && !pw.contains(e.target)) {
             document.getElementById('profileDropdown').classList.remove('active');
@@ -1478,7 +1612,7 @@ function parseUA(string $ua): string {
             document.getElementById('notifDropdown').classList.remove('show');
         }
     });
-
+ 
     const ORIGINAL_EMAIL = <?= json_encode($userEmail) ?>;
     function checkEmailChange(val) {
         const wrap = document.getElementById('emailConfirmWrap');
@@ -1492,18 +1626,18 @@ function parseUA(string $ua): string {
             inp.value = '';
         }
     }
-
+ 
     function handleLogout() {
         if (confirm('Are you sure you want to logout?')) window.location.href = 'logout.php';
     }
-
+ 
     /* ── Password eye toggle ── */
     function togglePw(id, btn) {
         const inp = document.getElementById(id);
         if (inp.type === 'password') { inp.type = 'text';     btn.textContent = '🙈'; }
         else                          { inp.type = 'password'; btn.textContent = '👁️'; }
     }
-
+ 
     /* ── Password strength meter ── */
     function checkStrength(val) {
         const bar   = document.getElementById('strengthBar');
@@ -1525,7 +1659,7 @@ function parseUA(string $ua): string {
         label.textContent = lvl.label;
         label.style.color = lvl.color;
     }
-
+ 
     /* ── Password match check ── */
     function checkMatch() {
         const nw  = document.getElementById('pwNew').value;
@@ -1535,7 +1669,7 @@ function parseUA(string $ua): string {
         if (nw === cf) { msg.style.color = '#065f46'; msg.textContent = '✓ Passwords match'; }
         else           { msg.style.color = '#991b1b'; msg.textContent = '✗ Passwords do not match'; }
     }
-
+ 
     /* ── Animate category bars on load ── */
     window.addEventListener('load', () => {
         document.querySelectorAll('.cat-fill').forEach(bar => {
@@ -1544,7 +1678,7 @@ function parseUA(string $ua): string {
             setTimeout(() => { bar.style.width = w; }, 250);
         });
     });
-
+ 
     /* ── Auto-open tab from URL hash ── */
     window.addEventListener('DOMContentLoaded', function() {
         const hash = window.location.hash.replace('#', '');
@@ -1552,7 +1686,7 @@ function parseUA(string $ua): string {
         if (validTabs.includes(hash)) switchTab(hash);
     });
 </script>
-
+ 
 <!-- AVATAR MODAL -->
 <div id="avatarModal" onclick="if(event.target===this)closeAvatarModal()">
     <div id="avatarModalBox">
@@ -1563,7 +1697,7 @@ function parseUA(string $ua): string {
             </div>
             <button type="button" onclick="closeAvatarModal()" style="background:rgba(255,255,255,.15);border:none;border-radius:8px;color:#fff;width:30px;height:30px;font-size:16px;cursor:pointer;">✕</button>
         </div>
-
+ 
         <!-- Simple form — same pattern as teacher profile, no fetch/CSRF issues -->
         <form method="POST" enctype="multipart/form-data" id="avatarForm">
             <input type="hidden" name="action" value="upload_avatar">
@@ -1638,6 +1772,95 @@ dz.addEventListener('drop', e => {
         previewAvatar(input);
     }
 });
+</script>
+
+<!-- ══ REPORT MODAL ══ -->
+<div class="report-modal-overlay" id="reportModalOverlay" onclick="if(event.target===this)closeReportModal()">
+    <div class="report-modal">
+        <div class="report-modal-header">
+            <div>
+                <div class="report-modal-title">🚩 Report an Issue</div>
+                <div class="report-modal-sub">We'll review your report and get back to you</div>
+            </div>
+            <button class="report-modal-close" onclick="closeReportModal()">✕</button>
+        </div>
+        <?php if (!empty($_GET['report']) && $_GET['report'] === 'sent'): ?>
+        <div style="margin:16px 24px 0;padding:12px 16px;border-radius:10px;background:#d1fae5;border:1px solid #a7f3d0;font-size:13px;font-weight:600;color:#065f46;display:flex;align-items:center;gap:8px;">✅ Your report was submitted! We'll look into it soon.</div>
+        <?php endif; ?>
+        <?php if ($latestReportStatus): ?>
+        <div style="margin:12px 24px 0;padding:12px 16px;border-radius:10px;background:<?= $hasOpenReport ? '#fff8ed' : '#d1fae5' ?>;border:1px solid <?= $hasOpenReport ? '#f59e0b' : '#a7f3d0' ?>;font-size:13px;font-weight:600;color:<?= $hasOpenReport ? '#92400e' : '#065f46' ?>;display:flex;align-items:center;gap:8px;">
+            <?= $hasOpenReport ? '⏳ Your last report is <strong>'.ucfirst(str_replace('_',' ',$latestReportStatus)).'</strong> — admin will respond soon.' : '✅ Your last report has been <strong>Resolved</strong>.' ?>
+        </div>
+        <?php endif; ?>
+        <form method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="submit_report">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+            <div class="report-modal-body">
+                <div class="report-field">
+                    <label>Report Title <span>*</span></label>
+                    <input type="text" name="report_title" placeholder="e.g. Assessment not loading" required maxlength="150">
+                </div>
+                <div class="report-field">
+                    <label>Explanation <span>*</span></label>
+                    <textarea name="report_description" rows="4" placeholder="Describe the issue in detail..." required maxlength="2000"></textarea>
+                </div>
+                <div class="report-field">
+                    <label>Screenshot / Image <span style="color:#94a3b8;font-weight:500;">(optional)</span></label>
+                    <label for="reportImageInput" class="report-drop-zone" id="reportDropZone">
+                        <div class="dz-icon">📷</div>
+                        <div class="dz-text">Click to upload or drag & drop</div>
+                        <div class="dz-sub">JPG, PNG, GIF, WEBP — max 5 MB</div>
+                    </label>
+                    <input type="file" name="report_image" id="reportImageInput" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none" onchange="previewReportImg(this)">
+                    <img id="reportImgPreview" class="report-img-preview" alt="Preview">
+                </div>
+            </div>
+            <div class="report-modal-footer">
+                <button type="button" class="btn-report-cancel" onclick="closeReportModal()">Cancel</button>
+                <button type="submit" class="btn-report-submit">🚩 Submit Report</button>
+            </div>
+        </form>
+    </div>
+</div>
+<script>
+function openReportModal(){
+    document.getElementById('reportModalOverlay').classList.add('open');
+    document.addEventListener('keydown', escReport);
+}
+function closeReportModal(){
+    document.getElementById('reportModalOverlay').classList.remove('open');
+    document.removeEventListener('keydown', escReport);
+}
+function escReport(e){ if(e.key==='Escape') closeReportModal(); }
+function previewReportImg(input){
+    const file = input.files[0]; if(!file) return;
+    if(file.size > 5*1024*1024){ alert('Image must be under 5MB.'); input.value=''; return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+        const p = document.getElementById('reportImgPreview');
+        p.src = e.target.result; p.style.display = 'block';
+        document.querySelector('#reportDropZone .dz-text').textContent = file.name;
+        document.querySelector('#reportDropZone .dz-sub').textContent = (file.size/1024).toFixed(1)+' KB';
+    };
+    reader.readAsDataURL(file);
+}
+const rdz = document.getElementById('reportDropZone');
+if(rdz){
+    rdz.addEventListener('dragover', e=>{ e.preventDefault(); rdz.classList.add('dragover'); });
+    rdz.addEventListener('dragleave', ()=> rdz.classList.remove('dragover'));
+    rdz.addEventListener('drop', e=>{
+        e.preventDefault(); rdz.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if(file && file.type.startsWith('image/')){
+            const input = document.getElementById('reportImageInput');
+            try{ const dt=new DataTransfer(); dt.items.add(file); input.files=dt.files; }catch(ex){}
+            previewReportImg(input);
+        }
+    });
+}
+<?php if(!empty($_GET['report']) && $_GET['report']==='sent'): ?>
+window.addEventListener('load', ()=> openReportModal());
+<?php endif; ?>
 </script>
 </body>
 </html>

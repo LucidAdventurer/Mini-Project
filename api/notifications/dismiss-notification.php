@@ -1,85 +1,101 @@
 <?php
-// ============================================================
-// api/notifications/dismiss-notification.php
-//
-// Two modes (auto-detected from request body):
-//
-//  1. X button click  → send { notification_id: 123 }
-//     Deletes that single notification for this student.
-//
-//  2. Resource opened → send { material_id: 456 }
-//     Deletes ALL notifications for that material (original behaviour).
-//
-// Always returns updated unread_count so the bell badge stays in sync.
-// ============================================================
+/* ========================================
+ * API: DISMISS NOTIFICATION
+ * File: api/notifications/dismiss-notification.php
+ *
+ * Handles two use cases:
+ *
+ *  A) Manual dismiss (X button)
+ *     POST { action: "dismiss_one", notification_id: 123 }
+ *     → Deletes that single notification row
+ *     → Returns { success, unread_count }
+ *
+ *  B) Action-based dismiss (clicking a notification item)
+ *     POST { action: "assessment_done", assessment_id: 45 }
+ *     → Deletes all assessment notifications for that assessment
+ *     POST { action: "resource_viewed", material_id: 12 }
+ *     → Deletes all material notifications for that resource
+ *
+ * All deletions are scoped to the logged-in user only.
+ * ======================================== */
 
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
-$currentUser = validateSession($conn, 'student');
-$userId      = (int) $currentUser['user_id'];
-
-$body           = json_decode(file_get_contents('php://input'), true) ?? [];
-$notificationId = isset($body['notification_id']) ? (int)$body['notification_id'] : 0;
-$materialId     = isset($body['material_id'])     ? (int)$body['material_id']     : 0;
-
-// ── Validate: need at least one valid ID ──────────────────────
-if ($notificationId <= 0 && $materialId <= 0) {
-    echo json_encode(['success' => false, 'error' => 'Provide notification_id or material_id']);
+$user = validateSession($conn, 'student');
+if (!$user) {
+    echo json_encode(['success' => false, 'message' => 'Unauthorized']);
     exit;
 }
 
-// ── Mode 1: dismiss a single notification by ID ───────────────
-if ($notificationId > 0) {
-    $stmt = $conn->prepare(
-        "DELETE FROM notifications
-         WHERE notification_id = ?
-           AND user_id         = ?"   // user_id guard prevents deleting others' notifications
-    );
+$userId = (int) $user['user_id'];
 
-    if (!$stmt) {
-        echo json_encode(['success' => false, 'error' => 'Query prepare failed']);
+// Parse JSON body
+$body   = json_decode(file_get_contents('php://input'), true) ?? [];
+$action = trim($body['action'] ?? '');
+
+$success = false;
+
+switch ($action) {
+
+    // ── A. Dismiss a single notification by its ID ──
+    case 'dismiss_one':
+        $notifId = (int)($body['notification_id'] ?? 0);
+        if ($notifId > 0) {
+            $res = safePreparedQuery($conn,
+                "DELETE FROM notifications WHERE notification_id = ? AND user_id = ?",
+                "ii", [$notifId, $userId]
+            );
+            $success = $res['success'];
+        }
+        break;
+
+    // ── B. Student opened/started an assessment ──
+    case 'assessment_done':
+        $assessmentId = (int)($body['assessment_id'] ?? 0);
+        if ($assessmentId > 0) {
+            $res = safePreparedQuery($conn,
+                "DELETE FROM notifications
+                 WHERE user_id = ? AND type = 'assessment' AND related_entity_id = ?",
+                "ii", [$userId, $assessmentId]
+            );
+            $success = $res['success'];
+        }
+        break;
+
+    // ── C. Student viewed a resource ──
+    case 'resource_viewed':
+        $materialId = (int)($body['material_id'] ?? 0);
+        if ($materialId > 0) {
+            $res = safePreparedQuery($conn,
+                "DELETE FROM notifications
+                 WHERE user_id = ? AND type = 'material' AND related_entity_id = ?",
+                "ii", [$userId, $materialId]
+            );
+            $success = $res['success'];
+        }
+        break;
+
+    default:
+        echo json_encode(['success' => false, 'message' => 'Unknown action']);
         exit;
-    }
-
-    $stmt->bind_param("ii", $notificationId, $userId);
-    $stmt->execute();
-    $deleted = $stmt->affected_rows;
-    $stmt->close();
-
-// ── Mode 2: dismiss all notifications for a material (original) ─
-} else {
-    $stmt = $conn->prepare(
-        "DELETE FROM notifications
-         WHERE user_id             = ?
-           AND related_entity_type = 'material'
-           AND related_entity_id   = ?"
-    );
-
-    if (!$stmt) {
-        echo json_encode(['success' => false, 'error' => 'Query prepare failed']);
-        exit;
-    }
-
-    $stmt->bind_param("ii", $userId, $materialId);
-    $stmt->execute();
-    $deleted = $stmt->affected_rows;
-    $stmt->close();
 }
 
-// ── Return fresh unread count so the bell badge updates ───────
-$countResult = $conn->prepare(
-    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0"
+// Return updated unread count so badge can be updated
+$countRes    = safePreparedQuery($conn,
+    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
+    "i", [$userId]
 );
-$countResult->bind_param("i", $userId);
-$countResult->execute();
-$row = $countResult->get_result()->fetch_assoc();
-$countResult->close();
+$unreadCount = 0;
+if ($countRes['success'] && $countRes['result']) {
+    $row         = $countRes['result']->fetch_assoc();
+    $unreadCount = (int)($row['cnt'] ?? 0);
+    $countRes['result']->free();
+}
 
 echo json_encode([
-    'success'      => true,
-    'deleted'      => $deleted,
-    'unread_count' => (int)($row['cnt'] ?? 0),
+    'success'      => $success,
+    'unread_count' => $unreadCount,
 ]);
