@@ -131,23 +131,6 @@ if ($activityResult['success'] && $activityResult['result']) {
     $activityResult['result']->free();
 }
 
-// ── System stats for admin overview ─────────────────────────────────────────
-$stats = [];
-foreach ([
-    'total_users'       => "SELECT COUNT(*) AS c FROM users",
-    'total_assessments' => "SELECT COUNT(*) AS c FROM assessments",
-    'active_students'   => "SELECT COUNT(*) AS c FROM users WHERE role='student' AND is_active=1",
-    'total_teachers'    => "SELECT COUNT(*) AS c FROM users WHERE role='teacher'",
-] as $key => $sql) {
-    $sr = safeQuery($conn, $sql);
-    if ($sr) {
-        $row = $sr->fetch_assoc();
-        $stats[$key] = (int) $row['c'];
-        $sr->free();
-    } else {
-        $stats[$key] = 0;
-    }
-}
 
 $csrfToken   = getCsrfToken();
 $memberSince = date('F j, Y', strtotime($adminData['created_at'] ?? 'now'));
@@ -203,109 +186,16 @@ body {
 
 /* ── Layout ── */
 .page {
-    display: grid;
-    grid-template-columns: 260px 1fr;
+    display: block;
     min-height: 100vh;
-}
-
-/* ── Sidebar ── */
-.sidebar {
-    background: var(--bg-card);
-    border-right: 1px solid var(--border);
-    padding: 32px 0;
-    display: flex;
-    flex-direction: column;
-    position: sticky;
-    top: 0;
-    height: 100vh;
-    overflow-y: auto;
-}
-.sidebar-logo {
-    padding: 0 24px 32px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 24px;
-}
-.sidebar-logo .logo-mark {
-    width: 36px; height: 36px;
-    background: var(--accent);
-    border-radius: var(--radius-sm);
-    display: grid; place-items: center;
-    font-family: var(--font-head);
-    font-weight: 800;
-    font-size: 18px;
-    color: #fff;
-}
-.sidebar-logo span {
-    font-family: var(--font-head);
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--text);
-}
-.nav-label {
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: .12em;
-    text-transform: uppercase;
-    color: var(--text-subtle);
-    padding: 0 24px;
-    margin-bottom: 8px;
-}
-.nav-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 11px 24px;
-    color: var(--text-muted);
-    text-decoration: none;
-    font-size: 14px;
-    font-weight: 500;
-    border-left: 3px solid transparent;
-    transition: all .18s;
-}
-.nav-item:hover { color: var(--text); background: rgba(255,255,255,.03); }
-.nav-item.active {
-    color: var(--accent);
-    border-left-color: var(--accent);
-    background: var(--accent-glow);
-}
-.nav-item i { width: 18px; text-align: center; font-size: 15px; }
-.nav-spacer { flex: 1; }
-.sidebar-user {
-    margin: 0 16px;
-    padding: 14px;
-    background: var(--bg-input);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-.sidebar-user .avatar-sm {
-    width: 36px; height: 36px;
-    background: var(--accent);
-    border-radius: 50%;
-    display: grid; place-items: center;
-    font-family: var(--font-head);
-    font-weight: 700;
-    font-size: 13px;
-    flex-shrink: 0;
-}
-.sidebar-user .info .name {
-    font-size: 13px; font-weight: 600; color: var(--text);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px;
-}
-.sidebar-user .info .role {
-    font-size: 11px; color: var(--accent); text-transform: uppercase;
-    letter-spacing: .06em; font-weight: 600;
 }
 
 /* ── Main content ── */
 .main {
     padding: 40px 48px;
     overflow-y: auto;
+    max-width: 960px;
+    margin: 0 auto;
 }
 
 /* ── Page header ── */
@@ -381,45 +271,13 @@ body {
     font-size: 24px; font-weight: 800;
     color: var(--text);
 }
-.hero-info .role-badge {
-    display: inline-flex; align-items: center; gap: 6px;
-    background: var(--accent-glow);
-    border: 1px solid rgba(59,91,219,.4);
-    color: var(--accent);
-    font-size: 12px; font-weight: 600;
-    letter-spacing: .08em; text-transform: uppercase;
-    padding: 4px 12px; border-radius: 20px;
-    margin: 6px 0 12px;
-}
 .hero-meta {
     display: flex; gap: 20px; flex-wrap: wrap;
     font-size: 13px; color: var(--text-muted);
+    margin-top: 8px;
 }
 .hero-meta span { display: flex; align-items: center; gap: 6px; }
 .hero-meta i { color: var(--accent); font-size: 13px; }
-.hero-stats {
-    margin-left: auto;
-    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
-    flex-shrink: 0;
-}
-.stat-pill {
-    background: var(--bg-input);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 12px 18px;
-    text-align: center;
-    min-width: 100px;
-}
-.stat-pill .val {
-    font-family: var(--font-head);
-    font-size: 22px; font-weight: 800;
-    color: var(--text);
-    line-height: 1;
-}
-.stat-pill .lbl {
-    font-size: 11px; color: var(--text-muted);
-    margin-top: 4px; text-transform: uppercase; letter-spacing: .06em;
-}
 
 /* ── Content grid ── */
 .content-grid {
@@ -539,50 +397,18 @@ body {
 
 /* ── Responsive ── */
 @media (max-width: 1024px) {
-    .page { grid-template-columns: 1fr; }
-    .sidebar { display: none; }
     .main { padding: 24px; }
     .content-grid { grid-template-columns: 1fr; }
-    .hero-stats { grid-template-columns: repeat(3, 1fr); }
     .hero-card { flex-wrap: wrap; }
 }
 @media (max-width: 640px) {
     .form-row { grid-template-columns: 1fr; }
-    .hero-stats { grid-template-columns: repeat(2, 1fr); }
+    .main { padding: 16px; }
 }
 </style>
 </head>
 <body>
 <div class="page">
-
-  <!-- ── Sidebar ── -->
-  <aside class="sidebar">
-    <div class="sidebar-logo">
-      <div class="logo-mark">P</div>
-      <span>PrepaUra</span>
-    </div>
-
-    <div class="nav-label">Main</div>
-    <a href="admin-dashboard.php" class="nav-item"><i class="fas fa-th-large"></i> Dashboard</a>
-    <a href="admin-users.php"     class="nav-item"><i class="fas fa-users"></i> Users</a>
-    <a href="admin-assessments.php" class="nav-item"><i class="fas fa-file-alt"></i> Assessments</a>
-    <a href="admin-groups.php"    class="nav-item"><i class="fas fa-layer-group"></i> Groups</a>
-    <a href="admin-materials.php" class="nav-item"><i class="fas fa-book-open"></i> Materials</a>
-
-    <div class="nav-label" style="margin-top:16px">System</div>
-    <a href="admin-settings.php"  class="nav-item"><i class="fas fa-sliders-h"></i> Settings</a>
-    <a href="admin-profile.php"   class="nav-item active"><i class="fas fa-user-shield"></i> My Profile</a>
-    <a href="logout.php"          class="nav-item"><i class="fas fa-sign-out-alt"></i> Logout</a>
-
-    <div class="nav-spacer"></div>
-    <div class="sidebar-user">
-      <div class="avatar-sm"><?= htmlspecialchars($initials) ?></div>
-      <div class="info">
-        <div class="name"><?= htmlspecialchars($adminData['full_name'] ?? 'Admin') ?></div>
-        <div class="role">Administrator</div>
-      </div>
-    </div>
-  </aside>
 
   <!-- ── Main ── -->
   <main class="main">
@@ -623,20 +449,6 @@ body {
           <?php endif; ?>
           <span><i class="fas fa-calendar-alt"></i>Member since <?= $memberSince ?></span>
           <span><i class="fas fa-clock"></i>Last login: <?= $lastLogin ?></span>
-        </div>
-      </div>
-      <div class="hero-stats">
-        <div class="stat-pill">
-          <div class="val"><?= number_format($stats['active_students']) ?></div>
-          <div class="lbl">Students</div>
-        </div>
-        <div class="stat-pill">
-          <div class="val"><?= number_format($stats['total_teachers']) ?></div>
-          <div class="lbl">Teachers</div>
-        </div>
-        <div class="stat-pill">
-          <div class="val"><?= number_format($stats['total_assessments']) ?></div>
-          <div class="lbl">Assessments</div>
         </div>
       </div>
     </div>
