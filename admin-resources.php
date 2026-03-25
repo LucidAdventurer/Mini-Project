@@ -178,9 +178,16 @@ function openUploadModal() {
 
 async function uploadToCloudinary(file, onProgress) {
     const fd=new FormData(); fd.append('file',file); fd.append('upload_preset',CLOUDINARY_PRESET); fd.append('folder','pta');
-    let resourceType='raw';
+    // Use 'image' for PDFs — Cloudinary serves PDFs inline under /image/upload/
+    // Use 'raw' only as a last resort for unknown binary formats
+    let resourceType='image';
     if (file.type.startsWith('video/')) resourceType='video';
-    else if (file.type.startsWith('image/')) resourceType='image';
+    // PDFs, docs stay as 'image' — Cloudinary supports them natively
+    // Other unknown types fall back to 'raw'
+    else if (!file.type.startsWith('image/') && !file.type.includes('pdf') &&
+             !file.type.includes('word') && !file.type.includes('document')) {
+        resourceType='raw';
+    }
     return new Promise((resolve,reject)=>{
         const xhr=new XMLHttpRequest();
         xhr.open('POST',`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/${resourceType}/upload`);
