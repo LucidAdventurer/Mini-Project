@@ -2,24 +2,15 @@
 // ============================================================
 // api/groups/get-groups.php
 //
-// Returns all groups owned by the logged-in teacher,
-// with member counts.
-//
-// GET (no params)
-// Returns { success: bool, groups: [{ group_id, name, description, member_count }] }
+// Returns the teacher's groups for use in targeting pickers.
+// GET — no params needed
+// Returns { success: bool, groups: [{ group_id, name, member_count }] }
 // ============================================================
 
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
-
-$conn = createDatabaseConnection();
-if (!$conn) {
-    http_response_code(503);
-    echo json_encode(['success' => false, 'error' => 'Database unavailable.']);
-    exit;
-}
 
 $currentUser = validateSession($conn, 'teacher');
 $teacherId   = (int) $currentUser['user_id'];

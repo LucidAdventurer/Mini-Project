@@ -1,10 +1,5 @@
 <?php
-// ============================================================
 // api/students/search.php
-// Simple student search for the teacher notifications page.
-// GET ?q=<search term>
-// Returns { success: bool, students: [...] }
-// ============================================================
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
 
@@ -24,7 +19,7 @@ $like = '%' . $q . '%';
 $r = safePreparedQuery($conn,
     "SELECT user_id, full_name, email, registration_number, department
      FROM users
-     WHERE user_type = 'student'
+     WHERE role = 'student'
        AND is_active = 1
        AND (full_name LIKE ? OR registration_number LIKE ? OR email LIKE ?)
      ORDER BY full_name ASC

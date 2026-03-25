@@ -595,10 +595,30 @@ body::before {
         </div>
         <div class="form-group">
           <label class="form-label">Visibility</label>
-          <select class="form-control" id="up-visibility">
+          <select class="form-control" id="up-visibility" onchange="toggleTargeting(this.value)">
             <option value="public">🌐 Public (all students)</option>
+            <option value="group">👥 Specific Group</option>
             <option value="private">🔒 Private (only me)</option>
           </select>
+        </div>
+      </div>
+
+      <!-- Group picker — shown when visibility = group -->
+      <div class="form-group" id="up-group-zone" style="display:none;">
+        <label class="form-label">Select Group</label>
+        <select class="form-control" id="up-group-select">
+          <option value="">Loading groups…</option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Available From</label>
+          <input type="date" class="form-control" id="up-from">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Available To</label>
+          <input type="date" class="form-control" id="up-to">
         </div>
       </div>
       <div class="form-group">
@@ -670,6 +690,16 @@ body::before {
             <option value="public">🌐 Public</option>
             <option value="private">🔒 Private</option>
           </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Available From</label>
+          <input type="date" class="form-control" id="edit-from">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Available To</label>
+          <input type="date" class="form-control" id="edit-to">
         </div>
       </div>
     </div>
@@ -863,12 +893,13 @@ document.getElementById('searchInput').addEventListener('input', e => {
 function openUploadModal() {
     ['up-title','up-desc','up-link'].forEach(id => document.getElementById(id).value='');
     document.getElementById('up-category').value   = '';
-    
     document.getElementById('up-visibility').value = 'public';
     document.getElementById('up-file').value        = '';
     document.getElementById('fileNameDisplay').style.display = 'none';
     document.getElementById('up-type').value = 'file';
     toggleUploadType('file');
+    toggleTargeting('public');
+    document.getElementById('up-group-select').value = '';
     document.getElementById('uploadModal').classList.add('open');
 }
 function closeUploadModal() { document.getElementById('uploadModal').classList.remove('open'); }
@@ -896,15 +927,54 @@ function handleDrop(e) {
         previewFile(input);
     }
 }
+/* ── Targeting state ── */
+let _groupsCache = null;
+
+async function toggleTargeting(val) {
+    document.getElementById('up-group-zone').style.display = val === 'group' ? 'block' : 'none';
+    if (val === 'group' && !_groupsCache) {
+        await loadGroupsForPicker();
+    }
+}
+
+async function loadGroupsForPicker() {
+    const sel = document.getElementById('up-group-select');
+    sel.innerHTML = '<option value="">Loading…</option>';
+    try {
+        const res  = await fetch('api/groups/get-groups.php', { credentials: 'same-origin' });
+        const data = await res.json();
+        _groupsCache = data.groups || [];
+        if (!_groupsCache.length) {
+            sel.innerHTML = '<option value="">No groups found — create one in Manage Groups</option>';
+        } else {
+            sel.innerHTML = '<option value="">Select a group…</option>' +
+                _groupsCache.map(g => `<option value="${g.group_id}">${esc(g.name)}</option>`).join('');
+        }
+    } catch(e) {
+        sel.innerHTML = '<option value="">Failed to load groups</option>';
+    }
+}
+
 async function submitUpload() {
     const title = document.getElementById('up-title').value.trim();
     if (!title) { toast('Title is required.', 'error'); return; }
-    const type = document.getElementById('up-type').value;
-    const btn  = document.getElementById('uploadSubmitBtn');
+    const type       = document.getElementById('up-type').value;
+    const visibility = document.getElementById('up-visibility').value;
+    const btn        = document.getElementById('uploadSubmitBtn');
+
+    if (visibility === 'group' && !document.getElementById('up-group-select').value) {
+        toast('Please select a group.', 'error'); return;
+    }
+
     btn.disabled = true; btn.innerHTML = 'Uploading…';
     try {
         let body;
         let headers = { 'X-CSRF-Token': CSRF_TOKEN };
+
+        const targets = visibility === 'group'
+            ? [{ type: 'group', id: parseInt(document.getElementById('up-group-select').value) }]
+            : [];
+
         if (type === 'file') {
             const file = document.getElementById('up-file').files[0];
             if (!file) { toast('Please select a file.', 'error'); btn.disabled=false; btn.innerHTML='<i class="fa fa-upload"></i> Upload'; return; }
@@ -913,14 +983,16 @@ async function submitUpload() {
             body.append('title', title);
             body.append('description', document.getElementById('up-desc').value.trim());
             body.append('category', document.getElementById('up-category').value);
-            body.append('is_public', document.getElementById('up-visibility').value === 'public' ? 1 : 0);
+            body.append('visibility', visibility);
+            body.append('targets', JSON.stringify(targets));
             body.append('file', file);
         } else {
             const link = document.getElementById('up-link').value.trim();
             if (!link) { toast('Please enter a URL.', 'error'); btn.disabled=false; btn.innerHTML='<i class="fa fa-upload"></i> Upload'; return; }
-            body = JSON.stringify({ action:'upload_link', title, description: document.getElementById('up-desc').value.trim(), category: document.getElementById('up-category').value, is_public: document.getElementById('up-visibility').value==='public'?1:0, external_url: link });
+            body = JSON.stringify({ action: 'upload_link', title, description: document.getElementById('up-desc').value.trim(), category: document.getElementById('up-category').value, visibility, targets, external_url: link });
             headers['Content-Type'] = 'application/json';
         }
+
         const res  = await fetch('api/resources/upload-resource.php', { method:'POST', credentials:'same-origin', headers, body });
         const data = await res.json();
         if (!data.success) throw new Error(data.error || 'Upload failed.');
@@ -947,7 +1019,9 @@ async function openEditModal(id) {
         document.getElementById('edit-title').value      = m.title || '';
         document.getElementById('edit-desc').value       = m.description || '';
         document.getElementById('edit-category').value   = m.category || '';
-        document.getElementById('edit-visibility').value = m.visibility || (m.is_public ? 'public' : 'private');
+        document.getElementById('edit-from').value = m.available_from ? m.available_from.substring(0,10) : '';
+        document.getElementById('edit-visibility').value = m.is_public ? 'public' : 'private';
+        document.getElementById('edit-to').value   = m.available_until ? m.available_until.substring(0,10) : '';
         document.getElementById('editModal').classList.add('open');
     } catch(e) { toast('Error loading resource.', 'error'); }
 }
@@ -964,7 +1038,9 @@ async function submitEdit() {
                 material_id: id, title,
                 description: document.getElementById('edit-desc').value.trim(),
                 category:    document.getElementById('edit-category').value,
-                visibility:  document.getElementById('edit-visibility').value,
+                available_from: document.getElementById('edit-from').value || null,
+                is_public:   document.getElementById('edit-visibility').value === 'public' ? 1 : 0,
+                available_until: document.getElementById('edit-to').value || null,
             }),
         });
         const data = await res.json();
@@ -979,7 +1055,7 @@ async function toggleVisibility(id, newPublic) {
         const res  = await fetch('api/resources/update-resource.php', {
             method: 'POST', credentials: 'same-origin',
             headers: { 'Content-Type':'application/json', 'X-CSRF-Token': CSRF_TOKEN },
-            body: JSON.stringify({ material_id: id, visibility: newPublic ? 'public' : 'private' }),
+            body: JSON.stringify({ material_id: id, is_public: newPublic }),
         });
         const data = await res.json();
         if (!data.success) throw new Error(data.error || 'Failed to update visibility.');

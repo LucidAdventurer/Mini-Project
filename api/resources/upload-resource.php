@@ -77,9 +77,11 @@ if ($isJson) {
     $title              = trim($body['title']            ?? '');
     $description        = trim($body['description']      ?? '');
     $category           = trim($body['category']         ?? '');
-    // Accept both 'visibility' => 'public' and 'is_public' => 1 from JSON callers
-    $isPublic           = (($body['visibility'] ?? '') === 'public' || ($body['is_public'] ?? 0) == 1) ? 1 : 0;
+    $visibilityRaw      = trim($body['visibility']       ?? '');
+    $isPublic           = ($visibilityRaw === 'public' || ($body['is_public'] ?? 0) == 1) ? 1 : 0;
+    $targets            = $body['targets']               ?? [];
     $externalUrl        = trim($body['external_url']     ?? '');
+    $cloudinaryPublicId = trim($body['cloudinary_public_id'] ?? '');
     $uploadedFile       = null;
 } else {
     // FormData (action = upload)
@@ -87,10 +89,11 @@ if ($isJson) {
     $title              = trim($_POST['title']       ?? '');
     $description        = trim($_POST['description'] ?? '');
     $category           = trim($_POST['category']    ?? '');
-    // Frontend sends is_public="1" or is_public="0" (string).
-    // Check visibility first (preferred), then fall back to is_public === "1" strictly.
-    $isPublic           = (($_POST['visibility'] ?? '') === 'public' || ($_POST['is_public'] ?? '') === '1') ? 1 : 0;
+    $visibilityRaw      = trim($_POST['visibility']  ?? '');
+    $isPublic           = ($visibilityRaw === 'public' || ($_POST['is_public'] ?? '') === '1') ? 1 : 0;
+    $targets            = json_decode($_POST['targets'] ?? '[]', true) ?: [];
     $externalUrl        = '';
+    $cloudinaryPublicId = '';
     $uploadedFile       = $_FILES['file'] ?? null;
 }
 
@@ -106,10 +109,11 @@ $validCategories = ['aptitude', 'verbal', 'logical', 'technical', 'general', 'co
 $category = strtolower($category);
 if (!in_array($category, $validCategories, true)) $category = 'general';
 
-$visibility = $isPublic ? 'public' : 'private';
+// Use explicit visibility if valid, else derive from isPublic flag
+$allowedVisibilities = ['public', 'group', 'private'];
+$visibility = in_array($visibilityRaw, $allowedVisibilities, true) ? $visibilityRaw : ($isPublic ? 'public' : 'private');
 $createdBy  = (int) $_SESSION['user_id'];
 
-// These will be set by the upload or link branch below
 $cloudinaryPublicId = null;
 $storedExternalUrl  = null;
 
@@ -189,7 +193,6 @@ if ($action === 'upload' && $uploadedFile) {
     }
 
     $cloudinaryPublicId = $cloudData['public_id'];
-    // external_url stays null for Cloudinary uploads
 
 } elseif ($action === 'upload_link') {
     if ($externalUrl === '') {
@@ -203,8 +206,6 @@ if ($action === 'upload' && $uploadedFile) {
         exit;
     }
     $storedExternalUrl = $externalUrl;
-    // cloudinary_public_id stays null for link uploads
-
 } else {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => 'No file or URL provided.']);
@@ -212,9 +213,8 @@ if ($action === 'upload' && $uploadedFile) {
 }
 
 // ── Insert into materials ─────────────────────────────────────────────────
-// Live schema columns: material_id (auto), title, description, created_by,
-//   visibility, cloudinary_public_id, external_url, category, created_at.
-// FIX: was using undefined $fileUrl — corrected to $storedExternalUrl.
+// Columns: material_id(auto), title, description, created_by, visibility,
+//          cloudinary_public_id, external_url, category
 $ins = safePreparedQuery(
     $conn,
     'INSERT INTO materials
@@ -225,10 +225,10 @@ $ins = safePreparedQuery(
     [
         $title,
         $description,
-        $createdBy,
-        $visibility,
-        $cloudinaryPublicId,   // null for link uploads
-        $storedExternalUrl,    // FIX: was $fileUrl (undefined). null for Cloudinary uploads.
+        $createdBy,           // created_by: user_id of the uploader
+        $visibility,          // visibility: 'public' or 'private'
+        $cloudinaryPublicId ?: null,  // cloudinary_public_id from frontend
+        $fileUrl,             // external_url: Cloudinary URL or external link
         $category,
     ]
 );
@@ -240,6 +240,19 @@ if (!$ins['success']) {
 }
 
 $newId = $ins['insert_id'];
+
+// ── Insert material_targets ───────────────────────────────────────────────
+if (!empty($targets) && is_array($targets) && in_array($visibility, ['group'], true)) {
+    foreach ($targets as $target) {
+        $tType = $target['type'] ?? '';
+        $tId   = (int)($target['id'] ?? 0);
+        if (!in_array($tType, ['group', 'student'], true) || $tId <= 0) continue;
+        safePreparedQuery($conn,
+            'INSERT IGNORE INTO material_targets (material_id, target_type, target_id) VALUES (?, ?, ?)',
+            'isi', [$newId, $tType, $tId]
+        );
+    }
+}
 
 // ── Notify students for public resources ──────────────────────────────────
 if ($visibility === 'public') {
@@ -267,7 +280,7 @@ if ($visibility === 'public') {
                 $params[] = $sid;
                 $params[] = $notifTitle;
                 $params[] = $notifMessage;
-                $params[] = 'material';   // notifications.type enum includes 'material'
+                $params[] = 'material';
                 $params[] = $newId;
             }
             safePreparedQuery(

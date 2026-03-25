@@ -1,12 +1,181 @@
 <!DOCTYPE html>
-<html lang="">
-  <head>
-    <meta charset="utf-8">
-    <title></title>
-  </head>
-  <body>
-    <header></header>
-    <main></main>
-    <footer></footer>
-  </body>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Help & Support</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background: #f5f7fb;
+      color: #333;
+    }
+
+    header {
+      background: #2c3e50;
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+
+    main {
+      max-width: 1000px;
+      margin: auto;
+      padding: 20px;
+    }
+
+    h2 {
+      color: #2c3e50;
+      margin-top: 30px;
+    }
+
+    .card {
+      background: white;
+      padding: 20px;
+      margin-top: 15px;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .faq-item {
+      margin-bottom: 15px;
+    }
+
+    .faq-item strong {
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    input, textarea {
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      font-size: 14px;
+    }
+
+    button {
+      background: #3498db;
+      color: white;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #2980b9;
+    }
+
+    footer {
+      margin-top: 40px;
+      background: #2c3e50;
+      color: white;
+      text-align: center;
+      padding: 15px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+
+<body>
+
+<header>
+  <h1>Help & Support</h1>
+  <p>Find answers or get assistance with the platform</p>
+</header>
+
+<main>
+
+  <!-- Getting Started -->
+  <section class="card">
+    <h2>Getting Started</h2>
+    <p>
+      This platform helps students practice assessments, track performance,
+      and prepare for placements. If you're new:
+    </p>
+    <ul>
+      <li>Create or log into your account</li>
+      <li>Browse available assessments</li>
+      <li>Start a test and track your progress</li>
+      <li>Review analytics and improve weak areas</li>
+    </ul>
+  </section>
+
+  <!-- FAQ -->
+  <section class="card">
+    <h2>Frequently Asked Questions</h2>
+
+    <div class="faq-item">
+      <strong>How do I start an assessment?</strong>
+      <span>Select an assessment and click "Start". Your progress will be saved automatically.</span>
+    </div>
+
+    <div class="faq-item">
+      <strong>Can I resume a test later?</strong>
+      <span>Yes, if the test allows it, you can resume from where you left off.</span>
+    </div>
+
+    <div class="faq-item">
+      <strong>Why are some features not working?</strong>
+      <span>This could be due to browser issues or connectivity. Try refreshing or switching browsers.</span>
+    </div>
+
+    <div class="faq-item">
+      <strong>Is my data secure?</strong>
+      <span>Basic security measures are in place, but always avoid sharing sensitive credentials.</span>
+    </div>
+  </section>
+
+  <!-- Troubleshooting -->
+  <section class="card">
+    <h2>Troubleshooting</h2>
+    <ul>
+      <li>Clear browser cache if pages don’t load correctly</li>
+      <li>Ensure stable internet connection</li>
+      <li>Disable extensions if something breaks</li>
+      <li>Try another browser (Chrome/Firefox recommended)</li>
+    </ul>
+  </section>
+
+  <!-- Contact / Report -->
+  <section class="card">
+    <h2>Contact Support</h2>
+    <p>If you face issues or want to report a bug, use the form below:</p>
+
+    <form onsubmit="handleSubmit(event)">
+      <input type="text" placeholder="Your Name" required>
+      <input type="email" placeholder="Your Email" required>
+      <textarea rows="4" placeholder="Describe your issue..." required></textarea>
+      <button type="submit">Submit</button>
+    </form>
+
+    <p style="margin-top:10px; font-size:14px;">
+      Or report directly via email:
+      <br>
+      <strong>tempminiprojects6@gmail.com</strong>
+    </p>
+  </section>
+
+</main>
+
+<footer>
+  <p>&copy; 2026 Placement & Training Platform</p>
+</footer>
+
+<script>
+  function handleSubmit(event) {
+    event.preventDefault();
+    alert("Your request has been submitted (demo only).");
+  }
+</script>
+
+</body>
 </html>

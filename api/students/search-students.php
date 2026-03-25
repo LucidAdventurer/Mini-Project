@@ -1,25 +1,9 @@
 <?php
-// ============================================================
 // api/students/search-students.php
-//
-// Search students by name, email, or registration number.
-// Used by the assessment targeting UI.
-//
-// GET ?q=<search_term>&limit=20
-// Returns { success: bool, students: [{ user_id, full_name, email, department, registration_number }] }
-// ============================================================
-
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
-
-$conn = createDatabaseConnection();
-if (!$conn) {
-    http_response_code(503);
-    echo json_encode(['success' => false, 'error' => 'Database unavailable.']);
-    exit;
-}
 
 validateSession($conn, 'teacher');
 
