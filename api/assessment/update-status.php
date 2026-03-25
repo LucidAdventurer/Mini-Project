@@ -100,16 +100,18 @@ if (!$result['success']) {
     exit;
 }
 
-// ── Sync assessment_targets ──
-safePreparedQuery($conn,
-    "DELETE FROM assessment_targets WHERE assessment_id = ?",
-    "i", [$assessmentId]
-);
-foreach ($targets as $t) {
+// ── Sync assessment_targets (only when publishing with targets) ──
+if ($status === 'published' && !empty($targets)) {
     safePreparedQuery($conn,
-        "INSERT INTO assessment_targets (assessment_id, target_type, target_id) VALUES (?, ?, ?)",
-        "isi", [$assessmentId, $t['type'], $t['id']]
+        "DELETE FROM assessment_targets WHERE assessment_id = ?",
+        "i", [$assessmentId]
     );
+    foreach ($targets as $t) {
+        safePreparedQuery($conn,
+            "INSERT IGNORE INTO assessment_targets (assessment_id, target_type, target_id) VALUES (?, ?, ?)",
+            "isi", [$assessmentId, $t['type'], $t['id']]
+        );
+    }
 }
 
 // ── Notify assigned students when publishing ──

@@ -122,21 +122,21 @@ $assignedResult = safePreparedQuery($conn,
         (SELECT COUNT(*) FROM assessment_attempts aa
           WHERE aa.assessment_id = a.assessment_id
             AND aa.user_id = ?
-            AND aa.status  = 'submitted') AS attempts_used,
+            AND aa.status  = 'completed') AS attempts_used,
         (SELECT aa2.attempt_id FROM assessment_attempts aa2
           WHERE aa2.assessment_id = a.assessment_id
             AND aa2.user_id = ?
-            AND aa2.status  = 'submitted'
+            AND aa2.status  = 'completed'
           ORDER BY aa2.submitted_at DESC LIMIT 1) AS last_attempt_id,
         (SELECT aa3.percentage FROM assessment_attempts aa3
           WHERE aa3.assessment_id = a.assessment_id
             AND aa3.user_id = ?
-            AND aa3.status  = 'submitted'
+            AND aa3.status  = 'completed'
           ORDER BY aa3.submitted_at DESC LIMIT 1) AS last_score,
         (SELECT aa4.submitted_at FROM assessment_attempts aa4
           WHERE aa4.assessment_id = a.assessment_id
             AND aa4.user_id = ?
-            AND aa4.status  = 'submitted'
+            AND aa4.status  = 'completed'
           ORDER BY aa4.submitted_at DESC LIMIT 1) AS last_submitted_at,
         (SELECT aa5.attempt_id FROM assessment_attempts aa5
           WHERE aa5.assessment_id = a.assessment_id
@@ -149,7 +149,8 @@ $assignedResult = safePreparedQuery($conn,
        AND (a.start_time IS NULL OR a.start_time <= NOW())
        AND (a.end_time   IS NULL OR a.end_time   >= NOW())
        AND (
-           EXISTS (
+           a.visibility = 'public'
+           OR EXISTS (
                SELECT 1 FROM assessment_targets at2
                WHERE at2.assessment_id = a.assessment_id
                  AND at2.target_type = 'student'

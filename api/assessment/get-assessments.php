@@ -2,24 +2,19 @@
 // ============================================================
 // api/assessment/get-assessments.php
 //
-// Returns all active/available assessments for the logged-in student.
-// Split into not_attended and attended (has a submitted attempt).
-//
-// Best attempt stats (correct/wrong/unanswered) are derived on the
-// fly from the answers table — assessment_attempts no longer stores
-// those columns.
-//
-// GET (no body)
-// Returns { success: bool, not_attended: [...], attended: [...] }
+// Aligned to LIVE schema:
+// - status = 'published'
+// - visibility = 'public'|'group'|'private'
+// - start_time / end_time
+// - assessment_targets (target_type: 'student'|'group')
+// - answers.marks_obtained
+// - attempt status 'completed'
 // ============================================================
 
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
-
-$conn = createDatabaseConnection();
-if (!$conn) { http_response_code(503); echo json_encode(['success'=>false,'error'=>'Database unavailable.']); exit; }
 
 $currentUser = validateSession($conn, 'student');
 $studentId   = (int) $currentUser['user_id'];
@@ -32,8 +27,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 
 $now = date('Y-m-d H:i:s');
 
-// ── Fetch assessments accessible to this student ──
-// Accessible = visibility 'public'  OR  student targeted  OR  group targeted
 $result = safePreparedQuery($conn,
     "SELECT
         a.assessment_id,
@@ -53,23 +46,19 @@ $result = safePreparedQuery($conn,
         a.created_at,
         u.full_name AS created_by_name,
 
-        -- Question count
         (SELECT COUNT(*) FROM questions q WHERE q.assessment_id = a.assessment_id) AS question_count,
 
-        -- Attempts used (submitted or timeout)
         (SELECT COUNT(*) FROM assessment_attempts aa
          WHERE aa.assessment_id = a.assessment_id
            AND aa.user_id = ?
-           AND aa.status IN ('submitted', 'timeout')) AS attempts_used,
+           AND aa.status IN ('completed', 'timeout')) AS attempts_used,
 
-        -- Active in-progress attempt (if any)
         (SELECT aa2.attempt_id FROM assessment_attempts aa2
          WHERE aa2.assessment_id = a.assessment_id
            AND aa2.user_id = ?
            AND aa2.status = 'in_progress'
          ORDER BY aa2.created_at DESC LIMIT 1) AS in_progress_attempt_id,
 
-        -- Best submitted attempt
         best.attempt_id     AS best_attempt_id,
         best.score          AS best_score,
         best.percentage     AS best_percentage,
@@ -89,13 +78,13 @@ $result = safePreparedQuery($conn,
              aa.attempt_number
          FROM assessment_attempts aa
          WHERE aa.user_id = ?
-           AND aa.status  = 'submitted'
+           AND aa.status  = 'completed'
            AND aa.percentage = (
                SELECT MAX(aa2.percentage)
                FROM assessment_attempts aa2
                WHERE aa2.assessment_id = aa.assessment_id
                  AND aa2.user_id       = aa.user_id
-                 AND aa2.status        = 'submitted'
+                 AND aa2.status        = 'completed'
            )
          GROUP BY aa.assessment_id
      ) best ON best.assessment_id = a.assessment_id
@@ -120,7 +109,7 @@ $result = safePreparedQuery($conn,
            )
        )
      ORDER BY a.created_at DESC",
-    "iiiissii",
+    "iiissii",
     [$studentId, $studentId, $studentId, $now, $now, $studentId, $studentId]
 );
 
@@ -165,12 +154,11 @@ if ($result['result']) {
             $passingMarks  = (int)$row['passing_marks'];
             $bestPct       = (float)$row['best_percentage'];
 
-            // Derive correct/wrong/unanswered counts from answers table
             $statsResult = safePreparedQuery($conn,
                 "SELECT
-                    COUNT(ans.answer_id)                                          AS total_answered,
-                    SUM(CASE WHEN ans.marks_awarded > 0 THEN 1 ELSE 0 END)       AS correct_count,
-                    SUM(CASE WHEN ans.marks_awarded < 0 THEN 1 ELSE 0 END)       AS wrong_count,
+                    COUNT(ans.answer_id)                                         AS total_answered,
+                    SUM(CASE WHEN ans.marks_obtained > 0 THEN 1 ELSE 0 END)     AS correct_count,
+                    SUM(CASE WHEN ans.marks_obtained < 0 THEN 1 ELSE 0 END)     AS wrong_count,
                     (SELECT COUNT(*) FROM questions qq
                      WHERE qq.assessment_id = ?) AS total_questions
                  FROM answers ans
@@ -202,7 +190,7 @@ if ($result['result']) {
                 'unanswered'     => $unanswered,
                 'submitted_at'   => $row['best_submitted_at'],
                 'attempt_number' => (int)$row['best_attempt_number'],
-                'passed'         => $totalMarks > 0
+                'passed'         => $totalMarks > 0 && $passingMarks > 0
                     ? ($bestPct >= ($passingMarks / $totalMarks * 100))
                     : false,
             ];

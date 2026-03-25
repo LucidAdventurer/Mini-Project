@@ -2,14 +2,16 @@
 // ============================================================
 // api/assessment/update.php
 //
-// Saves edits to an existing assessment owned by the logged-in teacher.
+// Saves edits for an existing assessment owned by the teacher.
 //
 // POST JSON {
-//   assessment_id, title, description, category, difficulty,
-//   duration_minutes, total_marks, passing_marks, max_attempts,
-//   start_time?, end_time?, randomize_questions?, randomize_options?,
-//   visibility?: 'public'|'private',
-//   status?: 'draft'|'active'|'archived'
+//   assessment_id, title, description, instructions,
+//   category, difficulty, duration_minutes, total_marks,
+//   passing_marks, max_attempts, start_time, end_time,
+//   randomize_questions, randomize_options,
+//   visibility: 'public'|'private',
+//   targets: [{ type: 'group'|'student', id: int }],
+//   status: 'draft'|'active'
 // }
 // Returns { success: bool, error?: string }
 // ============================================================
@@ -91,8 +93,9 @@ if ($passingMarks < 0 || $passingMarks > $totalMarks) {
 }
 
 // ── Optional fields ──
-$description = trim($body['description'] ?? '');
-$maxAttempts = max(1, (int)($body['max_attempts'] ?? 1));
+$description  = trim($body['description']  ?? '');
+$instructions = trim($body['instructions'] ?? '');
+$maxAttempts  = max(1, (int)($body['max_attempts'] ?? 1));
 
 // ── Datetime fields ──
 $startTime = null;
@@ -123,9 +126,9 @@ if (!in_array($visibility, ['public', 'private'], true)) {
     $visibility = 'private';
 }
 
-// ── Targets (for private assessments) ──
+// ── Targets ──
 $targets = [];
-if (isset($body['targets']) && is_array($body['targets'])) {
+if (!empty($body['targets']) && is_array($body['targets'])) {
     foreach ($body['targets'] as $t) {
         $ttype = trim($t['type'] ?? '');
         $tid   = (int)($t['id'] ?? 0);
@@ -135,13 +138,12 @@ if (isset($body['targets']) && is_array($body['targets'])) {
     }
 }
 
-// ── Status — DB enum uses 'published' not 'active' ──
+// ── Status — map 'active' → 'published' to match DB enum ──
 $status = trim($body['status'] ?? 'draft');
-if (!in_array($status, ['draft', 'active', 'archived'], true)) {
+if ($status === 'active') $status = 'published';
+if (!in_array($status, ['draft', 'published', 'archived', 'scheduled'], true)) {
     $status = 'draft';
 }
-// Translate JS-side 'active' to DB-side 'published'
-if ($status === 'active') $status = 'published';
 
 // ── Verify ownership ──
 $check = safePreparedQuery($conn,
@@ -154,11 +156,14 @@ if (!$check['success'] || !$check['result'] || $check['result']->num_rows === 0)
     echo json_encode(['success' => false, 'error' => 'Assessment not found or access denied.']);
     exit;
 }
-// ── Update ──
+$check['result']->free();
+
+// ── Update assessments row ──
 $result = safePreparedQuery($conn,
     "UPDATE assessments SET
         title               = ?,
         description         = ?,
+        instructions        = ?,
         category            = ?,
         difficulty          = ?,
         duration_minutes    = ?,
@@ -173,9 +178,10 @@ $result = safePreparedQuery($conn,
         status              = ?,
         updated_at          = NOW()
      WHERE assessment_id = ? AND created_by = ?",
-    "ssssiiiissiissii",
+    "sssssiiissiissii",
     [
-        $title, $description, $category, $difficulty,
+        $title, $description, $instructions,
+        $category, $difficulty,
         $duration, $totalMarks, $passingMarks, $maxAttempts,
         $startTime, $endTime,
         $randomizeQuestions, $randomizeOptions,
@@ -184,21 +190,27 @@ $result = safePreparedQuery($conn,
     ]
 );
 
-if ($result['success'] && $result['affected_rows'] >= 0) {
-    // Sync assessment_targets: delete existing, re-insert
-    safePreparedQuery($conn,
-        "DELETE FROM assessment_targets WHERE assessment_id = ?",
-        "i", [$assessmentId]
-    );
+if (!$result['success'] || $result['affected_rows'] < 0) {
+    error_log("update assessment failed for assessment_id=$assessmentId teacher_id=$teacherId");
+    http_response_code(500);
+    echo json_encode(['success' => false, 'error' => 'Update failed. Please try again.']);
+    exit;
+}
+
+// ── Sync assessment_targets ──
+// Delete old targets then re-insert current ones
+safePreparedQuery($conn,
+    "DELETE FROM assessment_targets WHERE assessment_id = ?",
+    "i", [$assessmentId]
+);
+
+if ($visibility === 'private' && !empty($targets)) {
     foreach ($targets as $t) {
         safePreparedQuery($conn,
-            "INSERT INTO assessment_targets (assessment_id, target_type, target_id) VALUES (?, ?, ?)",
+            "INSERT IGNORE INTO assessment_targets (assessment_id, target_type, target_id) VALUES (?, ?, ?)",
             "isi", [$assessmentId, $t['type'], $t['id']]
         );
     }
-
-    echo json_encode(['success' => true]);
-} else {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Update failed. Please try again.']);
 }
+
+echo json_encode(['success' => true]);
