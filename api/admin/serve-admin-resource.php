@@ -65,8 +65,10 @@ if (in_array($ext, $videoExts, true))       $resourceType = 'video';
 elseif (in_array($ext, $imageExts, true))   $resourceType = 'image';
 else                                         $resourceType = 'raw';
 
-// Signed URL if credentials available
-if (defined('CLOUDINARY_API_KEY') && defined('CLOUDINARY_API_SECRET')) {
+// Signed URL if credentials available (must use !empty, not defined —
+// config.php defines these as '' when not set, which would produce an
+// invalid signature and a 401 from Cloudinary)
+if (!empty(CLOUDINARY_API_KEY) && !empty(CLOUDINARY_API_SECRET)) {
     $timestamp  = time();
     $expiresAt  = $timestamp + 300;
     $attachment = $action === 'download' ? 'true' : 'false';

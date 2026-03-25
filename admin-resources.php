@@ -78,7 +78,16 @@ require_once __DIR__ . '/admin-head.php';
 <script>
 const CLOUDINARY_CLOUD='dmysg5azm', CLOUDINARY_PRESET='ptauploads';
 
+// ── Override API routes for this page ────────────────────────────────────
+// The shared API object (from admin-footer) points getResources at
+// get-resources.php which reads the materials table (teacher content).
+// Admin resources live in the resources table — override before use.
 document.addEventListener('DOMContentLoaded', async () => {
+    if (typeof API !== 'undefined') {
+        API.getResources   = `${_base}api/admin/get-admin-resources.php`;
+        API.uploadResource = `${_base}api/admin/upload-admin-resource.php`;
+        API.deleteResource = `${_base}api/admin/delete-admin-resource.php`;
+    }
     await fetchCsrf();
     loadResources();
 });
@@ -110,7 +119,10 @@ function renderResources(d, grid) {
     const typeIcon = {pdf:'📄',video:'🎬',image:'🖼️',doc:'📝',link:'🔗'};
     const typeBg   = {pdf:'rgba(59,130,246,0.12)',video:'rgba(234,179,8,0.12)',image:'rgba(236,72,153,0.12)',doc:'rgba(107,114,128,0.12)',link:'rgba(234,179,8,0.12)'};
     let html = d.materials.map(m => {
-        const rid=m.material_id, hasFile=!!m.cloudinary_public_id, ftype=getFileType(m);
+        // Use resource_id (resources table PK). get-admin-resources.php
+        // aliases resource_id → material_id for compat, so both exist;
+        // prefer resource_id explicitly to avoid any future confusion.
+        const rid=m.resource_id||m.material_id, hasFile=!!m.cloudinary_public_id, ftype=getFileType(m);
         const serveBase=`${_base}api/admin/serve-admin-resource.php?resource_id=${rid}`;
         const viewUrl=hasFile?`${serveBase}&action=view`:m.external_url;
         const dlUrl  =hasFile?`${serveBase}&action=download`:m.external_url||null;

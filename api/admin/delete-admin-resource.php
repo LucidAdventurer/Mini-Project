@@ -3,9 +3,13 @@
 // api/admin/delete-admin-resource.php
 //
 // Deletes a row from the `resources` table.
-// Returns cloudinary_public_id so caller can purge from Cloudinary.
+// Admin only. Validates CSRF.
 //
 // POST JSON { resource_id: int }
+//
+// Response: { success: bool, cloudinary_public_id: string|null }
+// The JS caller is responsible for any Cloudinary asset cleanup
+// using the returned public_id.
 // ============================================================
 
 require_once __DIR__ . '/../../config.php';
@@ -13,13 +17,16 @@ require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
-validateSession($conn, 'admin');
+$admin   = validateSession($conn, 'admin');
+$adminId = (int)$admin['user_id'];
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['success' => false, 'error' => 'Method not allowed.']);
     exit;
 }
+
+validateCsrfToken();
 
 $body       = json_decode(file_get_contents('php://input'), true);
 $resourceId = (int)($body['resource_id'] ?? 0);
@@ -30,7 +37,9 @@ if ($resourceId <= 0) {
     exit;
 }
 
-$fetch = safePreparedQuery($conn,
+// ── Fetch first to get cloudinary_public_id for caller cleanup ────────────
+$fetch = safePreparedQuery(
+    $conn,
     'SELECT resource_id, cloudinary_public_id FROM resources WHERE resource_id = ?',
     'i', [$resourceId]
 );
@@ -45,14 +54,16 @@ $row = $fetch['result']->fetch_assoc();
 $fetch['result']->free();
 $cloudinaryPublicId = $row['cloudinary_public_id'] ?: null;
 
-$del = safePreparedQuery($conn,
+// ── Delete ────────────────────────────────────────────────────────────────
+$del = safePreparedQuery(
+    $conn,
     'DELETE FROM resources WHERE resource_id = ?',
     'i', [$resourceId]
 );
 
-if (!$del['success']) {
+if (!$del['success'] || $del['affected_rows'] === 0) {
     http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Delete failed.']);
+    echo json_encode(['success' => false, 'error' => 'Failed to delete resource.']);
     exit;
 }
 
