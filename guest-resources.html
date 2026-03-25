@@ -458,11 +458,11 @@
         const params = new URLSearchParams({ limit: 50 });
         if (cat !== 'all') params.set('category', cat);
 
-        const r = await fetch(_base + 'api/resources/get-resources.php?' + params);
+        const r = await fetch(_base + 'api/guest/get-guest-resources.php?' + params);
         const d = await r.json();
         if (!d.success) throw new Error('API error');
 
-        allLoaded[cat] = d.materials || [];
+        allLoaded[cat] = d.resources || [];
         return allLoaded[cat];
     }
 
@@ -484,13 +484,30 @@
 
     // ── Render ───────────────────────────────────────────────────────────────
     function renderCard(m, idx) {
-        const icon   = typeIcon[m.material_type]  || '📦';
-        const tcls   = typeClass[m.material_type] || 'rtype-pdf';
-        const url    = m.external_url || '#';
-        const target = url !== '#' ? 'target="_blank" rel="noopener"' : '';
+        const rtype  = m.resource_type || 'link';
+        const icon   = typeIcon[rtype]  || '📦';
+        const tcls   = typeClass[rtype] || 'rtype-pdf';
         const desc   = m.description ? esc(m.description) : '<em style="color:var(--ink-faint)">No description</em>';
         const size   = m.file_size   ? `<span class="resource-size">${(m.file_size/(1024*1024)).toFixed(1)} MB</span>` : '';
         const delay  = Math.min(idx * 0.04, 0.4);
+
+        // Determine the open URL:
+        // - Cloudinary-stored files → serve-resource.php (handles signed URL / proxy)
+        // - external_url / file_path → open directly
+        let url, target;
+        if (m.cloudinary_public_id) {
+            url    = _base + 'api/resources/serve-resource.php?resource_id=' + m.resource_id + '&action=view';
+            target = 'target="_blank" rel="noopener"';
+        } else if (m.external_url) {
+            url    = esc(m.external_url);
+            target = 'target="_blank" rel="noopener"';
+        } else if (m.file_path) {
+            url    = esc(_base + m.file_path);
+            target = 'target="_blank" rel="noopener"';
+        } else {
+            url    = '#';
+            target = '';
+        }
 
         return `<div class="resource-card" style="animation-delay:${delay}s">
             <div class="resource-card-head">
@@ -500,11 +517,11 @@
             <div class="resource-card-desc">${desc}</div>
             <div class="resource-card-foot">
                 <div class="resource-badges">
-                    <span class="resource-type-badge">${esc(m.material_type || '')}</span>
+                    <span class="resource-type-badge">${esc(rtype)}</span>
                     ${m.category ? `<span class="resource-cat-badge">${esc(m.category)}</span>` : ''}
                     ${size}
                 </div>
-                <a class="resource-open-btn" href="${esc(url)}" ${target}>
+                <a class="resource-open-btn" href="${url}" ${target}>
                     Open
                     <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                 </a>

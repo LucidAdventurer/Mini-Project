@@ -3,9 +3,14 @@
 // api/resources/serve-resource.php
 //
 // Serves a Cloudinary-stored file or redirects to an external URL.
-// Works for logged-in users AND guests (public materials only).
+// Works for logged-in users AND guests (public items only).
+//
+// Handles two sources:
+//   ?material_id=int  — materials table (teacher/admin learning materials)
+//   ?resource_id=int  — resources table (public resource library)
 //
 // GET ?material_id=int&action=view|download
+// GET ?resource_id=int&action=view|download
 // ============================================================
 
 require_once __DIR__ . '/../../config.php';
@@ -18,58 +23,124 @@ $userId      = $sessionUid > 0 ? $sessionUid : null;
 $role        = $sessionUid > 0 ? $sessionRole : 'guest';
 $isGuest     = $userId === null;
 
+$action = in_array($_GET['action'] ?? '', ['view', 'download'], true) ? $_GET['action'] : 'view';
+
+// ── Determine source: resources table or materials table ──────────────────
+$resourceId = (int)($_GET['resource_id'] ?? 0);
 $materialId = (int)($_GET['material_id'] ?? 0);
-$action     = in_array($_GET['action'] ?? '', ['view', 'download'], true) ? $_GET['action'] : 'view';
 
-if ($materialId <= 0) {
+if ($resourceId <= 0 && $materialId <= 0) {
     http_response_code(400);
-    echo 'Invalid material ID.';
+    echo 'Invalid resource or material ID.';
     exit;
 }
 
-// ── Dismiss notification for students ────────────────────────────────────
-if ($userId && $role === 'student') {
-    safePreparedQuery($conn,
-        "DELETE FROM notifications WHERE user_id = ? AND type = 'material' AND related_entity_id = ?",
-        "ii", [$userId, $materialId]
+// ── Fetch from the correct table ──────────────────────────────────────────
+if ($resourceId > 0) {
+    // ── resources table (public library) ─────────────────────────────────
+    $r = safePreparedQuery($conn,
+        "SELECT resource_id AS id, title, cloudinary_public_id, external_url,
+                file_path, is_public
+         FROM resources WHERE resource_id = ?",
+        'i', [$resourceId]
     );
+
+    if (!$r['success'] || !$r['result'] || $r['result']->num_rows === 0) {
+        http_response_code(404);
+        echo 'Resource not found.';
+        exit;
+    }
+
+    $item = $r['result']->fetch_assoc();
+    $r['result']->free();
+
+    // Guests and students may only access public resources
+    if (!$item['is_public'] && ($isGuest || $role === 'student')) {
+        http_response_code(403);
+        echo 'Access denied.';
+        exit;
+    }
+
+    $title              = $item['title'];
+    $externalUrl        = $item['external_url']         ?? '';
+    $cloudinaryPublicId = $item['cloudinary_public_id'] ?? '';
+    $filePath           = $item['file_path']            ?? '';
+
+} else {
+    // ── materials table (teacher/admin materials) ─────────────────────────
+    // Dismiss notification for students
+    if ($userId && $role === 'student') {
+        safePreparedQuery($conn,
+            "DELETE FROM notifications WHERE user_id = ? AND type = 'material' AND related_entity_id = ?",
+            "ii", [$userId, $materialId]
+        );
+    }
+
+    $r = safePreparedQuery($conn,
+        "SELECT material_id AS id, title, cloudinary_public_id, external_url,
+                NULL AS file_path,
+                (visibility = 'public') AS is_public
+         FROM materials WHERE material_id = ?",
+        'i', [$materialId]
+    );
+
+    if (!$r['success'] || !$r['result'] || $r['result']->num_rows === 0) {
+        http_response_code(404);
+        echo 'Material not found.';
+        exit;
+    }
+
+    $item = $r['result']->fetch_assoc();
+    $r['result']->free();
+
+    if ($isGuest && !$item['is_public']) {
+        http_response_code(403);
+        echo 'Access denied.';
+        exit;
+    }
+    if ($role === 'student' && !$item['is_public']) {
+        http_response_code(403);
+        echo 'Access denied.';
+        exit;
+    }
+
+    $title              = $item['title'];
+    $externalUrl        = $item['external_url']         ?? '';
+    $cloudinaryPublicId = $item['cloudinary_public_id'] ?? '';
+    $filePath           = '';
 }
 
-// ── Fetch material ────────────────────────────────────────────────────────
-$r = safePreparedQuery($conn,
-    "SELECT material_id, title, cloudinary_public_id, external_url,
-            (visibility = 'public') AS is_public
-     FROM materials WHERE material_id = ?",
-    'i', [$materialId]
-);
+// ── Case 1: file_path (resources table legacy local file) ────────────────
+if ($filePath !== '') {
+    $localPath = __DIR__ . '/../../' . $filePath;
+    if (file_exists($localPath)) {
+        $ext      = strtolower(pathinfo($localPath, PATHINFO_EXTENSION));
+        $mimeMap  = [
+            'pdf'  => 'application/pdf',
+            'mp4'  => 'video/mp4', 'webm' => 'video/webm',
+            'jpg'  => 'image/jpeg', 'jpeg' => 'image/jpeg',
+            'png'  => 'image/png',  'gif'  => 'image/gif',
+            'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'doc'  => 'application/msword',
+        ];
+        $mimeType = $mimeMap[$ext] ?? mime_content_type($localPath) ?? 'application/octet-stream';
+        $safeName = preg_replace('/[^a-zA-Z0-9_\-.]/', '_', $title) . '.' . $ext;
 
-if (!$r['success'] || !$r['result'] || $r['result']->num_rows === 0) {
-    http_response_code(404);
-    echo 'Material not found.';
-    exit;
+        header('Content-Type: ' . $mimeType);
+        header('Content-Length: ' . filesize($localPath));
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: no-store');
+        header($action === 'download'
+            ? 'Content-Disposition: attachment; filename="' . $safeName . '"'
+            : 'Content-Disposition: inline; filename="' . $safeName . '"');
+        readfile($localPath);
+        exit;
+    }
 }
 
-$material = $r['result']->fetch_assoc();
-$r['result']->free();
-
-// ── Access control ────────────────────────────────────────────────────────
-if ($isGuest && !$material['is_public']) {
-    http_response_code(403);
-    echo 'Access denied.';
-    exit;
-}
-if ($role === 'student' && !$material['is_public']) {
-    http_response_code(403);
-    echo 'Access denied.';
-    exit;
-}
-
-$externalUrl        = $material['external_url']         ?? '';
-$cloudinaryPublicId = $material['cloudinary_public_id'] ?? '';
-
-// ── Case 1: External URL (link-type resource) ─────────────────────────────
+// ── Case 2: External URL (link-type resource) ─────────────────────────────
 if ($externalUrl !== '') {
-    // Check if it's a legacy local file path
+    // Check if it's a legacy local file path stored as a URL
     $localPath = __DIR__ . '/../../' . $externalUrl;
     if (file_exists($localPath)) {
         $ext      = strtolower(pathinfo($localPath, PATHINFO_EXTENSION));
@@ -82,7 +153,7 @@ if ($externalUrl !== '') {
             'doc'  => 'application/msword',
         ];
         $mimeType = $mimeMap[$ext] ?? mime_content_type($localPath) ?? 'application/octet-stream';
-        $safeName = preg_replace('/[^a-zA-Z0-9_\-.]/', '_', $material['title']) . '.' . $ext;
+        $safeName = preg_replace('/[^a-zA-Z0-9_\-.]/', '_', $title) . '.' . $ext;
 
         header('Content-Type: ' . $mimeType);
         header('Content-Length: ' . filesize($localPath));
@@ -95,7 +166,7 @@ if ($externalUrl !== '') {
         exit;
     }
 
-    // External URL — redirect directly
+    // True external URL — redirect directly
     if (filter_var($externalUrl, FILTER_VALIDATE_URL)) {
         header('Location: ' . $externalUrl);
         exit;
@@ -176,7 +247,7 @@ if ($cloudinaryPublicId !== '') {
     if ($httpCode === 200 && $fileData) {
         $mimeMap  = ['pdf' => 'application/pdf', 'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'doc' => 'application/msword'];
         $mimeType = $mimeMap[$ext] ?? 'application/octet-stream';
-        $safeName = preg_replace('/[^a-zA-Z0-9_\-.]/', '_', $material['title']) . ($ext ? '.' . $ext : '');
+        $safeName = preg_replace('/[^a-zA-Z0-9_\-.]/', '_', $title) . ($ext ? '.' . $ext : '');
 
         header('Content-Type: ' . $mimeType);
         header('Content-Length: ' . strlen($fileData));
