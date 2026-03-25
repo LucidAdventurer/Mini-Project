@@ -145,6 +145,33 @@ if ($rs['success'] && $rs['result']) {
     $rs['result']->free();
 }
 
+// ── Load teacher's groups ──
+$teacherGroups = [];
+$rg = safePreparedQuery($conn,
+    "SELECT g.group_id, g.name, COUNT(gm.student_id) AS member_count
+     FROM groups g
+     LEFT JOIN group_members gm ON gm.group_id = g.group_id
+     WHERE g.teacher_id = ?
+     GROUP BY g.group_id ORDER BY g.name ASC",
+    "i", [$teacherId]
+);
+if ($rg['success'] && $rg['result']) {
+    while ($row = $rg['result']->fetch_assoc()) $teacherGroups[] = $row;
+    $rg['result']->free();
+}
+
+// ── Load existing targets ──
+$existingTargets = [];
+$rt = safePreparedQuery($conn,
+    "SELECT target_type, target_id FROM assessment_targets WHERE assessment_id = ?",
+    "i", [$assessmentId]
+);
+if ($rt['success'] && $rt['result']) {
+    while ($row = $rt['result']->fetch_assoc())
+        $existingTargets[] = ['type' => $row['target_type'], 'id' => (int)$row['target_id']];
+    $rt['result']->free();
+}
+
 function jsStr(string $s): string {
     return addslashes(htmlspecialchars($s, ENT_QUOTES, 'UTF-8'));
 }
@@ -793,6 +820,42 @@ function fmtDate(?string $dt): string {
         @media (max-width: 400px) {
             .stats-grid { grid-template-columns: 1fr; }
         }
+
+        /* ── TARGETING ── */
+        .target-tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+        .target-tab {
+            padding: 6px 14px; background: var(--surface);
+            border: 1px solid var(--border-2); border-radius: 40px;
+            font-family: var(--font-body); font-size: 12.5px; font-weight: 600;
+            cursor: pointer; transition: var(--t); color: var(--text-3);
+        }
+        .target-tab:hover { border-color: var(--violet); color: var(--violet); }
+        .target-tab.active { background: var(--violet); border-color: var(--violet); color: white; }
+        .group-picker { display: flex; flex-direction: column; gap: 8px; }
+        .group-pick-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 14px; background: var(--surface);
+            border: 1px solid var(--border); border-radius: var(--r-sm);
+            cursor: pointer; transition: var(--t);
+        }
+        .group-pick-item:has(input:checked) { border-color: var(--violet); background: var(--violet-dim); }
+        .group-pick-name { flex: 1; font-size: 13.5px; font-weight: 500; color: var(--text-1); }
+        .group-pick-count { font-size: 11.5px; color: var(--text-3); }
+        .student-chip {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 4px 10px; background: var(--violet-dim);
+            border: 1px solid rgba(124,58,237,0.25); border-radius: 40px;
+            font-size: 12.5px; font-weight: 500; color: var(--violet);
+        }
+        .student-chip button { background: none; border: none; cursor: pointer; color: inherit; font-size: 14px; line-height: 1; padding: 0; }
+        .student-result-item {
+            padding: 10px 14px; cursor: pointer; transition: var(--t);
+            border-bottom: 1px solid var(--border);
+        }
+        .student-result-item:hover { background: var(--violet-dim); }
+        .student-result-item:last-child { border-bottom: none; }
+        .student-result-name { font-size: 13.5px; font-weight: 500; color: var(--text-1); }
+        .student-result-meta { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
     </style>
 </head>
 <body>
@@ -1004,9 +1067,81 @@ function fmtDate(?string $dt): string {
                     </label>
                     <label class="checkbox-label">
                         <input type="checkbox" id="isPublic"
-                               <?= $assessment['visibility'] === 'public' ? 'checked' : '' ?>>
-                        Public (guest access)
+                               <?= $assessment['visibility'] === 'public' ? 'checked' : '' ?>
+                               onchange="toggleGroupPicker()">
+                        Public (allow guest access)
                     </label>
+                </div>
+            </div>
+
+            <!-- Group / Student Targeting -->
+            <div class="form-group" id="targetingBlock" style="<?= $assessment['visibility'] === 'public' ? 'display:none' : '' ?>">
+                <label class="form-label">Restrict Access To</label>
+                <p style="font-size:13px;color:var(--text-3);margin:0 0 10px;">
+                    Choose groups or individual students. Leave both empty for private (no access).
+                </p>
+
+                <div class="target-tabs">
+                    <button type="button" class="target-tab active" onclick="switchTargetTab('groups',this)">👥 Groups</button>
+                    <button type="button" class="target-tab" onclick="switchTargetTab('students',this)">🎓 Students</button>
+                </div>
+
+                <!-- Groups tab -->
+                <div id="targetTabGroups">
+                    <?php if (empty($teacherGroups)): ?>
+                        <p style="font-size:13px;color:var(--gold);padding:10px 0;">⚠ You have no groups yet. <a href="manage-groups.php" style="color:var(--violet);">Create a group</a> first.</p>
+                    <?php else: ?>
+                    <div class="group-picker" id="groupPicker">
+                        <?php foreach ($teacherGroups as $g): ?>
+                        <label class="group-pick-item">
+                            <input type="checkbox" class="group-pick-cb"
+                                   value="<?= $g['group_id'] ?>"
+                                   <?php
+                                   foreach ($existingTargets as $t) {
+                                       if ($t['type'] === 'group' && $t['id'] === (int)$g['group_id']) {
+                                           echo 'checked'; break;
+                                       }
+                                   }
+                                   ?>>
+                            <span class="group-pick-name"><?= htmlspecialchars($g['name']) ?></span>
+                            <span class="group-pick-count"><?= (int)$g['member_count'] ?> student<?= $g['member_count'] != 1 ? 's' : '' ?></span>
+                        </label>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Students tab -->
+                <div id="targetTabStudents" style="display:none;">
+                    <div style="position:relative;margin-bottom:10px;">
+                        <input type="text" id="studentSearchInput" class="form-input"
+                               placeholder="Search by name, email or reg. number…"
+                               oninput="debounceStudentSearch(this.value)">
+                        <div id="studentSearchResults" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface-3);border:1.5px solid var(--border);border-radius:8px;box-shadow:var(--shadow-md);z-index:50;max-height:220px;overflow-y:auto;"></div>
+                    </div>
+                    <div id="selectedStudentsChips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:32px;">
+                        <?php foreach ($existingTargets as $t): ?>
+                        <?php if ($t['type'] === 'student'): ?>
+                        <?php
+                            $rs2 = safePreparedQuery($conn,
+                                "SELECT user_id, full_name FROM users WHERE user_id = ?",
+                                "i", [$t['id']]);
+                            $su = null;
+                            if ($rs2['success'] && $rs2['result']) {
+                                $su = $rs2['result']->fetch_assoc();
+                                $rs2['result']->free();
+                            }
+                        ?>
+                        <?php if ($su): ?>
+                        <span class="student-chip" data-id="<?= $su['user_id'] ?>">
+                            <?= htmlspecialchars($su['full_name']) ?>
+                            <button type="button" onclick="removeStudentChip(<?= $su['user_id'] ?>)">&times;</button>
+                        </span>
+                        <input type="hidden" class="student-pick-hidden" value="<?= $su['user_id'] ?>">
+                        <?php endif; ?>
+                        <?php endif; ?>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1390,10 +1525,10 @@ document.getElementById('confirmModal').addEventListener('click', function(e) {
 function toggleStatus() {
     const toggle    = document.getElementById('statusToggle');
     const isActive  = toggle.classList.contains('active');
-    const newStatus = isActive ? 'draft' : 'active';
+    const newStatus = isActive ? 'draft' : 'published';
 
     openConfirmModal(
-        isActive ? 'Set to Draft?' : 'Set to Active?',
+        isActive ? 'Set to Draft?' : 'Publish Assessment?',
         isActive
             ? 'Students will no longer be able to take this assessment.'
             : 'Students will be able to take this assessment immediately.',
@@ -1412,8 +1547,8 @@ function toggleStatus() {
                 if (data.success) {
                     toggle.classList.toggle('active');
                     const badge = document.getElementById('statusBadge');
-                    badge.className = 'meta-badge ' + newStatus;
-                    badge.innerHTML = '<span class="badge-dot"></span> ' + newStatus.charAt(0).toUpperCase() + newStatus.slice(1);
+                    badge.className = 'meta-badge ' + (newStatus === 'published' ? 'active' : newStatus);
+                    badge.innerHTML = '<span class="badge-dot"></span> ' + (newStatus === 'published' ? 'Published' : 'Draft');
                     showToast('Status updated to ' + newStatus);
                 } else {
                     showToast(data.error || 'Failed to update status.', 'error');
@@ -1424,7 +1559,7 @@ function toggleStatus() {
                 hideLoading();
             }
         },
-        isActive ? 'Set Draft' : 'Set Active',
+        isActive ? 'Set Draft' : 'Publish',
         false
     );
 }
@@ -1454,6 +1589,12 @@ async function saveAll() {
     btn.disabled = true;
     showLoading('Saving changes…');
 
+    const isPublicChecked = document.getElementById('isPublic').checked;
+    const targets         = isPublicChecked ? [] : collectTargets();
+    const visibilityVal   = isPublicChecked ? 'public'
+                          : targets.length  ? 'group'
+                          : 'private';
+
     const payload = {
         assessment_id       : ASSESSMENT_ID,
         title,
@@ -1468,7 +1609,8 @@ async function saveAll() {
         end_time            : document.getElementById('endTime').value || null,
         randomize_questions : document.getElementById('randomizeQuestions').checked ? 1 : 0,
         randomize_options   : document.getElementById('randomizeOptions').checked ? 1 : 0,
-        visibility          : document.getElementById('isPublic').checked ? 'public' : 'private',
+        visibility          : visibilityVal,
+        targets             : targets,
     };
 
     try {
@@ -1800,6 +1942,105 @@ async function doDeleteAssessment() {
         hideLoading();
         showToast('Network error. Please try again.', 'error');
     }
+}
+
+// ── Targeting helpers ──
+function toggleGroupPicker() {
+    const isPublic = document.getElementById('isPublic').checked;
+    const block    = document.getElementById('targetingBlock');
+    if (block) block.style.display = isPublic ? 'none' : '';
+}
+
+function switchTargetTab(tab, btn) {
+    document.querySelectorAll('.target-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('targetTabGroups').style.display   = tab === 'groups'   ? '' : 'none';
+    document.getElementById('targetTabStudents').style.display = tab === 'students' ? '' : 'none';
+}
+
+function collectTargets() {
+    const targets = [];
+    document.querySelectorAll('.group-pick-cb:checked').forEach(cb => {
+        targets.push({ type: 'group', id: parseInt(cb.value) });
+    });
+    document.querySelectorAll('.student-pick-hidden').forEach(inp => {
+        targets.push({ type: 'student', id: parseInt(inp.value) });
+    });
+    return targets;
+}
+
+let _studentSearchTimer = null;
+function debounceStudentSearch(val) {
+    clearTimeout(_studentSearchTimer);
+    if (val.length < 2) { closeStudentResults(); return; }
+    _studentSearchTimer = setTimeout(() => searchStudents(val), 300);
+}
+
+async function searchStudents(q) {
+    try {
+        const token = await getCsrfToken();
+        const res   = await fetch('api/students/search-students.php?q=' + encodeURIComponent(q), {
+            credentials: 'same-origin',
+            headers: { 'X-CSRF-Token': token },
+        });
+        const data = await res.json();
+        if (!data.success) return;
+        const box = document.getElementById('studentSearchResults');
+        if (!data.students.length) {
+            box.innerHTML = '<div class="student-result-item" style="color:#6b7280;">No students found.</div>';
+        } else {
+            box.innerHTML = data.students.map(s => {
+                if (document.querySelector(`.student-pick-hidden[value="${s.user_id}"]`)) return '';
+                const meta = [s.registration_number, s.department].filter(Boolean).join(' · ');
+                return `<div class="student-result-item" onclick="addStudentTarget(${s.user_id}, ${JSON.stringify(s.full_name)})">
+                    <div class="student-result-name">${escHtml(s.full_name)}</div>
+                    <div class="student-result-meta">${escHtml(s.email)}${meta ? ' · ' + escHtml(meta) : ''}</div>
+                </div>`;
+            }).join('');
+        }
+        box.style.display = 'block';
+        document.addEventListener('click', closeStudentResultsOutside, { once: true });
+    } catch(e) { console.error(e); }
+}
+
+function closeStudentResultsOutside(e) {
+    const box = document.getElementById('studentSearchResults');
+    if (box && !box.contains(e.target)) closeStudentResults();
+}
+
+function closeStudentResults() {
+    const box = document.getElementById('studentSearchResults');
+    if (box) box.style.display = 'none';
+}
+
+function addStudentTarget(userId, fullName) {
+    if (document.querySelector(`.student-pick-hidden[value="${userId}"]`)) {
+        closeStudentResults();
+        document.getElementById('studentSearchInput').value = '';
+        return;
+    }
+    const chips  = document.getElementById('selectedStudentsChips');
+    const chip   = document.createElement('span');
+    chip.className   = 'student-chip';
+    chip.dataset.id  = userId;
+    chip.innerHTML   = `${escHtml(fullName)} <button type="button" onclick="removeStudentChip(${userId})">&times;</button>`;
+    const hidden     = document.createElement('input');
+    hidden.type      = 'hidden';
+    hidden.className = 'student-pick-hidden';
+    hidden.value     = userId;
+    chips.appendChild(chip);
+    chips.appendChild(hidden);
+    closeStudentResults();
+    document.getElementById('studentSearchInput').value = '';
+}
+
+function removeStudentChip(userId) {
+    document.querySelector(`.student-chip[data-id="${userId}"]`)?.remove();
+    document.querySelector(`.student-pick-hidden[value="${userId}"]`)?.remove();
+}
+
+function escHtml(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // ── Keyboard Shortcuts ──
