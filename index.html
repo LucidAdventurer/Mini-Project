@@ -570,7 +570,7 @@
            Note: Backend must use password_verify() for secure comparison */
         .form-control {
             width: 100%;
-            padding: 14px 16px;
+            padding: 14px 40px 14px 16px;
             border: 2px solid #333333;
             border-radius: 12px;
             font-size: 14px;
@@ -966,7 +966,49 @@
         .hidden { 
             display: none; 
         }
-    </style>
+    
+        .show-password{
+            display:block;
+            margin-top:6px;
+            font-size:13px;
+            font-weight:600;
+            cursor:pointer;
+            color:#7c3aed;
+        }
+
+
+.password-wrapper{
+position: relative;
+}
+
+.password-wrapper{
+position: relative;
+}
+
+/* Teacher mode eye color */
+body.teacher-mode .toggle-password{
+position:absolute;
+right:14px;
+top:50%;
+transform:translateY(-50%);
+cursor:pointer;
+font-size:16px;
+color:#7c3aed;
+}
+
+/* Student mode eye color */
+body.student-mode .toggle-password{
+position:absolute;
+right:14px;
+top:50%;
+transform:translateY(-50%);
+cursor:pointer;
+font-size:16px;
+color:#1a3a52;
+}
+
+
+</style>
 </head>
 <body>
     <!-- ========================================
@@ -1052,14 +1094,18 @@
                 <!-- Password Input -->
                 <div class="form-group">
                     <label for="password">Password</label>
-                    <input 
-                        type="password" 
-                        class="form-control" 
-                        id="password" 
-                        name="password" 
-                        placeholder="Enter your password"
-                        required
-                        autocomplete="current-password">
+<div class="password-wrapper">
+<input 
+type="password" 
+class="form-control" 
+id="password" 
+name="password" 
+placeholder="Enter your password"
+required
+autocomplete="current-password">
+<span class="toggle-password" onclick="togglePassword()">👁</span>
+</div>
+                    
                 </div>
                 
                 <!-- Form Options -->
@@ -1504,5 +1550,26 @@
             }
         });
     </script>
+
+<script>
+function togglePassword(){
+ const p=document.getElementById("password");
+ if(p.type==="password"){p.type="text";}
+ else{p.type="password";}
+}
+</script>
+
+
+<script>
+function togglePassword(){
+const password=document.getElementById("password");
+if(password.type==="password"){
+password.type="text";
+}else{
+password.type="password";
+}
+}
+</script>
+
 </body>
 </html>
