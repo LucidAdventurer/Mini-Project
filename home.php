@@ -1558,15 +1558,13 @@ function renderResults(data, timedOut) {
             (q.options||[]).forEach((opt, oi) => {
                 const key = keys[oi] || (oi+1);
                 const userChose = answers[q.question_id] === opt.option_id;
-                // Determine correct option: prefer server data, fallback to is_correct flag
-                let isThisCorrect = opt.is_correct == 1;
-                if (res.correct_answer) {
-                    // server returns letter like 'A','B' — match by position
-                    const letterIdx = 'ABCDEFGH'.indexOf(res.correct_answer.toUpperCase());
-                    isThisCorrect = (oi === letterIdx);
-                }
+                // Determine correct option: server always returns correct_option_id.
+                // Fallback to is_correct flag from get-test-questions for client-side grading.
+                let isThisCorrect;
                 if (res.correct_option_id) {
                     isThisCorrect = (opt.option_id === res.correct_option_id);
+                } else {
+                    isThisCorrect = opt.is_correct == 1;
                 }
 
                 let cls = 'result-neutral';

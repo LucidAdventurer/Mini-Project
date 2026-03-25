@@ -77,12 +77,9 @@ if ($isJson) {
     $title              = trim($body['title']            ?? '');
     $description        = trim($body['description']      ?? '');
     $category           = trim($body['category']         ?? '');
-    // FIX: accept both 'visibility' => 'public' and 'is_public' => 1 from JSON callers
+    // Accept both 'visibility' => 'public' and 'is_public' => 1 from JSON callers
     $isPublic           = (($body['visibility'] ?? '') === 'public' || ($body['is_public'] ?? 0) == 1) ? 1 : 0;
-    $availFrom          = $body['available_from']        ?? null;
-    $availUntil         = $body['available_until']       ?? null;
     $externalUrl        = trim($body['external_url']     ?? '');
-    $cloudinaryPublicId = trim($body['cloudinary_public_id'] ?? '');
     $uploadedFile       = null;
 } else {
     // FormData (action = upload)
@@ -90,14 +87,10 @@ if ($isJson) {
     $title              = trim($_POST['title']       ?? '');
     $description        = trim($_POST['description'] ?? '');
     $category           = trim($_POST['category']    ?? '');
-    // FIX: frontend sends is_public="1" or is_public="0" (string).
-    // The old check used !empty($_POST['is_public']) which treats "0" as truthy.
-    // Now we check visibility first (preferred), then fall back to is_public === "1" strictly.
+    // Frontend sends is_public="1" or is_public="0" (string).
+    // Check visibility first (preferred), then fall back to is_public === "1" strictly.
     $isPublic           = (($_POST['visibility'] ?? '') === 'public' || ($_POST['is_public'] ?? '') === '1') ? 1 : 0;
-    $availFrom          = $_POST['available_from']   ?? null;
-    $availUntil         = $_POST['available_until']  ?? null;
     $externalUrl        = '';
-    $cloudinaryPublicId = '';
     $uploadedFile       = $_FILES['file'] ?? null;
 }
 
@@ -116,6 +109,7 @@ if (!in_array($category, $validCategories, true)) $category = 'general';
 $visibility = $isPublic ? 'public' : 'private';
 $createdBy  = (int) $_SESSION['user_id'];
 
+// These will be set by the upload or link branch below
 $cloudinaryPublicId = null;
 $storedExternalUrl  = null;
 
@@ -195,6 +189,7 @@ if ($action === 'upload' && $uploadedFile) {
     }
 
     $cloudinaryPublicId = $cloudData['public_id'];
+    // external_url stays null for Cloudinary uploads
 
 } elseif ($action === 'upload_link') {
     if ($externalUrl === '') {
@@ -208,6 +203,8 @@ if ($action === 'upload' && $uploadedFile) {
         exit;
     }
     $storedExternalUrl = $externalUrl;
+    // cloudinary_public_id stays null for link uploads
+
 } else {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => 'No file or URL provided.']);
@@ -215,8 +212,9 @@ if ($action === 'upload' && $uploadedFile) {
 }
 
 // ── Insert into materials ─────────────────────────────────────────────────
-// Columns: material_id(auto), title, description, created_by, visibility,
-//          cloudinary_public_id, external_url, category
+// Live schema columns: material_id (auto), title, description, created_by,
+//   visibility, cloudinary_public_id, external_url, category, created_at.
+// FIX: was using undefined $fileUrl — corrected to $storedExternalUrl.
 $ins = safePreparedQuery(
     $conn,
     'INSERT INTO materials
@@ -227,10 +225,10 @@ $ins = safePreparedQuery(
     [
         $title,
         $description,
-        $createdBy,           // created_by: user_id of the uploader
-        $visibility,          // visibility: 'public' or 'private'
-        $cloudinaryPublicId ?: null,  // cloudinary_public_id from frontend
-        $fileUrl,             // external_url: Cloudinary URL or external link
+        $createdBy,
+        $visibility,
+        $cloudinaryPublicId,   // null for link uploads
+        $storedExternalUrl,    // FIX: was $fileUrl (undefined). null for Cloudinary uploads.
         $category,
     ]
 );
@@ -269,7 +267,7 @@ if ($visibility === 'public') {
                 $params[] = $sid;
                 $params[] = $notifTitle;
                 $params[] = $notifMessage;
-                $params[] = 'material';
+                $params[] = 'material';   // notifications.type enum includes 'material'
                 $params[] = $newId;
             }
             safePreparedQuery(

@@ -395,7 +395,7 @@ $base = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
 $redirectMap = [
     'student' => $base . '/student-dashboard.php',
     'teacher' => $base . '/teacher-dashboard.php',
-    'admin'   => $base . '/admin-dashboard.html',
+    'admin'   => $base . '/admin-dashboard.php',
 ];
 $redirectUrl = $redirectMap[$user['role']] ?? null;
 
