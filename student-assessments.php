@@ -1001,7 +1001,7 @@ function deadlineLabel(?string $until): string {
             </div>
             <div class="page-header-right">
                 <strong><?= $totalAssigned ?></strong>
-                total assigned
+                Total Assigned
             </div>
         </div>
 
