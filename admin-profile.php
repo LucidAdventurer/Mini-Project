@@ -399,7 +399,7 @@ body {
 .hero-meta i { color: var(--accent); font-size: 13px; }
 .hero-stats {
     margin-left: auto;
-    display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
     flex-shrink: 0;
 }
 .stat-pill {
@@ -543,7 +543,7 @@ body {
     .sidebar { display: none; }
     .main { padding: 24px; }
     .content-grid { grid-template-columns: 1fr; }
-    .hero-stats { grid-template-columns: repeat(4, 1fr); }
+    .hero-stats { grid-template-columns: repeat(3, 1fr); }
     .hero-card { flex-wrap: wrap; }
 }
 @media (max-width: 640px) {
@@ -616,7 +616,6 @@ body {
       <div class="hero-avatar"><?= htmlspecialchars($initials) ?></div>
       <div class="hero-info">
         <div class="name"><?= htmlspecialchars($adminData['full_name'] ?? 'Administrator') ?></div>
-        <div class="role-badge"><i class="fas fa-shield-alt"></i> Super Administrator</div>
         <div class="hero-meta">
           <span><i class="fas fa-envelope"></i><?= htmlspecialchars($adminData['email'] ?? '') ?></span>
           <?php if (!empty($adminData['department'])): ?>
@@ -627,10 +626,6 @@ body {
         </div>
       </div>
       <div class="hero-stats">
-        <div class="stat-pill">
-          <div class="val"><?= number_format($stats['total_users']) ?></div>
-          <div class="lbl">Total Users</div>
-        </div>
         <div class="stat-pill">
           <div class="val"><?= number_format($stats['active_students']) ?></div>
           <div class="lbl">Students</div>

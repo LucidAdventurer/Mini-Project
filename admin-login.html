@@ -605,7 +605,6 @@
 
 <body>
 
-    <!-- Background -->
     <div class="bg">
         <div class="grid-lines"></div>
         <div class="glow-orb one"></div>
@@ -621,7 +620,6 @@
     </div>
 
     <div class="wrapper">
-        <!-- Left Panel -->
         <div class="left-panel">
             <div class="brand">
                 <div class="brand-icon">
@@ -658,7 +656,6 @@
             </div>
         </div>
 
-        <!-- Right Panel -->
         <div class="right-panel">
             <div class="form-header">
                 <div class="badge"><span></span> Restricted Access</div>
@@ -797,9 +794,9 @@
             btn.disabled = true;
 
             try {
-                // FIX: use a root-relative URL so the request works regardless
+                // FIX: use a relative URL so the request works regardless
                 // of where admin-login.html is served from in the directory tree.
-                const res = await fetch('/pta/login.php', {
+                const res = await fetch('login.php', {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json' },
