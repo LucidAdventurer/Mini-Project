@@ -178,7 +178,7 @@ $result = safePreparedQuery($conn,
         status              = ?,
         updated_at          = NOW()
      WHERE assessment_id = ? AND created_by = ?",
-    "sssssiiissiissii",
+    "sssssiiisssiissii",
     [
         $title, $description, $instructions,
         $category, $difficulty,

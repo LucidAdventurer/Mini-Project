@@ -1156,8 +1156,7 @@ function timeAgoPreview(string $datetime): string {
         cancelBtn.disabled   = true;
         if (startBtn) startBtn.disabled = true;
 
-        const base   = window.location.pathname.replace(/\/[^\/]*$/, '');
-        const apiUrl = base + '/api/assessment/start.php';
+        const apiUrl = 'api/assessment/start.php';
 
         try {
             const res  = await fetch(apiUrl, {
@@ -1176,7 +1175,7 @@ function timeAgoPreview(string $datetime): string {
             }
 
             if (data.success && data.attempt_id) {
-                window.location.href = base + '/take-test.php?attempt_id=' + data.attempt_id;
+                window.location.href = 'take-test.php?attempt_id=' + data.attempt_id;
             } else {
                 resetButtons(beginBtn, cancelBtn, startBtn);
                 closeConfirm();

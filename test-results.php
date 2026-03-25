@@ -7,6 +7,7 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db-guard.php';
 
 $currentUser = validateSession($conn, 'student');
+$userId      = (int) $currentUser['user_id'];
 
 $attemptId = (int)($_GET['attempt_id'] ?? 0);
 if ($attemptId <= 0) {
@@ -19,7 +20,7 @@ $allAttempts = [];
 $thisAttemptRow = safePreparedQuery($conn,
     "SELECT aa.assessment_id FROM assessment_attempts aa
      WHERE aa.attempt_id = ? AND aa.user_id = ?",
-    "ii", [$attemptId, (int)($currentUser['user_id'])]
+    "ii", [$attemptId, $userId]
 );
 if ($thisAttemptRow['success'] && $thisAttemptRow['result'] && $thisAttemptRow['result']->num_rows > 0) {
     $tar = $thisAttemptRow['result']->fetch_assoc();
@@ -28,9 +29,9 @@ if ($thisAttemptRow['success'] && $thisAttemptRow['result'] && $thisAttemptRow['
     $allAttR = safePreparedQuery($conn,
         "SELECT attempt_id, attempt_number, submitted_at, score, percentage
          FROM assessment_attempts
-         WHERE assessment_id = ? AND user_id = ? AND status = 'completed'
+         WHERE assessment_id = ? AND user_id = ? AND status = 'submitted'
          ORDER BY attempt_number ASC",
-        "ii", [$asmId, (int)($currentUser['user_id'])]
+        "ii", [$asmId, $userId]
     );
     if ($allAttR['success'] && $allAttR['result']) {
         while ($r = $allAttR['result']->fetch_assoc()) $allAttempts[] = $r;
@@ -83,8 +84,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
     header('Location: '.$_SERVER['PHP_SELF'].'?report=sent');
     exit;
 }
-$userId       = (int) $currentUser['user_id'];
-
 // Fetch profile image
 $imgRes = safePreparedQuery($conn, "SELECT profile_image FROM users WHERE user_id = ?", "i", [$userId]);
 $userProfileImage = '';
