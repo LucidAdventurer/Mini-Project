@@ -14,11 +14,11 @@ header('Content-Type: application/json');
 
 $currentUser = validateSession($conn);
 $userId = (int)$currentUser['user_id'];
-$role   = $currentUser['user_type'];
+$role   = $currentUser['role'];
 
 // Full profile
 $r = safePreparedQuery($conn,
-    "SELECT user_id, full_name, email, user_type, department,
+    "SELECT user_id, full_name, email, role, department,
             registration_number, is_verified, is_active,
             created_at, last_login, profile_image
      FROM users WHERE user_id = ?",
@@ -40,8 +40,8 @@ if ($role === 'student') {
     $rs = safePreparedQuery($conn,
         "SELECT
             COUNT(*) AS total_attempts,
-            SUM(status='completed') AS completed,
-            ROUND(AVG(CASE WHEN status='completed' THEN percentage END),1) AS avg_score,
+            SUM(status='submitted') AS submitted,
+            ROUND(AVG(CASE WHEN status='submitted' THEN percentage END),1) AS avg_score,
             ROUND(MAX(percentage),1) AS best_score
          FROM assessment_attempts WHERE user_id = ?",
         "i", [$userId]);
@@ -49,14 +49,14 @@ if ($role === 'student') {
         $row = $rs['result']->fetch_assoc(); $rs['result']->free();
         $stats = [
             'total_attempts' => (int)($row['total_attempts'] ?? 0),
-            'completed'      => (int)($row['completed']      ?? 0),
+            'completed'      => (int)($row['submitted']      ?? 0),
             'avg_score'      => (float)($row['avg_score']    ?? 0),
             'best_score'     => (float)($row['best_score']   ?? 0),
         ];
     }
     // Materials completed
     $rm = safePreparedQuery($conn,
-        "SELECT COUNT(*) AS c FROM material_progress WHERE user_id = ? AND is_completed = 1",
+        "SELECT COUNT(*) AS c FROM material_progress WHERE user_id = ? AND completed = 1",
         "i", [$userId]);
     if ($rm['success'] && $rm['result']) {
         $stats['materials_completed'] = (int)($rm['result']->fetch_assoc()['c'] ?? 0);
@@ -65,7 +65,7 @@ if ($role === 'student') {
 } elseif ($role === 'teacher') {
     $rt = safePreparedQuery($conn,
         "SELECT COUNT(*) AS total_assessments,
-                SUM(status='active') AS active_assessments
+                SUM(status='published') AS active_assessments
          FROM assessments WHERE created_by = ?",
         "i", [$userId]);
     if ($rt['success'] && $rt['result']) {
@@ -84,7 +84,7 @@ if ($role === 'student') {
         $rta['result']->free();
     }
     $rrm = safePreparedQuery($conn,
-        "SELECT COUNT(*) AS c FROM training_materials WHERE uploaded_by = ?",
+        "SELECT COUNT(*) AS c FROM materials WHERE uploaded_by = ?",
         "i", [$userId]);
     if ($rrm['success'] && $rrm['result']) {
         $stats['resources_uploaded'] = (int)($rrm['result']->fetch_assoc()['c'] ?? 0);
@@ -95,7 +95,7 @@ if ($role === 'student') {
         "SELECT
             (SELECT COUNT(*) FROM users)        AS total_users,
             (SELECT COUNT(*) FROM assessments)  AS total_assessments,
-            (SELECT COUNT(*) FROM training_materials) AS total_materials,
+            (SELECT COUNT(*) FROM resources) AS total_materials,
             (SELECT COUNT(*) FROM assessment_attempts WHERE status='completed') AS total_attempts",
         "", []);
     if ($ra['success'] && $ra['result']) {

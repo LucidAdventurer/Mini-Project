@@ -1066,9 +1066,9 @@
             updateTestStatus:_base+'api/admin/update-test-status.php',
             deleteTest:_base+'api/admin/delete-test.php',
             getTestQuestions:_base+'api/admin/get-test-questions.php',
-            getResources:_base+'api/resources/get-resources.php',
-            uploadResource:_base+'api/resources/upload-resource.php',
-            deleteResource:_base+'api/resources/delete-resource.php',
+            getResources:_base+'api/admin/get-admin-resources.php',
+            uploadResource:_base+'api/admin/upload-admin-resource.php',
+            deleteResource:_base+'api/admin/delete-admin-resource.php',
             serveResource:_base+'api/resources/serve-resource.php',
             viewResource:_base+'api/resources/view-resource.php',
             getMe:_base+'api/profile/get-profile.php',
@@ -1200,10 +1200,9 @@
             let html=d.materials.map(m=>{
                 const rid=m.material_id;const hasFile=!!m.cloudinary_public_id;
                 const ftype=getFileType(m);
-                // Images and videos: serve-resource proxies/redirects correctly
-                // PDFs and docs: use view-resource for inline viewer
-                const viewUrl=hasFile?`${API.viewResource}?material_id=${rid}`:m.external_url;
-                const dlUrl=hasFile?`${API.serveResource}?material_id=${rid}&action=download`:m.external_url||null;
+                const serveBase=`${_base}api/admin/serve-admin-resource.php?resource_id=${rid}`;
+                const viewUrl=hasFile?`${serveBase}&action=view`:m.external_url;
+                const dlUrl=hasFile?`${serveBase}&action=download`:m.external_url||null;
                 const viewBtn=viewUrl?`<a href="${viewUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">View</a>`:'';
                 const dlBtn=dlUrl?`<a href="${dlUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">Download</a>`:'';
                 const cat=(m.category||'general').toLowerCase();
@@ -1217,9 +1216,9 @@
             html+=`<div class="resource-card" onclick="openUploadModal()" style="border-style:dashed;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;min-height:130px;"><div style="font-size:26px;margin-bottom:7px;">+</div><div style="font-size:12.5px;color:var(--muted);">Upload New Resource</div></div>`;
             grid.innerHTML=html;
         }
-        async function deleteResource(materialId,title){
+        async function deleteResource(resourceId,title){
             if(!confirm(`Permanently delete "${title}"?\n\nThis cannot be undone.`))return;
-            try{const d=await apiPost(API.deleteResource,{material_id:materialId});if(d.success){showToast('Resource deleted.','success');PageCache.invalidate('resources');loadResources();}else showToast(d.error||'Delete failed.','error');}catch(e){showToast('Network error.','error');}
+            try{const d=await apiPost(API.deleteResource,{resource_id:resourceId});if(d.success){showToast('Resource deleted.','success');PageCache.invalidate('resources');loadResources();}else showToast(d.error||'Delete failed.','error');}catch(e){showToast('Network error.','error');}
         }
 
         // ════ USERS ════
