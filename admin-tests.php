@@ -43,7 +43,7 @@ require_once __DIR__ . '/admin-head.php';
         </div>
         <div class="tabs">
             <button class="tab active" onclick="filterByStatus('all',this)">All</button>
-            <button class="tab" onclick="filterByStatus('active',this)">Published</button>
+            <button class="tab" onclick="filterByStatus('published',this)">Published</button>
             <button class="tab" onclick="filterByStatus('draft',this)">Draft</button>
             <button class="tab" onclick="filterByStatus('archived',this)">Archived</button>
         </div>
@@ -244,7 +244,7 @@ require_once __DIR__ . '/admin-head.php';
       </div>
       <input type="file" id="ctQFileInput" accept=".pdf,.docx" style="display:none;" onchange="ctHandleQFile(this.files[0])">
 
-      <div id="ctFileChip" style="display:none;margin-top:10px;padding:9px 13px;background:var(--card-alt,rgba(255,255,255,.04));border-radius:7px;display:none;align-items:center;gap:10px;">
+      <div id="ctFileChip" style="display:none;margin-top:10px;padding:9px 13px;background:var(--card-alt,rgba(255,255,255,.04));border-radius:7px;align-items:center;gap:10px;">
         <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:var(--blue,#3b82f6);fill:none;stroke-width:2;flex-shrink:0;stroke-linecap:round;stroke-linejoin:round;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         <span id="ctFileName" style="flex:1;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
         <span id="ctFileSize" style="font-size:11px;color:var(--muted);"></span>
@@ -327,9 +327,10 @@ async function loadTests() {
 }
 
 function renderTests(d, tbody) {
-    if (d.stats) { setEl('tStatTotal',fmtNum(d.stats.total_assessments)); setEl('tStatActive',fmtNum(d.stats.active)); setEl('tStatDraft',fmtNum(d.stats.draft)); setEl('tStatPassRate',(d.stats.avg_pass_rate||0)+'%'); }
+    if (d.stats) { setEl('tStatTotal',fmtNum(d.stats.total_assessments)); setEl('tStatActive',fmtNum(d.stats.published)); setEl('tStatDraft',fmtNum(d.stats.draft)); setEl('tStatPassRate',(d.stats.avg_pass_rate||0)+'%'); }
     const tabs = document.querySelectorAll('.tabs .tab');
-    const sKeys = ['all','active','draft','archived']; const sLabel = ['All','Active','Draft','Archived'];
+    const sKeys = ['all','published','draft','archived'];
+    const sLabel = ['All','Published','Draft','Archived'];
     tabs.forEach((tab, i) => { const cnt = d.counts[sKeys[i]]; tab.textContent = sLabel[i] + (cnt ? ` (${fmtNum(cnt)})` : ''); });
     tbody.innerHTML = d.assessments.length
         ? d.assessments.map(t => renderTestRow(t)).join('')
@@ -339,21 +340,28 @@ function renderTests(d, tbody) {
 
 function renderTestRow(t) {
     const diffBadge = `<span class="badge ${t.difficulty}">${esc(t.difficulty)}</span>`;
-    const statusLabel = {active:'Published',draft:'Draft',archived:'Archived'}[t.status]||t.status;
+    const statusLabel = {published:'Published',draft:'Draft',archived:'Archived'}[t.status] || t.status;
     const statusBadge = `<span class="badge ${t.status}">${esc(statusLabel)}</span>`;
     let actions = `<button class="btn btn-ghost btn-sm" onclick="viewQuestions(${t.assessment_id})">Questions</button>`;
-    if (t.status==='draft')    actions += ` <button class="btn btn-primary btn-sm" onclick="changeTestStatus(${t.assessment_id},'active')">Publish</button><button class="btn btn-danger btn-sm" onclick="deleteTest(${t.assessment_id},'${esc(t.title)}')">Delete</button>`;
-    else if (t.status==='active')   actions += ` <button class="btn btn-ghost btn-sm" onclick="changeTestStatus(${t.assessment_id},'draft')">Unpublish</button><button class="btn btn-danger btn-sm" onclick="changeTestStatus(${t.assessment_id},'archived')">Archive</button>`;
-    else if (t.status==='archived') actions += ` <button class="btn btn-primary btn-sm" onclick="changeTestStatus(${t.assessment_id},'active')">Restore</button><button class="btn btn-danger btn-sm" onclick="deleteTest(${t.assessment_id},'${esc(t.title)}')">Delete</button>`;
+    if (t.status === 'draft') {
+        actions += ` <button class="btn btn-primary btn-sm" onclick="changeTestStatus(${t.assessment_id},'published')">Publish</button>`;
+        actions += ` <button class="btn btn-danger btn-sm" onclick="deleteTest(${t.assessment_id},'${esc(t.title)}')">Delete</button>`;
+    } else if (t.status === 'published') {
+        actions += ` <button class="btn btn-ghost btn-sm" onclick="changeTestStatus(${t.assessment_id},'draft')">Unpublish</button>`;
+        actions += ` <button class="btn btn-danger btn-sm" onclick="changeTestStatus(${t.assessment_id},'archived')">Archive</button>`;
+    } else if (t.status === 'archived') {
+        actions += ` <button class="btn btn-primary btn-sm" onclick="changeTestStatus(${t.assessment_id},'published')">Restore</button>`;
+        actions += ` <button class="btn btn-danger btn-sm" onclick="deleteTest(${t.assessment_id},'${esc(t.title)}')">Delete</button>`;
+    }
     return `<tr><td><div><b>${esc(t.title)}</b></div><div style="font-size:10.5px;color:var(--muted);">${fmtNum(t.student_count)} students · max ${t.max_attempts} attempt${t.max_attempts!==1?'s':''}</div></td><td>${esc(t.category||'—')}</td><td>${diffBadge}</td><td>${t.duration_minutes} min</td><td>${fmtNum(t.total_marks)} / ${fmtNum(t.passing_marks)}</td><td>${fmtNum(t.question_count)}</td><td>${fmtNum(t.attempt_count)}</td><td>${t.pass_rate!==null?t.pass_rate+'%':'—'}</td><td><span style="font-size:11.5px;">${esc(t.creator_name)}</span></td><td>${statusBadge}</td><td><div style="display:flex;gap:4px;flex-wrap:wrap;">${actions}</div></td></tr>`;
 }
 
 async function changeTestStatus(assessmentId, newStatus) {
-    const label = {active:'Publish',draft:'Unpublish',archived:'Archive'}[newStatus]||newStatus;
+    const label = {published:'Publish',draft:'Unpublish',archived:'Archive'}[newStatus] || newStatus;
     if (!confirm(`${label} this assessment?`)) return;
     try {
         const d = await apiPost(API.updateTestStatus, {assessment_id:assessmentId, status:newStatus});
-        if (d.success) { showToast(`Assessment ${label.toLowerCase()}d.`,'success'); PageCache.invalidate(`tests:${testStatus}:${testSearch}:${testCategory}:${testPage}`); loadTests(); }
+        if (d.success) { showToast(`Assessment ${label.toLowerCase()}ed.`,'success'); PageCache.invalidate(`tests:${testStatus}:${testSearch}:${testCategory}:${testPage}`); loadTests(); }
         else showToast(d.error||'Action failed.','error');
     } catch(e) { showToast('Network error.','error'); }
 }
@@ -459,7 +467,6 @@ function ctRenderStep(n) {
     const nextBtn = document.getElementById('ctBtnNext');
     if (n === 3) { nextBtn.textContent = 'Submit Assessment'; }
     else { nextBtn.textContent = 'Next →'; }
-    // Show step1-incomplete warning on step 2
     if (n === 2) {
         document.getElementById('ctStep1Warn').style.display = ctStep1Saved ? 'none' : '';
     }
@@ -538,55 +545,105 @@ function ctClearQFile() {
 
 async function ctHandleQFile(file) {
     if (!file) return;
+
     const maxMB = 10;
     if (file.size > maxMB * 1024 * 1024) {
-        ctShowParseStatus('error', `File too large. Max ${maxMB} MB allowed.`); return;
+        ctShowParseStatus('error', `File too large. Max ${maxMB} MB allowed.`);
+        return;
     }
+
     const ext = file.name.split('.').pop().toLowerCase();
     if (!['pdf','docx'].includes(ext)) {
-        ctShowParseStatus('error', 'Only PDF or DOCX files are accepted.'); return;
+        ctShowParseStatus('error', 'Only PDF or DOCX files are accepted.');
+        return;
     }
+
     document.getElementById('ctFileName').textContent = file.name;
     document.getElementById('ctFileSize').textContent = (file.size/1024).toFixed(1) + ' KB';
     document.getElementById('ctFileChip').style.display = 'flex';
+
     ctShowParseStatus('info', '⏳ Parsing questions from file…');
 
     try {
-        // Resolve CSRF token — try every location the shared JS might store it
         let csrfToken = window._csrfToken
                      || window.csrfToken
                      || document.querySelector('meta[name="csrf-token"]')?.content
                      || '';
 
-        // If still empty, fetch it fresh from the endpoint
         if (!csrfToken) {
-            try {
-                const tr = await fetch('api/csrf-token.php', { credentials: 'same-origin' });
-                const tj = await tr.json();
-                if (tj.success && tj.token) {
-                    csrfToken = tj.token;
-                    window._csrfToken = csrfToken;
-                }
-            } catch (_) {}
+            const tr = await fetch('api/csrf-token.php', { credentials: 'same-origin' });
+            const tj = await tr.json();
+            if (tj.success && tj.token) {
+                csrfToken = tj.token;
+                window._csrfToken = csrfToken;
+            }
         }
 
         const formData = new FormData();
-        formData.append('file', file);
-        const resp = await fetch('api-parse-questions.php', {
+        formData.append('document', file);
+
+        const resp = await fetch('api/assessment/parse-document.php', {
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'X-CSRF-Token': csrfToken },
             body: formData
         });
-        const d = await resp.json();
-        if (!d.success) { ctShowParseStatus('error', d.error || 'Parsing failed.'); return; }
+
+        const text = await resp.text();
+
+        let d;
+        try {
+            d = JSON.parse(text);
+        } catch (e) {
+            console.error('Invalid JSON:', text);
+            ctShowParseStatus('error', 'Invalid server response');
+            return;
+        }
+
+        if (!d.success) {
+            ctShowParseStatus('error', d.error || 'Parsing failed.');
+            return;
+        }
+
         const parsed = d.questions || [];
-        if (!parsed.length) { ctShowParseStatus('warn', 'No questions found. Check the file format and try again.'); return; }
-        // Merge parsed questions into ctQuestions
-        parsed.forEach(q => ctQuestions.push(q));
+
+        if (!parsed.length) {
+            ctShowParseStatus('warn', 'No questions found. Check the file format and try again.');
+            return;
+        }
+
+        parsed.forEach(q => {
+            const normalized = {
+                question_text: q.text || '',
+                question_type: q.type || 'mcq',
+                options: [],
+                marks: 1,
+                negative_marks: 0,
+                explanation: ''
+            };
+
+            if (Array.isArray(q.options)) {
+                normalized.options = q.options.map((opt, i) => ({
+                    option_text: opt || '',
+                    is_correct: (q.correctAnswer === String.fromCharCode(97 + i))
+                }));
+            }
+
+            if (normalized.question_type === 'true_false') {
+                normalized.options = [
+                    { option_text: 'True',  is_correct: q.correctAnswer === 'true' },
+                    { option_text: 'False', is_correct: q.correctAnswer === 'false' }
+                ];
+            }
+
+            ctQuestions.push(normalized);
+        });
         ctRenderQList();
-        ctShowParseStatus('success', `✓ ${parsed.length} question${parsed.length!==1?'s':''} parsed and added.`);
-    } catch(e) {
+
+        ctShowParseStatus('success', `✓ ${parsed.length} question${parsed.length !== 1 ? 's' : ''} parsed and added.`);
+
+    } catch (e) {
+        console.error(e);
         ctShowParseStatus('error', 'Network error while parsing. Try again.');
     }
 }
@@ -620,7 +677,6 @@ function ctAddBlankQuestion() {
         ]
     });
     ctRenderQList();
-    // Scroll to bottom of list
     setTimeout(() => {
         const list = document.getElementById('ctQList');
         list.lastElementChild?.scrollIntoView({ behavior:'smooth', block:'nearest' });
@@ -697,7 +753,6 @@ function ctBuildReview() {
     }).join('');
     document.getElementById('ctReviewQuestions').innerHTML = qHtml;
 
-    // Warnings
     const totalFromQ = ctQuestions.reduce((s,q)=>s+(q.marks||1),0);
     const warns = [];
     if (totalFromQ !== v.total_marks) warns.push(`⚠ Sum of question marks (${totalFromQ}) differs from total_marks (${v.total_marks}).`);
@@ -729,7 +784,19 @@ async function ctSubmit() {
     const btn = document.getElementById('ctBtnNext');
     btn.disabled = true;
     btn.textContent = 'Submitting…';
-    const payload = { ...ctGetStep1Values(), questions: ctQuestions };
+
+    const fixedQuestions = ctQuestions.map(q => {
+        if (q.question_type === 'true_false') {
+            const correctOpt = q.options.find(o => o.is_correct);
+            return {
+                ...q,
+                correct_answer: correctOpt ? correctOpt.option_text.toLowerCase() : null
+            };
+        }
+        return q;
+    });
+
+    const payload = { ...ctGetStep1Values(), questions: fixedQuestions };
     try {
         const d = await apiPost(API.uploadTest || 'api-upload-test.php', { test: payload });
         if (d.success) {

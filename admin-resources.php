@@ -124,7 +124,7 @@ function renderResources(d, grid) {
         // prefer resource_id explicitly to avoid any future confusion.
         const rid=m.resource_id||m.material_id, hasFile=!!m.cloudinary_public_id, ftype=getFileType(m);
         const serveBase=`${_base}api/admin/serve-admin-resource.php?resource_id=${rid}`;
-        const viewUrl=hasFile?`${serveBase}&action=view`:m.external_url;
+        const viewUrl=hasFile?`${_base}api/admin/view-admin-resource.php?resource_id=${rid}`:m.external_url;
         const dlUrl  =hasFile?`${serveBase}&action=download`:m.external_url||null;
         const viewBtn=viewUrl?`<a href="${viewUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">View</a>`:'';
         const dlBtn  =dlUrl?`<a href="${dlUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">Download</a>`:'';

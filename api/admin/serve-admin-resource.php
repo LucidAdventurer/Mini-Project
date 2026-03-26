@@ -1,179 +1,187 @@
 <?php
-// ============================================================
-// api/admin/serve-admin-resource.php
-//
-// Serves an admin-uploaded resource by redirecting to the
-// correct Cloudinary delivery URL.
-//
-// The core problem: PDFs uploaded via the unsigned upload preset
-// land under /raw/upload/ in Cloudinary. Browsers cannot render
-// a /raw/ URL as a PDF — you must use /image/upload/ with the
-// .pdf extension (Cloudinary supports PDF delivery under image).
-//
-// This script fixes the URL on-the-fly:
-//   raw/upload/  →  image/upload/  (for view)
-//   raw/upload/  →  image/upload/fl_attachment/  (for download)
-//
-// GET ?resource_id=int&action=view|download
-// ============================================================
+/* ========================================
+ * ADMIN RESOURCE SERVE
+ * File: api/admin/serve-admin-resource.php
+ *
+ * Proxies a resource's bytes through PHP so the browser receives the correct
+ * Content-Type header and can render PDFs inline.
+ *
+ * WHY PROXY (not redirect):
+ *   Cloudinary stores files without extensions in the public_id
+ *   (e.g. /image/upload/pta/b8qd9vszzg7it4hdvcpo). Without an extension
+ *   Chrome cannot detect the MIME type, so redirecting directly produces
+ *   "Failed to load PDF document" even though the bytes are correct.
+ *   Proxying through PHP lets us set Content-Type explicitly.
+ *
+ * WHY NOT USE validateSession():
+ *   db-guard's validateSession() calls isApiRequest() which matches any URL
+ *   containing /api/ and returns a JSON 401 — the browser tab / iframe
+ *   receives JSON instead of a file. We authenticate manually here so we can
+ *   issue a plain redirect to the login page on auth failure.
+ * ======================================== */
 
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
 
-$currentUser = validateSession($conn);
-$role        = $currentUser['user_type'] ?? $currentUser['role'] ?? '';
+// ── 1. Auth (manual — avoids JSON 401 from isApiRequest) ────────────────────
 
-$resourceId = (int)($_GET['resource_id'] ?? 0);
-$action     = $_GET['action'] ?? 'view';
-$action     = in_array($action, ['view', 'download'], true) ? $action : 'view';
+$uid  = getSessionUserId();
+$role = getSessionRole();
 
-if ($resourceId <= 0) {
-    http_response_code(400);
-    exit('Invalid resource ID.');
+if ($uid === 0 || $role === '') {
+    header('Location: ' . _adminRootUrl() . 'index.html?error=session_expired');
+    exit;
 }
-
-$r = safePreparedQuery(
-    $conn,
-    "SELECT resource_id, title, resource_type, external_url, cloudinary_public_id, is_public
-     FROM resources WHERE resource_id = ?",
-    "i", [$resourceId]
-);
-
-if (!$r['success'] || !$r['result'] || $r['result']->num_rows === 0) {
-    http_response_code(404);
-    exit('Resource not found.');
+if ($role !== 'admin') {
+    header('Location: ' . _adminRootUrl() . 'index.html?error=unauthorized');
+    exit;
 }
-
-$res = $r['result']->fetch_assoc();
-$r['result']->free();
-
-if ($role !== 'admin' && !$res['is_public']) {
-    http_response_code(403);
-    exit('Access denied.');
-}
-
-$url = trim($res['external_url'] ?? '');
-
-if (empty($url)) {
-    http_response_code(404);
-    exit('No file URL found for this resource.');
-}
-
-// Increment counter
-$col  = $action === 'download' ? 'downloads' : 'views';
-$stmt = $conn->prepare("UPDATE resources SET {$col} = {$col} + 1 WHERE resource_id = ?");
-if ($stmt) { $stmt->bind_param('i', $resourceId); $stmt->execute(); $stmt->close(); }
-
-// ── Serve the file ────────────────────────────────────────────────────────
-//
-// Files uploaded as 'raw' in Cloudinary MUST stay at /raw/upload/ —
-// rewriting to /image/upload/ causes a 404. Instead:
-//   - download → simple redirect to the raw URL (browser will download it)
-//   - view     → render an HTML viewer page that embeds the URL in a
-//                <iframe> (PDF) or <video> tag, which the browser handles
-//
-// For PDFs the browser's built-in PDF viewer loads the raw URL just fine
-// inside an iframe — it only fails when navigated to directly in Edge/Chrome
-// because those browsers try to use their own PDF renderer at top-level
-// and choke on the Cloudinary raw response headers.
-
-if ($action === 'download') {
-    // Direct redirect — browser will prompt Save As
-    header('Location: ' . $url, true, 302);
+$adminRow = getUserData($conn, $uid);
+if (!$adminRow || !$adminRow['is_active']) {
+    session_destroy();
+    header('Location: ' . _adminRootUrl() . 'index.html?error=session_expired');
     exit;
 }
 
-// ── View: render inline viewer page ──────────────────────────────────────
-$title       = htmlspecialchars($res['title'] ?? 'Resource', ENT_QUOTES);
-$resourceType = strtolower($res['resource_type'] ?? 'pdf');
-$isVideo      = ($resourceType === 'video');
-$downloadUrl  = htmlspecialchars($url, ENT_QUOTES);
-$iframeUrl    = htmlspecialchars($url, ENT_QUOTES);
+// ── 2. Input ─────────────────────────────────────────────────────────────────
 
-header('Content-Type: text/html; charset=utf-8');
-header('X-Frame-Options: SAMEORIGIN');
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title><?= $title ?></title>
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; background: #0f1117; color: #e2e8f0;
-         height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-  .topbar { display: flex; align-items: center; justify-content: space-between;
-            padding: 10px 20px; background: #1a1d27;
-            border-bottom: 1px solid #2d3148; flex-shrink: 0; gap: 12px; }
-  .title { font-size: 15px; font-weight: 600; color: #e2e8f0;
-           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
-  .dl-btn { display: inline-flex; align-items: center; gap: 6px;
-            padding: 7px 14px; background: #0066ff; color: #fff;
-            border: none; border-radius: 6px; cursor: pointer;
-            font-size: 13px; font-weight: 500; text-decoration: none;
-            flex-shrink: 0; transition: background 0.15s; }
-  .dl-btn:hover { background: #0052cc; }
-  .viewer { flex: 1; overflow: hidden; position: relative; }
-  iframe { width: 100%; height: 100%; border: none; display: block; }
-  .video-wrap { width: 100%; height: 100%; display: flex;
-                align-items: center; justify-content: center; background: #000; }
-  video { max-width: 100%; max-height: 100%; }
-  /* Google Docs embed fallback */
-  .gdocs-btn { position: absolute; inset: 0; display: flex; flex-direction: column;
-               align-items: center; justify-content: center; gap: 16px;
-               background: #0f1117; text-align: center; padding: 24px; }
-  .gdocs-btn p { color: #9ca3af; font-size: 14px; max-width: 400px; line-height: 1.6; }
-  .gdocs-btn a { padding: 10px 24px; background: #0066ff; color: white;
-                 border-radius: 8px; text-decoration: none; font-weight: 600; }
-</style>
-</head>
-<body>
-<div class="topbar">
-  <span class="title"><?= $title ?></span>
-  <a href="<?= $downloadUrl ?>" class="dl-btn" download>↓ Download</a>
-</div>
-<div class="viewer">
-<?php if ($isVideo): ?>
-  <div class="video-wrap">
-    <video controls autoplay>
-      <source src="<?= $iframeUrl ?>">
-      Your browser does not support video playback.
-    </video>
-  </div>
-<?php else: ?>
-  <!--
-    Embed using Google Docs Viewer as a proxy — this renders the raw
-    Cloudinary PDF URL without needing any content-type tricks.
-    Falls back to a direct-open button if the viewer is blocked.
-  -->
-  <iframe
-    id="viewer-frame"
-    src="https://docs.google.com/viewer?url=<?= urlencode($url) ?>&embedded=true"
-    title="<?= $title ?>"
-    onload="checkLoaded(this)"
-  ></iframe>
-  <div class="gdocs-btn" id="fallback" style="display:none;">
-    <p>Unable to display preview. Click below to open the PDF directly in a new tab.</p>
-    <a href="<?= $iframeUrl ?>" target="_blank" rel="noopener">Open PDF ↗</a>
-  </div>
-  <script>
-    // Google Docs viewer sometimes fails silently — show fallback after 12s
-    const t = setTimeout(() => {
-      document.getElementById('viewer-frame').style.display = 'none';
-      document.getElementById('fallback').style.display = 'flex';
-    }, 12000);
-    function checkLoaded(frame) {
-      try {
-        // If the iframe loaded our own fallback page, it'll have a title
-        // otherwise it loaded Google Docs successfully — cancel the timer
-        clearTimeout(t);
-      } catch(e) {}
-    }
-  </script>
-<?php endif; ?>
-</div>
-</body>
-</html>
-<?php
+$resourceId = filter_input(INPUT_GET, 'resource_id', FILTER_VALIDATE_INT);
+$action     = in_array($_GET['action'] ?? '', ['view', 'download'], true)
+              ? $_GET['action'] : 'view';
+
+if (!$resourceId || $resourceId <= 0) {
+    http_response_code(400);
+    die('Invalid resource ID.');
+}
+
+// ── 3. Fetch resource ────────────────────────────────────────────────────────
+
+$q = safePreparedQuery(
+    $conn,
+    "SELECT resource_id, title, cloudinary_public_id, external_url, resource_type
+     FROM   resources
+     WHERE  resource_id = ?
+     LIMIT  1",
+    'i', [$resourceId]
+);
+
+if (!$q['success'] || !$q['result']) {
+    http_response_code(500); die('Database error.');
+}
+$resource = $q['result']->fetch_assoc();
+$q['result']->free();
+
+if (!$resource) {
+    http_response_code(404); die('Resource not found.');
+}
+
+// ── 4. Counter ───────────────────────────────────────────────────────────────
+
+$col = $action === 'download' ? 'downloads' : 'views';
+$conn->query("UPDATE resources SET {$col} = {$col} + 1 WHERE resource_id = " . (int)$resourceId);
+
+// ── 5. Resolve source URL ────────────────────────────────────────────────────
+
+$publicId    = $resource['cloudinary_public_id'] ?? '';
+$externalUrl = $resource['external_url']         ?? '';
+$title       = $resource['title']                ?? 'resource';
+
+if (!$publicId && !$externalUrl) {
+    http_response_code(404); die('No file attached to this resource.');
+}
+
+if ($publicId) {
+    $cloudName = defined('CLOUDINARY_CLOUD_NAME') ? CLOUDINARY_CLOUD_NAME : '';
+    if (!$cloudName) { http_response_code(500); die('Cloudinary not configured.'); }
+
+    $ext       = strtolower(pathinfo($publicId, PATHINFO_EXTENSION));
+    $videoExts = ['mp4', 'mov', 'webm', 'avi', 'mkv', 'ogg'];
+    $rawExts   = ['zip', 'rar', '7z', 'tar', 'gz', 'csv', 'xml', 'json'];
+
+    if (in_array($ext, $videoExts, true))   $cdnType = 'video';
+    elseif (in_array($ext, $rawExts, true)) $cdnType = 'raw';
+    else                                    $cdnType = 'image';
+
+    $sourceUrl = "https://res.cloudinary.com/{$cloudName}/{$cdnType}/upload/{$publicId}";
+} else {
+    header('Location: ' . $externalUrl);
+    exit;
+}
+
+// ── 6. Detect MIME type ───────────────────────────────────────────────────────
+
+$mimeMap = [
+    'pdf'  => 'application/pdf',
+    'png'  => 'image/png',
+    'jpg'  => 'image/jpeg',
+    'jpeg' => 'image/jpeg',
+    'gif'  => 'image/gif',
+    'webp' => 'image/webp',
+    'mp4'  => 'video/mp4',
+    'webm' => 'video/webm',
+    'mov'  => 'video/quicktime',
+    'ogg'  => 'video/ogg',
+    'doc'  => 'application/msword',
+    'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'xls'  => 'application/vnd.ms-excel',
+    'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'ppt'  => 'application/vnd.ms-powerpoint',
+    'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+];
+
+$mime = $mimeMap[$ext] ?? null;
+if (!$mime) {
+    $typeFromDb = strtolower($resource['resource_type'] ?? '');
+    $mime = match($typeFromDb) {
+        'pdf'   => 'application/pdf',
+        'video' => 'video/mp4',
+        'image' => 'image/jpeg',
+        default => 'application/octet-stream',
+    };
+}
+
+// ── 7. Proxy the file through PHP ────────────────────────────────────────────
+
+$safeTitle = preg_replace('/[^a-zA-Z0-9._\- ]/', '_', $title);
+$fileExt   = $ext ?: 'bin';
+
+if ($action === 'download') {
+    header('Content-Disposition: attachment; filename="' . $safeTitle . '.' . $fileExt . '"');
+} else {
+    header('Content-Disposition: inline; filename="' . $safeTitle . '.' . $fileExt . '"');
+}
+
+header('Content-Type: ' . $mime);
+header('X-Content-Type-Options: nosniff');
+header('Cache-Control: private, max-age=3600');
+
+$ch = curl_init($sourceUrl);
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => false,
+    CURLOPT_FOLLOWLOCATION => true,
+    CURLOPT_MAXREDIRS      => 5,
+    CURLOPT_TIMEOUT        => 60,
+    CURLOPT_CONNECTTIMEOUT => 10,
+    CURLOPT_SSL_VERIFYPEER => true,
+    CURLOPT_USERAGENT      => 'PREPAURA-Server/1.0',
+    CURLOPT_WRITEFUNCTION  => function($ch, $data) {
+        echo $data;
+        return strlen($data);
+    },
+]);
+
+$ok       = curl_exec($ch);
+$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+
+if (!$ok || $httpCode !== 200) {
+    error_log("serve-admin-resource: Cloudinary fetch failed. HTTP {$httpCode} for {$sourceUrl}");
+}
 exit;
+
+function _adminRootUrl(): string {
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    $script = str_replace('\\', '/', dirname(dirname(dirname($_SERVER['SCRIPT_NAME']))));
+    return $scheme . '://' . $host . rtrim($script, '/') . '/';
+}

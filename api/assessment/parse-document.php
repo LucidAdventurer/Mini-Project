@@ -25,7 +25,14 @@ if (!$conn) {
     exit;
 }
 
-validateSession($conn, 'teacher');
+$user = null;
+
+foreach (['admin', 'teacher'] as $role) {
+    try {
+        $user = validateSession($conn, $role);
+        break;
+    } catch (Exception $e) {}
+}
 
 header('Content-Type: application/json');
 

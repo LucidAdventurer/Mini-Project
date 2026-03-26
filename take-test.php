@@ -36,7 +36,7 @@ $asmResult = safePreparedQuery($conn,
     "SELECT
         aa.attempt_id,
         aa.assessment_id,
-        aa.start_time,
+        aa.created_at,
         aa.status,
 
         a.title,
@@ -46,7 +46,7 @@ $asmResult = safePreparedQuery($conn,
         a.randomize_questions,
         a.randomize_options,
 
-        TIMESTAMPDIFF(SECOND, aa.start_time, NOW()) AS elapsed_seconds
+        TIMESTAMPDIFF(SECOND, aa.created_at, NOW()) AS elapsed_seconds
 
      FROM assessment_attempts aa
      JOIN assessments a ON a.assessment_id = aa.assessment_id

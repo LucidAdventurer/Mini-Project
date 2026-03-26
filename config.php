@@ -21,6 +21,8 @@
 set_time_limit(120); // 2 minutes for remote DB operations
 ini_set('max_execution_time', '120');
 
+date_default_timezone_set('Asia/Kolkata');
+
 // ========================================
 // LOAD ENV.PHP CONFIGURATION
 // ========================================
@@ -173,6 +175,7 @@ function createDatabaseConnection() {
 
 // Establish database connection
 $conn = createDatabaseConnection();
+$conn->query("SET time_zone = '+05:30'");
 
 if ($conn === null || $conn->connect_error) {
     // Log the error
@@ -317,8 +320,6 @@ function ensureDatabaseConnection(&$conn) {
     
     return ($conn !== null);
 }
-
-$conn->query("SET time_zone = '+05:30'");
 
 // ========================================
 // SHUTDOWN HANDLER
