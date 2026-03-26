@@ -43,7 +43,8 @@ if (!empty($_SESSION['login_time']) && empty($_SESSION['due_popup_shown'])) {
            AND a.end_time > NOW()
            AND a.end_time <= DATE_ADD(NOW(), INTERVAL 3 DAY)
            AND (
-               EXISTS (
+               a.visibility = 'public'
+               OR EXISTS (
                    SELECT 1 FROM assessment_targets at2
                    WHERE at2.assessment_id = a.assessment_id
                      AND at2.target_type = 'student'
@@ -134,7 +135,8 @@ $availCountResult = safePreparedQuery($conn,
        AND (a.start_time IS NULL OR a.start_time <= NOW())
        AND (a.end_time   IS NULL OR a.end_time   >= NOW())
        AND (
-           EXISTS (
+           a.visibility = 'public'
+           OR EXISTS (
                SELECT 1 FROM assessment_targets at2
                WHERE at2.assessment_id = a.assessment_id
                  AND at2.target_type = 'student'
@@ -186,7 +188,8 @@ $assessmentsResult = safePreparedQuery($conn,
        AND (a.start_time IS NULL OR a.start_time <= NOW())
        AND (a.end_time   IS NULL OR a.end_time   >= NOW())
        AND (
-           EXISTS (
+           a.visibility = 'public'
+           OR EXISTS (
                SELECT 1 FROM assessment_targets at2
                WHERE at2.assessment_id = a.assessment_id
                  AND at2.target_type = 'student'
