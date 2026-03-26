@@ -1153,10 +1153,7 @@ function dismissResourceNotif(materialId) {
 /* ── Actions ── */
 function openFile(id, type) {
     dismissResourceNotif(id);
-    if (['pdf','video'].includes(type))
-        window.open('api/resources/view-resource.php?material_id='+id, '_blank');
-    else
-        dlFile(id,'');
+    window.open('api/resources/view-resource.php?material_id='+id, '_blank');
 }
 function dlFile(id, title) {
     const a = document.createElement('a');
