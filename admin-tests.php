@@ -192,7 +192,6 @@ require_once __DIR__ . '/admin-head.php';
           <label class="ct-label">Visibility</label>
           <select id="ctVisibility" class="ct-input">
             <option value="public">Public</option>
-            <option value="group">Group</option>
             <option value="private">Private</option>
           </select>
         </div>

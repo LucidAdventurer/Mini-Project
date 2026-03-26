@@ -31,8 +31,7 @@ if ($materialId <= 0) {
 
 // ── Fetch material ────────────────────────────────────────────────────────
 $r = safePreparedQuery($conn,
-    "SELECT material_id, title, cloudinary_public_id, external_url,
-            (visibility = 'public') AS is_public
+    "SELECT material_id, title, cloudinary_public_id, external_url, visibility
      FROM materials WHERE material_id = ?",
     'i', [$materialId]
 );
@@ -46,19 +45,39 @@ if (!$r['success'] || !$r['result'] || $r['result']->num_rows === 0) {
 $material = $r['result']->fetch_assoc();
 $r['result']->free();
 
+$vis = $material['visibility'] ?? 'private';
+
 // ── Access control ────────────────────────────────────────────────────────
-// Guests may only view public materials.
-if ($isGuest && !$material['is_public']) {
+if ($isGuest && $vis !== 'public') {
     http_response_code(403);
     echo 'Access denied.';
     exit;
 }
 
-// Logged-in students cannot view private materials either.
-if ($role === 'student' && !$material['is_public']) {
-    http_response_code(403);
-    echo 'Access denied.';
-    exit;
+if ($role === 'student' && $vis !== 'public') {
+    if ($vis === 'group') {
+        $access = safePreparedQuery($conn,
+            "SELECT 1 FROM material_targets mt
+             JOIN group_members gm ON gm.group_id = mt.target_id
+             WHERE mt.material_id = ? AND mt.target_type = 'group' AND gm.student_id = ?
+             UNION
+             SELECT 1 FROM material_targets mt
+             WHERE mt.material_id = ? AND mt.target_type = 'student' AND mt.target_id = ?
+             LIMIT 1",
+            'iiii', [$materialId, $userId, $materialId, $userId]
+        );
+        $hasAccess = $access['success'] && $access['result'] && $access['result']->num_rows > 0;
+        if ($access['result']) $access['result']->free();
+        if (!$hasAccess) {
+            http_response_code(403);
+            echo 'Access denied.';
+            exit;
+        }
+    } else {
+        http_response_code(403);
+        echo 'Access denied.';
+        exit;
+    }
 }
 
 $title = htmlspecialchars($material['title'], ENT_QUOTES, 'UTF-8');

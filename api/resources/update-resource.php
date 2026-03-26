@@ -10,7 +10,7 @@ header('Content-Type: application/json');
 
 $currentUser = validateSession($conn);
 $userId      = (int)$currentUser['user_id'];
-$role        = $currentUser['role'];   // role, not user_type
+$role        = $currentUser['role'];
 
 if (!in_array($role, ['admin', 'teacher'], true)) {
     http_response_code(403);
@@ -38,6 +38,7 @@ $title       = trim($body['title']         ?? '');
 $description = trim($body['description']   ?? '');
 $category    = trim($body['category']      ?? '');
 $externalUrl = trim($body['external_url']  ?? '');
+$targets     = $body['targets']            ?? null; // array of {type, id} or null = no change
 
 // Accept either visibility string or is_public int from JS
 $visibility = trim($body['visibility'] ?? '');
@@ -51,14 +52,11 @@ if ($materialId <= 0) {
     echo json_encode(['success' => false, 'error' => 'Invalid material ID.']);
     exit;
 }
-if ($title === '') {
-    // Allow partial update (visibility toggle only) — title may be empty
-    // Only require title when other fields are also provided
-    if ($description !== '' || $category !== '') {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Title is required.']);
-        exit;
-    }
+
+if ($title === '' && ($description !== '' || $category !== '')) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'error' => 'Title is required.']);
+    exit;
 }
 
 $allowedCategories   = ['aptitude', 'verbal', 'logical', 'technical', 'general', 'coding', 'reasoning', 'english'];
@@ -80,7 +78,7 @@ if ($externalUrl !== '' && !filter_var($externalUrl, FILTER_VALIDATE_URL)) {
     exit;
 }
 
-// ── Verify material exists and check ownership ────────────────────────────
+// ── Verify ownership ──────────────────────────────────────────────────────
 $check = safePreparedQuery($conn,
     'SELECT material_id, created_by, title, description, category, visibility, external_url
      FROM materials WHERE material_id = ?',
@@ -100,15 +98,14 @@ if ($role !== 'admin' && (int)$mRow['created_by'] !== $userId) {
     exit;
 }
 
-// ── Merge with existing values so partial updates work ───────────────────
+// ── Merge with existing values ────────────────────────────────────────────
 $finalTitle       = $title       !== '' ? $title       : $mRow['title'];
 $finalDescription = $description !== '' ? $description : ($mRow['description'] ?? '');
 $finalCategory    = $category    !== '' ? $category    : ($mRow['category']    ?? 'general');
 $finalVisibility  = $visibility  !== '' ? $visibility  : $mRow['visibility'];
 $finalExternalUrl = $externalUrl !== '' ? $externalUrl : ($mRow['external_url'] ?? null);
 
-// ── Update — only columns that exist on materials ─────────────────────────
-// No difficulty, no is_public, no available_from/until on this table
+// ── Update materials row ──────────────────────────────────────────────────
 $result = safePreparedQuery($conn,
     'UPDATE materials SET
         title        = ?,
@@ -128,9 +125,49 @@ $result = safePreparedQuery($conn,
     ]
 );
 
-if ($result['success'] && $result['affected_rows'] >= 0) {
-    echo json_encode(['success' => true]);
-} else {
+if (!$result['success']) {
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'Update failed. Please try again.']);
+    exit;
+}
+
+// ── Sync material_targets ─────────────────────────────────────────────────
+// Always wipe existing targets first, then re-insert based on final visibility.
+// If $targets is null (not sent), reconstruct from visibility alone.
+$conn->begin_transaction();
+try {
+    // Delete existing targets
+    $del = $conn->prepare('DELETE FROM material_targets WHERE material_id = ?');
+    $del->bind_param('i', $materialId);
+    $del->execute();
+    $del->close();
+
+    // Insert new targets only when visibility = 'group'
+    if ($finalVisibility === 'group') {
+        if (is_array($targets) && count($targets) > 0) {
+            // Use targets from request payload
+            $ins = $conn->prepare(
+                'INSERT INTO material_targets (material_id, target_type, target_id) VALUES (?, ?, ?)'
+            );
+            foreach ($targets as $t) {
+                $tType = trim($t['type'] ?? '');
+                $tId   = (int)($t['id']   ?? 0);
+                if (!in_array($tType, ['group', 'student'], true) || $tId <= 0) continue;
+                $ins->bind_param('isi', $materialId, $tType, $tId);
+                $ins->execute();
+            }
+            $ins->close();
+        }
+        // If targets is null or empty and visibility is group, targets were wiped above —
+        // the resource becomes group-visible with no targets (no one can see it).
+        // This mirrors the assessment behaviour.
+    }
+    // For public/private, no rows in material_targets needed.
+
+    $conn->commit();
+    echo json_encode(['success' => true]);
+} catch (Exception $e) {
+    $conn->rollback();
+    http_response_code(500);
+    echo json_encode(['success' => false, 'error' => 'Failed to update targets.']);
 }

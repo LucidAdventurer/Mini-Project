@@ -228,7 +228,7 @@ $ins = safePreparedQuery(
         $createdBy,           // created_by: user_id of the uploader
         $visibility,          // visibility: 'public' or 'private'
         $cloudinaryPublicId ?: null,  // cloudinary_public_id from frontend
-        $fileUrl,             // external_url: Cloudinary URL or external link
+        $storedExternalUrl ?: null,   // external_url: Cloudinary URL or external link
         $category,
     ]
 );
