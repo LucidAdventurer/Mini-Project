@@ -79,7 +79,7 @@ if ($resourceId > 0) {
     $r = safePreparedQuery($conn,
         "SELECT material_id AS id, title, cloudinary_public_id, external_url,
                 NULL AS file_path,
-                (visibility = 'public') AS is_public
+                visibility
          FROM materials WHERE material_id = ?",
         'i', [$materialId]
     );
@@ -93,15 +93,40 @@ if ($resourceId > 0) {
     $item = $r['result']->fetch_assoc();
     $r['result']->free();
 
-    if ($isGuest && !$item['is_public']) {
+    $vis = $item['visibility'] ?? 'private';
+
+    if ($isGuest && $vis !== 'public') {
         http_response_code(403);
         echo 'Access denied.';
         exit;
     }
-    if ($role === 'student' && !$item['is_public']) {
-        http_response_code(403);
-        echo 'Access denied.';
-        exit;
+
+    if ($role === 'student' && $vis !== 'public') {
+        if ($vis === 'group') {
+            // Check group membership
+            $access = safePreparedQuery($conn,
+                "SELECT 1 FROM material_targets mt
+                 JOIN group_members gm ON gm.group_id = mt.target_id
+                 WHERE mt.material_id = ? AND mt.target_type = 'group' AND gm.student_id = ?
+                 UNION
+                 SELECT 1 FROM material_targets mt
+                 WHERE mt.material_id = ? AND mt.target_type = 'student' AND mt.target_id = ?
+                 LIMIT 1",
+                'iiii', [$materialId, $userId, $materialId, $userId]
+            );
+            $hasAccess = $access['success'] && $access['result'] && $access['result']->num_rows > 0;
+            if ($access['result']) $access['result']->free();
+            if (!$hasAccess) {
+                http_response_code(403);
+                echo 'Access denied.';
+                exit;
+            }
+        } else {
+            // private
+            http_response_code(403);
+            echo 'Access denied.';
+            exit;
+        }
     }
 
     $title              = $item['title'];

@@ -33,7 +33,10 @@ if (!empty($_GET['material_id'])) {
         "SELECT m.material_id, m.title, m.description, m.category,
                 m.visibility, m.cloudinary_public_id, m.external_url,
                 m.created_by, m.created_at,
-                u.full_name AS uploaded_by_name
+                u.full_name AS uploaded_by_name,
+                (SELECT mt.target_id FROM material_targets mt
+                 WHERE mt.material_id = m.material_id
+                   AND mt.target_type = 'group' LIMIT 1) AS group_id
          FROM materials m
          LEFT JOIN users u ON u.user_id = m.created_by
          WHERE m.material_id = ? AND m.created_by = ?",
@@ -130,7 +133,10 @@ $r = safePreparedQuery($conn,
         m.cloudinary_public_id,
         m.external_url,
         m.created_at,
-        u.full_name AS uploaded_by_name
+        u.full_name AS uploaded_by_name,
+        (SELECT mt.target_id FROM material_targets mt
+         WHERE mt.material_id = m.material_id
+           AND mt.target_type = 'group' LIMIT 1) AS group_id
      FROM materials m
      LEFT JOIN users u ON u.user_id = m.created_by
      WHERE {$where}
@@ -183,6 +189,7 @@ function buildMaterial(array $row): array {
         'material_type'        => $type,
         'is_public'            => $isPublic,
         'visibility'           => $row['visibility'] ?? 'public',
+        'group_id'             => isset($row['group_id']) ? (int)$row['group_id'] : null,
         'cloudinary_public_id' => $row['cloudinary_public_id'] ?? null,
         'external_url'         => $row['external_url'] ?? null,
         'file_size'            => null,

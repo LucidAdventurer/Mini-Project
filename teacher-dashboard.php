@@ -236,7 +236,7 @@ default     => ucfirst($status),
   --r-xl:        28px;
   --ease:        cubic-bezier(0.22,1,0.36,1);
   --t:           0.22s var(--ease);
-  --font-head:   'Syne', system-ui, sans-serif;
+  --font-head:   'Times New Roman', Times, serif;
   --font-body:   'DM Sans', system-ui, sans-serif;
   --nav-h:       64px;
 }

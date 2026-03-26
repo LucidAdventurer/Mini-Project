@@ -144,7 +144,7 @@ $initials    = implode('', array_map(fn($p) => strtoupper($p[0]), array_slice(ex
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin Profile — PrepaUra</title>
+<title>Admin Profile — PrepAura</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
@@ -167,7 +167,7 @@ $initials    = implode('', array_map(fn($p) => strtoupper($p[0]), array_slice(ex
     --text-muted:  #6b7a99;
     --text-subtle: #3d4a68;
     --success:     #10b981;
-    --font-head:   'Syne', sans-serif;
+    --font-head:   'Times New Roman', Times, serif;
     --font-body:   'DM Sans', sans-serif;
     --radius:      12px;
     --radius-sm:   8px;

@@ -506,7 +506,7 @@ function timeAgo(string $datetime): string {
 
         .notif-dropdown-header {
             padding: 16px 20px 14px;
-            font-family: 'Sora', sans-serif;
+            font-family: 'Times New Roman', Times, serif;
             font-weight: 700; font-size: 14px; color: var(--text);
             border-bottom: 1px solid var(--border);
             display: flex; align-items: center; justify-content: space-between;
@@ -594,7 +594,7 @@ function timeAgo(string $datetime): string {
             border-radius: 8px;
             display: flex; align-items: center; justify-content: center;
             color: white; font-weight: 700; font-size: 13px;
-            font-family: 'Sora', sans-serif;
+            font-family: 'Times New Roman', Times, serif;
         }
 
         .profile-name { font-weight: 600; font-size: 13.5px; color: rgba(255,255,255,.95); }
@@ -626,10 +626,10 @@ function timeAgo(string $datetime): string {
             border-radius: 12px;
             display: flex; align-items: center; justify-content: center;
             color: white; font-weight: 800; font-size: 18px;
-            font-family: 'Sora', sans-serif; flex-shrink: 0;
+            font-family: 'Times New Roman', Times, serif; flex-shrink: 0;
         }
         .dropdown-user-info { flex: 1; overflow: hidden; }
-        .dropdown-user-name { font-family: 'Sora', sans-serif; font-weight: 700; font-size: 15px; color: white; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dropdown-user-name { font-family: 'Times New Roman', Times, serif; font-weight: 700; font-size: 15px; color: white; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .dropdown-user-email { font-size: 12px; color: rgba(255,255,255,.65); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
         .dropdown-menu { padding: 8px; }
@@ -771,7 +771,7 @@ function timeAgo(string $datetime): string {
             display: flex; align-items: flex-start; justify-content: space-between;
         }
         .report-modal-title {
-            font-family: 'Sora', sans-serif; font-size: 17px; font-weight: 800; color: #fff;
+            font-family: 'Times New Roman', Times, serif; font-size: 17px; font-weight: 800; color: #fff;
             margin-bottom: 4px;
         }
         .report-modal-sub { font-size: 12px; color: rgba(255,255,255,.6); }
@@ -872,7 +872,7 @@ function timeAgo(string $datetime): string {
         }
 
         .welcome-content h1 {
-            font-family: 'Sora', sans-serif;
+            font-family: 'Times New Roman', Times, serif;
             font-size: 26px; font-weight: 800;
             color: white; margin-bottom: 6px;
             letter-spacing: -.3px;
@@ -893,7 +893,7 @@ function timeAgo(string $datetime): string {
         }
         .stat-item:hover { background: rgba(255,255,255,.16); }
         .stat-number {
-            font-family: 'Sora', sans-serif;
+            font-family: 'Times New Roman', Times, serif;
             font-size: 26px; font-weight: 800;
             color: white; display: block; line-height: 1;
         }
@@ -916,7 +916,7 @@ function timeAgo(string $datetime): string {
             margin-bottom: 18px;
         }
         .section-title {
-            font-family: 'Sora', sans-serif;
+            font-family: 'Times New Roman', Times, serif;
             font-size: 18px; font-weight: 700; color: var(--text);
         }
         .view-all-link {
@@ -979,7 +979,7 @@ function timeAgo(string $datetime): string {
         }
 
         .assessment-title {
-            font-family: 'Sora', sans-serif;
+            font-family: 'Times New Roman', Times, serif;
             font-size: 15.5px; font-weight: 700; color: var(--text);
             margin-bottom: 4px; line-height: 1.3;
         }
@@ -989,7 +989,7 @@ function timeAgo(string $datetime): string {
             padding: 4px 11px; border-radius: 6px;
             font-size: 11.5px; font-weight: 700;
             white-space: nowrap; flex-shrink: 0;
-            font-family: 'Sora', sans-serif;
+            font-family: 'Times New Roman', Times, serif;
             letter-spacing: .02em;
         }
         .difficulty-badge.easy   { background: #dcfce7; color: #166534; }
@@ -1040,7 +1040,7 @@ function timeAgo(string $datetime): string {
             border: 1px solid var(--border);
         }
         .sidebar-card-title {
-            font-family: 'Sora', sans-serif;
+            font-family: 'Times New Roman', Times, serif;
             font-size: 15px; font-weight: 700; color: var(--text);
             margin-bottom: 18px;
             display: flex; align-items: center; gap: 8px;

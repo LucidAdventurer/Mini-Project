@@ -76,6 +76,14 @@ define('CLOUDINARY_CLOUD_NAME', $_env['CLOUDINARY_CLOUD_NAME'] ?? '');
 define('CLOUDINARY_API_KEY',    $_env['CLOUDINARY_API_KEY']    ?? '');
 define('CLOUDINARY_API_SECRET', $_env['CLOUDINARY_API_SECRET'] ?? '');
 
+// SMTP
+define('SMTP_HOST',      $_env['SMTP_HOST']      ?? '');
+define('SMTP_PORT',      (int)($_env['SMTP_PORT'] ?? 587));
+define('SMTP_USER',      $_env['SMTP_USER']       ?? '');
+define('SMTP_PASS',      $_env['SMTP_PASS']       ?? '');
+define('SMTP_FROM',      $_env['SMTP_FROM']       ?? '');
+define('SMTP_FROM_NAME', $_env['SMTP_FROM_NAME']  ?? 'PTA Platform');
+
 // Connection settings for remote database
 define('DB_CONNECT_TIMEOUT', 10); // Shorter - fail fast if DB is down
 define('DB_READ_TIMEOUT', 30);     // Read timeout in seconds

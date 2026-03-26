@@ -58,14 +58,21 @@ require_once __DIR__ . '/admin-head.php';
                 </div>
             </div>
             <div class="card">
-                <div class="card-header"><h3>Database Overview</h3><p>PTA schema record counts</p></div>
+                <div class="card-header"><h3>Database Overview</h3><p>Live record counts from all active tables</p></div>
                 <div class="card-body">
                     <div class="bar-chart">
                         <div class="bar-row"><div class="bar-label">users</div><div class="bar-track"><div class="bar-fill" id="dbUsersBar" style="width:0%"></div></div><div class="bar-val" id="dbUsers">—</div></div>
                         <div class="bar-row"><div class="bar-label">assessments</div><div class="bar-track"><div class="bar-fill" id="dbAssessmentsBar" style="width:0%"></div></div><div class="bar-val" id="dbAssessments">—</div></div>
+                        <div class="bar-row"><div class="bar-label">questions</div><div class="bar-track"><div class="bar-fill" id="dbQuestionsBar" style="width:0%"></div></div><div class="bar-val" id="dbQuestions">—</div></div>
+                        <div class="bar-row"><div class="bar-label">question_options</div><div class="bar-track"><div class="bar-fill" id="dbOptionsBar" style="width:0%"></div></div><div class="bar-val" id="dbOptions">—</div></div>
                         <div class="bar-row"><div class="bar-label">attempts</div><div class="bar-track"><div class="bar-fill green" id="dbAttemptsBar" style="width:0%"></div></div><div class="bar-val" id="dbAttempts">—</div></div>
+                        <div class="bar-row"><div class="bar-label">answers</div><div class="bar-track"><div class="bar-fill green" id="dbAnswersBar" style="width:0%"></div></div><div class="bar-val" id="dbAnswers">—</div></div>
+                        <div class="bar-row"><div class="bar-label">groups</div><div class="bar-track"><div class="bar-fill yellow" id="dbGroupsBar" style="width:0%"></div></div><div class="bar-val" id="dbGroups">—</div></div>
+                        <div class="bar-row"><div class="bar-label">group_members</div><div class="bar-track"><div class="bar-fill yellow" id="dbGroupMembersBar" style="width:0%"></div></div><div class="bar-val" id="dbGroupMembers">—</div></div>
+                        <div class="bar-row"><div class="bar-label">materials</div><div class="bar-track"><div class="bar-fill" id="dbMaterialsBar" style="width:0%"></div></div><div class="bar-val" id="dbMaterials">—</div></div>
+                        <div class="bar-row"><div class="bar-label">resources</div><div class="bar-track"><div class="bar-fill" id="dbResourcesBar" style="width:0%"></div></div><div class="bar-val" id="dbResources">—</div></div>
                         <div class="bar-row"><div class="bar-label">notifications</div><div class="bar-track"><div class="bar-fill yellow" id="dbNotificationsBar" style="width:0%"></div></div><div class="bar-val" id="dbNotifications">—</div></div>
-                        <div class="bar-row"><div class="bar-label">materials</div><div class="bar-track"><div class="bar-fill" id="dbAuditLogsBar" style="width:0%"></div></div><div class="bar-val" id="dbAuditLogs">—</div></div>
+                        <div class="bar-row"><div class="bar-label">login_activity</div><div class="bar-track"><div class="bar-fill" id="dbLoginActivityBar" style="width:0%"></div></div><div class="bar-val" id="dbLoginActivity">—</div></div>
                     </div>
                 </div>
             </div>
@@ -104,16 +111,25 @@ function renderSettings(d) {
 
 function populateDbOverview(counts) {
     const rows = [
-        {label:'dbUsers',       bar:'dbUsersBar',       val:counts.users},
-        {label:'dbAssessments', bar:'dbAssessmentsBar',  val:counts.assessments},
-        {label:'dbAttempts',    bar:'dbAttemptsBar',     val:counts.attempts},
-        {label:'dbNotifications',bar:'dbNotificationsBar',val:counts.notifications},
-        {label:'dbAuditLogs',   bar:'dbAuditLogsBar',    val:counts.materials},
+        { label:'dbUsers',        bar:'dbUsersBar',        val: counts.users },
+        { label:'dbAssessments',  bar:'dbAssessmentsBar',  val: counts.assessments },
+        { label:'dbQuestions',    bar:'dbQuestionsBar',    val: counts.questions },
+        { label:'dbOptions',      bar:'dbOptionsBar',      val: counts.question_options },
+        { label:'dbAttempts',     bar:'dbAttemptsBar',     val: counts.assessment_attempts },
+        { label:'dbAnswers',      bar:'dbAnswersBar',      val: counts.answers },
+        { label:'dbGroups',       bar:'dbGroupsBar',       val: counts.groups },
+        { label:'dbGroupMembers', bar:'dbGroupMembersBar', val: counts.group_members },
+        { label:'dbMaterials',    bar:'dbMaterialsBar',    val: counts.materials },
+        { label:'dbResources',    bar:'dbResourcesBar',    val: counts.resources },
+        { label:'dbNotifications',bar:'dbNotificationsBar',val: counts.notifications },
+        { label:'dbLoginActivity',bar:'dbLoginActivityBar',val: counts.login_activity },
     ];
     const maxVal = Math.max(1, ...rows.map(r => r.val || 0));
-    rows.forEach(({label, bar, val}) => {
-        const valEl = document.getElementById(label); if (valEl) valEl.textContent = val ?? '—';
-        const barEl = document.getElementById(bar); if (barEl) barEl.style.width = Math.round(((val||0)/maxVal)*100) + '%';
+    rows.forEach(({ label, bar, val }) => {
+        const valEl = document.getElementById(label);
+        if (valEl) valEl.textContent = (val !== undefined && val !== null) ? fmtNum(val) : '—';
+        const barEl = document.getElementById(bar);
+        if (barEl) barEl.style.width = Math.round(((val || 0) / maxVal) * 100) + '%';
     });
 }
 
