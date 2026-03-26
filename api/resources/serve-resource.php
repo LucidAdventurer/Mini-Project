@@ -37,10 +37,9 @@ if ($resourceId <= 0 && $materialId <= 0) {
 
 // ── Fetch from the correct table ──────────────────────────────────────────
 if ($resourceId > 0) {
-    // ── resources table (public library) ─────────────────────────────────
     $r = safePreparedQuery($conn,
         "SELECT resource_id AS id, title, cloudinary_public_id, external_url,
-                file_path, is_public
+                file_path, is_public, resource_type
          FROM resources WHERE resource_id = ?",
         'i', [$resourceId]
     );
@@ -54,7 +53,6 @@ if ($resourceId > 0) {
     $item = $r['result']->fetch_assoc();
     $r['result']->free();
 
-    // Guests and students may only access public resources
     if (!$item['is_public'] && ($isGuest || $role === 'student')) {
         http_response_code(403);
         echo 'Access denied.';
@@ -65,10 +63,9 @@ if ($resourceId > 0) {
     $externalUrl        = $item['external_url']         ?? '';
     $cloudinaryPublicId = $item['cloudinary_public_id'] ?? '';
     $filePath           = $item['file_path']            ?? '';
+    $resourceTypeDb     = strtolower($item['resource_type'] ?? '');
 
 } else {
-    // ── materials table (teacher/admin materials) ─────────────────────────
-    // Dismiss notification for students
     if ($userId && $role === 'student') {
         safePreparedQuery($conn,
             "DELETE FROM notifications WHERE user_id = ? AND type = 'material' AND related_entity_id = ?",
@@ -79,7 +76,7 @@ if ($resourceId > 0) {
     $r = safePreparedQuery($conn,
         "SELECT material_id AS id, title, cloudinary_public_id, external_url,
                 NULL AS file_path,
-                visibility
+                visibility, NULL AS resource_type
          FROM materials WHERE material_id = ?",
         'i', [$materialId]
     );
@@ -103,7 +100,6 @@ if ($resourceId > 0) {
 
     if ($role === 'student' && $vis !== 'public') {
         if ($vis === 'group') {
-            // Check group membership
             $access = safePreparedQuery($conn,
                 "SELECT 1 FROM material_targets mt
                  JOIN group_members gm ON gm.group_id = mt.target_id
@@ -122,7 +118,6 @@ if ($resourceId > 0) {
                 exit;
             }
         } else {
-            // private
             http_response_code(403);
             echo 'Access denied.';
             exit;
@@ -133,9 +128,10 @@ if ($resourceId > 0) {
     $externalUrl        = $item['external_url']         ?? '';
     $cloudinaryPublicId = $item['cloudinary_public_id'] ?? '';
     $filePath           = '';
+    $resourceTypeDb     = '';
 }
 
-// ── Case 1: file_path (resources table legacy local file) ────────────────
+// ── Case 1: Local file ────────────────────────────────────────────────────
 if ($filePath !== '') {
     $localPath = __DIR__ . '/../../' . $filePath;
     if (file_exists($localPath)) {
@@ -163,17 +159,13 @@ if ($filePath !== '') {
     }
 }
 
-// ── Case 2: Cloudinary-stored file — checked BEFORE external_url ─────────
-// IMPORTANT: When a file is uploaded via admin, BOTH cloudinary_public_id
-// AND external_url (the full Cloudinary https URL) are saved to the DB.
-// We must check cloudinary_public_id first — if we let external_url fire
-// first it redirects to the unsigned raw Cloudinary URL which is blocked
-// on the free tier. The signed URL path here requires credentials in env.php.
+// ── Case 2: Cloudinary file ───────────────────────────────────────────────
 if ($cloudinaryPublicId !== '') {
     $cloudName = !empty(CLOUDINARY_CLOUD_NAME) ? CLOUDINARY_CLOUD_NAME : 'dmysg5azm';
+    $apiKey    = !empty(CLOUDINARY_API_KEY)    ? CLOUDINARY_API_KEY    : '';
+    $apiSecret = !empty(CLOUDINARY_API_SECRET) ? CLOUDINARY_API_SECRET : '';
 
-    $ext = strtolower(pathinfo($cloudinaryPublicId, PATHINFO_EXTENSION));
-
+    $ext       = strtolower(pathinfo($cloudinaryPublicId, PATHINFO_EXTENSION));
     $videoExts = ['mp4', 'webm', 'ogg', 'mov', 'avi'];
     $imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 
@@ -182,14 +174,23 @@ if ($cloudinaryPublicId !== '') {
     } elseif (in_array($ext, $imageExts, true)) {
         $resourceType = 'image';
     } else {
-        $resourceType = 'raw';  // PDF, DOCX, etc.
+        // resources table = admin uploads (stored as image)
+        // materials table = teacher uploads (stored as raw)
+        $resourceType = ($resourceId > 0) ? 'image' : 'raw';
+    }
+
+    // No extension — fall back to resource_type column
+    if (!$ext) {
+        $resourceType = match($resourceTypeDb) {
+            'video'           => 'video',
+            'pdf', 'document' => ($resourceId > 0) ? 'image' : 'raw',
+            default           => ($resourceId > 0) ? 'image' : 'raw',
+        };
+        if ($resourceTypeDb === 'pdf') $ext = 'pdf';
     }
 
     // ── Signed URL ────────────────────────────────────────────────────────
-    // config.php defines CLOUDINARY_API_KEY/SECRET as '' when not in env.php.
-    // Must use !empty(), not defined() — defined() returns true for '' and
-    // would produce an invalid signature, causing a Cloudinary 401.
-    if (!empty(CLOUDINARY_API_KEY) && !empty(CLOUDINARY_API_SECRET)) {
+    if (!empty($apiKey) && !empty($apiSecret)) {
         $timestamp = time();
         $expiresAt = $timestamp + 300;
 
@@ -198,7 +199,7 @@ if ($cloudinaryPublicId !== '') {
                    . "&public_id={$cloudinaryPublicId}"
                    . "&timestamp={$timestamp}"
                    . "&type=upload"
-                   . CLOUDINARY_API_SECRET;
+                   . $apiSecret;
         $signature = sha1($sigString);
 
         $deliveryUrl = "https://api.cloudinary.com/v1_1/{$cloudName}/{$resourceType}/download?"
@@ -208,7 +209,7 @@ if ($cloudinaryPublicId !== '') {
                 'public_id'  => $cloudinaryPublicId,
                 'timestamp'  => $timestamp,
                 'type'       => 'upload',
-                'api_key'    => CLOUDINARY_API_KEY,
+                'api_key'    => $apiKey,
                 'signature'  => $signature,
             ]);
 
@@ -216,14 +217,14 @@ if ($cloudinaryPublicId !== '') {
         exit;
     }
 
-    // ── No credentials: unsigned delivery (images/video only on free tier) ─
+    // ── No credentials: unsigned (images/video only) ──────────────────────
     if ($resourceType === 'image' || $resourceType === 'video') {
         $deliveryUrl = "https://res.cloudinary.com/{$cloudName}/{$resourceType}/upload/{$cloudinaryPublicId}";
         header('Location: ' . $deliveryUrl);
         exit;
     }
 
-    // ── PDF/raw with no credentials: try curl proxy, then friendly error ──
+    // ── No credentials + raw: proxy attempt ───────────────────────────────
     $fetchUrl = "https://res.cloudinary.com/{$cloudName}/raw/upload/{$cloudinaryPublicId}";
     $ch = curl_init($fetchUrl);
     curl_setopt_array($ch, [
@@ -255,7 +256,6 @@ if ($cloudinaryPublicId !== '') {
         exit;
     }
 
-    // Credentials missing — show a clear message instead of a broken redirect
     http_response_code(503);
     header('Content-Type: text/html; charset=utf-8');
     echo '<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -267,15 +267,14 @@ if ($cloudinaryPublicId !== '') {
           <body><div class="box">
           <h2>📄 PDF unavailable</h2>
           <p>This file requires Cloudinary API credentials to serve.<br>
-          Add <code>CLOUDINARY_API_KEY</code> and <code>CLOUDINARY_API_SECRET</code> to <code>env.php</code> to enable PDF delivery.</p>
+          Add <code>CLOUDINARY_API_KEY</code> and <code>CLOUDINARY_API_SECRET</code> to <code>env.php</code>.</p>
           <a href="javascript:history.back()">← Go back</a>
           </div></body></html>';
     exit;
 }
 
-// ── Case 3: External URL (true link-type resource, no cloudinary_public_id) ─
+// ── Case 3: External URL ──────────────────────────────────────────────────
 if ($externalUrl !== '') {
-    // Check if it's a legacy local file path stored in external_url
     $localPath = __DIR__ . '/../../' . $externalUrl;
     if (file_exists($localPath)) {
         $ext      = strtolower(pathinfo($localPath, PATHINFO_EXTENSION));
@@ -301,7 +300,6 @@ if ($externalUrl !== '') {
         exit;
     }
 
-    // True external URL — redirect directly
     if (filter_var($externalUrl, FILTER_VALIDATE_URL)) {
         header('Location: ' . $externalUrl);
         exit;

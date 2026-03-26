@@ -2,28 +2,12 @@
 /* ========================================
  * ADMIN RESOURCE SERVE
  * File: api/admin/serve-admin-resource.php
- *
- * Proxies a resource's bytes through PHP so the browser receives the correct
- * Content-Type header and can render PDFs inline.
- *
- * WHY PROXY (not redirect):
- *   Cloudinary stores files without extensions in the public_id
- *   (e.g. /image/upload/pta/b8qd9vszzg7it4hdvcpo). Without an extension
- *   Chrome cannot detect the MIME type, so redirecting directly produces
- *   "Failed to load PDF document" even though the bytes are correct.
- *   Proxying through PHP lets us set Content-Type explicitly.
- *
- * WHY NOT USE validateSession():
- *   db-guard's validateSession() calls isApiRequest() which matches any URL
- *   containing /api/ and returns a JSON 401 — the browser tab / iframe
- *   receives JSON instead of a file. We authenticate manually here so we can
- *   issue a plain redirect to the login page on auth failure.
  * ======================================== */
 
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
 
-// ── 1. Auth (manual — avoids JSON 401 from isApiRequest) ────────────────────
+// ── 1. Auth ──────────────────────────────────────────────────────────────────
 
 $uid  = getSessionUserId();
 $role = getSessionRole();
@@ -80,7 +64,7 @@ if (!$resource) {
 $col = $action === 'download' ? 'downloads' : 'views';
 $conn->query("UPDATE resources SET {$col} = {$col} + 1 WHERE resource_id = " . (int)$resourceId);
 
-// ── 5. Resolve source URL ────────────────────────────────────────────────────
+// ── 5. Resolve source ────────────────────────────────────────────────────────
 
 $publicId    = $resource['cloudinary_public_id'] ?? '';
 $externalUrl = $resource['external_url']         ?? '';
@@ -90,94 +74,80 @@ if (!$publicId && !$externalUrl) {
     http_response_code(404); die('No file attached to this resource.');
 }
 
-if ($publicId) {
-    $cloudName = defined('CLOUDINARY_CLOUD_NAME') ? CLOUDINARY_CLOUD_NAME : '';
-    if (!$cloudName) { http_response_code(500); die('Cloudinary not configured.'); }
-
-    $ext       = strtolower(pathinfo($publicId, PATHINFO_EXTENSION));
-    $videoExts = ['mp4', 'mov', 'webm', 'avi', 'mkv', 'ogg'];
-    $rawExts   = ['zip', 'rar', '7z', 'tar', 'gz', 'csv', 'xml', 'json'];
-
-    if (in_array($ext, $videoExts, true))   $cdnType = 'video';
-    elseif (in_array($ext, $rawExts, true)) $cdnType = 'raw';
-    else                                    $cdnType = 'image';
-
-    $sourceUrl = "https://res.cloudinary.com/{$cloudName}/{$cdnType}/upload/{$publicId}";
-} else {
+// ── Case 1: External URL only (no Cloudinary) ────────────────────────────────
+if (!$publicId && $externalUrl) {
     header('Location: ' . $externalUrl);
     exit;
 }
 
-// ── 6. Detect MIME type ───────────────────────────────────────────────────────
+// ── Case 2: Cloudinary file — use signed URL (same as teacher side) ──────────
 
-$mimeMap = [
-    'pdf'  => 'application/pdf',
-    'png'  => 'image/png',
-    'jpg'  => 'image/jpeg',
-    'jpeg' => 'image/jpeg',
-    'gif'  => 'image/gif',
-    'webp' => 'image/webp',
-    'mp4'  => 'video/mp4',
-    'webm' => 'video/webm',
-    'mov'  => 'video/quicktime',
-    'ogg'  => 'video/ogg',
-    'doc'  => 'application/msword',
-    'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'xls'  => 'application/vnd.ms-excel',
-    'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'ppt'  => 'application/vnd.ms-powerpoint',
-    'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-];
+$cloudName = !empty(CLOUDINARY_CLOUD_NAME) ? CLOUDINARY_CLOUD_NAME : '';
+$apiKey    = !empty(CLOUDINARY_API_KEY)    ? CLOUDINARY_API_KEY    : '';
+$apiSecret = !empty(CLOUDINARY_API_SECRET) ? CLOUDINARY_API_SECRET : '';
 
-$mime = $mimeMap[$ext] ?? null;
-if (!$mime) {
-    $typeFromDb = strtolower($resource['resource_type'] ?? '');
-    $mime = match($typeFromDb) {
-        'pdf'   => 'application/pdf',
-        'video' => 'video/mp4',
-        'image' => 'image/jpeg',
-        default => 'application/octet-stream',
-    };
+if (!$cloudName) {
+    http_response_code(500); die('Cloudinary not configured.');
 }
 
-// ── 7. Proxy the file through PHP ────────────────────────────────────────────
+// Determine resource type — admin resources are uploaded as 'image' type even
+// for PDFs (that's what the Cloudinary dashboard shows for this account).
+// Fall back to resource_type column when no extension in public_id.
+$ext       = strtolower(pathinfo($publicId, PATHINFO_EXTENSION));
+$videoExts = ['mp4', 'mov', 'webm', 'avi', 'mkv', 'ogg'];
+$imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 
-$safeTitle = preg_replace('/[^a-zA-Z0-9._\- ]/', '_', $title);
-$fileExt   = $ext ?: 'bin';
-
-if ($action === 'download') {
-    header('Content-Disposition: attachment; filename="' . $safeTitle . '.' . $fileExt . '"');
+if (in_array($ext, $videoExts, true)) {
+    $cdnType = 'video';
+} elseif (in_array($ext, $imageExts, true)) {
+    $cdnType = 'image';
 } else {
-    header('Content-Disposition: inline; filename="' . $safeTitle . '.' . $fileExt . '"');
+    // PDFs and docs — admin upload script stores them under 'image' type
+    $cdnType = 'image';
 }
 
-header('Content-Type: ' . $mime);
-header('X-Content-Type-Options: nosniff');
-header('Cache-Control: private, max-age=3600');
-
-$ch = curl_init($sourceUrl);
-curl_setopt_array($ch, [
-    CURLOPT_RETURNTRANSFER => false,
-    CURLOPT_FOLLOWLOCATION => true,
-    CURLOPT_MAXREDIRS      => 5,
-    CURLOPT_TIMEOUT        => 60,
-    CURLOPT_CONNECTTIMEOUT => 10,
-    CURLOPT_SSL_VERIFYPEER => true,
-    CURLOPT_USERAGENT      => 'PREPAURA-Server/1.0',
-    CURLOPT_WRITEFUNCTION  => function($ch, $data) {
-        echo $data;
-        return strlen($data);
-    },
-]);
-
-$ok       = curl_exec($ch);
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-
-if (!$ok || $httpCode !== 200) {
-    error_log("serve-admin-resource: Cloudinary fetch failed. HTTP {$httpCode} for {$sourceUrl}");
+// No extension fallback
+if (!$ext) {
+    $typeFromDb = strtolower($resource['resource_type'] ?? '');
+    $cdnType = match($typeFromDb) {
+        'video'           => 'video',
+        'pdf', 'document' => 'image', // stored as image type on this account
+        default           => 'image',
+    };
+    if ($typeFromDb === 'pdf') $ext = 'pdf';
 }
-exit;
+
+// ── Signed URL (same logic as serve-resource.php teacher side) ───────────────
+if (!empty($apiKey) && !empty($apiSecret)) {
+    $timestamp = time();
+    $expiresAt = $timestamp + 300;
+
+    $sigString = "attachment=" . ($action === 'download' ? 'true' : 'false')
+               . "&expires_at={$expiresAt}"
+               . "&public_id={$publicId}"
+               . "&timestamp={$timestamp}"
+               . "&type=upload"
+               . $apiSecret;
+    $signature = sha1($sigString);
+
+    $deliveryUrl = "https://api.cloudinary.com/v1_1/{$cloudName}/{$cdnType}/download?"
+        . http_build_query([
+            'attachment' => $action === 'download' ? 'true' : 'false',
+            'expires_at' => $expiresAt,
+            'public_id'  => $publicId,
+            'timestamp'  => $timestamp,
+            'type'       => 'upload',
+            'api_key'    => $apiKey,
+            'signature'  => $signature,
+        ]);
+
+    header('Location: ' . $deliveryUrl);
+    exit;
+}
+
+// ── No credentials fallback ───────────────────────────────────────────────────
+http_response_code(503);
+die('Cloudinary API credentials not configured. Add CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET to env.php.');
 
 function _adminRootUrl(): string {
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
