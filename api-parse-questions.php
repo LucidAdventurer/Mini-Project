@@ -265,6 +265,13 @@ function extractTextDocx(string $filePath): string
     $text = strip_tags($xml);
     $text = html_entity_decode($text, ENT_QUOTES | ENT_XML1, 'UTF-8');
 
+    // Split inline options onto their own lines.
+    // Handles DOCX where all options are in one paragraph:
+    // "A. PHP B) C C) Assembly D) COBOL" -> each option on its own line
+    $text = preg_replace('/(?<!\n)\s+([B-Db-d][.)]\s)/u', "\n$1", $text);
+    // Split inline Answer:/Ans:/Key: lines
+    $text = preg_replace('/(?<!\n)\s+((?:Answer|Ans|Key)\s*[:\-]\s*[a-dA-D])/iu', "\n$1", $text);
+
     // Collapse 3+ consecutive blank lines to 2
     $text = preg_replace("/\n{3,}/", "\n\n", $text);
 
@@ -392,6 +399,48 @@ function parseQuestions(string $text): array
         if (preg_match($optPat, $s, $m) && $current !== null) {
             $optText   = trim($m[2]);
             $isCorrect = false;
+
+            // Check if this "option" line actually contains multiple inline options
+            // e.g. "PHP B) C C) Assembly D) COBOL Answer: A) PHP"
+            // Split it on B) C) D) boundaries (letter followed by ) or .)
+            $inlineSplit = preg_split('/\s+(?=[B-Db-d][.)]\s)/u', $optText);
+            if (count($inlineSplit) > 1) {
+                // First part belongs to option A (current match)
+                $firstText  = trim($inlineSplit[0]);
+                $isCorrect0 = false;
+                if (preg_match($correctRx, $firstText, $mc)) {
+                    $isCorrect0 = true;
+                    $firstText  = trim(preg_replace($correctRx, '', $firstText));
+                }
+                // Strip trailing Answer:/Ans: from first part
+                $firstText = preg_replace('/\s+(?:Answer|Ans|Key)\s*[:\-]\s*[a-dA-D]\)?\s*$/iu', '', $firstText);
+                $current['options'][] = ['option_text' => trim($firstText), 'is_correct' => $isCorrect0];
+
+                // Remaining parts are options B, C, D...
+                for ($si = 1; $si < count($inlineSplit); $si++) {
+                    // Strip leading letter+delimiter
+                    $part = preg_replace('/^[a-dA-D][.)]\s*/u', '', trim($inlineSplit[$si]));
+                    // Strip trailing Answer:/Ans: annotation
+                    $part = preg_replace('/\s+(?:Answer|Ans|Key)\s*[:\-]\s*[a-dA-D]\)?\s*$/iu', '', $part);
+                    $isCorrectN = false;
+                    if (preg_match($correctRx, $part, $mc)) {
+                        $isCorrectN = true;
+                        $part = trim(preg_replace($correctRx, '', $part));
+                    }
+                    $current['options'][] = ['option_text' => trim($part), 'is_correct' => $isCorrectN];
+                }
+
+                // Now look for Answer: marker anywhere in original line
+                if (preg_match('/(?:Answer|Ans|Key)\s*[:\-]\s*([a-dA-D])/iu', $optText, $am)) {
+                    $ansIdx = ord(strtolower($am[1])) - ord('a');
+                    foreach ($current['options'] as &$op) $op['is_correct'] = false;
+                    unset($op);
+                    if (isset($current['options'][$ansIdx])) {
+                        $current['options'][$ansIdx]['is_correct'] = true;
+                    }
+                }
+                continue;
+            }
 
             if (preg_match($correctRx, $optText, $mc)) {
                 $isCorrect = true;
