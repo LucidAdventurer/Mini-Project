@@ -1263,6 +1263,7 @@ function timeAgo(string $datetime): string {
         <span class="left-sidebar-label">Navigation</span>
         <a href="student-dashboard.php" class="active"><i class="fa fa-home"></i> Dashboard</a>
         <a href="student-assessments.php"><i class="fa fa-clipboard-list"></i> Assessments</a>
+        <a href="self-assessment.php"><i class="fa fa-user-check"></i> Self Assessment</a>
         <a href="student-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
 
         <div class="left-sidebar-bottom">
