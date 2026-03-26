@@ -812,8 +812,7 @@ function renderGrid(mats, total) {
         const visBadge = `<span class="badge-vis ${vis}"> ${vis === 'public' ? '🌐 Public' :vis === 'group'  ? '👥 Group' :'🔒 Private'}</span>`;
         const isLink   = m.material_type === 'link';
         const primaryBtn = isLink ? `<a class="btn-view" href="${esc(m.external_url)}" target="_blank" rel="noopener"><i class="fa fa-external-link-alt"></i> Open</a>`: `<button class="btn-view" onclick="openFile(${m.material_id},'${esc(m.material_type)}')"><i class="fa fa-eye"></i> View</button>`;
-        const visIcon  = m.is_public ? 'fa-lock-open' : 'fa-lock';
-        const visTitle = m.is_public ? 'Make Private' : 'Make Public';
+        const visIcon  = vis === 'public' ? 'fa-lock-open' : 'fa-lock';
 
         return `
         <div class="resource-card" id="rcard-${m.material_id}">
@@ -834,7 +833,9 @@ function renderGrid(mats, total) {
             </div>
             <div class="card-actions">
                 ${primaryBtn}
-                <button class="btn-icon" onclick="openEditModal(${m.material_id})" title="Edit"><i class="fa fa-pen"></i></button> onclick="openEditModal(${m.material_id})"                <button class="btn-icon danger" onclick="openDeleteModal(${m.material_id},'${esc(m.title)}')" title="Delete"><i class="fa fa-trash"></i></button>
+                <button class="btn-icon" onclick="openEditModal(${m.material_id})" title="Edit"><i class="fa fa-pen"></i></button>
+                <button class="btn-icon" onclick="openEditModal(${m.material_id})" title="Change visibility"><i class="fa ${visIcon}"></i></button>
+                <button class="btn-icon danger" onclick="openDeleteModal(${m.material_id},'${esc(m.title)}')" title="Delete"><i class="fa fa-trash"></i></button>
             </div>
         </div>`;
     }).join('');
@@ -1015,7 +1016,7 @@ async function openEditModal(id) {
         document.getElementById('edit-from').value = m.available_from ? m.available_from.substring(0,10) : '';
         const vis = m.visibility || (m.is_public ? 'public' : 'private');
         document.getElementById('edit-visibility').value = vis;
-        await toggleEditTargeting(vis, m.target_group_id);
+        await toggleEditTargeting(vis, m.group_id);
         document.getElementById('edit-to').value   = m.available_until ? m.available_until.substring(0,10) : '';
         document.getElementById('editModal').classList.add('open');
     } catch(e) { toast('Error loading resource.', 'error'); }
@@ -1093,20 +1094,6 @@ async function toggleEditTargeting(val, groupId=null) {
 
         if (groupId) sel.value = groupId;
     }
-}
-
-/* ── Visibility toggle ── */
-async function toggleVisibility(id, newPublic) {
-    try {
-        const res  = await fetch('api/resources/update-resource.php', {
-            method: 'POST', credentials: 'same-origin',
-            headers: { 'Content-Type':'application/json', 'X-CSRF-Token': CSRF_TOKEN },
-            body: JSON.stringify({ material_id: id, is_public: newPublic }),
-        });
-        const data = await res.json();
-        if (!data.success) throw new Error(data.error || 'Failed to update visibility.');
-        toast(newPublic ? '🌐 Made public' : '🔒 Made private', 'success'); load();
-    } catch(e) { toast(e.message, 'error'); }
 }
 
 /* ── Delete modal ── */

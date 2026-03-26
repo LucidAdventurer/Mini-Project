@@ -34,7 +34,32 @@ $params     = [];
 $types      = '';
 
 if ($role === 'student') {
-    $conditions[] = "m.visibility = 'public'";
+    // Public materials OR group-targeted where student is a member OR student-targeted directly
+    $conditions[] = "(
+        m.visibility = 'public'
+        OR (
+            m.visibility = 'group'
+            AND EXISTS (
+                SELECT 1 FROM material_targets mt
+                JOIN group_members gm ON gm.group_id = mt.target_id
+                WHERE mt.material_id = m.material_id
+                  AND mt.target_type = 'group'
+                  AND gm.student_id = ?
+            )
+        )
+        OR (
+            m.visibility = 'group'
+            AND EXISTS (
+                SELECT 1 FROM material_targets mt
+                WHERE mt.material_id = m.material_id
+                  AND mt.target_type = 'student'
+                  AND mt.target_id = ?
+            )
+        )
+    )";
+    $params[] = $userId;
+    $params[] = $userId;
+    $types   .= 'ii';
     if ($uploaderRole !== '') {
         $conditions[] = 'u.role = ?';
         $params[]     = $uploaderRole;
@@ -125,7 +150,31 @@ $statsParams     = [];
 $statsTypes      = '';
 
 if ($role === 'student') {
-    $statsConditions[] = "m.visibility = 'public'";
+    $statsConditions[] = "(
+        m.visibility = 'public'
+        OR (
+            m.visibility = 'group'
+            AND EXISTS (
+                SELECT 1 FROM material_targets mt
+                JOIN group_members gm ON gm.group_id = mt.target_id
+                WHERE mt.material_id = m.material_id
+                  AND mt.target_type = 'group'
+                  AND gm.student_id = ?
+            )
+        )
+        OR (
+            m.visibility = 'group'
+            AND EXISTS (
+                SELECT 1 FROM material_targets mt
+                WHERE mt.material_id = m.material_id
+                  AND mt.target_type = 'student'
+                  AND mt.target_id = ?
+            )
+        )
+    )";
+    $statsParams[] = $userId;
+    $statsParams[] = $userId;
+    $statsTypes   .= 'ii';
     if ($uploaderRole !== '') {
         $statsConditions[] = 'u.role = ?';
         $statsParams[]     = $uploaderRole;
@@ -138,9 +187,7 @@ if ($role === 'student') {
 }
 
 $statsWhere = $statsConditions ? 'WHERE ' . implode(' AND ', $statsConditions) : '';
-$statsJoin  = ($role === 'student' && $uploaderRole !== '')
-    ? 'LEFT JOIN users u ON u.user_id = m.created_by'
-    : '';
+$statsJoin  = 'LEFT JOIN users u ON u.user_id = m.created_by';
 
 $statsStmt = $conn->prepare(
     "SELECT COUNT(*) AS total_materials FROM materials m $statsJoin $statsWhere"
