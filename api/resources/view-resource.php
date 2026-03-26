@@ -101,6 +101,28 @@ $imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 $isVideo = $hasCloudinary && in_array($ext, $videoExts, true);
 $isImage = $hasCloudinary && in_array($ext, $imageExts, true);
 
+// No extension in public_id — ask Cloudinary Admin API for the real format
+if ($hasCloudinary && !$isVideo && !$isImage && !$ext) {
+    $apiKey    = !empty(CLOUDINARY_API_KEY)    ? CLOUDINARY_API_KEY    : '';
+    $apiSecret = !empty(CLOUDINARY_API_SECRET) ? CLOUDINARY_API_SECRET : '';
+    $cloudName = !empty(CLOUDINARY_CLOUD_NAME) ? CLOUDINARY_CLOUD_NAME : '';
+
+    if ($apiKey && $apiSecret && $cloudName) {
+        $ch = curl_init("https://api.cloudinary.com/v1_1/{$cloudName}/resources/image/upload/" . urlencode($publicId));
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_USERPWD        => $apiKey . ':' . $apiSecret,
+            CURLOPT_TIMEOUT        => 10,
+        ]);
+        $resp = curl_exec($ch);
+        curl_close($ch);
+        $info = json_decode($resp, true);
+        $fmt  = strtolower($info['format'] ?? '');
+        if (in_array($fmt, $imageExts, true)) $isImage = true;
+        elseif (in_array($fmt, $videoExts, true)) $isVideo = true;
+    }
+}
+
 $serveUrl = htmlspecialchars('serve-resource.php?material_id=' . $materialId . '&action=view',  ENT_QUOTES, 'UTF-8');
 $dlUrl    = htmlspecialchars('serve-resource.php?material_id=' . $materialId . '&action=download', ENT_QUOTES, 'UTF-8');
 

@@ -180,16 +180,44 @@ if ($cloudinaryPublicId !== '') {
     }
 
     // No extension — fall back to resource_type column
+    // No extension — ask Cloudinary Admin API for the real format
     if (!$ext) {
-        $resourceType = match($resourceTypeDb) {
-            'video'           => 'video',
-            'pdf', 'document' => ($resourceId > 0) ? 'image' : 'raw',
-            default           => ($resourceId > 0) ? 'image' : 'raw',
-        };
-        if ($resourceTypeDb === 'pdf') $ext = 'pdf';
+        if (!empty($apiKey) && !empty($apiSecret)) {
+            $ch = curl_init("https://api.cloudinary.com/v1_1/{$cloudName}/resources/image/upload/" . urlencode($cloudinaryPublicId));
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_USERPWD        => $apiKey . ':' . $apiSecret,
+                CURLOPT_TIMEOUT        => 10,
+            ]);
+            $resp = curl_exec($ch);
+            curl_close($ch);
+            $info = json_decode($resp, true);
+            $fmt  = strtolower($info['format'] ?? '');
+
+            if (in_array($fmt, $videoExts, true))      { $resourceType = 'video'; $ext = $fmt; }
+            elseif (in_array($fmt, $imageExts, true))  { $resourceType = 'image'; $ext = $fmt; }
+            elseif ($fmt === 'pdf')                    { $resourceType = 'image'; $ext = 'pdf'; }
+            else                                        { $resourceType = 'image'; } // default
+        } else {
+            // No credentials — use resource_type column as last resort
+            $resourceType = match($resourceTypeDb) {
+                'video'           => 'video',
+                'pdf', 'document' => 'image',
+                default           => 'image',
+            };
+            if ($resourceTypeDb === 'pdf') $ext = 'pdf';
+        }
     }
 
     // ── Signed URL ────────────────────────────────────────────────────────
+    // ── Images and videos: redirect directly (public/anonymous on Cloudinary) ─
+    if ($resourceType === 'image' || $resourceType === 'video') {
+        $deliveryUrl = "https://res.cloudinary.com/{$cloudName}/{$resourceType}/upload/{$cloudinaryPublicId}";
+        header('Location: ' . $deliveryUrl);
+        exit;
+    }
+
+    // ── PDFs/docs: use signed URL ─────────────────────────────────────────
     if (!empty($apiKey) && !empty($apiSecret)) {
         $timestamp = time();
         $expiresAt = $timestamp + 300;
