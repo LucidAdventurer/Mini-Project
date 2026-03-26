@@ -610,17 +610,6 @@ body::before {
           <option value="">Loading groups…</option>
         </select>
       </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Available From</label>
-          <input type="date" class="form-control" id="up-from">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Available To</label>
-          <input type="date" class="form-control" id="up-to">
-        </div>
-      </div>
       <div class="form-group">
         <label class="form-label">File or Link</label>
         <select class="form-control" id="up-type" onchange="toggleUploadType(this.value)" style="margin-bottom:10px;">
@@ -686,10 +675,17 @@ body::before {
         </div>
         <div class="form-group">
           <label class="form-label">Visibility</label>
-          <select class="form-control" id="edit-visibility">
+          <select class="form-control" id="edit-visibility" onchange="toggleEditTargeting(this.value)">
             <option value="public">🌐 Public</option>
+            <option value="group">👥 Group</option>
             <option value="private">🔒 Private</option>
           </select>
+          <div class="form-group" id="edit-group-zone" style="display:none;">
+            <label class="form-label">Select Group</label>
+            <select class="form-control" id="edit-group-select">
+              <option value="">Loading groups…</option>
+            </select>
+          </div>
         </div>
       </div>
       <div class="form-row">
@@ -812,13 +808,11 @@ function renderGrid(mats, total) {
     grid.innerHTML = mats.map(m => {
         const [ic, fa] = iconFor(m.material_type);
         const catBadge = m.category ? `<span class="badge-cat">${esc(m.category)}</span>` : '';
-        const visBadge = `<span class="badge-vis ${m.is_public?'public':'private'}">${m.is_public?'🌐 Public':'🔒 Private'}</span>`;
+        const vis = m.visibility || (m.is_public ? 'public' : 'private');
+        const visBadge = `<span class="badge-vis ${vis}"> ${vis === 'public' ? '🌐 Public' :vis === 'group'  ? '👥 Group' :'🔒 Private'}</span>`;
         const isLink   = m.material_type === 'link';
-        const primaryBtn = isLink
-            ? `<a class="btn-view" href="${esc(m.external_url)}" target="_blank" rel="noopener"><i class="fa fa-external-link-alt"></i> Open</a>`
-            : `<button class="btn-view" onclick="openFile(${m.material_id},'${esc(m.material_type)}')"><i class="fa fa-eye"></i> View</button>`;
-        const visIcon  = m.is_public ? 'fa-lock-open' : 'fa-lock';
-        const visTitle = m.is_public ? 'Make Private' : 'Make Public';
+        const primaryBtn = isLink ? `<a class="btn-view" href="${esc(m.external_url)}" target="_blank" rel="noopener"><i class="fa fa-external-link-alt"></i> Open</a>`: `<button class="btn-view" onclick="openFile(${m.material_id},'${esc(m.material_type)}')"><i class="fa fa-eye"></i> View</button>`;
+        const visIcon  = vis === 'public' ? 'fa-lock-open' : 'fa-lock';
 
         return `
         <div class="resource-card" id="rcard-${m.material_id}">
@@ -840,7 +834,7 @@ function renderGrid(mats, total) {
             <div class="card-actions">
                 ${primaryBtn}
                 <button class="btn-icon" onclick="openEditModal(${m.material_id})" title="Edit"><i class="fa fa-pen"></i></button>
-                <button class="btn-icon" onclick="toggleVisibility(${m.material_id},${m.is_public?0:1})" title="${visTitle}"><i class="fa ${visIcon}"></i></button>
+                <button class="btn-icon" onclick="openEditModal(${m.material_id})" title="Change visibility"><i class="fa ${visIcon}"></i></button>
                 <button class="btn-icon danger" onclick="openDeleteModal(${m.material_id},'${esc(m.title)}')" title="Delete"><i class="fa fa-trash"></i></button>
             </div>
         </div>`;
@@ -1020,47 +1014,86 @@ async function openEditModal(id) {
         document.getElementById('edit-desc').value       = m.description || '';
         document.getElementById('edit-category').value   = m.category || '';
         document.getElementById('edit-from').value = m.available_from ? m.available_from.substring(0,10) : '';
-        document.getElementById('edit-visibility').value = m.is_public ? 'public' : 'private';
+        const vis = m.visibility || (m.is_public ? 'public' : 'private');
+        document.getElementById('edit-visibility').value = vis;
+        await toggleEditTargeting(vis, m.group_id);
         document.getElementById('edit-to').value   = m.available_until ? m.available_until.substring(0,10) : '';
         document.getElementById('editModal').classList.add('open');
     } catch(e) { toast('Error loading resource.', 'error'); }
 }
 function closeEditModal() { document.getElementById('editModal').classList.remove('open'); }
+
 async function submitEdit() {
-    const id    = document.getElementById('edit-id').value;
-    const title = document.getElementById('edit-title').value.trim();
-    if (!title) { toast('Title is required.', 'error'); return; }
-    try {
-        const res  = await fetch('api/resources/update-resource.php', {
-            method: 'POST', credentials: 'same-origin',
-            headers: { 'Content-Type':'application/json', 'X-CSRF-Token': CSRF_TOKEN },
-            body: JSON.stringify({
-                material_id: id, title,
-                description: document.getElementById('edit-desc').value.trim(),
-                category:    document.getElementById('edit-category').value,
-                available_from: document.getElementById('edit-from').value || null,
-                is_public:   document.getElementById('edit-visibility').value === 'public' ? 1 : 0,
-                available_until: document.getElementById('edit-to').value || null,
-            }),
-        });
-        const data = await res.json();
-        if (!data.success) throw new Error(data.error || 'Update failed.');
-        closeEditModal(); toast('Resource updated!', 'success'); load();
-    } catch(e) { toast(e.message, 'error'); }
+    const id         = document.getElementById('edit-id').value;
+    const title      = document.getElementById('edit-title').value.trim();
+    const visibility = document.getElementById('edit-visibility').value;
+
+    if (!title) {
+        toast('Title required', 'error');
+        return;
+    }
+
+    let targets = [];
+
+    if (visibility === 'group') {
+        const gid = document.getElementById('edit-group-select').value;
+        if (!gid) {
+            toast('Select a group', 'error');
+            return;
+        }
+        targets = [{ type:'group', id: parseInt(gid) }];
+    }
+
+    const res = await fetch('api/resources/update-resource.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': CSRF_TOKEN
+        },
+        body: JSON.stringify({
+            material_id: id,
+            title,
+            description: document.getElementById('edit-desc').value.trim(),
+            category: document.getElementById('edit-category').value,
+            available_from: document.getElementById('edit-from').value || null,
+            available_until: document.getElementById('edit-to').value || null,
+            visibility,
+            targets
+        })
+    });
+
+    const data = await res.json();
+    if (!data.success) {
+        toast(data.error || 'Update failed', 'error');
+        return;
+    }
+
+    closeEditModal();
+    toast('Updated', 'success');
+    load();
 }
 
-/* ── Visibility toggle ── */
-async function toggleVisibility(id, newPublic) {
-    try {
-        const res  = await fetch('api/resources/update-resource.php', {
-            method: 'POST', credentials: 'same-origin',
-            headers: { 'Content-Type':'application/json', 'X-CSRF-Token': CSRF_TOKEN },
-            body: JSON.stringify({ material_id: id, is_public: newPublic }),
-        });
-        const data = await res.json();
-        if (!data.success) throw new Error(data.error || 'Failed to update visibility.');
-        toast(newPublic ? '🌐 Made public' : '🔒 Made private', 'success'); load();
-    } catch(e) { toast(e.message, 'error'); }
+async function toggleEditTargeting(val, groupId=null) {
+    const zone = document.getElementById('edit-group-zone');
+    const sel  = document.getElementById('edit-group-select');
+
+    zone.style.display = val === 'group' ? '' : 'none';
+
+    if (val === 'group') {
+        if (!_groupsCache) {
+            const res  = await fetch('api/groups/get-groups.php');
+            const data = await res.json();
+            _groupsCache = data.groups || [];
+        }
+
+        sel.innerHTML =
+            '<option value="">Select group</option>' +
+            _groupsCache.map(g =>
+                `<option value="${g.group_id}">${g.name}</option>`
+            ).join('');
+
+        if (groupId) sel.value = groupId;
+    }
 }
 
 /* ── Delete modal ── */

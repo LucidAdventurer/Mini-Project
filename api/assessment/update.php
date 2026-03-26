@@ -131,13 +131,7 @@ if ($startTime && $endTime && $startTime >= $endTime) {
 $randomizeQuestions = !empty($body['randomize_questions']) ? 1 : 0;
 $randomizeOptions   = !empty($body['randomize_options'])   ? 1 : 0;
 
-// ── Visibility — DB enum('public','group','private') ──
-$visibility = trim($body['visibility'] ?? 'private');
-if (!in_array($visibility, ['public', 'group', 'private'], true)) {
-    $visibility = 'private';
-}
-
-// ── Targets ──
+// ── Targets (parse first — needed to derive visibility) ──
 $targets = [];
 if (!empty($body['targets']) && is_array($body['targets'])) {
     foreach ($body['targets'] as $t) {
@@ -147,6 +141,25 @@ if (!empty($body['targets']) && is_array($body['targets'])) {
             $targets[] = ['type' => $ttype, 'id' => $tid];
         }
     }
+}
+
+// ── Visibility — DB enum('public','group','private') ──
+// The frontend checkbox only sends 'public' or 'private'.
+// When targets are present and visibility is not public, auto-derive:
+//   any 'group' target  → store as 'group'
+//   only 'student' targets → store as 'private'
+//   no targets          → store as 'private'
+$visibilityRaw = trim($body['visibility'] ?? 'private');
+if ($visibilityRaw === 'public') {
+    $visibility = 'public';
+} elseif (!empty($targets)) {
+    $hasGroupTarget = false;
+    foreach ($targets as $t) {
+        if ($t['type'] === 'group') { $hasGroupTarget = true; break; }
+    }
+    $visibility = $hasGroupTarget ? 'group' : 'private';
+} else {
+    $visibility = 'private';
 }
 
 // ── Status — map 'active' → 'published' to match DB enum('draft','published','archived') ──
