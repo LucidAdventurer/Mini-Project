@@ -5,16 +5,28 @@
 // Saves edits for an existing assessment owned by the teacher.
 //
 // POST JSON {
-//   assessment_id, title, description, instructions,
+//   assessment_id, title, description,
 //   category, difficulty, duration_minutes, total_marks,
 //   passing_marks, max_attempts, start_time, end_time,
 //   randomize_questions, randomize_options,
-//   visibility: 'public'|'private',
+//   visibility: 'public'|'group'|'private',
 //   targets: [{ type: 'group'|'student', id: int }],
 //   status: 'draft'|'active'
 // }
 // Returns { success: bool, error?: string }
 // ============================================================
+
+// Catch fatal errors / exceptions before any output so the
+// client always gets valid JSON instead of an empty 500 body.
+set_exception_handler(function (Throwable $e) {
+    if (!headers_sent()) {
+        http_response_code(500);
+        header('Content-Type: application/json');
+    }
+    error_log('update.php exception: ' . $e->getMessage());
+    echo json_encode(['success' => false, 'error' => 'Server error: ' . $e->getMessage()]);
+    exit;
+});
 
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
@@ -93,11 +105,10 @@ if ($passingMarks < 0 || $passingMarks > $totalMarks) {
 }
 
 // ── Optional fields ──
-$description  = trim($body['description']  ?? '');
-$instructions = trim($body['instructions'] ?? '');
-$maxAttempts  = max(1, (int)($body['max_attempts'] ?? 1));
+$description = trim($body['description'] ?? '');
+$maxAttempts = max(1, (int)($body['max_attempts'] ?? 1));
 
-// ── Datetime fields ──
+// ── Datetime fields — null when not provided ──
 $startTime = null;
 $endTime   = null;
 
@@ -120,9 +131,9 @@ if ($startTime && $endTime && $startTime >= $endTime) {
 $randomizeQuestions = !empty($body['randomize_questions']) ? 1 : 0;
 $randomizeOptions   = !empty($body['randomize_options'])   ? 1 : 0;
 
-// ── Visibility ──
+// ── Visibility — DB enum('public','group','private') ──
 $visibility = trim($body['visibility'] ?? 'private');
-if (!in_array($visibility, ['public', 'private'], true)) {
+if (!in_array($visibility, ['public', 'group', 'private'], true)) {
     $visibility = 'private';
 }
 
@@ -138,78 +149,131 @@ if (!empty($body['targets']) && is_array($body['targets'])) {
     }
 }
 
-// ── Status — map 'active' → 'published' to match DB enum ──
+// ── Status — map 'active' → 'published' to match DB enum('draft','published','archived') ──
 $status = trim($body['status'] ?? 'draft');
 if ($status === 'active') $status = 'published';
-if (!in_array($status, ['draft', 'published', 'archived', 'scheduled'], true)) {
+if (!in_array($status, ['draft', 'published', 'archived'], true)) {
     $status = 'draft';
 }
 
 // ── Verify ownership ──
-$check = safePreparedQuery($conn,
-    "SELECT assessment_id FROM assessments WHERE assessment_id = ? AND created_by = ?",
-    "ii", [$assessmentId, $teacherId]
-);
-
-if (!$check['success'] || !$check['result'] || $check['result']->num_rows === 0) {
+$chk = $conn->prepare("SELECT assessment_id FROM assessments WHERE assessment_id = ? AND created_by = ?");
+if (!$chk) {
+    http_response_code(500);
+    echo json_encode(['success' => false, 'error' => 'DB error (ownership check).']);
+    exit;
+}
+$chk->bind_param("ii", $assessmentId, $teacherId);
+$chk->execute();
+$chk->store_result();
+if ($chk->num_rows === 0) {
+    $chk->close();
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'Assessment not found or access denied.']);
     exit;
 }
-$check['result']->free();
+$chk->close();
 
-// ── Update assessments row ──
-$result = safePreparedQuery($conn,
-    "UPDATE assessments SET
-        title               = ?,
-        description         = ?,
-        instructions        = ?,
-        category            = ?,
-        difficulty          = ?,
-        duration_minutes    = ?,
-        total_marks         = ?,
-        passing_marks       = ?,
-        max_attempts        = ?,
-        start_time          = ?,
-        end_time            = ?,
-        randomize_questions = ?,
-        randomize_options   = ?,
-        visibility          = ?,
-        status              = ?,
-        updated_at          = NOW()
-     WHERE assessment_id = ? AND created_by = ?",
-    "sssssiiisssiissii",
-    [
-        $title, $description, $instructions,
-        $category, $difficulty,
-        $duration, $totalMarks, $passingMarks, $maxAttempts,
-        $startTime, $endTime,
-        $randomizeQuestions, $randomizeOptions,
-        $visibility, $status,
-        $assessmentId, $teacherId,
-    ]
+// ── UPDATE assessments ──
+//
+// Columns (14 SET params + 2 WHERE params = 16 total):
+//  # | type | param
+//  1 |  s   | title
+//  2 |  s   | description
+//  3 |  s   | category
+//  4 |  s   | difficulty
+//  5 |  i   | duration_minutes
+//  6 |  i   | total_marks
+//  7 |  i   | passing_marks
+//  8 |  i   | max_attempts
+//  9 |  s   | start_time
+// 10 |  s   | end_time
+// 11 |  i   | randomize_questions
+// 12 |  i   | randomize_options
+// 13 |  s   | visibility
+// 14 |  s   | status
+// 15 |  i   | assessment_id (WHERE)
+// 16 |  i   | created_by    (WHERE)
+//
+// Type string: s s s s i i i i s s i i s s i i = "ssssiiiissiiassii"
+// Wait — positions 13,14 are 's', not 'a'. Let me write it character by character:
+// 1=s, 2=s, 3=s, 4=s, 5=i, 6=i, 7=i, 8=i, 9=s, 10=s, 11=i, 12=i, 13=s, 14=s, 15=i, 16=i
+// Concatenated: "ssssiiiissiissii"  ← 16 chars, verified
+
+$upd = $conn->prepare(
+    "UPDATE assessments
+     SET title               = ?,
+         description         = ?,
+         category            = ?,
+         difficulty          = ?,
+         duration_minutes    = ?,
+         total_marks         = ?,
+         passing_marks       = ?,
+         max_attempts        = ?,
+         start_time          = ?,
+         end_time            = ?,
+         randomize_questions = ?,
+         randomize_options   = ?,
+         visibility          = ?,
+         status              = ?,
+         updated_at          = NOW()
+     WHERE assessment_id = ? AND created_by = ?"
 );
 
-if (!$result['success'] || $result['affected_rows'] < 0) {
-    error_log("update assessment failed for assessment_id=$assessmentId teacher_id=$teacherId");
+if (!$upd) {
+    error_log("update.php prepare failed: " . $conn->error);
     http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Update failed. Please try again.']);
+    echo json_encode(['success' => false, 'error' => 'DB prepare error: ' . $conn->error]);
     exit;
 }
 
-// ── Sync assessment_targets ──
-// Delete old targets then re-insert current ones
-safePreparedQuery($conn,
-    "DELETE FROM assessment_targets WHERE assessment_id = ?",
-    "i", [$assessmentId]
+$upd->bind_param(
+    "ssssiiiissiissii",   // 16 chars: ssss iiii ss ii ss ii
+    $title,               //  1 s
+    $description,         //  2 s
+    $category,            //  3 s
+    $difficulty,          //  4 s
+    $duration,            //  5 i
+    $totalMarks,          //  6 i
+    $passingMarks,        //  7 i
+    $maxAttempts,         //  8 i
+    $startTime,           //  9 s  (nullable)
+    $endTime,             // 10 s  (nullable)
+    $randomizeQuestions,  // 11 i
+    $randomizeOptions,    // 12 i
+    $visibility,          // 13 s
+    $status,              // 14 s
+    $assessmentId,        // 15 i  WHERE
+    $teacherId            // 16 i  WHERE
 );
 
-if ($visibility === 'private' && !empty($targets)) {
-    foreach ($targets as $t) {
-        safePreparedQuery($conn,
-            "INSERT IGNORE INTO assessment_targets (assessment_id, target_type, target_id) VALUES (?, ?, ?)",
-            "isi", [$assessmentId, $t['type'], $t['id']]
-        );
+if (!$upd->execute()) {
+    error_log("update.php execute failed: assessment_id=$assessmentId err=" . $upd->error);
+    http_response_code(500);
+    echo json_encode(['success' => false, 'error' => 'Update failed: ' . $upd->error]);
+    $upd->close();
+    exit;
+}
+$upd->close();
+
+// ── Sync assessment_targets ──
+$del = $conn->prepare("DELETE FROM assessment_targets WHERE assessment_id = ?");
+if ($del) {
+    $del->bind_param("i", $assessmentId);
+    $del->execute();
+    $del->close();
+}
+
+if ($visibility !== 'public' && !empty($targets)) {
+    $ins = $conn->prepare(
+        "INSERT IGNORE INTO assessment_targets (assessment_id, target_type, target_id) VALUES (?, ?, ?)"
+    );
+    if ($ins) {
+        foreach ($targets as $t) {
+            $ins->bind_param("isi", $assessmentId, $t['type'], $t['id']);
+            $ins->execute();
+        }
+        $ins->close();
     }
 }
 
