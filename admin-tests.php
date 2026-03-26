@@ -252,11 +252,10 @@ require_once __DIR__ . '/admin-head.php';
       </div>
       <div id="ctParseStatus" style="display:none;margin-top:10px;font-size:12.5px;padding:9px 13px;border-radius:7px;"></div>
 
-      <!-- Manual question adder -->
+      <!-- Questions list (populated by file upload) -->
       <div style="margin-top:20px;border-top:1px solid var(--line);padding-top:16px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <span style="font-size:12.5px;font-weight:600;">Questions <span id="ctQCount" style="color:var(--muted);font-weight:400;">(0 added)</span></span>
-          <button class="btn btn-ghost btn-sm" onclick="ctAddBlankQuestion()">+ Add Question Manually</button>
         </div>
         <div id="ctQList" style="display:flex;flex-direction:column;gap:10px;"></div>
       </div>
@@ -553,12 +552,29 @@ async function ctHandleQFile(file) {
     ctShowParseStatus('info', '⏳ Parsing questions from file…');
 
     try {
+        // Resolve CSRF token — try every location the shared JS might store it
+        let csrfToken = window._csrfToken
+                     || window.csrfToken
+                     || document.querySelector('meta[name="csrf-token"]')?.content
+                     || '';
+
+        // If still empty, fetch it fresh from the endpoint
+        if (!csrfToken) {
+            try {
+                const tr = await fetch('api/csrf-token.php', { credentials: 'same-origin' });
+                const tj = await tr.json();
+                if (tj.success && tj.token) {
+                    csrfToken = tj.token;
+                    window._csrfToken = csrfToken;
+                }
+            } catch (_) {}
+        }
+
         const formData = new FormData();
         formData.append('file', file);
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content
-                       || window._csrfToken || '';
         const resp = await fetch('api-parse-questions.php', {
             method: 'POST',
+            credentials: 'same-origin',
             headers: { 'X-CSRF-Token': csrfToken },
             body: formData
         });

@@ -19,8 +19,8 @@ foreach (['admin', 'teacher'] as $role) {
 }
 if (!$user) { echo json_encode(['success' => false, 'error' => 'Unauthorized']); exit; }
 
-// ── CSRF check (uses your existing verifyCsrf helper) ───────────
-verifyCsrf();
+// ── CSRF check ──────────────────────────────────────────────────
+validateCsrfToken();
 
 // ── Parse request body ──────────────────────────────────────────
 $body = json_decode(file_get_contents('php://input'), true);
@@ -66,7 +66,7 @@ foreach ($questions as $idx => $q) {
     $n = $idx + 1;
     if (empty(trim($q['question_text'] ?? ''))) vErr("Question $n: question_text is required.");
     if (!in_array($q['question_type'] ?? '', $allowed_qtypes)) vErr("Question $n: invalid question_type.");
-    if (!is_array($q['options'] ?? null) || count($q['options']) < 2) vErr("Question $n: must have ≥ 2 options.");
+    if (!is_array($q['options'] ?? null) || count($q['options']) < 2) vErr("Question $n: must have ≥ 2 options. Got " . count($q['options'] ?? []) . ". Check that your DOCX/PDF has options on separate lines (a) b) c) d)) or uses the 'Answer: X' format.");
     $hasCorrect = false;
     foreach ($q['options'] as $o) {
         if (empty(trim($o['option_text'] ?? ''))) vErr("Question $n: option_text cannot be empty.");
@@ -76,74 +76,66 @@ foreach ($questions as $idx => $q) {
 }
 
 // ── Transaction: insert assessment + questions + options ─────────
-try {
-    $conn->beginTransaction();
+$conn->begin_transaction();
 
+try {
     // 1. Insert assessment (status = 'draft' so admin can review before publishing)
-    $stmt = $conn->prepare("
-        INSERT INTO assessments
+    $stmt = $conn->prepare(
+        "INSERT INTO assessments
             (created_by, title, description, visibility, status, category, difficulty,
              duration_minutes, total_marks, passing_marks, max_attempts,
              randomize_questions, randomize_options, created_at, updated_at)
-        VALUES
-            (:created_by, :title, :description, :visibility, 'draft', :category, :difficulty,
-             :duration_minutes, :total_marks, :passing_marks, :max_attempts,
-             :rq, :ro, NOW(), NOW())
-    ");
-    $stmt->execute([
-        ':created_by'        => $user['user_id'],
-        ':title'             => $title,
-        ':description'       => $description,
-        ':visibility'        => $visibility,
-        ':category'          => $category,
-        ':difficulty'        => $difficulty,
-        ':duration_minutes'  => $duration_minutes,
-        ':total_marks'       => $total_marks,
-        ':passing_marks'     => $passing_marks,
-        ':max_attempts'      => $max_attempts,
-        ':rq'                => $randomize_q,
-        ':ro'                => $randomize_o,
-    ]);
-    $assessmentId = (int) $conn->lastInsertId();
+         VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())"
+    );
+    $userId = (int) $user['user_id'];
+    $stmt->bind_param(
+        "isssssiiiiiii",
+        $userId, $title, $description, $visibility,
+        $category, $difficulty, $duration_minutes,
+        $total_marks, $passing_marks, $max_attempts,
+        $randomize_q, $randomize_o
+    );
+    $stmt->execute();
+    $assessmentId = (int) $conn->insert_id;
+    $stmt->close();
 
     // 2. Insert each question and its options
-    $qStmt = $conn->prepare("
-        INSERT INTO questions
+    $qStmt = $conn->prepare(
+        "INSERT INTO questions
             (assessment_id, question_text, question_type, marks, negative_marks,
              explanation, question_order, created_at)
-        VALUES
-            (:assessment_id, :question_text, :question_type, :marks, :negative_marks,
-             :explanation, :question_order, NOW())
-    ");
+         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())"
+    );
 
-    $oStmt = $conn->prepare("
-        INSERT INTO question_options
+    $oStmt = $conn->prepare(
+        "INSERT INTO question_options
             (question_id, option_text, is_correct, option_order)
-        VALUES
-            (:question_id, :option_text, :is_correct, :option_order)
-    ");
+         VALUES (?, ?, ?, ?)"
+    );
 
     foreach ($questions as $order => $q) {
-        $qStmt->execute([
-            ':assessment_id'  => $assessmentId,
-            ':question_text'  => trim($q['question_text']),
-            ':question_type'  => $q['question_type'],
-            ':marks'          => max(0, intval($q['marks'] ?? 1)),
-            ':negative_marks' => max(0, floatval($q['negative_marks'] ?? 0)),
-            ':explanation'    => trim($q['explanation'] ?? ''),
-            ':question_order' => $order + 1,
-        ]);
-        $questionId = (int) $conn->lastInsertId();
+        $qText    = trim($q['question_text']);
+        $qType    = $q['question_type'];
+        $marks    = max(0, intval($q['marks'] ?? 1));
+        $negMarks = max(0.0, floatval($q['negative_marks'] ?? 0));
+        $expl     = trim($q['explanation'] ?? '');
+        $qOrder   = $order + 1;
+
+        $qStmt->bind_param("issidsi", $assessmentId, $qText, $qType, $marks, $negMarks, $expl, $qOrder);
+        $qStmt->execute();
+        $questionId = (int) $conn->insert_id;
 
         foreach ($q['options'] as $optOrder => $o) {
-            $oStmt->execute([
-                ':question_id' => $questionId,
-                ':option_text' => trim($o['option_text']),
-                ':is_correct'  => !empty($o['is_correct']) ? 1 : 0,
-                ':option_order'=> $optOrder + 1,
-            ]);
+            $optText   = trim($o['option_text']);
+            $isCorrect = !empty($o['is_correct']) ? 1 : 0;
+            $optOrd    = $optOrder + 1;
+            $oStmt->bind_param("isii", $questionId, $optText, $isCorrect, $optOrd);
+            $oStmt->execute();
         }
     }
+
+    $qStmt->close();
+    $oStmt->close();
 
     $conn->commit();
 
@@ -153,8 +145,8 @@ try {
         'message'       => 'Assessment imported as draft successfully.',
     ]);
 
-} catch (PDOException $e) {
-    $conn->rollBack();
+} catch (Exception $e) {
+    $conn->rollback();
     error_log('[api-upload-test] DB error: ' . $e->getMessage());
     echo json_encode(['success' => false, 'error' => 'Database error. Please try again.']);
 }
