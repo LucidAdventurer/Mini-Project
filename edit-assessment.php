@@ -8,79 +8,6 @@
  * ======================================== */
 
 require 'config.php';
-
-// ── CSRF token for report form ──
-if (empty($_SESSION['csrf_token'])) {
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-}
-
-// ── Report status ──
-$reportStatusResult = safePreparedQuery($conn,
-    "SELECT status FROM student_reports WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
-    "i", [$teacherId]
-);
-$latestReportStatus = null;
-if ($reportStatusResult['success'] && $reportStatusResult['result']) {
-    $rrow = $reportStatusResult['result']->fetch_assoc();
-    $latestReportStatus = $rrow['status'] ?? null;
-    $reportStatusResult['result']->free();
-}
-$hasOpenReport = in_array($latestReportStatus, ['pending', 'in_progress']);
-
-// ── Handle report submission ──
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submit_report') {
-    $reportTitle = trim($_POST['report_title'] ?? '');
-    $reportDesc  = trim($_POST['report_description'] ?? '');
-    $reportImage = null;
-
-    if (!empty($_FILES['report_image']) && $_FILES['report_image']['error'] === UPLOAD_ERR_OK) {
-        $file    = $_FILES['report_image'];
-        $allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-        if ($file['size'] <= 5 * 1024 * 1024 && in_array($file['type'], $allowed)) {
-            $ext       = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-            $uploadDir = 'uploads/reports/';
-            if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
-            $stored    = 'report_' . $teacherId . '_' . time() . '.' . $ext;
-            $fullPath  = $uploadDir . $stored;
-            if (move_uploaded_file($file['tmp_name'], $fullPath)) {
-                $reportImage = $fullPath;
-            }
-        }
-    }
-
-    if ($reportTitle !== '' && $reportDesc !== '') {
-        $insResult = safePreparedQuery($conn,
-            "INSERT INTO student_reports (user_id, title, description, image_path, status, created_at)
-             VALUES (?, ?, ?, ?, 'pending', NOW())",
-            "isss", [$teacherId, $reportTitle, $reportDesc, $reportImage]
-        );
-        if ($insResult['success']) {
-            $hasOpenReport      = true;
-            $latestReportStatus = 'pending';
-
-            // ── Notify all admins ──
-            $notifTitle   = '🚩 Teacher Report: ' . mb_strimwidth($reportTitle, 0, 60, '…');
-            $notifMessage = $currentUser['full_name'] . ' submitted a support report: ' . mb_strimwidth($reportDesc, 0, 120, '…');
-            $adminResult  = safePreparedQuery($conn,
-                "SELECT user_id FROM users WHERE role = 'admin'",
-                "", []
-            );
-            if ($adminResult['success'] && $adminResult['result']) {
-                while ($adminRow = $adminResult['result']->fetch_assoc()) {
-                    safePreparedQuery($conn,
-                        "INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
-                         VALUES (?, ?, ?, 'warning', 0, NOW())",
-                        "iss", [(int)$adminRow['user_id'], $notifTitle, $notifMessage]
-                    );
-                }
-                $adminResult['result']->free();
-            }
-        }
-    }
-    header('Location: ' . $_SERVER['PHP_SELF'] . '?report=sent');
-    exit;
-}
-
 require_once 'db-guard.php';
 
 $currentUser = validateSession($conn, 'teacher');
@@ -943,13 +870,6 @@ function fmtDate(?string $dt): string {
         </div>
     </a>
     <div class="nav-right">
-    <?php if ($hasOpenReport || $latestReportStatus === 'resolved'): ?>
-    <div class="report-dot-wrap" onclick="openReportModal()" title="<?= $hasOpenReport ? 'Your report is being reviewed' : 'Report resolved' ?>">
-        <span class="report-status-dot <?= $latestReportStatus === 'resolved' ? 'resolved' : '' ?>"></span>
-        <span><?= $hasOpenReport ? 'Report Pending' : 'Resolved' ?></span>
-    </div>
-    <?php endif; ?>
-
         <div class="profile-wrap">
             <button class="profile-button" id="profileBtn">
                 <div class="profile-avatar">
@@ -977,7 +897,7 @@ function fmtDate(?string $dt): string {
                 </div>
                 <div class="dropdown-menu">
                     <a href="teacher-profile.php" class="dropdown-item"><i class="fa fa-user"></i> My Profile</a>
-                    <a href="#" onclick="event.preventDefault(); document.getElementById('profileDropdown').classList.remove('open'); openReportModal();" class="dropdown-item"><i class="fa fa-circle-question"></i> Help &amp; Support</a>
+                    <a href="help.html" target="_blank" rel="noopener" class="dropdown-item"><i class="fa fa-circle-question"></i> Help &amp; Support</a>
                     <div class="dropdown-divider"></div>
                     <button onclick="handleLogout()" class="dropdown-item danger"><i class="fa fa-right-from-bracket"></i> Logout</button>
                 </div>
@@ -2145,109 +2065,6 @@ document.addEventListener('click', () => profileDrop.classList.remove('open'));
 function handleLogout() {
     if (confirm('Are you sure you want to logout?')) window.location.href = 'logout.php';
 }
-</script>
-
-<!-- ── REPORT MODAL ── -->
-<div class="report-modal-overlay" id="reportModalOverlay" onclick="if(event.target===this)closeReportModal()">
-    <div class="report-modal">
-        <div class="report-modal-header">
-            <div>
-                <div class="report-modal-title">🚩 Help &amp; Support</div>
-                <div class="report-modal-sub">We'll review your report and get back to you</div>
-            </div>
-            <button class="report-modal-close" onclick="closeReportModal()">✕</button>
-        </div>
-
-        <?php if (!empty($_GET['report']) && $_GET['report'] === 'sent'): ?>
-        <div class="report-success-banner">✅ Your report was submitted! We'll look into it soon.</div>
-        <?php endif; ?>
-
-        <?php if ($latestReportStatus): ?>
-        <div style="margin:16px 24px 0;padding:12px 16px;border-radius:var(--r-md,14px);
-            background:<?= $hasOpenReport ? '#fff8ed' : '#d1fae5' ?>;
-            border:1px solid <?= $hasOpenReport ? '#f59e0b' : '#a7f3d0' ?>;
-            font-size:13px;font-weight:600;
-            color:<?= $hasOpenReport ? '#92400e' : '#065f46' ?>;
-            display:flex;align-items:center;gap:8px;">
-            <?= $hasOpenReport
-                ? '⏳ Your last report is <strong>' . ucfirst(str_replace('_', ' ', $latestReportStatus)) . '</strong> — admin will respond soon.'
-                : '✅ Your last report has been <strong>Resolved</strong>.' ?>
-        </div>
-        <?php endif; ?>
-
-        <form method="POST" enctype="multipart/form-data" id="reportForm">
-            <input type="hidden" name="action" value="submit_report">
-            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
-            <div class="report-modal-body">
-                <div class="report-field">
-                    <label>Report Title <span>*</span></label>
-                    <input type="text" name="report_title" placeholder="e.g. Page not loading" required maxlength="150">
-                </div>
-                <div class="report-field">
-                    <label>Explanation <span>*</span></label>
-                    <textarea name="report_description" rows="4" placeholder="Describe the issue in detail..." required maxlength="2000"></textarea>
-                </div>
-                <div class="report-field">
-                    <label>Screenshot / Image <span style="color:var(--text-3,#8b7fa8);font-weight:500;">(optional)</span></label>
-                    <label for="reportImageInput" class="report-drop-zone" id="reportDropZone">
-                        <div class="dz-icon">📷</div>
-                        <div class="dz-text">Click to upload or drag &amp; drop</div>
-                        <div class="dz-sub">JPG, PNG, GIF, WEBP — max 5 MB</div>
-                    </label>
-                    <input type="file" name="report_image" id="reportImageInput"
-                        accept="image/jpeg,image/png,image/gif,image/webp"
-                        style="display:none" onchange="previewReportImg(this)">
-                    <img id="reportImgPreview" class="report-img-preview" alt="Preview">
-                </div>
-            </div>
-            <div class="report-modal-footer">
-                <button type="button" class="btn-report-cancel" onclick="closeReportModal()">Cancel</button>
-                <button type="submit" class="btn-report-submit">🚩 Submit Report</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<script>
-function openReportModal() {
-    document.getElementById('reportModalOverlay').classList.add('open');
-    document.addEventListener('keydown', escReport);
-}
-function closeReportModal() {
-    document.getElementById('reportModalOverlay').classList.remove('open');
-    document.removeEventListener('keydown', escReport);
-}
-function escReport(e) { if (e.key === 'Escape') closeReportModal(); }
-function previewReportImg(input) {
-    const file = input.files[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5MB.'); input.value = ''; return; }
-    const reader = new FileReader();
-    reader.onload = e => {
-        const p = document.getElementById('reportImgPreview');
-        p.src = e.target.result; p.style.display = 'block';
-        document.querySelector('#reportDropZone .dz-text').textContent = file.name;
-        document.querySelector('#reportDropZone .dz-sub').textContent = (file.size/1024).toFixed(1)+' KB';
-    };
-    reader.readAsDataURL(file);
-}
-const _rdz = document.getElementById('reportDropZone');
-if (_rdz) {
-    _rdz.addEventListener('dragover', e => { e.preventDefault(); _rdz.classList.add('dragover'); });
-    _rdz.addEventListener('dragleave', () => _rdz.classList.remove('dragover'));
-    _rdz.addEventListener('drop', e => {
-        e.preventDefault(); _rdz.classList.remove('dragover');
-        const file = e.dataTransfer.files[0];
-        if (file && file.type.startsWith('image/')) {
-            const inp = document.getElementById('reportImageInput');
-            try { const dt = new DataTransfer(); dt.items.add(file); inp.files = dt.files; } catch(ex) {}
-            previewReportImg(inp);
-        }
-    });
-}
-<?php if (!empty($_GET['report']) && $_GET['report'] === 'sent'): ?>
-window.addEventListener('load', () => openReportModal());
-<?php endif; ?>
 </script>
 </body>
 </html>
