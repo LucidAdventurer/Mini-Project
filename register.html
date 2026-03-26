@@ -1,620 +1,337 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Registration - Choose Your Role">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>Register - Placement Portal</title>
-    <style>
-        /* ============================================
-           CSS VARIABLES - Matching theme
-           ============================================ */
-        :root {
-            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            --color-primary: #234C6A;
-            --color-primary-dark: #456882;
-            --color-teacher-primary: #2E073F;
-            --color-teacher-secondary: #AD49E1;
-            --color-text: #2d3748;
-            --color-white: #ffffff;
-            --transition: all 0.3s ease;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Registration - Choose Your Role">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
 
-        /* ============================================
-           GLOBAL RESET & BASE STYLES
-           ============================================ */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+<title>Register - Placement Portal</title>
 
-        body {
-            font-family: var(--font-family);
-            overflow: hidden;
-            background: #f0f4f8;
-        }
+<style>
 
-        /* ============================================
-           DYNAMIC BACKGROUND
-           Gradient that shifts based on hover
-           ============================================ */
-        .dynamic-background {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 1;
-            /* Default gradient - neutral */
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            transition: background 0.8s ease;
-        }
+:root{
+--font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+--color-primary:#234C6A;
+--color-primary-dark:#456882;
+--color-teacher-primary:#2E073F;
+--color-teacher-secondary:#AD49E1;
+--color-text:#2d3748;
+--color-white:#ffffff;
+--transition:all 0.3s ease;
+}
 
-        /* Background changes on hover over cards */
-        body.student-hover .dynamic-background {
-            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
-        }
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+}
 
-        body.teacher-hover .dynamic-background {
-            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, #7A1CAC 100%);
-        }
+/* LOGIN PAGE BACKGROUND */
+body{
+font-family:var(--font-family);
+overflow:hidden;
+background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+}
 
-        /* ============================================
-           FLOATING ANIMATIONS
-           Mixed elements from both themes
-           ============================================ */
-        .mixed-animation {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            opacity: 0.3;
-        }
+/* MAIN CONTAINER */
 
-        /* Books for student theme */
-        .book {
-            position: absolute;
-            width: 45px;
-            height: 65px;
-            background: white;
-            border-radius: 4px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-            animation: float 8s ease-in-out infinite;
-        }
+.container{
+position:relative;
+min-height:100vh;
+display:flex;
+justify-content:center;
+align-items:center;
+padding:20px;
+}
 
-        .book::before {
-            content: '';
-            position: absolute;
-            left: 5px;
-            top: 5px;
-            bottom: 5px;
-            width: 3px;
-            background: var(--color-primary);
-            border-radius: 2px;
-        }
+/* MAIN CARD */
 
-        /* Chalkboards for teacher theme */
-        .chalkboard {
-            position: absolute;
-            background: #2d3e3f;
-            border-radius: 6px;
-            box-shadow: 0 0 0 6px #8b4513, 0 6px 15px rgba(0, 0, 0, 0.3);
-            animation: float 9s ease-in-out infinite;
-        }
+.selection-card{
+background:rgba(0,0,0,0.95);
+backdrop-filter:blur(20px);
+border-radius:24px;
+padding:50px 40px;
+width:100%;
+max-width:900px;
+box-shadow:0 20px 60px rgba(0,0,0,0.25);
+border:2px solid rgba(0,0,0,0.8);
+animation:cardPop 0.6s ease;
+}
 
-        @keyframes float {
-            0%, 100% {
-                transform: translateY(0) rotate(0deg);
-            }
-            50% {
-                transform: translateY(-30px) rotate(5deg);
-            }
-        }
+@keyframes cardPop{
+from{
+opacity:0;
+transform:scale(.9) translateY(40px);
+}
+to{
+opacity:1;
+transform:scale(1) translateY(0);
+}
+}
 
-        .book:nth-child(1) {
-            top: 10%;
-            left: 5%;
-            animation-delay: 0s;
-        }
+/* HEADER */
 
-        .book:nth-child(2) {
-            top: 70%;
-            left: 85%;
-            animation-delay: 1s;
-        }
+.selection-header{
+text-align:center;
+margin-bottom:50px;
+}
 
-        .chalkboard:nth-child(3) {
-            width: 80px;
-            height: 65px;
-            top: 15%;
-            right: 10%;
-            animation-delay: 1.5s;
-        }
+.logo{
+width:90px;
+height:90px;
+margin:0 auto 25px;
+background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+border-radius:50%;
+display:flex;
+align-items:center;
+justify-content:center;
+font-size:42px;
+color:white;
+font-weight:bold;
+box-shadow:0 0 25px rgba(102,126,234,.6);
+}
 
-        .chalkboard:nth-child(4) {
-            width: 70px;
-            height: 55px;
-            bottom: 15%;
-            left: 15%;
-            animation-delay: 2s;
-        }
+.selection-header h1{
+font-size:32px;
+color:white;
+margin-bottom:12px;
+}
 
-        /* ============================================
-           MAIN CONTAINER
-           ============================================ */
-        .container {
-            position: relative;
-            z-index: 2;
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
+.selection-header p{
+font-size:16px;
+color:#bbb;
+}
 
-        /* ============================================
-           SELECTION CARD
-           Main container for role selection
-           ============================================ */
-        .selection-card {
-            background: rgba(0, 0, 0, 0.98);
-            backdrop-filter: blur(20px);
-            border-radius: 24px;
-            padding: 50px 40px;
-            width: 100%;
-            max-width: 900px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
-            animation: cardPop 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-            border: 2px solid rgba(0, 0, 0, 0.8);
-        }
+/* ROLE CARDS */
 
-        @keyframes cardPop {
-            from {
-                opacity: 0;
-                transform: scale(0.8) translateY(40px);
-            }
-            to {
-                opacity: 1;
-                transform: scale(1) translateY(0);
-            }
-        }
+.roles-container{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:25px;
+margin-bottom:35px;
+}
 
-        /* ============================================
-           HEADER SECTION
-           ============================================ */
-        .selection-header {
-            text-align: center;
-            margin-bottom: 50px;
-        }
+.role-card{
+background:rgba(255,255,255,.05);
+border:2px solid rgba(255,255,255,.1);
+border-radius:20px;
+padding:40px 30px;
+text-align:center;
+cursor:pointer;
+transition:.35s;
+text-decoration:none;
+color:white;
+}
 
-        .logo {
-            width: 90px;
-            height: 90px;
-            margin: 0 auto 25px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 42px;
-            color: #ffffff;
-            font-weight: bold;
-            box-shadow: 0 0 25px rgba(102, 126, 234, 0.5);
-            position: relative;
-            overflow: hidden;
-        }
+.role-card:hover{
+transform:translateY(-10px) scale(1.03);
+box-shadow:0 15px 40px rgba(0,0,0,.4);
+}
 
-        .logo::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transform: rotate(45deg);
-            animation: logoShine 3s infinite;
-        }
+.role-icon{
+width:100px;
+height:100px;
+margin:0 auto 25px;
+background:rgba(255,255,255,.1);
+border-radius:50%;
+display:flex;
+align-items:center;
+justify-content:center;
+font-size:50px;
+}
 
-        @keyframes logoShine {
-            0% {
-                transform: translateX(-100%) translateY(-100%) rotate(45deg);
-            }
-            100% {
-                transform: translateX(100%) translateY(100%) rotate(45deg);
-            }
-        }
+.role-title{
+font-size:24px;
+font-weight:700;
+margin-bottom:12px;
+}
 
-        .selection-header h1 {
-            font-size: 32px;
-            color: #ffffff;
-            margin-bottom: 12px;
-            font-weight: 700;
-        }
+.role-description{
+font-size:14px;
+color:#ccc;
+line-height:1.6;
+margin-bottom:20px;
+}
 
-        .selection-header p {
-            font-size: 16px;
-            color: #aaa;
-            line-height: 1.6;
-        }
+.role-features{
+display:flex;
+flex-direction:column;
+gap:8px;
+}
 
-        /* ============================================
-           ROLE SELECTION CARDS
-           Student and Teacher options
-           ============================================ */
-        .roles-container {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 25px;
-            margin-bottom: 35px;
-        }
+.feature-item{
+font-size:13px;
+color:#bbb;
+}
 
-        .role-card {
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
-            border: 2px solid rgba(255, 255, 255, 0.1);
-            border-radius: 20px;
-            padding: 40px 30px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-            position: relative;
-            overflow: hidden;
-            text-decoration: none;
-            display: block;
-        }
+/* GUEST SECTION */
 
-        .role-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
-            opacity: 0;
-            transition: opacity 0.4s ease;
-            z-index: 0;
-        }
+.guest-section{
+background:rgba(255,255,255,.04);
+border:2px solid rgba(255,255,255,.08);
+border-radius:16px;
+padding:25px;
+text-align:center;
+margin-bottom:30px;
+}
 
-        .role-card.teacher::before {
-            background: linear-gradient(135deg, var(--color-teacher-primary) 0%, var(--color-teacher-secondary) 100%);
-        }
+.guest-section h3{
+font-size:18px;
+color:white;
+margin-bottom:10px;
+}
 
-        .role-card:hover::before {
-            opacity: 1;
-        }
+.guest-section p{
+font-size:14px;
+color:#aaa;
+margin-bottom:20px;
+}
 
-        .role-card:hover {
-            transform: translateY(-10px) scale(1.05);
-            border-color: rgba(255, 255, 255, 0.3);
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
-        }
+.btn-guest{
+display:inline-block;
+padding:14px 35px;
+background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+color:white;
+border-radius:12px;
+font-weight:700;
+font-size:15px;
+text-decoration:none;
+transition:.3s;
+}
 
-        .role-card * {
-            position: relative;
-            z-index: 1;
-        }
+.btn-guest:hover{
+transform:translateY(-3px);
+}
 
-        .role-icon {
-            width: 100px;
-            height: 100px;
-            margin: 0 auto 25px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 50px;
-            transition: all 0.3s ease;
-        }
+/* FOOTER */
 
-        .role-card:hover .role-icon {
-            background: rgba(255, 255, 255, 0.2);
-            transform: scale(1.1) rotate(5deg);
-        }
+.selection-footer{
+text-align:center;
+padding-top:25px;
+border-top:2px solid rgba(255,255,255,.1);
+}
 
-        .role-title {
-            font-size: 24px;
-            font-weight: 700;
-            color: #ffffff;
-            margin-bottom: 12px;
-            transition: all 0.3s ease;
-        }
+.selection-footer p{
+color:#aaa;
+font-size:14px;
+}
 
-        .role-description {
-            font-size: 14px;
-            color: #aaa;
-            line-height: 1.6;
-            margin-bottom: 20px;
-            transition: all 0.3s ease;
-        }
+.selection-footer a{
+color:#667eea;
+text-decoration:none;
+font-weight:600;
+}
 
-        .role-card:hover .role-description {
-            color: #ffffff;
-        }
+.selection-footer a:hover{
+text-decoration:underline;
+}
 
-        .role-features {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            margin-top: 20px;
-        }
+/* MOBILE */
 
-        .feature-item {
-            font-size: 13px;
-            color: #bbb;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-        }
+@media(max-width:768px){
 
-        .role-card:hover .feature-item {
-            color: #ffffff;
-        }
+.selection-card{
+padding:40px 25px;
+}
 
-        /* ============================================
-           GUEST ACCESS SECTION
-           Prominent option for guest users
-           ============================================ */
-        .guest-section {
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
-            border: 2px solid rgba(255, 255, 255, 0.08);
-            border-radius: 16px;
-            padding: 25px;
-            text-align: center;
-            margin-bottom: 30px;
-        }
+.roles-container{
+grid-template-columns:1fr;
+}
 
-        .guest-section h3 {
-            font-size: 18px;
-            color: #ffffff;
-            margin-bottom: 10px;
-            font-weight: 600;
-        }
+.selection-header h1{
+font-size:26px;
+}
 
-        .guest-section p {
-            font-size: 14px;
-            color: #aaa;
-            margin-bottom: 20px;
-        }
+.role-card{
+padding:35px 25px;
+}
 
-        .btn-guest {
-            display: inline-block;
-            padding: 14px 35px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 12px;
-            font-weight: 700;
-            font-size: 15px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-        }
+.role-icon{
+width:80px;
+height:80px;
+font-size:40px;
+}
 
-        .btn-guest:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
-        }
+}
 
-        /* ============================================
-           FOOTER SECTION
-           Link back to login
-           ============================================ */
-        .selection-footer {
-            text-align: center;
-            padding-top: 25px;
-            border-top: 2px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .selection-footer p {
-            color: #aaa;
-            font-size: 14px;
-            margin-bottom: 12px;
-        }
-
-        .selection-footer a {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 600;
-            transition: all 0.3s ease;
-        }
-
-        .selection-footer a:hover {
-            color: #764ba2;
-            text-decoration: underline;
-        }
-
-        /* ============================================
-           RESPONSIVE DESIGN
-           Mobile and tablet adjustments
-           ============================================ */
-        @media (max-width: 768px) {
-            .selection-card {
-                padding: 40px 25px;
-            }
-
-            .roles-container {
-                grid-template-columns: 1fr;
-                gap: 20px;
-            }
-
-            .selection-header h1 {
-                font-size: 26px;
-            }
-
-            .role-card {
-                padding: 35px 25px;
-            }
-
-            .role-icon {
-                width: 80px;
-                height: 80px;
-                font-size: 40px;
-            }
-
-            .role-title {
-                font-size: 22px;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .logo {
-                width: 75px;
-                height: 75px;
-                font-size: 36px;
-            }
-
-            .selection-header h1 {
-                font-size: 24px;
-            }
-
-            .selection-header p {
-                font-size: 14px;
-            }
-        }
-    </style>
+</style>
 </head>
+
 <body>
-    <!-- Animated Background -->
-    <div class="dynamic-background">
-        <div class="mixed-animation">
-            <div class="book"></div>
-            <div class="book"></div>
-            <div class="chalkboard"></div>
-            <div class="chalkboard"></div>
-        </div>
-    </div>
 
-    <!-- Main Container -->
-    <div class="container">
-        <div class="selection-card">
-            <!-- Header -->
-            <div class="selection-header">
-                <div class="logo">P</div>
-                <h1>Join Placement Portal</h1>
-                <p>Choose your role to get started with placement preparation</p>
-            </div>
+<div class="container">
 
-            <!-- Role Selection Cards -->
-            <div class="roles-container">
-                <!-- Student Card -->
-                <a href="student-registration.html" class="role-card student" 
-                   onmouseenter="document.body.classList.add('student-hover')"
-                   onmouseleave="document.body.classList.remove('student-hover')">
-                    <div class="role-icon">📚</div>
-                    <h2 class="role-title">Student</h2>
-                    <p class="role-description">
-                        Prepare for placements with practice tests, performance tracking, and detailed analytics
-                    </p>
-                    <div class="role-features">
-                        <div class="feature-item">✓ Practice unlimited tests</div>
-                        <div class="feature-item">✓ Track your progress</div>
-                        <div class="feature-item">✓ Get instant results</div>
-                        <div class="feature-item">✓ Access study materials</div>
-                    </div>
-                </a>
+<div class="selection-card">
 
-                <!-- Teacher Card -->
-                <a href="teacher-registration.html" class="role-card teacher"
-                   onmouseenter="document.body.classList.add('teacher-hover')"
-                   onmouseleave="document.body.classList.remove('teacher-hover')">
-                    <div class="role-icon">👨‍🏫</div>
-                    <h2 class="role-title">Teacher</h2>
-                    <p class="role-description">
-                        Create and manage assessments, track student performance, and analyze results
-                    </p>
-                    <div class="role-features">
-                        <div class="feature-item">✓ Create custom tests</div>
-                        <div class="feature-item">✓ Upload PDF questions</div>
-                        <div class="feature-item">✓ Monitor student progress</div>
-                        <div class="feature-item">✓ Generate reports</div>
-                    </div>
-                </a>
-            </div>
+<div class="selection-header">
+<div class="logo">P</div>
+<h1>Join Placement Portal</h1>
+<p>Choose your role to get started with placement preparation</p>
+</div>
 
-            <!-- Guest Access Section -->
-            <div class="guest-section">
-                <h3>🎯 Just Exploring?</h3>
-                <p>Try our platform without creating an account</p>
-                <a href="guest-dashboard.html" class="btn-guest">Continue as Guest</a>
-            </div>
+<div class="roles-container">
 
-            <!-- Footer -->
-            <div class="selection-footer">
-                <p>Already have an account? <a href="index.html">Login here</a></p>
-            </div>
-        </div>
-    </div>
+<a href="student-registration.html" class="role-card">
 
-    <script>
-        /* ============================================
-           PAGE LOAD ANIMATIONS
-           Smooth entrance effects
-           ============================================ */
-        window.addEventListener('load', function() {
-            console.log('Registration selection page loaded');
-            
-            // Add fade-in animation to role cards
-            const roleCards = document.querySelectorAll('.role-card');
-            roleCards.forEach((card, index) => {
-                setTimeout(() => {
-                    card.style.animation = 'fadeIn 0.5s ease forwards';
-                }, index * 100);
-            });
-        });
+<div class="role-icon">📚</div>
 
-        /* ============================================
-           KEYBOARD SHORTCUTS
-           Enhanced user experience
-           ============================================ */
-        document.addEventListener('keydown', function(e) {
-            // Press 'S' to go to student registration
-            if (e.key === 's' || e.key === 'S') {
-                window.location.href = 'student-registration.html';
-            }
-            
-            // Press 'T' to go to teacher registration
-            if (e.key === 't' || e.key === 'T') {
-                window.location.href = 'teacher-registration.html';
-            }
-            
-            // Press 'G' to continue as guest
-            if (e.key === 'g' || e.key === 'G') {
-                window.location.href = 'guest-dashboard.html';
-            }
-            
-            // Press 'L' or Escape to go back to login
-            if (e.key === 'l' || e.key === 'L' || e.key === 'Escape') {
-                window.location.href = 'index.html';
-            }
-        });
+<h2 class="role-title">Student</h2>
 
-        /* ============================================
-           ADD FADE IN ANIMATION
-           CSS keyframes for entrance animations
-           ============================================ */
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes fadeIn {
-                from {
-                    opacity: 0;
-                    transform: translateY(20px);
-                }
-                to {
-                    opacity: 1;
-                    transform: translateY(0);
-                }
-            }
-            
-            .role-card {
-                opacity: 0;
-            }
-        `;
-        document.head.appendChild(style);
-    </script>
+<p class="role-description">
+Prepare for placements with practice tests, performance tracking, and analytics
+</p>
+
+<div class="role-features">
+<div class="feature-item">✓ Practice unlimited tests</div>
+<div class="feature-item">✓ Track progress</div>
+<div class="feature-item">✓ Instant results</div>
+<div class="feature-item">✓ Study materials</div>
+</div>
+
+</a>
+
+<a href="teacher-registration.html" class="role-card">
+
+<div class="role-icon">👨‍🏫</div>
+
+<h2 class="role-title">Teacher</h2>
+
+<p class="role-description">
+Create and manage assessments, track student performance and generate reports
+</p>
+
+<div class="role-features">
+<div class="feature-item">✓ Create custom tests</div>
+<div class="feature-item">✓ Upload PDF questions</div>
+<div class="feature-item">✓ Monitor students</div>
+<div class="feature-item">✓ Generate reports</div>
+</div>
+
+</a>
+
+</div>
+
+<div class="guest-section">
+
+<h3>🎯 Just Exploring?</h3>
+<p>Try our platform without creating an account</p>
+
+<a href="guest-dashboard.html" class="btn-guest">
+Continue as Guest
+</a>
+
+</div>
+
+<div class="selection-footer">
+<p>
+Already have an account?
+<a href="index.html">Login here</a>
+</p>
+</div>
+
+</div>
+</div>
+
 </body>
 </html>
