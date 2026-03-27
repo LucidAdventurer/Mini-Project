@@ -103,7 +103,7 @@ if (!function_exists('timeAgo')) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>My Assessments — PREPAURA</title>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet">
+
 <style>
 /* ── DESIGN TOKENS ── */
 :root {
@@ -138,8 +138,8 @@ if (!function_exists('timeAgo')) {
   --r-xl:        28px;
   --ease:        cubic-bezier(0.22,1,0.36,1);
   --t:           0.22s var(--ease);
-  --font-head:   'Syne', system-ui, sans-serif;
-  --font-body:   'DM Sans', system-ui, sans-serif;
+  --font-head:   'Times New Roman', Arial, serif;
+  --font-body:   'Calibri', 'Segoe UI', Arial, sans-serif;
   --nav-h:       64px;
 }
 
@@ -147,6 +147,7 @@ if (!function_exists('timeAgo')) {
 html { -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
 body {
   font-family: var(--font-body);
+  font-size: 15px;
   background: var(--surface);
   color: var(--text-1);
   min-height: 100vh;
@@ -323,7 +324,7 @@ body::before {
 }
 .page-header-left { position: relative; z-index: 1; }
 .page-header-label { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--orchid); margin-bottom: 6px; }
-.page-header-left h1 { font-family: var(--font-head); font-size: 26px; font-weight: 800; color: white; margin-bottom: 4px; line-height: 1.2; }
+.page-header-left h1 { font-family: var(--font-head); font-size: 28px; font-weight: 800; color: white; margin-bottom: 4px; line-height: 1.2; }
 .page-header-left p { font-size: 14px; color: rgba(255,255,255,0.55); }
 .btn-create {
   display: inline-flex; align-items: center; gap: 8px;
@@ -379,7 +380,7 @@ body::before {
 
 .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .card-title-group { flex: 1; }
-.card-title { font-family: var(--font-head); font-size: 17px; font-weight: 700; color: var(--text-1); margin-bottom: 4px; line-height: 1.3; }
+.card-title { font-family: var(--font-head); font-size: 18px; font-weight: 700; color: var(--text-1); margin-bottom: 4px; line-height: 1.3; }
 .card-meta-sub { font-size: 12.5px; color: var(--text-3); }
 .card-badges { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
 
@@ -447,7 +448,7 @@ body::before {
   gap: 12px; padding: 72px 20px; border-radius: var(--r-xl); text-align: center;
 }
 .state-message .state-icon { font-size: 48px; opacity: 0.4; }
-.state-message h3 { font-family: var(--font-head); font-size: 20px; font-weight: 700; color: var(--text-1); }
+.state-message h3 { font-family: var(--font-head); font-size: 22px; font-weight: 700; color: var(--text-1); }
 .state-message p  { font-size: 14px; color: var(--text-3); }
 .state-empty { background: var(--surface-3); border: 1px dashed var(--border-2); box-shadow: var(--shadow-xs); }
 .state-error { background: rgba(244,63,94,0.04); border: 1px solid rgba(244,63,94,0.2); }
