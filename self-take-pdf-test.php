@@ -151,105 +151,150 @@ $durationSec = (int)$sa['duration_minutes'] * 60;
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= $isSetup ? 'Setup PDF Test' : 'PDF Test' ?> — PTA Platform</title>
-    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary:#1a3a52; --accent:#0ea5e9; --accent2:#06b6d4;
-            --success:#10b981; --danger:#ef4444; --warning:#f59e0b;
-            --bg:#f0f4f8; --surface:#fff; --surface2:#f8fafc;
-            --border:#e2e8f0; --text:#0f172a; --text-mid:#475569; --text-soft:#94a3b8;
-            --radius:14px; --shadow:0 2px 12px rgba(0,0,0,.08); --nav-h:64px;
+            --primary:       #1a3a52;
+            --primary-mid:   #234C6A;
+            --accent:        #0ea5e9;
+            --accent-glow:   rgba(14,165,233,.18);
+            --accent2:       #06b6d4;
+            --success:       #10b981;
+            --warning:       #f59e0b;
+            --danger:        #ef4444;
+            --bg:            #f0f4f8;
+            --surface:       #ffffff;
+            --surface2:      #f8fafc;
+            --border:        #e2e8f0;
+            --text:          #0f172a;
+            --text-mid:      #475569;
+            --text-soft:     #94a3b8;
+            --radius:        16px;
+            --radius-sm:     10px;
+            --shadow:        0 1px 3px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.06);
+            --header-h:      68px;
+            --transition:    .2s cubic-bezier(.4,0,.2,1);
         }
-        *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
-        body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding-top:var(--nav-h);}
+        html, *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding-top: var(--header-h); -webkit-font-smoothing: antialiased; }
 
-        /* NAV */
-        .navbar{background:var(--primary);padding:0 24px;height:var(--nav-h);display:flex;align-items:center;justify-content:space-between;position:fixed;top:0;left:0;right:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,.2);}
-        .nav-left{display:flex;align-items:center;gap:14px;}
-        .nav-title{font-family:'Sora',sans-serif;font-size:15px;font-weight:700;color:white;}
-        .nav-sub{font-size:12px;color:rgba(255,255,255,.6);}
-        .timer-box{background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.2);border-radius:10px;padding:8px 18px;font-family:'Sora',sans-serif;font-size:18px;font-weight:800;color:white;letter-spacing:.05em;}
-        .timer-box.warn{background:rgba(245,158,11,.25);border-color:rgba(245,158,11,.5);color:#fcd34d;}
-        .timer-box.danger{background:rgba(239,68,68,.25);border-color:rgba(239,68,68,.5);color:#fca5a5;animation:pulse .8s infinite;}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+        /* ══ HEADER ══ */
+        .test-header { background: var(--primary); padding: 0 28px; height: var(--header-h); display: flex; justify-content: space-between; align-items: center; position: fixed; top: 0; left: 0; right: 0; z-index: 1000; box-shadow: 0 1px 0 rgba(255,255,255,.06), 0 4px 20px rgba(0,0,0,.18); }
+        .header-left { display: flex; align-items: center; gap: 16px; }
+        .brand { display: flex; align-items: center; gap: 11px; text-decoration: none; flex-shrink: 0; }
+        .brand-logo { width: 42px; height: 42px; border-radius: 10px; object-fit: contain; background: white; padding: 3px; flex-shrink: 0; }
+        .brand-text { display: flex; flex-direction: column; line-height: 1.2; }
+        .brand-name { font-family: 'Sora', sans-serif; font-size: 16px; font-weight: 800; color: white; letter-spacing: .4px; }
+        .brand-sub { font-size: 10.5px; font-weight: 400; color: rgba(255,255,255,.6); letter-spacing: .02em; }
+        .header-divider { width: 1px; height: 30px; background: rgba(255,255,255,.15); flex-shrink: 0; }
+        .test-info { display: flex; align-items: center; gap: 10px; flex: 1; padding: 0 16px; }
+        .test-title { font-family: 'Sora', sans-serif; font-size: 15px; font-weight: 700; color: white; letter-spacing: -.1px; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .test-badge { padding: 4px 11px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2); color: rgba(255,255,255,.85); border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+        .header-right { display: flex; align-items: center; gap: 12px; }
+        .back-btn { display: flex; align-items: center; gap: 6px; color: rgba(255,255,255,.75); font-size: 13px; font-weight: 600; text-decoration: none; padding: 8px 14px; border: 1px solid rgba(255,255,255,.2); border-radius: 8px; transition: var(--transition); white-space: nowrap; }
+        .back-btn:hover { background: rgba(255,255,255,.12); color: white; }
+        .timer-display { display: flex; align-items: center; gap: 10px; padding: 10px 20px; background: rgba(255,255,255,.12); border: 1.5px solid rgba(255,255,255,.2); border-radius: var(--radius-sm); color: white; font-family: 'Sora', sans-serif; font-weight: 800; font-size: 18px; min-width: 120px; justify-content: center; transition: var(--transition); }
+        .timer-display.warn   { background: rgba(245,158,11,.25); border-color: rgba(245,158,11,.5); color: #fcd34d; }
+        .timer-display.danger { background: rgba(239,68,68,.25); border-color: var(--danger); color: #fca5a5; animation: pulse 1s ease-in-out infinite; }
+        @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
 
-        .container{max-width:860px;margin:0 auto;padding:28px 20px 60px;}
+        .container { max-width: 860px; margin: 0 auto; padding: 28px 20px 60px; }
 
-        /* SETUP MODE */
-        .setup-header{background:linear-gradient(135deg,var(--primary),#1e5276);border-radius:var(--radius);padding:24px 28px;margin-bottom:24px;color:white;}
-        .setup-title{font-family:'Sora',sans-serif;font-size:20px;font-weight:800;margin-bottom:4px;}
-        .setup-sub{font-size:13px;color:rgba(255,255,255,.7);}
+        /* ══ SETUP MODE ══ */
+        .setup-header { background: linear-gradient(135deg, var(--primary), #1e5276); border-radius: var(--radius); padding: 24px 28px; margin-bottom: 24px; color: white; }
+        .setup-title  { font-family: 'Sora', sans-serif; font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+        .setup-sub    { font-size: 13px; color: rgba(255,255,255,.7); }
+        .pdf-viewer-hint { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 14px 18px; margin-bottom: 20px; font-size: 13.5px; color: #1e40af; display: flex; align-items: center; gap: 10px; }
+        .q-builder { display: flex; flex-direction: column; gap: 18px; }
+        .q-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+        .q-card-header { background: linear-gradient(135deg, #f8fafc, #f1f5f9); padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
+        .q-num { font-family: 'Sora', sans-serif; font-weight: 700; font-size: 14px; color: var(--primary); }
+        .q-card-body { padding: 18px; }
+        .q-input { width: 100%; padding: 9px 13px; border: 1.5px solid var(--border); border-radius: 9px; font-size: 13.5px; font-family: 'Inter', sans-serif; color: var(--text); transition: var(--transition); margin-bottom: 10px; }
+        .q-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+        .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+        .option-wrap { display: flex; align-items: center; gap: 8px; }
+        .option-label { font-size: 12px; font-weight: 700; color: var(--text-soft); width: 16px; flex-shrink: 0; }
+        .correct-row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+        .correct-row select { padding: 6px 10px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 13px; background: var(--surface); cursor: pointer; }
+        .btn-remove { background: none; border: none; color: var(--danger); font-size: 13px; cursor: pointer; padding: 4px 8px; border-radius: 6px; transition: var(--transition); }
+        .btn-remove:hover { background: #fee2e2; }
+        .add-q-btn { display: flex; align-items: center; gap: 8px; justify-content: center; padding: 13px; border-radius: var(--radius); border: 2px dashed var(--border); background: transparent; color: var(--text-mid); font-size: 14px; font-weight: 600; cursor: pointer; transition: var(--transition); font-family: 'Inter', sans-serif; width: 100%; }
+        .add-q-btn:hover { border-color: var(--accent); color: var(--accent); background: #f0f9ff; }
+        .submit-bar { position: sticky; bottom: 0; background: var(--surface); border-top: 1px solid var(--border); padding: 14px 0; margin-top: 24px; display: flex; gap: 12px; justify-content: flex-end; }
+        .btn-save { padding: 12px 32px; border-radius: var(--radius-sm); border: none; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: white; font-size: 14px; font-weight: 700; cursor: pointer; font-family: 'Inter', sans-serif; transition: var(--transition); }
+        .btn-save:hover { opacity: .9; transform: translateY(-1px); }
 
-        .pdf-viewer-hint{background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:14px 18px;margin-bottom:20px;font-size:13.5px;color:#1e40af;display:flex;align-items:center;gap:10px;}
+        /* ══ TAKE MODE ══ */
+        .test-progress { background: var(--surface); border-radius: var(--radius); padding: 18px 22px; margin-bottom: 22px; border: 1px solid var(--border); box-shadow: var(--shadow); }
+        .progress-bar-wrap { height: 7px; background: var(--surface2); border-radius: 4px; margin-top: 10px; overflow: hidden; }
+        .progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 4px; transition: width .3s; }
+        .q-dots { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+        .q-dot { width: 30px; height: 30px; border-radius: 8px; background: var(--surface2); border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--text-soft); cursor: pointer; transition: var(--transition); }
+        .q-dot:hover { border-color: var(--accent); color: var(--accent); transform: scale(1.1); }
+        .q-dot.answered { background: #dcfce7; border-color: var(--success); color: #166534; }
+        .q-dot.current  { background: linear-gradient(135deg, var(--accent), var(--accent2)); border-color: var(--accent); color: white; box-shadow: 0 2px 8px rgba(14,165,233,.35); }
 
-        .q-builder{display:flex;flex-direction:column;gap:18px;}
-        .q-card{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);}
-        .q-card-header{background:linear-gradient(135deg,#f8fafc,#f1f5f9);padding:14px 18px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);}
-        .q-num{font-family:'Sora',sans-serif;font-weight:700;font-size:14px;color:var(--primary);}
-        .q-card-body{padding:18px;}
-        .q-input{width:100%;padding:9px 13px;border:1.5px solid var(--border);border-radius:9px;font-size:13.5px;font-family:'Inter',sans-serif;color:var(--text);transition:.2s;margin-bottom:10px;}
-        .q-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(14,165,233,.12);}
-        .options-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
-        .option-wrap{display:flex;align-items:center;gap:8px;}
-        .option-label{font-size:12px;font-weight:700;color:var(--text-soft);width:16px;flex-shrink:0;}
-        .correct-row{display:flex;align-items:center;gap:10px;font-size:13px;}
-        .correct-row select{padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface);cursor:pointer;}
-        .btn-remove{background:none;border:none;color:var(--danger);font-size:13px;cursor:pointer;padding:4px 8px;border-radius:6px;transition:.15s;}
-        .btn-remove:hover{background:#fee2e2;}
+        .question-card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); padding: 32px; margin-bottom: 16px; box-shadow: var(--shadow); }
+        .q-text { font-size: 17px; color: var(--text); line-height: 1.75; margin-bottom: 24px; font-weight: 500; }
+        .options-list { display: flex; flex-direction: column; gap: 12px; }
+        .option-item { display: flex; align-items: center; gap: 14px; padding: 15px 18px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); cursor: pointer; transition: var(--transition); background: var(--surface); }
+        .option-item:hover { border-color: var(--accent); background: #f0f9ff; transform: translateX(4px); box-shadow: 0 2px 8px rgba(14,165,233,.1); }
+        .option-item input { display: none; }
+        .option-item:has(input:checked) { border-color: var(--accent); background: linear-gradient(135deg, rgba(14,165,233,.08), rgba(6,182,212,.08)); box-shadow: 0 0 0 3px var(--accent-glow); }
+        .opt-letter { width: 32px; height: 32px; border-radius: 8px; background: var(--surface2); border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--text-mid); flex-shrink: 0; transition: var(--transition); }
+        .option-item:has(input:checked) .opt-letter { background: var(--accent); color: white; border-color: var(--accent); }
+        .opt-text { font-size: 14.5px; color: var(--text); line-height: 1.5; }
 
-        .add-q-btn{display:flex;align-items:center;gap:8px;justify-content:center;padding:13px;border-radius:var(--radius);border:2px dashed var(--border);background:transparent;color:var(--text-mid);font-size:14px;font-weight:600;cursor:pointer;transition:.2s;font-family:'Inter',sans-serif;width:100%;}
-        .add-q-btn:hover{border-color:var(--accent);color:var(--accent);background:#f0f9ff;}
+        .nav-btns { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; padding-top: 20px; border-top: 1.5px solid var(--border); }
+        .btn-nav { padding: 10px 24px; border-radius: var(--radius-sm); border: 1.5px solid var(--accent); background: var(--surface); color: var(--accent); font-family: 'Inter', sans-serif; font-weight: 700; font-size: 13.5px; cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 8px; }
+        .btn-nav:hover:not(:disabled) { background: var(--accent); color: white; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(14,165,233,.3); }
+        .btn-nav:disabled { opacity: .4; cursor: not-allowed; border-color: var(--border); color: var(--text-soft); }
+        .btn-submit-test { padding: 10px 28px; border-radius: var(--radius-sm); border: none; background: linear-gradient(135deg, var(--success), #34d399); color: white; font-family: 'Inter', sans-serif; font-weight: 700; font-size: 13.5px; cursor: pointer; transition: var(--transition); box-shadow: 0 2px 8px rgba(16,185,129,.35); }
+        .btn-submit-test:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(16,185,129,.5); }
 
-        .submit-bar{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--border);padding:14px 0;margin-top:24px;display:flex;gap:12px;justify-content:flex-end;}
-        .btn-save{padding:12px 32px;border-radius:10px;border:none;background:linear-gradient(135deg,var(--accent),var(--accent2));color:white;font-size:14px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;}
-        .btn-save:hover{opacity:.9;}
-
-        /* TAKE MODE */
-        .test-progress{background:var(--surface);border-radius:var(--radius);padding:16px 20px;margin-bottom:20px;border:1px solid var(--border);box-shadow:var(--shadow);}
-        .progress-bar-wrap{height:6px;background:var(--surface2);border-radius:3px;margin-top:8px;overflow:hidden;}
-        .progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:3px;transition:.3s;}
-
-        .question-card{background:var(--surface);border-radius:var(--radius);border:1.5px solid var(--border);padding:24px;margin-bottom:16px;box-shadow:var(--shadow);}
-        .q-text{font-family:'Sora',sans-serif;font-size:16px;font-weight:600;color:var(--text);margin-bottom:18px;line-height:1.5;}
-        .options-list{display:flex;flex-direction:column;gap:10px;}
-        .option-item{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:10px;border:1.5px solid var(--border);cursor:pointer;transition:.2s;}
-        .option-item:hover{border-color:var(--accent);background:#f0f9ff;}
-        .option-item input{display:none;}
-        .option-item:has(input:checked){border-color:var(--accent);background:linear-gradient(135deg,#e0f2fe,#e0f9ff);}
-        .opt-letter{width:28px;height:28px;border-radius:7px;background:var(--surface2);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text-mid);flex-shrink:0;transition:.2s;}
-        .option-item:has(input:checked) .opt-letter{background:var(--accent);color:white;border-color:var(--accent);}
-        .opt-text{font-size:14px;color:var(--text);}
-
-        .nav-btns{display:flex;justify-content:space-between;align-items:center;margin-top:16px;}
-        .btn-nav{padding:10px 22px;border-radius:9px;border:1.5px solid var(--border);background:var(--surface);color:var(--text-mid);font-size:13.5px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;transition:.15s;}
-        .btn-nav:hover{background:var(--surface2);}
-        .btn-nav:disabled{opacity:.4;cursor:not-allowed;}
-        .btn-submit-test{padding:10px 28px;border-radius:9px;border:none;background:linear-gradient(135deg,var(--success),#059669);color:white;font-size:13.5px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;}
-
-        .q-dots{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
-        .q-dot{width:26px;height:26px;border-radius:6px;background:var(--surface2);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--text-soft);cursor:pointer;transition:.2s;}
-        .q-dot.answered{background:var(--accent);border-color:var(--accent);color:white;}
-        .q-dot.current{border-color:var(--primary);color:var(--primary);}
+        @media (max-width: 768px) {
+            .test-header { padding: 0 16px; height: auto; min-height: var(--header-h); flex-wrap: wrap; gap: 8px; padding-top: 10px; padding-bottom: 10px; }
+            body { padding-top: 90px; }
+            .container { padding: 16px 14px 60px; }
+            .question-card { padding: 22px 16px; }
+            .nav-btns { flex-wrap: wrap; gap: 10px; }
+            .btn-nav, .btn-submit-test { width: 100%; justify-content: center; }
+        }
     </style>
 </head>
 <body>
 
-<nav class="navbar">
-    <div class="nav-left">
-        <div>
-            <div class="nav-title">📄 <?= htmlspecialchars($sa['title']) ?></div>
-            <div class="nav-sub"><?= $isSetup ? 'Setup — Add Questions' : 'PDF Self Test' ?></div>
+<header class="test-header">
+    <!-- LEFT: Brand + test info -->
+    <div class="header-left">
+        <a href="student-dashboard.php" class="brand">
+            <img src="prepaura-logo.png" alt="Prepaura Logo" class="brand-logo">
+            <div class="brand-text">
+                <span class="brand-name">PREPAURA</span>
+                <span class="brand-sub">Placement Training Platform</span>
+            </div>
+        </a>
+        <div class="header-divider"></div>
+        <div class="test-info">
+            <div class="test-title">📄 <?= htmlspecialchars($sa['title']) ?></div>
+            <?php if ($isSetup): ?>
+            <div class="test-badge">Setup Mode</div>
+            <?php else: ?>
+            <div class="test-badge">PDF Self Test</div>
+            <?php endif; ?>
         </div>
     </div>
-    <div style="display:flex;align-items:center;gap:12px;">
+    <!-- RIGHT: Timer + Back -->
+    <div class="header-right">
         <?php if (!$isSetup && $sa['status'] === 'ready'): ?>
-        <div class="timer-box" id="timerDisplay">
-            <?= gmdate('i:s', $durationSec) ?>
-        </div>
+        <div class="timer-display" id="timerDisplay">⏱️ <?= gmdate('i:s', $durationSec) ?></div>
         <?php endif; ?>
-        <a href="self-assessment.php" style="color:rgba(255,255,255,.7);font-size:13px;text-decoration:none;padding:8px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.2);">✕ Exit</a>
+        <a href="self-assessment.php" class="back-btn">← Self Assessment</a>
     </div>
-</nav>
+</header>
 
 <div class="container">
 
@@ -263,28 +308,30 @@ $durationSec = (int)$sa['duration_minutes'] * 60;
 </div>
 
 <?php if ($sa['pdf_path']): ?>
-<div class="pdf-viewer-hint">
-    📎 <span>Your PDF: <strong><?= htmlspecialchars(basename($sa['pdf_path'])) ?></strong> —
-    <a href="<?= htmlspecialchars($sa['pdf_path']) ?>" target="_blank" style="color:#1e40af;">Open PDF ↗</a>
-    to refer while adding questions below.</span>
+<div class="pdf-viewer-hint" style="justify-content:space-between;flex-wrap:wrap;gap:10px;">
+    <span>📎 <strong><?= htmlspecialchars(basename($sa['pdf_path'])) ?></strong> —
+    <a href="<?= htmlspecialchars($sa['pdf_path']) ?>" target="_blank" style="color:#1e40af;">Open PDF ↗</a></span>
+    <button type="button" id="parseBtn" onclick="parsePdf()"
+        style="padding:8px 18px;border-radius:8px;border:none;background:#1e40af;color:white;font-size:13px;font-weight:700;cursor:pointer;">
+        ✨ Auto-Parse PDF
+    </button>
 </div>
+<div id="parseStatus" style="display:none;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#166534;"></div>
 <?php endif; ?>
 
 <form method="POST" id="setupForm">
     <input type="hidden" name="action" value="save_questions">
     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
 
-    <div class="q-builder" id="questionBuilder">
-        <!-- Questions added by JS -->
+    <div id="parseStatus" style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:16px 18px;margin-bottom:20px;font-size:13.5px;color:#0369a1;">
+        ⏳ Parsing your PDF, please wait…
     </div>
 
-    <button type="button" class="add-q-btn" onclick="addQuestion()" style="margin-top:18px;">
-        + Add Question
-    </button>
+    <div class="q-builder" id="questionBuilder" style="display:none;"></div>
 
-    <div class="submit-bar">
+    <div class="submit-bar" id="submitBar" style="display:none;">
         <a href="self-assessment.php" style="padding:12px 20px;border-radius:10px;border:1.5px solid var(--border);background:#fff;color:var(--text-mid);font-size:13.5px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;">Cancel</a>
-        <button type="submit" class="btn-save" id="saveBtn" disabled>💾 Save & Start Test</button>
+        <button type="submit" class="btn-save" id="saveBtn">💾 Save & Start Test</button>
     </div>
 </form>
 
@@ -340,8 +387,59 @@ function checkSave() {
     document.getElementById('saveBtn').disabled = filled.length === 0;
 }
 
-// Add first question on load
+// Add first question on load, then auto-parse if PDF exists
 addQuestion();
+<?php if ($sa['pdf_path']): ?>
+window.addEventListener('load', () => parsePdf());
+<?php endif; ?>
+
+async function parsePdf() {
+    const btn    = document.getElementById('parseBtn');
+    const status = document.getElementById('parseStatus');
+    if (btn) btn.disabled = true;
+
+    try {
+        const formData = new FormData();
+        formData.append('sa_id', '<?= $saId ?>');
+        formData.append('csrf_token', '<?= htmlspecialchars($_SESSION['csrf_token']) ?>');
+
+        const res    = await fetch('api/self-assessment/parse-pdf.php', { method: 'POST', body: formData });
+        const result = await res.json();
+
+        if (result.success && result.questions?.length > 0) {
+            const builder = document.getElementById('questionBuilder');
+            builder.innerHTML = '';
+            qCount = 0;
+            result.questions.forEach(q => {
+                addQuestion();
+                const idx = qCount - 1;
+                document.querySelector(`[name="questions[${idx}][text]"]`).value     = q.text       || '';
+                document.querySelector(`[name="questions[${idx}][option_a]"]`).value = q.options[0] || '';
+                document.querySelector(`[name="questions[${idx}][option_b]"]`).value = q.options[1] || '';
+                document.querySelector(`[name="questions[${idx}][option_c]"]`).value = q.options[2] || '';
+                document.querySelector(`[name="questions[${idx}][option_d]"]`).value = q.options[3] || '';
+                document.querySelector(`[name="questions[${idx}][correct]"]`).value  = (q.correctAnswer || 'a').toLowerCase();
+            });
+            status.style.background   = '#f0fdf4';
+            status.style.borderColor  = '#86efac';
+            status.style.color        = '#166534';
+            status.textContent        = '✅ ' + result.questions.length + ' questions parsed! Click "Save & Start Test" to begin.';
+            builder.style.display     = 'flex';
+            document.getElementById('submitBar').style.display = 'flex';
+        } else {
+            status.style.background  = '#fef2f2';
+            status.style.borderColor = '#fca5a5';
+            status.style.color       = '#991b1b';
+            status.textContent       = '❌ ' + (result.error || 'No questions found in PDF.');
+            document.getElementById('submitBar').style.display = 'none';
+        }
+    } catch (err) {
+        status.style.background  = '#fef2f2';
+        status.style.color       = '#991b1b';
+        status.textContent       = '❌ Parse failed. Please try again.';
+    }
+    if (btn) btn.disabled = false;
+}
 </script>
 
 <?php elseif ($sa['status'] === 'ready' && !empty($questions)): ?>
@@ -455,8 +553,8 @@ const timerInterval = setInterval(() => {
     const m = String(Math.floor(timeLeft/60)).padStart(2,'0');
     const s = String(timeLeft%60).padStart(2,'0');
     timerEl.textContent = m + ':' + s;
-    if (timeLeft <= 60)  timerEl.className = 'timer-box warn';
-    if (timeLeft <= 10)  timerEl.className = 'timer-box danger';
+    if (timeLeft <= 60)  timerEl.className = 'timer-display warn';
+    if (timeLeft <= 10)  timerEl.className = 'timer-display danger';
     if (timeLeft <= 0) {
         clearInterval(timerInterval);
         alert('⏰ Time is up! Submitting your test.');

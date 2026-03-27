@@ -72,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
              SET score=?, total=?, percentage=?, time_taken_sec=?, levels_used=?,
                  status='submitted', submitted_at=NOW()
              WHERE attempt_id=? AND user_id=?",
-            "iiidsi i", [$score, $total, $pct, $timeTaken, $sa['levels_selected'], $attemptId, $userId]
+            "iiidsii", [$score, $total, $pct, $timeTaken, $sa['levels_selected'], $attemptId, $userId]
         );
         // fix types
         safePreparedQuery($conn,
@@ -104,8 +104,13 @@ $qRes = safePreparedQuery($conn,
     "i", [$saId]
 );
 if ($qRes['success'] && $qRes['result']) {
-    while ($r = $qRes['result']->fetch_assoc()) $questions[] = $r;
+    $grouped = [];
+    while ($r = $qRes['result']->fetch_assoc()) $grouped[$r['difficulty']][] = $r;
     $qRes['result']->free();
+    foreach ($grouped as $grp) foreach ($grp as $q) $questions[] = $q;
+    shuffle($questions);
+    foreach ($questions as $i => &$q) $q['q_order'] = $i;
+    unset($q);
 }
 
 // Create attempt
@@ -126,70 +131,248 @@ $levelsArr   = array_map('ucfirst', explode(',', $sa['levels_selected'] ?? ''));
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Level Test — PTA Platform</title>
-    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        :root{--primary:#1a3a52;--accent:#0ea5e9;--accent2:#06b6d4;--success:#10b981;--danger:#ef4444;--warning:#f59e0b;--bg:#f0f4f8;--surface:#fff;--surface2:#f8fafc;--border:#e2e8f0;--text:#0f172a;--text-mid:#475569;--text-soft:#94a3b8;--radius:14px;--shadow:0 2px 12px rgba(0,0,0,.08);--nav-h:64px;}
-        *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
-        body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding-top:var(--nav-h);}
-        .navbar{background:var(--primary);padding:0 24px;height:var(--nav-h);display:flex;align-items:center;justify-content:space-between;position:fixed;top:0;left:0;right:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,.2);}
-        .nav-title{font-family:'Sora',sans-serif;font-size:15px;font-weight:700;color:white;}
-        .nav-sub{font-size:12px;color:rgba(255,255,255,.6);}
-        .timer-box{background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.2);border-radius:10px;padding:8px 18px;font-family:'Sora',sans-serif;font-size:18px;font-weight:800;color:white;letter-spacing:.05em;}
-        .timer-box.warn{background:rgba(245,158,11,.25);border-color:rgba(245,158,11,.5);color:#fcd34d;}
-        .timer-box.danger{background:rgba(239,68,68,.25);border-color:rgba(239,68,68,.5);color:#fca5a5;animation:pulse .8s infinite;}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+        :root {
+            --primary:       #1a3a52;
+            --primary-mid:   #234C6A;
+            --accent:        #0ea5e9;
+            --accent-glow:   rgba(14,165,233,.18);
+            --accent2:       #06b6d4;
+            --success:       #10b981;
+            --warning:       #f59e0b;
+            --danger:        #ef4444;
+            --bg:            #f0f4f8;
+            --surface:       #ffffff;
+            --surface2:      #f8fafc;
+            --border:        #e2e8f0;
+            --text:          #0f172a;
+            --text-mid:      #475569;
+            --text-soft:     #94a3b8;
+            --radius:        16px;
+            --radius-sm:     10px;
+            --shadow:        0 1px 3px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.06);
+            --shadow-md:     0 4px 24px rgba(0,0,0,.10);
+            --header-h:      68px;
+            --transition:    .2s cubic-bezier(.4,0,.2,1);
+        }
 
-        .diff-badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:700;}
-        .diff-easy{background:#dcfce7;color:#166534;}
-        .diff-medium{background:#fef3c7;color:#92400e;}
-        .diff-hard{background:#fee2e2;color:#991b1b;}
+        html, *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
-        .container{max-width:820px;margin:0 auto;padding:28px 20px 60px;}
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding-top: var(--header-h);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ══ HEADER ══ */
+        .test-header {
+            background: var(--primary);
+            padding: 0 28px;
+            height: var(--header-h);
+            display: flex; justify-content: space-between; align-items: center;
+            position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+            box-shadow: 0 1px 0 rgba(255,255,255,.06), 0 4px 20px rgba(0,0,0,.18);
+        }
+
+        /* ══ BRAND (left) ══ */
+        .header-left { display: flex; align-items: center; gap: 16px; }
+
+        .brand { display: flex; align-items: center; gap: 11px; text-decoration: none; flex-shrink: 0; }
+        .brand-logo {
+            width: 42px; height: 42px; border-radius: 10px;
+            object-fit: contain; background: white; padding: 3px;
+            flex-shrink: 0;
+        }
+        .brand-text { display: flex; flex-direction: column; line-height: 1.2; }
+        .brand-name {
+            font-family: 'Sora', sans-serif; font-size: 16px; font-weight: 800;
+            color: white; letter-spacing: .4px;
+        }
+        .brand-sub { font-size: 10.5px; font-weight: 400; color: rgba(255,255,255,.6); letter-spacing: .02em; }
+
+        .header-divider { width: 1px; height: 30px; background: rgba(255,255,255,.15); flex-shrink: 0; }
+
+        /* ══ CENTER TEST INFO ══ */
+        .test-info { display: flex; align-items: center; gap: 10px; flex: 1; padding: 0 20px; }
+
+        .test-title {
+            font-family: 'Sora', sans-serif;
+            font-size: 15px; font-weight: 700; color: white;
+            letter-spacing: -.1px;
+        }
+
+        .test-badge {
+            padding: 4px 11px;
+            background: rgba(255,255,255,.12);
+            border: 1px solid rgba(255,255,255,.2);
+            color: rgba(255,255,255,.85); border-radius: 8px;
+            font-size: 12px; font-weight: 600; white-space: nowrap;
+        }
+
+        /* ══ RIGHT (timer + back btn) ══ */
+        .header-right { display: flex; align-items: center; gap: 12px; }
+
+        .back-btn {
+            display: flex; align-items: center; gap: 6px;
+            color: rgba(255,255,255,.75); font-size: 13px; font-weight: 600;
+            text-decoration: none; padding: 8px 14px;
+            border: 1px solid rgba(255,255,255,.2); border-radius: 8px;
+            transition: var(--transition); white-space: nowrap;
+        }
+        .back-btn:hover { background: rgba(255,255,255,.12); color: white; }
+
+        .timer-display {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 20px;
+            background: rgba(255,255,255,.12);
+            border: 1.5px solid rgba(255,255,255,.2);
+            border-radius: var(--radius-sm);
+            color: white;
+            font-family: 'Sora', sans-serif; font-weight: 800; font-size: 18px;
+            min-width: 120px; justify-content: center;
+            transition: var(--transition);
+        }
+        .timer-display.warn  { background: rgba(245,158,11,.25); border-color: rgba(245,158,11,.5); color: #fcd34d; }
+        .timer-display.danger{ background: rgba(239,68,68,.25);  border-color: var(--danger); color: #fca5a5; animation: pulse 1s ease-in-out infinite; }
+        @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
+
+        .submit-btn {
+            padding: 10px 24px;
+            background: linear-gradient(135deg, var(--success), #34d399);
+            color: white; border: none; border-radius: var(--radius-sm);
+            font-family: 'Inter', sans-serif; font-weight: 700; font-size: 13.5px;
+            cursor: pointer; transition: var(--transition);
+            box-shadow: 0 2px 8px rgba(16,185,129,.35);
+        }
+        .submit-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(16,185,129,.5); }
+
+        /* ══ DIFF BADGES ══ */
+        .diff-badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 700; }
+        .diff-easy   { background: #dcfce7; color: #166534; }
+        .diff-medium { background: #fef3c7; color: #92400e; }
+        .diff-hard   { background: #fee2e2; color: #991b1b; }
+
+        .container { max-width: 820px; margin: 0 auto; padding: 28px 20px 60px; }
 
         .test-progress{background:var(--surface);border-radius:var(--radius);padding:16px 20px;margin-bottom:20px;border:1px solid var(--border);box-shadow:var(--shadow);}
         .progress-bar-wrap{height:6px;background:var(--surface2);border-radius:3px;margin-top:8px;overflow:hidden;}
         .progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:3px;transition:.3s;}
-        .q-dots{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
-        .q-dot{width:28px;height:28px;border-radius:7px;background:var(--surface2);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--text-soft);cursor:pointer;transition:.2s;}
-        .q-dot.answered{background:var(--accent);border-color:var(--accent);color:white;}
-        .q-dot.current{border-color:var(--primary);color:var(--primary);font-weight:700;}
+        /* ══ PROGRESS BAR ══ */
+        .test-progress {
+            background: var(--surface); border-radius: var(--radius);
+            padding: 18px 22px; margin-bottom: 22px;
+            border: 1px solid var(--border); box-shadow: var(--shadow);
+        }
+        .progress-bar-wrap { height: 7px; background: var(--surface2); border-radius: 4px; margin-top: 10px; overflow: hidden; }
+        .progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 4px; transition: width .3s; }
 
-        .question-card{background:var(--surface);border-radius:var(--radius);border:1.5px solid var(--border);padding:24px;margin-bottom:16px;box-shadow:var(--shadow);}
-        .q-meta{display:flex;align-items:center;gap:8px;margin-bottom:14px;}
-        .q-text{font-family:'Sora',sans-serif;font-size:15.5px;font-weight:600;color:var(--text);line-height:1.55;margin-bottom:18px;}
-        .options-list{display:flex;flex-direction:column;gap:10px;}
-        .option-item{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:10px;border:1.5px solid var(--border);cursor:pointer;transition:.2s;}
-        .option-item:hover{border-color:var(--accent);background:#f0f9ff;}
-        .option-item input{display:none;}
-        .option-item:has(input:checked){border-color:var(--accent);background:linear-gradient(135deg,#e0f2fe,#e0f9ff);}
-        .opt-letter{width:30px;height:30px;border-radius:8px;background:var(--surface2);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text-mid);flex-shrink:0;transition:.2s;}
-        .option-item:has(input:checked) .opt-letter{background:var(--accent);color:white;border-color:var(--accent);}
-        .opt-text{font-size:14px;color:var(--text);}
+        .q-dots { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+        .q-dot {
+            width: 30px; height: 30px; border-radius: 8px;
+            background: var(--surface2); border: 1.5px solid var(--border);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: 700; color: var(--text-soft);
+            cursor: pointer; transition: var(--transition);
+        }
+        .q-dot:hover { border-color: var(--accent); color: var(--accent); transform: scale(1.1); }
+        .q-dot.answered { background: #dcfce7; border-color: var(--success); color: #166534; }
+        .q-dot.current  { background: linear-gradient(135deg, var(--accent), var(--accent2)); border-color: var(--accent); color: white; box-shadow: 0 2px 8px rgba(14,165,233,.35); }
 
-        .nav-btns{display:flex;justify-content:space-between;align-items:center;margin-top:16px;}
-        .btn-nav{padding:10px 22px;border-radius:9px;border:1.5px solid var(--border);background:var(--surface);color:var(--text-mid);font-size:13.5px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;transition:.15s;}
-        .btn-nav:hover:not(:disabled){background:var(--surface2);}
-        .btn-nav:disabled{opacity:.4;cursor:not-allowed;}
-        .btn-submit-test{padding:10px 28px;border-radius:9px;border:none;background:linear-gradient(135deg,var(--success),#059669);color:white;font-size:13.5px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;}
+        /* ══ QUESTION CARD ══ */
+        .question-card {
+            background: var(--surface); border-radius: var(--radius);
+            border: 1px solid var(--border); padding: 32px;
+            margin-bottom: 16px; box-shadow: var(--shadow);
+        }
+        .q-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1.5px solid var(--border); }
+        .q-num-label { font-family: 'Sora', sans-serif; font-size: 13px; font-weight: 700; color: var(--text-soft); text-transform: uppercase; letter-spacing: .06em; }
+        .q-text { font-size: 17px; color: var(--text); line-height: 1.75; margin-bottom: 24px; font-weight: 500; }
+
+        .options-list { display: flex; flex-direction: column; gap: 12px; }
+        .option-item {
+            display: flex; align-items: center; gap: 14px;
+            padding: 15px 18px; border-radius: var(--radius-sm);
+            border: 1.5px solid var(--border); cursor: pointer; transition: var(--transition);
+            background: var(--surface);
+        }
+        .option-item:hover { border-color: var(--accent); background: #f0f9ff; transform: translateX(4px); box-shadow: 0 2px 8px rgba(14,165,233,.1); }
+        .option-item input { display: none; }
+        .option-item:has(input:checked) { border-color: var(--accent); background: linear-gradient(135deg, rgba(14,165,233,.08), rgba(6,182,212,.08)); box-shadow: 0 0 0 3px var(--accent-glow); }
+        .opt-letter {
+            width: 32px; height: 32px; border-radius: 8px;
+            background: var(--surface2); border: 1.5px solid var(--border);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px; font-weight: 700; color: var(--text-mid); flex-shrink: 0; transition: var(--transition);
+        }
+        .option-item:has(input:checked) .opt-letter { background: var(--accent); color: white; border-color: var(--accent); }
+        .opt-text { font-size: 14.5px; color: var(--text); line-height: 1.5; }
+
+        /* ══ NAV BUTTONS ══ */
+        .nav-btns {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-top: 20px; padding-top: 20px; border-top: 1.5px solid var(--border);
+        }
+        .btn-nav {
+            padding: 10px 24px; border-radius: var(--radius-sm);
+            border: 1.5px solid var(--accent); background: var(--surface); color: var(--accent);
+            font-family: 'Inter', sans-serif; font-weight: 700; font-size: 13.5px;
+            cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 8px;
+        }
+        .btn-nav:hover:not(:disabled) { background: var(--accent); color: white; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(14,165,233,.3); }
+        .btn-nav:disabled { opacity: .4; cursor: not-allowed; border-color: var(--border); color: var(--text-soft); }
+        .btn-submit-test {
+            padding: 10px 28px; border-radius: var(--radius-sm); border: none;
+            background: linear-gradient(135deg, var(--success), #34d399); color: white;
+            font-family: 'Inter', sans-serif; font-weight: 700; font-size: 13.5px; cursor: pointer;
+            transition: var(--transition); box-shadow: 0 2px 8px rgba(16,185,129,.35);
+        }
+        .btn-submit-test:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(16,185,129,.5); }
+
+        @media (max-width: 768px) {
+            .test-header { padding: 0 16px; height: auto; min-height: var(--header-h); flex-wrap: wrap; gap: 8px; padding-top: 10px; padding-bottom: 10px; }
+            body { padding-top: 90px; }
+            .container { padding: 16px 14px 60px; }
+            .question-card { padding: 22px 16px; }
+            .nav-btns { flex-wrap: wrap; gap: 10px; }
+            .btn-nav, .btn-submit-test { width: 100%; justify-content: center; }
+        }
     </style>
 </head>
 <body>
 
-<nav class="navbar">
-    <div>
-        <div class="nav-title">🎯 Level Test &nbsp;
+<header class="test-header">
+    <!-- LEFT: Brand -->
+    <div class="header-left">
+        <a href="student-dashboard.php" class="brand">
+            <img src="prepaura-logo.png" alt="Prepaura Logo" class="brand-logo">
+            <div class="brand-text">
+                <span class="brand-name">PREPAURA</span>
+                <span class="brand-sub">Placement Training Platform</span>
+            </div>
+        </a>
+        <div class="header-divider"></div>
+        <!-- Test info -->
+        <div class="test-info">
+            <div class="test-title">🎯 Level Test</div>
             <?php foreach($levelsArr as $lv): ?>
             <span class="diff-badge diff-<?= strtolower($lv) ?>"><?= htmlspecialchars($lv) ?></span>
             <?php endforeach; ?>
+            <div class="test-badge"><?= count($questions) ?> Questions &nbsp;·&nbsp; <?= $sa['duration_minutes'] ?> min</div>
         </div>
-        <div class="nav-sub"><?= count($questions) ?> Questions &nbsp;|&nbsp; <?= $sa['duration_minutes'] ?> min</div>
     </div>
-    <div style="display:flex;align-items:center;gap:12px;">
-        <div class="timer-box" id="timerDisplay"><?= gmdate('i:s', $durationSec) ?></div>
-        <a href="self-assessment.php" style="color:rgba(255,255,255,.7);font-size:13px;text-decoration:none;padding:8px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.2);"
-           onclick="return confirm('Exit test? Progress will be lost.')">✕ Exit</a>
+    <!-- RIGHT: Timer + Back -->
+    <div class="header-right">
+        <div class="timer-display" id="timerDisplay">⏱️ <?= gmdate('i:s', $durationSec) ?></div>
+        <a href="self-assessment.php" class="back-btn"
+           onclick="return confirm('Exit test? Progress will be lost.')">← Self Assessment</a>
     </div>
-</nav>
+</header>
 
 <div class="container">
 
@@ -227,7 +410,7 @@ $levelsArr   = array_map('ucfirst', explode(',', $sa['levels_selected'] ?? ''));
     <?php foreach ($questions as $i => $q): ?>
     <div class="question-card" id="qcard-<?= $i ?>" style="<?= $i>0?'display:none':'' ?>">
         <div class="q-meta">
-            <span style="font-size:12px;font-weight:600;color:var(--text-soft);">Q<?= $i+1 ?></span>
+            <span class="q-num-label">Question <?= $i+1 ?></span>
             <?php if ($q['difficulty']): ?>
             <span class="diff-badge diff-<?= $q['difficulty'] ?>"><?= ucfirst($q['difficulty']) ?></span>
             <?php endif; ?>
@@ -290,8 +473,8 @@ const iv=setInterval(()=>{
     elapsed++; timeLeft--;
     document.getElementById('timeTakenInput').value=elapsed;
     timerEl.textContent=String(Math.floor(timeLeft/60)).padStart(2,'0')+':'+String(timeLeft%60).padStart(2,'0');
-    if(timeLeft<=60) timerEl.className='timer-box warn';
-    if(timeLeft<=10) timerEl.className='timer-box danger';
+    if(timeLeft<=60) timerEl.className='timer-display warn';
+    if(timeLeft<=10) timerEl.className='timer-display danger';
     if(timeLeft<=0){ clearInterval(iv); alert('⏰ Time up! Submitting.'); document.getElementById('testForm').submit(); }
 },1000);
 window.addEventListener('beforeunload',()=>clearInterval(iv));

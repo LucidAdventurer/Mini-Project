@@ -144,7 +144,8 @@ $lvlChartRes = safePreparedQuery($conn,
 $lvlChartLabels = []; $lvlChartData = [];
 if ($lvlChartRes['success'] && $lvlChartRes['result']) {
     while ($r = $lvlChartRes['result']->fetch_assoc()) {
-        $lvlChartLabels[] = ucfirst($r['levels_used'] ?? 'Mixed');
+        $lvls = array_map(fn($l) => ucfirst(str_replace('_',' ',$l)), explode(',', $r['levels_used'] ?? 'mixed'));
+        $lvlChartLabels[] = implode('+', $lvls);
         $lvlChartData[]   = round((float)$r['percentage']);
     }
     $lvlChartRes['result']->free();
@@ -154,36 +155,88 @@ $lvlChartData   = array_reverse($lvlChartData);
 
 // ── Handle PDF test creation (popup form POST) ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'create_pdf_test') {
-    // CSRF check
-    if (!hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) {
-        die('Invalid CSRF token');
-    }
+    if (!hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) die('Invalid CSRF token');
+
     $title    = trim($_POST['title'] ?? '');
     $duration = max(1, (int)($_POST['duration'] ?? 30));
+    $numQ     = max(1, min(100, (int)($_POST['num_questions'] ?? 10)));
     $pdfPath  = null;
 
     if (!empty($_FILES['pdf_file']) && $_FILES['pdf_file']['error'] === UPLOAD_ERR_OK) {
         $file = $_FILES['pdf_file'];
-        if ($file['type'] === 'application/pdf' && $file['size'] <= 20 * 1024 * 1024) {
+        if ($file['type'] === 'application/pdf' && $file['size'] <= 50 * 1024 * 1024) {
             $dir = 'uploads/self_assessment_pdfs/';
             if (!is_dir($dir)) mkdir($dir, 0755, true);
-            $name    = 'sa_pdf_' . $userId . '_' . time() . '.pdf';
+            $name     = 'sa_pdf_' . $userId . '_' . time() . '.pdf';
             $fullPath = $dir . $name;
-            if (move_uploaded_file($file['tmp_name'], $fullPath)) {
-                $pdfPath = $fullPath;
-            }
+            if (move_uploaded_file($file['tmp_name'], $fullPath)) $pdfPath = $fullPath;
         }
     }
 
-    if ($title !== '') {
+    if ($title !== '' && $pdfPath) {
+        // ── Parse PDF inline ──
+        $raw  = file_get_contents($pdfPath);
+        $text = '';
+        preg_match_all('/stream\r?\n(.*?)\r?\nendstream/s', $raw, $streams);
+        foreach ($streams[1] as $stream) {
+            $dec = @gzuncompress($stream);
+            if ($dec === false) $dec = @gzinflate($stream);
+            $src = ($dec !== false) ? $dec : $stream;
+            preg_match_all('/BT(.*?)ET/s', $src, $bt);
+            foreach ($bt[1] as $block) {
+                preg_match_all('/\(([^)]*)\)\s*Tj/s', $block, $tj);
+                foreach ($tj[1] as $t) $text .= stripcslashes($t) . ' ';
+                preg_match_all('/\[(.*?)\]\s*TJ/s', $block, $tJ);
+                foreach ($tJ[1] as $t) { preg_match_all('/\(([^)]*)\)/', $t, $p); foreach ($p[1] as $pp) $text .= stripcslashes($pp); }
+                $text .= "\n";
+            }
+        }
+        if (strlen(trim($text)) < 20) { preg_match_all('/\(([^\)]{3,})\)/', $raw, $m); $text = implode("\n", $m[1]); }
+
+        // ── Extract questions ──
+        $questions = [];
+        $lines = array_values(array_filter(array_map('trim', preg_split('/\r?\n/', $text))));
+        $i = 0;
+        while ($i < count($lines)) {
+            if (preg_match('/^(?:Q\.?\s*)?\d+[\.\)]\s+(.+)/i', $lines[$i], $qm)) {
+                $qText = trim($qm[1]); $opts = []; $correct = 'a'; $i++;
+                while ($i < count($lines)) {
+                    if (preg_match('/^([A-D])[\.\)]\s*(.+)/i', $lines[$i], $om)) { $opts[strtolower($om[1])] = trim($om[2]); $i++; }
+                    elseif (preg_match('/^Answer\s*:\s*([A-D])/i', $lines[$i], $am)) { $correct = strtolower($am[1]); $i++; break; }
+                    elseif (preg_match('/^(?:Q\.?\s*)?\d+[\.\)]\s+/i', $lines[$i])) break;
+                    else $i++;
+                }
+                if ($qText && count($opts) >= 2) $questions[] = ['text'=>$qText,'a'=>$opts['a']??'','b'=>$opts['b']??'','c'=>$opts['c']??'','d'=>$opts['d']??'','correct'=>$correct];
+            } else $i++;
+        }
+
+        // Limit to requested number
+        $questions = array_slice($questions, 0, $numQ);
+        $totalQ    = count($questions);
+
+        // ── Insert assessment ──
         $ins = safePreparedQuery($conn,
             "INSERT INTO self_assessments (user_id, type, title, duration_minutes, total_questions, pdf_path, status)
-             VALUES (?, 'pdf', ?, ?, 0, ?, 'draft')",
-            "isis", [$userId, $title, $duration, $pdfPath]
+             VALUES (?, 'pdf', ?, ?, ?, ?, 'ready')",
+            "isiss", [$userId, $title, $duration, $totalQ, $pdfPath]
         );
         if ($ins['success']) {
             $newSaId = $conn->insert_id;
-            header("Location: self-take-pdf-test.php?sa_id=$newSaId&setup=1");
+            // ── Insert questions into map ──
+            foreach ($questions as $order => $q) {
+                safePreparedQuery($conn,
+                    "INSERT INTO self_assessment_q_map (sa_id, question_text, option_a, option_b, option_c, option_d, correct_option, q_order)
+                     VALUES (?,?,?,?,?,?,?,?)",
+                    "issssssi", [$newSaId, $q['text'], $q['a'], $q['b'], $q['c'], $q['d'], $q['correct'], $order]
+                );
+            }
+            if ($totalQ > 0) {
+                header("Location: self-take-pdf-test.php?sa_id=$newSaId");
+            } else {
+                // No questions parsed — go to setup as fallback
+                safePreparedQuery($conn, "UPDATE self_assessments SET status='draft' WHERE sa_id=?", "i", [$newSaId]);
+                header("Location: self-take-pdf-test.php?sa_id=$newSaId&setup=1&parse_error=1");
+            }
             exit;
         }
     }
@@ -195,28 +248,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'create_level_test') {
     if (!hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) die('Invalid CSRF token');
     $levels   = $_POST['levels'] ?? [];           // e.g. ['easy','easy','medium'] — one per checked sublevel
-    $numQEach = max(5, min(20, (int)($_POST['num_questions'] ?? 10))); // questions per level selected
+    $totalRequested = max(1, (int)($_POST['num_questions'] ?? 20));
     $duration = max(1, (int)($_POST['duration'] ?? 20));
-    $allowed  = ['easy','medium','hard'];
+    $allowed  = array_map(fn($n) => "level_$n", range(1, 15));
     $levels   = array_filter($levels, fn($l) => in_array($l, $allowed));
     $levels   = array_values($levels);
 
     if (!empty($levels)) {
-        // Count how many sublevels per difficulty were checked
-        $diffCounts = array_count_values($levels);
-        $uniqueDiffs = array_unique($levels);
-        $levStr = implode(',', $uniqueDiffs);
-        $placeholders = implode(',', array_fill(0, count($uniqueDiffs), '?'));
-        $types  = str_repeat('s', count($uniqueDiffs));
+        $numLevels  = count($levels);
+        $numQEach   = (int)floor($totalRequested / $numLevels); // divide evenly, ignore remainder
+        if ($numQEach < 1) $numQEach = 1;
+        $levStr = implode(',', $levels);
 
-        // Pull random questions — num per difficulty = count of checked sublevels × numQEach
         $qids = [];
-        foreach ($diffCounts as $diff => $count) {
-            $need = $count * $numQEach;
+        foreach ($levels as $diff) {
             $bankQ = safePreparedQuery($conn,
                 "SELECT question_id FROM self_assessment_question_bank
                  WHERE difficulty = ?
-                 ORDER BY RAND() LIMIT $need",
+                 ORDER BY RAND() LIMIT $numQEach",
                 "s", [$diff]
             );
             if ($bankQ['success'] && $bankQ['result']) {
@@ -1108,21 +1157,26 @@ function timeAgoSA(string $dt): string {
                     <label for="pdfFileInput" class="pdf-drop-zone" id="pdfDropZone">
                         <div class="dz-icon">📎</div>
                         <div class="dz-text">Click to upload or drag & drop</div>
-                        <div class="dz-sub">PDF only — max 20 MB</div>
+                        <div class="dz-sub">PDF only — max 50 MB</div>
                     </label>
                     <input type="file" name="pdf_file" id="pdfFileInput"
                         accept="application/pdf" style="display:none"
-                        onchange="onPdfSelect(this)" required>
+                        onchange="onPdfSelect(this)">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Duration (minutes) <span class="req">*</span></label>
                     <input type="number" name="duration" class="form-input"
                         value="30" min="5" max="180" required>
                 </div>
+                <div class="form-group">
+                    <label class="form-label">Number of Questions <span class="req">*</span></label>
+                    <input type="number" name="num_questions" class="form-input"
+                        value="10" min="1" max="100" required>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn-cancel" onclick="closePdfModal()">Cancel</button>
-                <button type="submit" class="btn-primary">📄 Next: Add Questions →</button>
+                <button type="submit" class="btn-primary">🚀 Start Test →</button>
             </div>
         </form>
     </div>
@@ -1155,7 +1209,7 @@ function timeAgoSA(string $dt): string {
                         <div class="level-sublevel-list" id="easy-list">
                             <?php for ($i = 1; $i <= 5; $i++): ?>
                             <label class="sublevel-label easy-sub">
-                                <input type="checkbox" name="levels[]" value="easy" data-level="<?= $i ?>">
+                                <input type="checkbox" name="levels[]" value="level_<?= $i ?>" data-level="<?= $i ?>">
                                 <span class="check-box">✓</span>
                                 Level <?= $i ?>
                             </label>
@@ -1172,7 +1226,7 @@ function timeAgoSA(string $dt): string {
                         <div class="level-sublevel-list" id="medium-list">
                             <?php for ($i = 6; $i <= 10; $i++): ?>
                             <label class="sublevel-label medium-sub">
-                                <input type="checkbox" name="levels[]" value="medium" data-level="<?= $i ?>">
+                                <input type="checkbox" name="levels[]" value="level_<?= $i ?>" data-level="<?= $i ?>">
                                 <span class="check-box">✓</span>
                                 Level <?= $i ?>
                             </label>
@@ -1189,7 +1243,7 @@ function timeAgoSA(string $dt): string {
                         <div class="level-sublevel-list" id="hard-list">
                             <?php for ($i = 11; $i <= 15; $i++): ?>
                             <label class="sublevel-label hard-sub">
-                                <input type="checkbox" name="levels[]" value="hard" data-level="<?= $i ?>">
+                                <input type="checkbox" name="levels[]" value="level_<?= $i ?>" data-level="<?= $i ?>">
                                 <span class="check-box">✓</span>
                                 Level <?= $i ?>
                             </label>
@@ -1200,9 +1254,9 @@ function timeAgoSA(string $dt): string {
 
                 <div class="form-grid-2">
                     <div class="form-group">
-                        <label class="form-label">Questions per Level <span class="req">*</span></label>
+                        <label class="form-label">Total Questions <span class="req">*</span></label>
                         <input type="number" name="num_questions" class="form-input"
-                            value="10" min="1" max="50" required>
+                            value="20" min="1" max="200" required>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Duration (minutes) <span class="req">*</span></label>
@@ -1250,8 +1304,8 @@ document.addEventListener('keydown', e => {
 function onPdfSelect(input) {
     const file = input.files[0];
     if (!file) return;
-    if (file.size > 20 * 1024 * 1024) {
-        alert('PDF must be under 20MB.');
+    if (file.size > 50 * 1024 * 1024) {
+        alert('PDF must be under 50MB.');
         input.value = '';
         return;
     }
@@ -1308,8 +1362,9 @@ function updateLevelInfo() {
     if (checked.length === 0) { infoBox.style.display = 'none'; return; }
     const numQ = document.querySelector('input[name="num_questions"]').value;
     const labels = [...checked].map(cb => 'Level ' + cb.dataset.level).join(', ');
-    const total  = checked.length * parseInt(numQ);
-    infoText.textContent = labels + ' selected — ' + total + ' questions total (' + numQ + ' per level).';
+    const perLvl = Math.floor(parseInt(numQ) / checked.length) || 1;
+    const total  = perLvl * checked.length;
+    infoText.textContent = labels + ' selected — ' + total + ' questions total (' + perLvl + ' per level).';
     infoBox.style.display = 'block';
 }
 document.querySelector('input[name="num_questions"]').addEventListener('input', updateLevelInfo);
@@ -1408,8 +1463,11 @@ new Chart(document.getElementById('lvlChart'), {
             label: 'Score %',
             data: <?= json_encode($lvlChartData) ?>,
             backgroundColor: <?= json_encode(array_map(function($l){
-                if(str_contains($l,'Hard'))   return 'rgba(239,68,68,.7)';
-                if(str_contains($l,'Medium')) return 'rgba(245,158,11,.7)';
+                // Extract first level number to determine color
+                preg_match('/\d+/', $l, $m);
+                $n = (int)($m[0] ?? 0);
+                if($n >= 11) return 'rgba(239,68,68,.7)';
+                if($n >= 6)  return 'rgba(245,158,11,.7)';
                 return 'rgba(16,185,129,.7)';
             }, $lvlChartLabels)) ?>,
             borderRadius: 6,
