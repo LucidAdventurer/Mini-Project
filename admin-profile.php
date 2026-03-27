@@ -190,6 +190,103 @@ body {
     min-height: 100vh;
 }
 
+<<<<<<< Updated upstream
+=======
+/* ── Sidebar ── */
+.sidebar {
+    background: var(--bg-card);
+    border-right: 1px solid var(--border);
+    padding: 32px 0;
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+}
+.sidebar-logo {
+    padding: 0 24px 32px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+}
+.sidebar-logo .logo-mark {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: var(--radius-sm);
+    display: grid; place-items: center;
+    font-family: var(--font-head);
+    font-weight: 800;
+    font-size: 21px;
+    color: #fff;
+}
+.sidebar-logo span {
+    font-family: var(--font-head);
+    font-size: 21px;
+    font-weight: 700;
+    color: var(--text);
+}
+.nav-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
+    padding: 0 24px;
+    margin-bottom: 8px;
+}
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 24px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    border-left: 3px solid transparent;
+    transition: all .18s;
+}
+.nav-item:hover { color: var(--text); background: rgba(255,255,255,.03); }
+.nav-item.active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    background: var(--accent-glow);
+}
+.nav-item i { width: 18px; text-align: center; font-size: 15px; }
+.nav-spacer { flex: 1; }
+.sidebar-user {
+    margin: 0 16px;
+    padding: 14px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.sidebar-user .avatar-sm {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-family: var(--font-head);
+    font-weight: 700;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+.sidebar-user .info .name {
+    font-size: 13px; font-weight: 600; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px;
+}
+.sidebar-user .info .role {
+    font-size: 11px; color: var(--accent); text-transform: uppercase;
+    letter-spacing: .06em; font-weight: 600;
+}
+
+>>>>>>> Stashed changes
 /* ── Main content ── */
 .main {
     padding: 40px 48px;

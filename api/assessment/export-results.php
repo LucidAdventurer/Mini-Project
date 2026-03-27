@@ -88,7 +88,7 @@ $raw = $conn->query(
      FROM assessment_attempts aa
      LEFT JOIN users u ON u.user_id = aa.user_id
      WHERE aa.assessment_id = $assessmentId
-       AND aa.status IN ('completed','timeout','under_review')
+       AND aa.status IN ('submitted','completed','timeout','under_review')
      ORDER BY aa.user_id ASC, aa.attempt_number ASC"
 );
 
