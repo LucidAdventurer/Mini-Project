@@ -260,16 +260,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         if ($numQEach < 1) $numQEach = 1;
         $levStr = implode(',', $levels);
 
-        $qids = [];
+        $qids    = [];
+        $usedIds = [];
         foreach ($levels as $diff) {
+            $exclude = !empty($usedIds) ? 'AND question_id NOT IN (' . implode(',', $usedIds) . ')' : '';
             $bankQ = safePreparedQuery($conn,
                 "SELECT question_id FROM self_assessment_question_bank
-                 WHERE difficulty = ?
+                 WHERE difficulty = ? $exclude
                  ORDER BY RAND() LIMIT $numQEach",
                 "s", [$diff]
             );
             if ($bankQ['success'] && $bankQ['result']) {
-                while ($r = $bankQ['result']->fetch_assoc()) $qids[] = (int)$r['question_id'];
+                while ($r = $bankQ['result']->fetch_assoc()) {
+                    $qids[]    = (int)$r['question_id'];
+                    $usedIds[] = (int)$r['question_id'];
+                }
                 $bankQ['result']->free();
             }
         }
