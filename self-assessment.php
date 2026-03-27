@@ -154,13 +154,15 @@ $lvlChartLabels = array_reverse($lvlChartLabels);
 $lvlChartData   = array_reverse($lvlChartData);
 
 // ── Handle PDF test creation (popup form POST) ──
+// REQUIRED ONE-TIME MIGRATION (run once in your DB):
+//   ALTER TABLE self_assessments ADD COLUMN question_limit INT NOT NULL DEFAULT 0 AFTER total_questions;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'create_pdf_test') {
     if (!hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) die('Invalid CSRF token');
 
-    $title    = trim($_POST['title'] ?? '');
-    $duration = max(1, (int)($_POST['duration'] ?? 30));
-    $numQ     = max(1, min(100, (int)($_POST['num_questions'] ?? 10)));
-    $pdfPath  = null;
+    $title        = trim($_POST['title'] ?? '');
+    $duration     = max(1, (int)($_POST['duration'] ?? 30));
+    $questionLimit = max(1, min(200, (int)($_POST['num_questions'] ?? 10))); // how many to show per test
+    $pdfPath      = null;
 
     if (!empty($_FILES['pdf_file']) && $_FILES['pdf_file']['error'] === UPLOAD_ERR_OK) {
         $file = $_FILES['pdf_file'];
@@ -174,7 +176,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     }
 
     if ($title !== '' && $pdfPath) {
-        // ── Parse PDF inline ──
+        // ── Parse PDF inline (extract ALL questions — no slicing) ──
         $raw  = file_get_contents($pdfPath);
         $text = '';
         preg_match_all('/stream\r?\n(.*?)\r?\nendstream/s', $raw, $streams);
@@ -193,8 +195,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         }
         if (strlen(trim($text)) < 20) { preg_match_all('/\(([^\)]{3,})\)/', $raw, $m); $text = implode("\n", $m[1]); }
 
-        // ── Extract questions ──
-        $questions = [];
+        // ── Extract ALL questions from PDF ──
+        $allQuestions = [];
         $lines = array_values(array_filter(array_map('trim', preg_split('/\r?\n/', $text))));
         $i = 0;
         while ($i < count($lines)) {
@@ -202,41 +204,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
                 $qText = trim($qm[1]); $opts = []; $correct = 'a'; $i++;
                 while ($i < count($lines)) {
                     if (preg_match('/^([A-D])[\.\)]\s*(.+)/i', $lines[$i], $om)) { $opts[strtolower($om[1])] = trim($om[2]); $i++; }
-                    elseif (preg_match('/^Answer\s*:\s*([A-D])/i', $lines[$i], $am)) { $correct = strtolower($am[1]); $i++; break; }
+                    elseif (preg_match('/^(?:Answer|Ans)[\s\.:]*([A-D])/i', $lines[$i], $am)) { $correct = strtolower($am[1]); $i++; break; }
                     elseif (preg_match('/^(?:Q\.?\s*)?\d+[\.\)]\s+/i', $lines[$i])) break;
                     else $i++;
                 }
-                if ($qText && count($opts) >= 2) $questions[] = ['text'=>$qText,'a'=>$opts['a']??'','b'=>$opts['b']??'','c'=>$opts['c']??'','d'=>$opts['d']??'','correct'=>$correct];
+                if ($qText && count($opts) >= 2)
+                    $allQuestions[] = ['text'=>$qText,'a'=>$opts['a']??'','b'=>$opts['b']??'','c'=>$opts['c']??'','d'=>$opts['d']??'','correct'=>$correct];
             } else $i++;
         }
 
-        // Limit to requested number
-        $questions = array_slice($questions, 0, $numQ);
-        $totalQ    = count($questions);
+        $totalParsed = count($allQuestions);
 
-        // ── Insert assessment ──
+        if ($totalParsed === 0) {
+            // Parse failed — stay on self-assessment with error, never go to setup page
+            header('Location: self-assessment.php?error=parse');
+            exit;
+        }
+
+        // Cap question_limit to however many were actually parsed
+        if ($questionLimit > $totalParsed) $questionLimit = $totalParsed;
+
+        // ── Insert assessment — store ALL count + the per-test limit ──
         $ins = safePreparedQuery($conn,
-            "INSERT INTO self_assessments (user_id, type, title, duration_minutes, total_questions, pdf_path, status)
-             VALUES (?, 'pdf', ?, ?, ?, ?, 'ready')",
-            "isiss", [$userId, $title, $duration, $totalQ, $pdfPath]
+            "INSERT INTO self_assessments (user_id, type, title, duration_minutes, total_questions, question_limit, pdf_path, status)
+             VALUES (?, 'pdf', ?, ?, ?, ?, ?, 'ready')",
+            "isiiss", [$userId, $title, $duration, $totalParsed, $questionLimit, $pdfPath]
         );
         if ($ins['success']) {
             $newSaId = $conn->insert_id;
-            // ── Insert questions into map ──
-            foreach ($questions as $order => $q) {
+            // ── Insert ALL questions into map ──
+            foreach ($allQuestions as $order => $q) {
                 safePreparedQuery($conn,
                     "INSERT INTO self_assessment_q_map (sa_id, question_text, option_a, option_b, option_c, option_d, correct_option, q_order)
                      VALUES (?,?,?,?,?,?,?,?)",
                     "issssssi", [$newSaId, $q['text'], $q['a'], $q['b'], $q['c'], $q['d'], $q['correct'], $order]
                 );
             }
-            if ($totalQ > 0) {
-                header("Location: self-take-pdf-test.php?sa_id=$newSaId");
-            } else {
-                // No questions parsed — go to setup as fallback
-                safePreparedQuery($conn, "UPDATE self_assessments SET status='draft' WHERE sa_id=?", "i", [$newSaId]);
-                header("Location: self-take-pdf-test.php?sa_id=$newSaId&setup=1&parse_error=1");
-            }
+            // Go directly to test — no setup page
+            header("Location: self-take-pdf-test.php?sa_id=$newSaId");
             exit;
         }
     }
@@ -452,6 +457,7 @@ function timeAgoSA(string $dt): string {
             animation: badgePulse 2s ease-in-out infinite; border: 2px solid var(--primary);
         }
         @keyframes badgePulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,.5); } 60% { box-shadow: 0 0 0 5px rgba(239,68,68,0); } }
+        @keyframes spin { to { transform: rotate(360deg); } }
         .profile-dropdown-container { position: relative; }
         .profile-button {
             display: flex; align-items: center; gap: 9px;
@@ -913,7 +919,11 @@ function timeAgoSA(string $dt): string {
 
         <?php if (!empty($_GET['error'])): ?>
         <div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:13.5px;color:#991b1b;">
-            ⚠️ Something went wrong. Please try again.
+            <?php if ($_GET['error'] === 'parse'): ?>
+                ❌ No questions could be extracted from your PDF. Make sure the PDF has selectable text and follows the format: <strong>1. Question</strong>, <strong>A) Option</strong>, <strong>Answer: A</strong>
+            <?php else: ?>
+                ⚠️ Something went wrong. Please try again.
+            <?php endif; ?>
         </div>
         <?php endif; ?>
 
@@ -1144,11 +1154,11 @@ function timeAgoSA(string $dt): string {
         <div class="modal-header">
             <div>
                 <div class="modal-title">📄 Create PDF Test</div>
-                <div class="modal-sub">Upload your PDF & add questions manually</div>
+                <div class="modal-sub">Upload your PDF — questions are extracted automatically</div>
             </div>
             <button class="modal-close" onclick="closePdfModal()">✕</button>
         </div>
-        <form method="POST" enctype="multipart/form-data" id="pdfTestForm">
+        <form method="POST" enctype="multipart/form-data" id="pdfTestForm" onsubmit="return handlePdfSubmit()">
             <input type="hidden" name="action" value="create_pdf_test">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
             <div class="modal-body">
@@ -1174,14 +1184,26 @@ function timeAgoSA(string $dt): string {
                         value="30" min="5" max="180" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Number of Questions <span class="req">*</span></label>
+                    <label class="form-label">Number of Questions per Test <span class="req">*</span></label>
                     <input type="number" name="num_questions" class="form-input"
-                        value="10" min="1" max="100" required>
+                        value="10" min="1" max="200" required>
+                    <div style="font-size:12px;color:var(--text-soft);margin-top:5px;">
+                        All questions from the PDF will be saved. Each test will randomly pick this many.
+                    </div>
+                </div>
+
+                <!-- Parsing progress overlay (shown on submit) -->
+                <div id="pdfParseProgress" style="display:none;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:16px 18px;margin-top:8px;display:none;align-items:center;gap:12px;">
+                    <div style="width:20px;height:20px;border:2.5px solid #bae6fd;border-top-color:#0369a1;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;"></div>
+                    <div>
+                        <div style="font-size:13.5px;font-weight:600;color:#0369a1;">Parsing your PDF…</div>
+                        <div style="font-size:12px;color:#0284c7;margin-top:2px;">Extracting questions and saving to database. Please wait.</div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn-cancel" onclick="closePdfModal()">Cancel</button>
-                <button type="submit" class="btn-primary">🚀 Start Test →</button>
+                <button type="button" class="btn-cancel" onclick="closePdfModal()" id="pdfCancelBtn">Cancel</button>
+                <button type="submit" class="btn-primary" id="pdfSubmitBtn">🚀 Start Test →</button>
             </div>
         </form>
     </div>
@@ -1300,6 +1322,17 @@ function openPdfModal()   { document.getElementById('pdfModalOverlay').classList
 function closePdfModal()  { document.getElementById('pdfModalOverlay').classList.remove('open'); }
 function openLevelModal() { document.getElementById('levelModalOverlay').classList.add('open'); }
 function closeLevelModal(){ document.getElementById('levelModalOverlay').classList.remove('open'); }
+
+function handlePdfSubmit() {
+    // Show parsing progress, disable buttons so user waits on the page
+    const progress  = document.getElementById('pdfParseProgress');
+    const submitBtn = document.getElementById('pdfSubmitBtn');
+    const cancelBtn = document.getElementById('pdfCancelBtn');
+    if (progress)  { progress.style.display = 'flex'; }
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '⏳ Parsing…'; }
+    if (cancelBtn) { cancelBtn.disabled = true; }
+    return true; // allow form to submit normally — PHP redirects to test when done
+}
 
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') { closePdfModal(); closeLevelModal(); }
