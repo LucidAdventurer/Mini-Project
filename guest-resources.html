@@ -1,36 +1,50 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Resources — Prepaura</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
     <style>
-        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
         :root {
-            --ink:        #0f4c4c;
-            --ink-muted:  #2d7a72;
-            --ink-faint:  #7ab8b2;
-            --surface:    #ffffff;
-            --surface-2:  #f0faf9;
-            --surface-3:  #e0f5f2;
-            --line:       #b2ddd9;
-            --accent-bg:  #e0f5f2;
-            --teal:       #0d9488;
-            --teal-dark:  #0f766e;
+            --ink: #0f4c4c;
+            --ink-muted: #2d7a72;
+            --ink-faint: #7ab8b2;
+            --surface: #ffffff;
+            --surface-2: #f0faf9;
+            --surface-3: #e0f5f2;
+            --line: #b2ddd9;
+            --accent-bg: #e0f5f2;
+            --teal: #0d9488;
+            --teal-dark: #0f766e;
             --teal-light: #ccfbf1;
             --serif: 'Times New Roman', Times, serif;
-            --sans:  'Plus Jakarta Sans', system-ui, sans-serif;
+            --sans: 'Plus Jakarta Sans', system-ui, sans-serif;
             --r: 10px;
         }
 
-        html { scroll-behavior: smooth; }
+        html {
+            scroll-behavior: smooth;
+        }
+
         body {
-            font-family: var(--sans); background: var(--surface);
-            color: var(--ink); font-size: 15px; line-height: 1.6;
+            font-family: var(--sans);
+            background: var(--surface);
+            color: var(--ink);
+            font-size: 15px;
+            line-height: 1.6;
             -webkit-font-smoothing: antialiased;
             min-height: 100vh;
             display: flex;
@@ -39,48 +53,162 @@
 
         /* ── Navbar ── */
         .navbar {
-            position: sticky; top: 0; z-index: 100;
-            background: rgba(255,255,255,0.92); backdrop-filter: blur(12px);
-            border-bottom: 1px solid var(--line); padding: 0 28px;
-            display: flex; align-items: center; justify-content: space-between; height: 58px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--line);
+            padding: 0 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 58px;
         }
+
         .brand {
-            display: flex; align-items: center; gap: 10px;
-            text-decoration: none; color: var(--ink);
-            font-weight: 700; font-size: 16px; letter-spacing: 0.01em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+            color: var(--ink);
+            font-weight: 700;
+            font-size: 16px;
+            letter-spacing: 0.01em;
         }
-        .brand-mark { width: 36px; height: 36px; display: grid; place-items: center; }
-        .brand-mark img { width: 36px; height: 36px; object-fit: contain; display: block; }
-        .brand-name { display: flex; flex-direction: column; line-height: 1.2; }
-        .brand-name-main { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; color: var(--ink); }
-        .brand-name-sub  { font-size: 10px; font-weight: 400; color: var(--ink-muted); letter-spacing: 0.02em; }
-        .nav-links { display: flex; align-items: center; gap: 6px; }
+
+        .brand-mark {
+            width: 36px;
+            height: 36px;
+            display: grid;
+            place-items: center;
+        }
+
+        .brand-mark img {
+            width: 36px;
+            height: 36px;
+            object-fit: contain;
+            display: block;
+        }
+
+        .brand-name {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.2;
+        }
+
+        .brand-name-main {
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            color: var(--ink);
+        }
+
+        .brand-name-sub {
+            font-size: 10px;
+            font-weight: 400;
+            color: var(--ink-muted);
+            letter-spacing: 0.02em;
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
         .nav-link {
-            padding: 7px 14px; border-radius: 8px; font-size: 14px; font-weight: 500;
-            color: var(--ink-muted); text-decoration: none; transition: 0.15s;
+            padding: 7px 14px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--ink-muted);
+            text-decoration: none;
+            transition: 0.15s;
         }
-        .nav-link:hover { background: var(--surface-3); color: var(--ink); }
-        .nav-link.active { background: var(--surface-3); color: var(--ink); font-weight: 600; }
+
+        .nav-link:hover {
+            background: var(--surface-3);
+            color: var(--ink);
+        }
+
+        .nav-link.active {
+            background: var(--surface-3);
+            color: var(--ink);
+            font-weight: 600;
+        }
+
         .nav-btn {
-            padding: 7px 16px; border-radius: 8px; font-size: 14px; font-weight: 600;
-            text-decoration: none; transition: 0.15s; font-family: var(--sans);
+            padding: 7px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: 0.15s;
+            font-family: var(--sans);
         }
-        .nav-btn.outline { border: 1px solid var(--line); color: var(--ink); background: var(--surface); }
-        .nav-btn.outline:hover { background: var(--surface-3); }
-        .nav-btn.solid { background: var(--teal); color: #fff; border: 1px solid var(--teal); }
-        .nav-btn.solid:hover { background: var(--teal-dark); }
+
+        .nav-btn.outline {
+            border: 1px solid var(--line);
+            color: var(--ink);
+            background: var(--surface);
+        }
+
+        .nav-btn.outline:hover {
+            background: var(--surface-3);
+        }
+
+        .nav-btn.solid {
+            background: var(--teal);
+            color: #fff;
+            border: 1px solid var(--teal);
+        }
+
+        .nav-btn.solid:hover {
+            background: var(--teal-dark);
+        }
+
         .hamburger {
-            display: none; flex-direction: column; gap: 4px;
-            background: none; border: none; cursor: pointer; padding: 6px;
+            display: none;
+            flex-direction: column;
+            gap: 4px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 6px;
         }
-        .hamburger span { width: 20px; height: 2px; background: var(--ink); border-radius: 2px; display: block; }
+
+        .hamburger span {
+            width: 20px;
+            height: 2px;
+            background: var(--ink);
+            border-radius: 2px;
+            display: block;
+        }
+
         .mobile-nav {
-            display: none; flex-direction: column; gap: 4px;
-            padding: 10px 20px 14px; border-bottom: 1px solid var(--line); background: var(--surface);
+            display: none;
+            flex-direction: column;
+            gap: 4px;
+            padding: 10px 20px 14px;
+            border-bottom: 1px solid var(--line);
+            background: var(--surface);
         }
-        .mobile-nav.open { display: flex; }
-        .mobile-nav .nav-link { display: block; padding: 10px 14px; }
-        .mobile-nav-actions { display: flex; gap: 8px; padding: 8px 14px 0; }
+
+        .mobile-nav.open {
+            display: flex;
+        }
+
+        .mobile-nav .nav-link {
+            display: block;
+            padding: 10px 14px;
+        }
+
+        .mobile-nav-actions {
+            display: flex;
+            gap: 8px;
+            padding: 8px 14px 0;
+        }
 
         /* ── Page header ── */
         .page-header {
@@ -89,24 +217,55 @@
             margin: 0 auto;
             width: 100%;
         }
+
         .breadcrumb {
-            display: flex; align-items: center; gap: 6px;
-            font-size: 13px; color: var(--ink-faint); margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--ink-faint);
+            margin-bottom: 20px;
         }
-        .breadcrumb a { color: var(--ink-muted); text-decoration: none; transition: color 0.15s; }
-        .breadcrumb a:hover { color: var(--ink); }
-        .breadcrumb-sep { font-size: 11px; color: var(--ink-faint); }
+
+        .breadcrumb a {
+            color: var(--ink-muted);
+            text-decoration: none;
+            transition: color 0.15s;
+        }
+
+        .breadcrumb a:hover {
+            color: var(--ink);
+        }
+
+        .breadcrumb-sep {
+            font-size: 11px;
+            color: var(--ink-faint);
+        }
+
         .page-header-label {
-            font-size: 12px; font-weight: 600; letter-spacing: 0.08em;
-            text-transform: uppercase; color: var(--ink-faint); margin-bottom: 10px;
-        }
-        .page-header-title {
-            font-family: var(--serif); font-size: clamp(28px, 4vw, 40px);
-            font-weight: 400; line-height: 1.15; letter-spacing: -0.015em; color: var(--ink);
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--ink-faint);
             margin-bottom: 10px;
         }
+
+        .page-header-title {
+            font-family: var(--serif);
+            font-size: clamp(28px, 4vw, 40px);
+            font-weight: 400;
+            line-height: 1.15;
+            letter-spacing: -0.015em;
+            color: var(--ink);
+            margin-bottom: 10px;
+        }
+
         .page-header-sub {
-            font-size: 15px; color: var(--ink-muted); max-width: 520px; line-height: 1.65;
+            font-size: 15px;
+            color: var(--ink-muted);
+            max-width: 520px;
+            line-height: 1.65;
         }
 
         /* ── Toolbar: tabs + search + count ── */
@@ -116,41 +275,89 @@
             margin: 0 auto;
             width: 100%;
         }
+
         .toolbar-top {
-            display: flex; align-items: center; justify-content: space-between;
-            gap: 12px; flex-wrap: wrap; margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
         }
-        .resources-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+
+        .resources-tabs {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+
         .res-tab {
-            padding: 7px 18px; border-radius: 99px;
-            border: 1px solid var(--line); background: var(--surface);
-            font-size: 13px; font-weight: 500; color: var(--ink-muted);
-            cursor: pointer; transition: 0.15s; font-family: var(--sans);
+            padding: 7px 18px;
+            border-radius: 99px;
+            border: 1px solid var(--line);
+            background: var(--surface);
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--ink-muted);
+            cursor: pointer;
+            transition: 0.15s;
+            font-family: var(--sans);
         }
-        .res-tab:hover { background: var(--surface-3); color: var(--ink); }
-        .res-tab.active { background: var(--teal); color: #fff; border-color: var(--teal); }
+
+        .res-tab:hover {
+            background: var(--surface-3);
+            color: var(--ink);
+        }
+
+        .res-tab.active {
+            background: var(--teal);
+            color: #fff;
+            border-color: var(--teal);
+        }
 
         .search-wrap {
-            position: relative; flex-shrink: 0;
+            position: relative;
+            flex-shrink: 0;
         }
+
         .search-input {
             padding: 8px 14px 8px 36px;
-            border: 1px solid var(--line); border-radius: 99px;
-            font-size: 13px; font-family: var(--sans); color: var(--ink);
-            background: var(--surface); outline: none;
+            border: 1px solid var(--line);
+            border-radius: 99px;
+            font-size: 13px;
+            font-family: var(--sans);
+            color: var(--ink);
+            background: var(--surface);
+            outline: none;
             transition: border-color 0.15s;
             width: 220px;
         }
-        .search-input:focus { border-color: var(--teal); }
-        .search-input::placeholder { color: var(--ink-faint); }
+
+        .search-input:focus {
+            border-color: var(--teal);
+        }
+
+        .search-input::placeholder {
+            color: var(--ink-faint);
+        }
+
         .search-icon {
-            position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
-            color: var(--ink-faint); pointer-events: none;
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--ink-faint);
+            pointer-events: none;
         }
 
         .results-meta {
-            font-size: 13px; color: var(--ink-faint);
-            display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+            font-size: 13px;
+            color: var(--ink-faint);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
         }
 
         /* ── Grid ── */
@@ -161,6 +368,7 @@
             width: 100%;
             flex: 1;
         }
+
         .resources-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -169,70 +377,171 @@
 
         /* ── Cards ── */
         .resource-card {
-            border: 1px solid var(--line); border-radius: var(--r);
-            padding: 20px 22px; background: var(--surface);
-            display: flex; flex-direction: column; gap: 12px;
+            border: 1px solid var(--line);
+            border-radius: var(--r);
+            padding: 20px 22px;
+            background: var(--surface);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
             transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
             animation: fadeUp 0.35s ease both;
         }
+
         .resource-card:hover {
             border-color: var(--teal);
-            box-shadow: 0 4px 20px rgba(13,148,136,0.1);
+            box-shadow: 0 4px 20px rgba(13, 148, 136, 0.1);
             transform: translateY(-2px);
         }
-        .resource-card-head { display: flex; align-items: flex-start; gap: 13px; }
-        .resource-type-icon {
-            width: 40px; height: 40px; border-radius: 9px; flex-shrink: 0;
-            display: grid; place-items: center; font-size: 19px;
+
+        .resource-card-head {
+            display: flex;
+            align-items: flex-start;
+            gap: 13px;
         }
-        .rtype-pdf     { background: #eff6ff; }
-        .rtype-video   { background: #f0fdf4; }
-        .rtype-link    { background: #fefce8; }
-        .rtype-article { background: #faf5ff; }
-        .rtype-quiz    { background: #fdf2f8; }
+
+        .resource-type-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 9px;
+            flex-shrink: 0;
+            display: grid;
+            place-items: center;
+            font-size: 19px;
+        }
+
+        .rtype-pdf {
+            background: #eff6ff;
+        }
+
+        .rtype-video {
+            background: #f0fdf4;
+        }
+
+        .rtype-link {
+            background: #fefce8;
+        }
+
+        .rtype-article {
+            background: #faf5ff;
+        }
+
+        .rtype-quiz {
+            background: #fdf2f8;
+        }
+
         .resource-card-title {
-            font-size: 14px; font-weight: 600; color: var(--ink); line-height: 1.35;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--ink);
+            line-height: 1.35;
             flex: 1;
         }
+
         .resource-card-desc {
-            font-size: 13px; color: var(--ink-muted); line-height: 1.5;
-            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-clamp: 2;
+            font-size: 13px;
+            color: var(--ink-muted);
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            line-clamp: 2;
         }
+
         .resource-card-foot {
-            display: flex; align-items: center; justify-content: space-between;
-            margin-top: auto; gap: 8px; flex-wrap: wrap;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: auto;
+            gap: 8px;
+            flex-wrap: wrap;
         }
-        .resource-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+        .resource-badges {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
         .resource-type-badge {
-            font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
-            padding: 3px 8px; border-radius: 99px; background: var(--surface-3); color: var(--ink-muted);
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 3px 8px;
+            border-radius: 99px;
+            background: var(--surface-3);
+            color: var(--ink-muted);
         }
+
         .resource-cat-badge {
-            font-size: 10px; color: var(--ink-faint);
-            padding: 3px 8px; border-radius: 99px; background: var(--surface-2);
+            font-size: 10px;
+            color: var(--ink-faint);
+            padding: 3px 8px;
+            border-radius: 99px;
+            background: var(--surface-2);
         }
-        .resource-size { font-size: 11px; color: var(--ink-faint); }
+
+        .resource-size {
+            font-size: 11px;
+            color: var(--ink-faint);
+        }
+
         .resource-open-btn {
-            display: inline-flex; align-items: center; gap: 5px;
-            padding: 7px 14px; border-radius: 7px; font-size: 12px; font-weight: 600;
-            text-decoration: none; background: var(--surface-3); color: var(--ink);
-            border: 1px solid var(--line); transition: 0.15s; font-family: var(--sans);
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 7px 14px;
+            border-radius: 7px;
+            font-size: 12px;
+            font-weight: 600;
+            text-decoration: none;
+            background: var(--surface-3);
+            color: var(--ink);
+            border: 1px solid var(--line);
+            transition: 0.15s;
+            font-family: var(--sans);
             flex-shrink: 0;
         }
-        .resource-open-btn:hover { background: var(--teal); color: #fff; border-color: var(--teal); }
+
+        .resource-open-btn:hover {
+            background: var(--teal);
+            color: #fff;
+            border-color: var(--teal);
+        }
 
         /* ── States ── */
-        .resources-empty, .resources-loading {
-            grid-column: 1/-1; text-align: center; padding: 80px 0;
-            color: var(--ink-faint); font-size: 14px; line-height: 1.7;
+        .resources-empty,
+        .resources-loading {
+            grid-column: 1/-1;
+            text-align: center;
+            padding: 80px 0;
+            color: var(--ink-faint);
+            font-size: 14px;
+            line-height: 1.7;
         }
-        .spinner-wrap { margin-bottom: 12px; }
+
+        .spinner-wrap {
+            margin-bottom: 12px;
+        }
+
         .spinner {
-            width: 28px; height: 28px; border: 2px solid var(--line);
-            border-top-color: var(--teal); border-radius: 50%;
-            animation: spin 0.8s linear infinite; margin: 0 auto;
+            width: 28px;
+            height: 28px;
+            border: 2px solid var(--line);
+            border-top-color: var(--teal);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
 
         /* ── Pagination ── */
         .pagination-wrap {
@@ -246,270 +555,410 @@
             gap: 6px;
             flex-wrap: wrap;
         }
+
         .page-btn {
-            padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 500;
-            border: 1px solid var(--line); background: var(--surface); color: var(--ink-muted);
-            cursor: pointer; font-family: var(--sans); transition: 0.15s;
+            padding: 7px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            border: 1px solid var(--line);
+            background: var(--surface);
+            color: var(--ink-muted);
+            cursor: pointer;
+            font-family: var(--sans);
+            transition: 0.15s;
         }
-        .page-btn:hover:not(:disabled) { background: var(--surface-3); color: var(--ink); }
-        .page-btn.active { background: var(--teal); color: #fff; border-color: var(--teal); }
-        .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-        .page-ellipsis { padding: 7px 8px; color: var(--ink-faint); font-size: 13px; }
+
+        .page-btn:hover:not(:disabled) {
+            background: var(--surface-3);
+            color: var(--ink);
+        }
+
+        .page-btn.active {
+            background: var(--teal);
+            color: #fff;
+            border-color: var(--teal);
+        }
+
+        .page-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .page-ellipsis {
+            padding: 7px 8px;
+            color: var(--ink-faint);
+            font-size: 13px;
+        }
 
         /* ── Notice ── */
-        .notice-wrap { padding: 32px 28px 0; max-width: 1080px; margin: 0 auto; width: 100%; }
-        .notice {
-            background: var(--accent-bg); border: 1px solid #99d6d0; border-radius: var(--r);
-            padding: 14px 18px; display: flex; align-items: start; gap: 12px;
-            font-size: 14px; color: var(--teal-dark); line-height: 1.5;
+        .notice-wrap {
+            padding: 32px 28px 0;
+            max-width: 1080px;
+            margin: 0 auto;
+            width: 100%;
         }
-        .notice-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
-        .notice a { color: var(--teal-dark); font-weight: 600; }
+
+        .notice {
+            background: var(--accent-bg);
+            border: 1px solid #99d6d0;
+            border-radius: var(--r);
+            padding: 14px 18px;
+            display: flex;
+            align-items: start;
+            gap: 12px;
+            font-size: 14px;
+            color: var(--teal-dark);
+            line-height: 1.5;
+        }
+
+        .notice-icon {
+            font-size: 15px;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        .notice a {
+            color: var(--teal-dark);
+            font-weight: 600;
+        }
 
         /* ── Footer ── */
-        .footer-outer { border-top: 1px solid var(--line); margin-top: auto; }
-        footer {
-            padding: 28px; display: flex; align-items: center;
-            justify-content: space-between; flex-wrap: wrap;
-            gap: 12px; max-width: 1080px; margin: 0 auto;
+        .footer-outer {
+            border-top: 1px solid var(--line);
+            margin-top: auto;
         }
-        .footer-brand { font-size: 14px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 8px; text-decoration: none; }
-        .footer-bm { width: 22px; height: 22px; display: grid; place-items: center; }
-        .footer-bm img { width: 22px; height: 22px; object-fit: contain; }
-        .footer-links { display: flex; gap: 20px; flex-wrap: wrap; }
-        .footer-link { font-size: 13px; color: var(--ink-muted); text-decoration: none; transition: color 0.15s; }
-        .footer-link:hover { color: var(--ink); }
-        .footer-copy { font-size: 13px; color: var(--ink-faint); width: 100%; }
+
+        footer {
+            padding: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            max-width: 1080px;
+            margin: 0 auto;
+        }
+
+        .footer-brand {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--ink);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+
+        .footer-bm {
+            width: 22px;
+            height: 22px;
+            display: grid;
+            place-items: center;
+        }
+
+        .footer-bm img {
+            width: 22px;
+            height: 22px;
+            object-fit: contain;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .footer-link {
+            font-size: 13px;
+            color: var(--ink-muted);
+            text-decoration: none;
+            transition: color 0.15s;
+        }
+
+        .footer-link:hover {
+            color: var(--ink);
+        }
+
+        .footer-copy {
+            font-size: 13px;
+            color: var(--ink-faint);
+            width: 100%;
+        }
 
         /* ── Animations ── */
         @keyframes fadeUp {
-            from { opacity: 0; transform: translateY(12px); }
-            to   { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
-        .reveal { opacity: 0; transform: translateY(16px); transition: opacity 0.45s ease, transform 0.45s ease; }
-        .reveal.visible { opacity: 1; transform: none; }
+
+        .reveal {
+            opacity: 0;
+            transform: translateY(16px);
+            transition: opacity 0.45s ease, transform 0.45s ease;
+        }
+
+        .reveal.visible {
+            opacity: 1;
+            transform: none;
+        }
 
         @media (max-width: 640px) {
-            .desktop-links { display: none; }
-            .hamburger { display: flex; }
-            .search-input { width: 160px; }
-            footer { flex-direction: column; align-items: flex-start; }
-            .page-header { padding-top: 40px; }
-            .toolbar-top { flex-direction: column; align-items: flex-start; }
+            .desktop-links {
+                display: none;
+            }
+
+            .hamburger {
+                display: flex;
+            }
+
+            .search-input {
+                width: 160px;
+            }
+
+            footer {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .page-header {
+                padding-top: 40px;
+            }
+
+            .toolbar-top {
+                flex-direction: column;
+                align-items: flex-start;
+            }
         }
     </style>
 </head>
+
 <body>
 
-<!-- ── Navbar ── -->
-<nav class="navbar">
-    <a href="guest-dashboard.html" class="brand">
-        <div class="brand-mark"><img src="prepaura-logo.png" alt="Prepaura"></div>
-        <div class="brand-name">
-            <span class="brand-name-main">PREPAURA</span>
-            <span class="brand-name-sub">Placement Training Platform</span>
-        </div>
-    </a>
-    <div class="nav-links desktop-links">
-        <a href="guest-dashboard.html#features" class="nav-link">Features</a>
-        <a href="guest-dashboard.html#tests"    class="nav-link">Tests</a>
-        <a href="guest-resources.html"          class="nav-link active">Resources</a>
-        <a href="guest-dashboard.html#about"    class="nav-link">About</a>
-    </div>
-    <div class="nav-links desktop-links">
-        <a href="index.html"    class="nav-btn outline">Log in</a>
-        <a href="register.html" class="nav-btn solid">Sign up</a>
-    </div>
-    <button class="hamburger" onclick="toggleMenu()" aria-label="Menu">
-        <span></span><span></span><span></span>
-    </button>
-</nav>
-
-<div class="mobile-nav" id="mobileNav">
-    <a href="guest-dashboard.html#features" class="nav-link" onclick="toggleMenu()">Features</a>
-    <a href="guest-dashboard.html#tests"    class="nav-link" onclick="toggleMenu()">Tests</a>
-    <a href="guest-resources.html"          class="nav-link" onclick="toggleMenu()">Resources</a>
-    <a href="guest-dashboard.html#about"    class="nav-link" onclick="toggleMenu()">About</a>
-    <div class="mobile-nav-actions">
-        <a href="index.html"    class="nav-btn outline" style="flex:1;text-align:center">Log in</a>
-        <a href="register.html" class="nav-btn solid"   style="flex:1;text-align:center">Sign up</a>
-    </div>
-</div>
-
-<!-- ── Page header ── -->
-<div class="page-header reveal">
-    <div class="breadcrumb">
-        <a href="guest-dashboard.html">Home</a>
-        <span class="breadcrumb-sep">›</span>
-        <span>Resources</span>
-    </div>
-    <p class="page-header-label">Study materials</p>
-    <h1 class="page-header-title">Resources to help you <em style="font-style:italic;color:var(--ink-muted)">prepare</em></h1>
-    <p class="page-header-sub">PDFs, videos, links and articles for placement prep — browse by topic or search by keyword.</p>
-</div>
-
-<!-- ── Guest notice ── -->
-<div class="notice-wrap reveal">
-    <div class="notice">
-        <span class="notice-icon">ℹ️</span>
-        <span>You're browsing as a guest. <a href="register.html">Create a free account</a> to track your progress and unlock personalised recommendations.</span>
-    </div>
-</div>
-
-<!-- ── Toolbar ── -->
-<div class="toolbar reveal">
-    <div class="toolbar-top">
-        <div class="resources-tabs" id="resTabs">
-            <button class="res-tab active" data-cat="all">All</button>
-            <button class="res-tab" data-cat="aptitude">Aptitude</button>
-            <button class="res-tab" data-cat="verbal">Verbal</button>
-            <button class="res-tab" data-cat="logical">Logical</button>
-            <button class="res-tab" data-cat="technical">Technical</button>
-            <button class="res-tab" data-cat="general">General</button>
-        </div>
-        <div class="search-wrap">
-            <svg class="search-icon" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-            </svg>
-            <input class="search-input" id="searchInput" type="search" placeholder="Search resources…" autocomplete="off">
-        </div>
-    </div>
-    <div class="results-meta" id="resultsMeta">
-        <span id="resultsCount"></span>
-    </div>
-</div>
-
-<!-- ── Grid ── -->
-<div class="resources-wrap">
-    <div class="resources-grid" id="resourcesGrid">
-        <div class="resources-loading">
-            <div class="spinner-wrap"><div class="spinner"></div></div>
-            Loading resources…
-        </div>
-    </div>
-</div>
-
-<!-- ── Pagination ── -->
-<div class="pagination-wrap" id="paginationWrap"></div>
-
-<!-- ── Footer ── -->
-<div class="footer-outer">
-    <footer>
-        <a href="guest-dashboard.html" class="footer-brand">
-            <div class="footer-bm"><img src="prepaura-logo.png" alt="Prepaura"></div>
-            PREPAURA
+    <!-- ── Navbar ── -->
+    <nav class="navbar">
+        <a href="guest-dashboard.html" class="brand">
+            <div class="brand-mark"><img src="prepaura-logo.png" alt="Prepaura"></div>
+            <div class="brand-name">
+                <span class="brand-name-main">PREPAURA</span>
+                <span class="brand-name-sub">Placement Training Platform</span>
+            </div>
         </a>
-        <div class="footer-links">
-            <a href="#" class="footer-link">Privacy</a>
-            <a href="#" class="footer-link">Terms</a>
-            <a href="#" class="footer-link">Help</a>
-            <a href="#" class="footer-link">Contact</a>
+        <div class="nav-links desktop-links">
+            <a href="guest-dashboard.html#features" class="nav-link">Features</a>
+            <a href="guest-dashboard.html#tests" class="nav-link">Tests</a>
+            <a href="guest-resources.html" class="nav-link active">Resources</a>
+            <a href="guest-dashboard.html#about" class="nav-link">About</a>
         </div>
-        <p class="footer-copy">© 2025 Placement & Training Portal.</p>
-    </footer>
-</div>
+        <div class="nav-links desktop-links">
+            <a href="index.html" class="nav-btn outline">Log in</a>
+            <a href="register.html" class="nav-btn solid">Sign up</a>
+        </div>
+        <button class="hamburger" onclick="toggleMenu()" aria-label="Menu">
+            <span></span><span></span><span></span>
+        </button>
+    </nav>
 
-<script>
-    // ── Helpers ─────────────────────────────────────────────────────────────
-    const _base = (function() {
-        const s = window.location.pathname;
-        return s.substring(0, s.lastIndexOf('/') + 1);
-    })();
+    <div class="mobile-nav" id="mobileNav">
+        <a href="guest-dashboard.html#features" class="nav-link" onclick="toggleMenu()">Features</a>
+        <a href="guest-dashboard.html#tests" class="nav-link" onclick="toggleMenu()">Tests</a>
+        <a href="guest-resources.html" class="nav-link" onclick="toggleMenu()">Resources</a>
+        <a href="guest-dashboard.html#about" class="nav-link" onclick="toggleMenu()">About</a>
+        <div class="mobile-nav-actions">
+            <a href="index.html" class="nav-btn outline" style="flex:1;text-align:center">Log in</a>
+            <a href="register.html" class="nav-btn solid" style="flex:1;text-align:center">Sign up</a>
+        </div>
+    </div>
 
-    function esc(s) {
-        if (s === null || s === undefined) return '';
-        return String(s)
-            .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-            .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
-    }
+    <!-- ── Page header ── -->
+    <div class="page-header reveal">
+        <div class="breadcrumb">
+            <a href="guest-dashboard.html">Home</a>
+            <span class="breadcrumb-sep">›</span>
+            <span>Resources</span>
+        </div>
+        <p class="page-header-label">Study materials</p>
+        <h1 class="page-header-title">Resources to help you <em
+                style="font-style:italic;color:var(--ink-muted)">prepare</em></h1>
+        <p class="page-header-sub">PDFs, videos, links and articles for placement prep — browse by topic or search by
+            keyword.</p>
+    </div>
 
-    const typeIcon  = { pdf:'📄', video:'🎬', link:'🔗', article:'📰', quiz:'📝' };
-    const typeClass = { pdf:'rtype-pdf', video:'rtype-video', link:'rtype-link', article:'rtype-article', quiz:'rtype-quiz' };
+    <!-- ── Guest notice ── -->
+    <div class="notice-wrap reveal">
+        <div class="notice">
+            <span class="notice-icon">ℹ️</span>
+            <span>You're browsing as a guest. <a href="register.html">Create a free account</a> to track your progress
+                and unlock personalised recommendations.</span>
+        </div>
+    </div>
 
-    // ── State ────────────────────────────────────────────────────────────────
-    let activeCat    = 'all';
-    let currentPage  = 1;
-    const PAGE_SIZE  = 12;
-    let totalItems   = 0;
-    let searchQuery  = '';
-    let searchTimer  = null;
-    let allLoaded    = {};   // cache per category: { materials: [], fetched: bool }
+    <!-- ── Toolbar ── -->
+    <div class="toolbar reveal">
+        <div class="toolbar-top">
+            <div class="resources-tabs" id="resTabs">
+                <button class="res-tab active" data-cat="all">All</button>
+                <button class="res-tab" data-cat="aptitude">Aptitude</button>
+                <button class="res-tab" data-cat="verbal">Verbal</button>
+                <button class="res-tab" data-cat="logical">Logical</button>
+                <button class="res-tab" data-cat="technical">Technical</button>
+                <button class="res-tab" data-cat="general">General</button>
+            </div>
+            <div class="search-wrap">
+                <svg class="search-icon" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+                    viewBox="0 0 24 24">
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="m21 21-4.35-4.35" />
+                </svg>
+                <input class="search-input" id="searchInput" type="search" placeholder="Search resources…"
+                    autocomplete="off">
+            </div>
+        </div>
+        <div class="results-meta" id="resultsMeta">
+            <span id="resultsCount"></span>
+        </div>
+    </div>
 
-    // ── URL param sync ───────────────────────────────────────────────────────
-    function readParams() {
-        const p = new URLSearchParams(window.location.search);
-        const cat = p.get('category');
-        const valid = ['aptitude','verbal','logical','technical','general'];
-        if (cat && valid.includes(cat)) activeCat = cat;
-    }
+    <!-- ── Grid ── -->
+    <div class="resources-wrap">
+        <div class="resources-grid" id="resourcesGrid">
+            <div class="resources-loading">
+                <div class="spinner-wrap">
+                    <div class="spinner"></div>
+                </div>
+                Loading resources…
+            </div>
+        </div>
+    </div>
 
-    function updateUrl() {
-        const p = new URLSearchParams();
-        if (activeCat !== 'all') p.set('category', activeCat);
-        if (currentPage > 1)     p.set('page', currentPage);
-        const qs = p.toString();
-        history.replaceState(null, '', qs ? '?' + qs : window.location.pathname);
-    }
+    <!-- ── Pagination ── -->
+    <div class="pagination-wrap" id="paginationWrap"></div>
 
-    // ── Fetch ────────────────────────────────────────────────────────────────
-    async function fetchResources(cat) {
-        if (allLoaded[cat]) return allLoaded[cat];
+    <!-- ── Footer ── -->
+    <div class="footer-outer">
+        <footer>
+            <a href="guest-dashboard.html" class="footer-brand">
+                <div class="footer-bm"><img src="prepaura-logo.png" alt="Prepaura"></div>
+                PREPAURA
+            </a>
+            <div class="footer-links">
+                <a href="#" class="footer-link">Privacy</a>
+                <a href="#" class="footer-link">Terms</a>
+                <a href="#" class="footer-link">Help</a>
+                <a href="#" class="footer-link">Contact</a>
+            </div>
+            <p class="footer-copy">© 2025 Placement & Training Portal.</p>
+        </footer>
+    </div>
 
-        const params = new URLSearchParams({ limit: 50 });
-        if (cat !== 'all') params.set('category', cat);
+    <script>
+        // ── Helpers ─────────────────────────────────────────────────────────────
+        const _base = (function () {
+            const s = window.location.pathname;
+            return s.substring(0, s.lastIndexOf('/') + 1);
+        })();
 
-        const r = await fetch(_base + 'api/guest/get-guest-resources.php?' + params);
-        const d = await r.json();
-        if (!d.success) throw new Error('API error');
-
-        allLoaded[cat] = d.resources || [];
-        return allLoaded[cat];
-    }
-
-    // ── Filter + paginate ────────────────────────────────────────────────────
-    function applyFilter(materials) {
-        if (!searchQuery) return materials;
-        const q = searchQuery.toLowerCase();
-        return materials.filter(m =>
-            (m.title       || '').toLowerCase().includes(q) ||
-            (m.description || '').toLowerCase().includes(q) ||
-            (m.category    || '').toLowerCase().includes(q)
-        );
-    }
-
-    function getPage(materials, page) {
-        const start = (page - 1) * PAGE_SIZE;
-        return materials.slice(start, start + PAGE_SIZE);
-    }
-
-    // ── Render ───────────────────────────────────────────────────────────────
-    function renderCard(m, idx) {
-        const rtype  = m.resource_type || 'link';
-        const icon   = typeIcon[rtype]  || '📦';
-        const tcls   = typeClass[rtype] || 'rtype-pdf';
-        const desc   = m.description ? esc(m.description) : '<em style="color:var(--ink-faint)">No description</em>';
-        const size   = m.file_size   ? `<span class="resource-size">${(m.file_size/(1024*1024)).toFixed(1)} MB</span>` : '';
-        const delay  = Math.min(idx * 0.04, 0.4);
-
-        // Determine the open URL:
-        // - Cloudinary-stored files → serve-resource.php (handles signed URL / proxy)
-        // - external_url / file_path → open directly
-        let url, target;
-        if (m.cloudinary_public_id) {
-            url    = _base + 'api/resources/serve-resource.php?resource_id=' + m.resource_id + '&action=view';
-            target = 'target="_blank" rel="noopener"';
-        } else if (m.external_url) {
-            url    = esc(m.external_url);
-            target = 'target="_blank" rel="noopener"';
-        } else if (m.file_path) {
-            url    = esc(_base + m.file_path);
-            target = 'target="_blank" rel="noopener"';
-        } else {
-            url    = '#';
-            target = '';
+        function esc(s) {
+            if (s === null || s === undefined) return '';
+            return String(s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
         }
 
-        return `<div class="resource-card" style="animation-delay:${delay}s">
+        const typeIcon = { pdf: '📄', video: '🎬', link: '🔗', article: '📰', quiz: '📝' };
+        const typeClass = { pdf: 'rtype-pdf', video: 'rtype-video', link: 'rtype-link', article: 'rtype-article', quiz: 'rtype-quiz' };
+
+        // ── State ────────────────────────────────────────────────────────────────
+        let activeCat = 'all';
+        let currentPage = 1;
+        const PAGE_SIZE = 12;
+        let totalItems = 0;
+        let searchQuery = '';
+        let searchTimer = null;
+        let allLoaded = {};   // cache per category: { materials: [], fetched: bool }
+
+        // ── URL param sync ───────────────────────────────────────────────────────
+        function readParams() {
+            const p = new URLSearchParams(window.location.search);
+            const cat = p.get('category');
+            const valid = ['aptitude', 'verbal', 'logical', 'technical', 'general'];
+            if (cat && valid.includes(cat)) activeCat = cat;
+        }
+
+        function updateUrl() {
+            const p = new URLSearchParams();
+            if (activeCat !== 'all') p.set('category', activeCat);
+            if (currentPage > 1) p.set('page', currentPage);
+            const qs = p.toString();
+            history.replaceState(null, '', qs ? '?' + qs : window.location.pathname);
+        }
+
+        // ── Fetch ────────────────────────────────────────────────────────────────
+        async function fetchResources(cat) {
+            if (allLoaded[cat]) return allLoaded[cat];
+
+            const params = new URLSearchParams({ limit: 50 });
+            if (cat !== 'all') params.set('category', cat);
+
+            const r = await fetch(_base + 'api/guest/get-guest-resources.php?' + params);
+            const d = await r.json();
+            if (!d.success) throw new Error('API error');
+
+            allLoaded[cat] = d.resources || [];
+            return allLoaded[cat];
+        }
+
+        // ── Filter + paginate ────────────────────────────────────────────────────
+        function applyFilter(materials) {
+            if (!searchQuery) return materials;
+            const q = searchQuery.toLowerCase();
+            return materials.filter(m =>
+                (m.title || '').toLowerCase().includes(q) ||
+                (m.description || '').toLowerCase().includes(q) ||
+                (m.category || '').toLowerCase().includes(q)
+            );
+        }
+
+        function getPage(materials, page) {
+            const start = (page - 1) * PAGE_SIZE;
+            return materials.slice(start, start + PAGE_SIZE);
+        }
+
+        // ── Render ───────────────────────────────────────────────────────────────
+        function renderCard(m, idx) {
+            const rtype = m.resource_type || 'link';
+            const icon = typeIcon[rtype] || '📦';
+            const tcls = typeClass[rtype] || 'rtype-pdf';
+            const desc = m.description ? esc(m.description) : '<em style="color:var(--ink-faint)">No description</em>';
+            const size = m.file_size ? `<span class="resource-size">${(m.file_size / (1024 * 1024)).toFixed(1)} MB</span>` : '';
+            const delay = Math.min(idx * 0.04, 0.4);
+
+            // Determine the open URL:
+            // - Cloudinary-stored files → serve-resource.php (handles signed URL / proxy)
+            // - external_url / file_path → open directly
+            let url, target;
+            if (m.cloudinary_public_id) {
+                url = _base + 'api/resources/serve-resource.php?resource_id=' + m.resource_id + '&action=view';
+                target = 'target="_blank" rel="noopener"';
+            } else if (m.external_url) {
+                url = esc(m.external_url);
+                target = 'target="_blank" rel="noopener"';
+            } else if (m.file_path) {
+                url = esc(_base + m.file_path);
+                target = 'target="_blank" rel="noopener"';
+            } else {
+                url = '#';
+                target = '';
+            }
+
+            return `<div class="resource-card" style="animation-delay:${delay}s">
             <div class="resource-card-head">
                 <div class="resource-type-icon ${tcls}">${icon}</div>
                 <div class="resource-card-title">${esc(m.title)}</div>
@@ -527,128 +976,129 @@
                 </a>
             </div>
         </div>`;
-    }
-
-    function renderGrid(materials) {
-        const grid = document.getElementById('resourcesGrid');
-        const count = document.getElementById('resultsCount');
-
-        const filtered = applyFilter(materials);
-        totalItems = filtered.length;
-        const page = getPage(filtered, currentPage);
-
-        if (!filtered.length) {
-            const msg = searchQuery
-                ? `No resources match "<strong>${esc(searchQuery)}</strong>". Try a different keyword.`
-                : 'No resources available for this category yet. Check back later.';
-            grid.innerHTML = `<div class="resources-empty">${msg}</div>`;
-            count.textContent = '';
-            renderPagination(0);
-            return;
         }
 
-        grid.innerHTML = page.map((m, i) => renderCard(m, i)).join('');
-        count.textContent = `Showing ${(currentPage-1)*PAGE_SIZE + 1}–${Math.min(currentPage*PAGE_SIZE, totalItems)} of ${totalItems} resource${totalItems !== 1 ? 's' : ''}`;
-        renderPagination(filtered.length);
-    }
+        function renderGrid(materials) {
+            const grid = document.getElementById('resourcesGrid');
+            const count = document.getElementById('resultsCount');
 
-    // ── Pagination ───────────────────────────────────────────────────────────
-    function renderPagination(total) {
-        const wrap = document.getElementById('paginationWrap');
-        const pages = Math.ceil(total / PAGE_SIZE);
-        if (pages <= 1) { wrap.innerHTML = ''; return; }
+            const filtered = applyFilter(materials);
+            totalItems = filtered.length;
+            const page = getPage(filtered, currentPage);
 
-        let html = '';
-        html += `<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>← Prev</button>`;
+            if (!filtered.length) {
+                const msg = searchQuery
+                    ? `No resources match "<strong>${esc(searchQuery)}</strong>". Try a different keyword.`
+                    : 'No resources available for this category yet. Check back later.';
+                grid.innerHTML = `<div class="resources-empty">${msg}</div>`;
+                count.textContent = '';
+                renderPagination(0);
+                return;
+            }
 
-        // Smart page window
-        for (let p = 1; p <= pages; p++) {
-            if (p === 1 || p === pages || (p >= currentPage - 1 && p <= currentPage + 1)) {
-                html += `<button class="page-btn ${p===currentPage?'active':''}" onclick="goPage(${p})">${p}</button>`;
-            } else if (p === currentPage - 2 || p === currentPage + 2) {
-                html += `<span class="page-ellipsis">…</span>`;
+            grid.innerHTML = page.map((m, i) => renderCard(m, i)).join('');
+            count.textContent = `Showing ${(currentPage - 1) * PAGE_SIZE + 1}–${Math.min(currentPage * PAGE_SIZE, totalItems)} of ${totalItems} resource${totalItems !== 1 ? 's' : ''}`;
+            renderPagination(filtered.length);
+        }
+
+        // ── Pagination ───────────────────────────────────────────────────────────
+        function renderPagination(total) {
+            const wrap = document.getElementById('paginationWrap');
+            const pages = Math.ceil(total / PAGE_SIZE);
+            if (pages <= 1) { wrap.innerHTML = ''; return; }
+
+            let html = '';
+            html += `<button class="page-btn" onclick="goPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>← Prev</button>`;
+
+            // Smart page window
+            for (let p = 1; p <= pages; p++) {
+                if (p === 1 || p === pages || (p >= currentPage - 1 && p <= currentPage + 1)) {
+                    html += `<button class="page-btn ${p === currentPage ? 'active' : ''}" onclick="goPage(${p})">${p}</button>`;
+                } else if (p === currentPage - 2 || p === currentPage + 2) {
+                    html += `<span class="page-ellipsis">…</span>`;
+                }
+            }
+
+            html += `<button class="page-btn" onclick="goPage(${currentPage + 1})" ${currentPage === pages ? 'disabled' : ''}>Next →</button>`;
+            wrap.innerHTML = html;
+        }
+
+        function goPage(p) {
+            const pages = Math.ceil(totalItems / PAGE_SIZE);
+            if (p < 1 || p > pages) return;
+            currentPage = p;
+            updateUrl();
+            loadAndRender();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // ── Main load ────────────────────────────────────────────────────────────
+        async function loadAndRender() {
+            const grid = document.getElementById('resourcesGrid');
+            grid.innerHTML = `<div class="resources-loading"><div class="spinner-wrap"><div class="spinner"></div></div>Loading resources…</div>`;
+            document.getElementById('resultsCount').textContent = '';
+            document.getElementById('paginationWrap').innerHTML = '';
+
+            try {
+                const materials = await fetchResources(activeCat);
+                renderGrid(materials);
+            } catch (err) {
+                grid.innerHTML = `<div class="resources-empty">Could not load resources. Please try again.</div>`;
+                console.error(err);
             }
         }
 
-        html += `<button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage===pages?'disabled':''}>Next →</button>`;
-        wrap.innerHTML = html;
-    }
-
-    function goPage(p) {
-        const pages = Math.ceil(totalItems / PAGE_SIZE);
-        if (p < 1 || p > pages) return;
-        currentPage = p;
-        updateUrl();
-        loadAndRender();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-
-    // ── Main load ────────────────────────────────────────────────────────────
-    async function loadAndRender() {
-        const grid = document.getElementById('resourcesGrid');
-        grid.innerHTML = `<div class="resources-loading"><div class="spinner-wrap"><div class="spinner"></div></div>Loading resources…</div>`;
-        document.getElementById('resultsCount').textContent = '';
-        document.getElementById('paginationWrap').innerHTML = '';
-
-        try {
-            const materials = await fetchResources(activeCat);
-            renderGrid(materials);
-        } catch(err) {
-            grid.innerHTML = `<div class="resources-empty">Could not load resources. Please try again.</div>`;
-            console.error(err);
+        // ── Tab switching ────────────────────────────────────────────────────────
+        function switchTab(cat, btn) {
+            activeCat = cat;
+            currentPage = 1;
+            document.querySelectorAll('.res-tab').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            updateUrl();
+            loadAndRender();
         }
-    }
 
-    // ── Tab switching ────────────────────────────────────────────────────────
-    function switchTab(cat, btn) {
-        activeCat   = cat;
-        currentPage = 1;
-        document.querySelectorAll('.res-tab').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        updateUrl();
-        loadAndRender();
-    }
-
-    // ── Mobile menu ──────────────────────────────────────────────────────────
-    function toggleMenu() {
-        document.getElementById('mobileNav').classList.toggle('open');
-    }
-    document.addEventListener('click', e => {
-        const nav = document.getElementById('mobileNav');
-        if (!nav.contains(e.target) && !e.target.closest('.hamburger')) nav.classList.remove('open');
-    });
-
-    // ── Reveal on scroll ─────────────────────────────────────────────────────
-    const io = new IntersectionObserver(entries => {
-        entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); } });
-    }, { threshold: 0.1 });
-    document.querySelectorAll('.reveal').forEach(el => io.observe(el));
-
-    // ── Init ─────────────────────────────────────────────────────────────────
-    window.addEventListener('DOMContentLoaded', () => {
-        readParams();
-
-        // Set active tab from URL
-        document.querySelectorAll('.res-tab').forEach(btn => {
-            if (btn.dataset.cat === activeCat) btn.classList.add('active');
-            else btn.classList.remove('active');
-            btn.addEventListener('click', () => switchTab(btn.dataset.cat, btn));
+        // ── Mobile menu ──────────────────────────────────────────────────────────
+        function toggleMenu() {
+            document.getElementById('mobileNav').classList.toggle('open');
+        }
+        document.addEventListener('click', e => {
+            const nav = document.getElementById('mobileNav');
+            if (!nav.contains(e.target) && !e.target.closest('.hamburger')) nav.classList.remove('open');
         });
 
-        // Search with debounce
-        document.getElementById('searchInput').addEventListener('input', e => {
-            clearTimeout(searchTimer);
-            searchTimer = setTimeout(() => {
-                searchQuery = e.target.value.trim();
-                currentPage = 1;
-                if (allLoaded[activeCat]) {
-                    renderGrid(allLoaded[activeCat]);
-                }
-            }, 250);
-        });
+        // ── Reveal on scroll ─────────────────────────────────────────────────────
+        const io = new IntersectionObserver(entries => {
+            entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); } });
+        }, { threshold: 0.1 });
+        document.querySelectorAll('.reveal').forEach(el => io.observe(el));
 
-        loadAndRender();
-    });
-</script>
+        // ── Init ─────────────────────────────────────────────────────────────────
+        window.addEventListener('DOMContentLoaded', () => {
+            readParams();
+
+            // Set active tab from URL
+            document.querySelectorAll('.res-tab').forEach(btn => {
+                if (btn.dataset.cat === activeCat) btn.classList.add('active');
+                else btn.classList.remove('active');
+                btn.addEventListener('click', () => switchTab(btn.dataset.cat, btn));
+            });
+
+            // Search with debounce
+            document.getElementById('searchInput').addEventListener('input', e => {
+                clearTimeout(searchTimer);
+                searchTimer = setTimeout(() => {
+                    searchQuery = e.target.value.trim();
+                    currentPage = 1;
+                    if (allLoaded[activeCat]) {
+                        renderGrid(allLoaded[activeCat]);
+                    }
+                }, 250);
+            });
+
+            loadAndRender();
+        });
+    </script>
 </body>
+
 </html>

@@ -48,7 +48,7 @@ if (!$user) {
 }
 
 /* ── CSRF ─────────────────────────────────────────────────── */
-verifyCsrf();
+validateCsrfToken();
 
 /* ── File validation ──────────────────────────────────────── */
 if (empty($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {

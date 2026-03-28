@@ -20,6 +20,43 @@
             --text: #e8eaf0;
             --muted: #6b7280;
         }
+        [data-theme="light"] {
+            --bg: #eef1f8;
+            --surface: #ffffff;
+            --surface2: #f0f3fa;
+            --border: rgba(0, 102, 255, 0.15);
+            --text: #0d1117;
+            --muted: #5a6278;
+        }
+        [data-theme="light"] body { background: var(--bg); }
+        [data-theme="light"] .grid-lines {
+            background-image:
+                linear-gradient(rgba(0,102,255,0.06) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,102,255,0.06) 1px, transparent 1px);
+        }
+        [data-theme="light"] .wrapper {
+            box-shadow: 0 0 0 1px rgba(0,102,255,0.08), 0 24px 60px rgba(0,0,0,0.14);
+        }
+        [data-theme="light"] input[type="text"],
+        [data-theme="light"] input[type="password"] {
+            border-color: rgba(0,0,0,0.12);
+        }
+        [data-theme="light"] input::placeholder { color: #9ca3af; }
+        [data-theme="light"] label { color: #64748b; }
+        /* Theme toggle button */
+        .theme-btn {
+            position: fixed; top: 16px; right: 16px; z-index: 100;
+            width: 38px; height: 38px; border-radius: 50%;
+            background: var(--surface2); border: 1px solid var(--border);
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            color: var(--muted); transition: color 0.2s, background 0.2s, border-color 0.2s;
+        }
+        .theme-btn:hover { color: var(--blue-400); border-color: var(--blue-500); }
+        .theme-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; position: absolute; transition: opacity 0.2s, transform 0.2s; }
+        .theme-btn .icon-sun  { opacity: 0; transform: rotate(90deg) scale(0.7); }
+        .theme-btn .icon-moon { opacity: 1; transform: rotate(0deg) scale(1); }
+        [data-theme="light"] .theme-btn .icon-sun  { opacity: 1; transform: rotate(0deg) scale(1); }
+        [data-theme="light"] .theme-btn .icon-moon { opacity: 0; transform: rotate(-90deg) scale(0.7); }
 
         * {
             margin: 0;
@@ -229,7 +266,7 @@
 
         .brand h2 {
             font-family: Arial, sans-serif;
-            font-size: 26px;
+            font-size: 30px;
             font-weight: 800;
             color: white;
             line-height: 1.2;
@@ -237,7 +274,7 @@
         }
 
         .brand p {
-            font-size: 14px;
+            font-size: 16px;
             color: rgba(255, 255, 255, 0.7);
             line-height: 1.6;
         }
@@ -274,14 +311,14 @@
         }
 
         .stat-label {
-            font-size: 11px;
+            font-size: 17px;
             color: rgba(255, 255, 255, 0.6);
             margin-bottom: 2px;
         }
 
         .stat-value {
             font-family: Arial, sans-serif;
-            font-size: 15px;
+            font-size: 17px;
             font-weight: 700;
             color: white;
         }
@@ -309,7 +346,7 @@
             border: 1px solid rgba(0, 102, 255, 0.25);
             border-radius: 20px;
             padding: 5px 12px;
-            font-size: 11px;
+            font-size: 17px;
             font-weight: 500;
             color: var(--blue-400);
             letter-spacing: 0.05em;
@@ -339,7 +376,7 @@
 
         .form-header h1 {
             font-family: Arial, sans-serif;
-            font-size: 28px;
+            font-size: 32px;
             font-weight: 800;
             color: var(--text);
             line-height: 1.1;
@@ -347,7 +384,7 @@
         }
 
         .form-header p {
-            font-size: 13px;
+            font-size: 17px;
             color: var(--muted);
         }
 
@@ -358,7 +395,7 @@
 
         label {
             display: block;
-            font-size: 12px;
+            font-size: 16px;
             font-weight: 500;
             color: #9ca3af;
             margin-bottom: 8px;
@@ -392,7 +429,7 @@
             border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 10px;
             font-family: Arial, sans-serif;
-            font-size: 14px;
+            font-size: 16px;
             color: var(--text);
             outline: none;
             transition: border-color 0.2s, box-shadow 0.2s;
@@ -456,7 +493,7 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 13px;
+            font-size: 17px;
             color: var(--muted);
             cursor: pointer;
         }
@@ -471,7 +508,7 @@
         }
 
         .forgot {
-            font-size: 12px;
+            font-size: 16px;
             color: var(--blue-400);
             text-decoration: none;
             font-weight: 500;
@@ -490,7 +527,7 @@
             border: none;
             border-radius: 10px;
             font-family: Arial, sans-serif;
-            font-size: 15px;
+            font-size: 17px;
             font-weight: 700;
             cursor: pointer;
             position: relative;
@@ -559,7 +596,7 @@
         }
 
         .security-note p {
-            font-size: 11.5px;
+            font-size: 17px;
             color: #6b7280;
             line-height: 1.6;
         }
@@ -571,7 +608,7 @@
         .form-footer {
             text-align: center;
             margin-top: 20px;
-            font-size: 13px;
+            font-size: 17px;
             color: var(--muted);
         }
 
@@ -601,9 +638,14 @@
             }
         }
     </style>
+<script>(function(){var t=localStorage.getItem('pta_theme');if(t==='light')document.documentElement.setAttribute('data-theme','light');}());</script>
 </head>
 
 <body>
+    <button class="theme-btn" onclick="toggleLoginTheme()" title="Toggle light / dark mode">
+        <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
 
     <div class="bg">
         <div class="grid-lines"></div>
@@ -855,6 +897,17 @@
 
         document.addEventListener('contextmenu', e => e.preventDefault());
         window.addEventListener('load', () => document.getElementById('username').focus());
+
+        function toggleLoginTheme() {
+            var isLight = document.documentElement.getAttribute('data-theme') === 'light';
+            if (isLight) {
+                document.documentElement.removeAttribute('data-theme');
+                localStorage.setItem('pta_theme', 'dark');
+            } else {
+                document.documentElement.setAttribute('data-theme', 'light');
+                localStorage.setItem('pta_theme', 'light');
+            }
+        }
     </script>
 </body>
 

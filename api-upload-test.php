@@ -89,7 +89,7 @@ try {
     );
     $userId = (int) $user['user_id'];
     $stmt->bind_param(
-        "isssssiiiiiii",
+        "isssssiiiiii",
         $userId, $title, $description, $visibility,
         $category, $difficulty, $duration_minutes,
         $total_marks, $passing_marks, $max_attempts,
@@ -106,12 +106,14 @@ try {
              explanation, question_order, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, NOW())"
     );
+    if (!$qStmt) throw new Exception("Prepare questions failed: " . $conn->error);
 
     $oStmt = $conn->prepare(
         "INSERT INTO question_options
             (question_id, option_text, is_correct, option_order)
          VALUES (?, ?, ?, ?)"
     );
+    if (!$oStmt) throw new Exception("Prepare question_options failed: " . $conn->error);
 
     foreach ($questions as $order => $q) {
         $qText    = trim($q['question_text']);
@@ -148,5 +150,5 @@ try {
 } catch (Exception $e) {
     $conn->rollback();
     error_log('[api-upload-test] DB error: ' . $e->getMessage());
-    echo json_encode(['success' => false, 'error' => 'Database error. Please try again.']);
+    echo json_encode(['success' => false, 'error' => 'Database error: ' . $e->getMessage()]);
 }

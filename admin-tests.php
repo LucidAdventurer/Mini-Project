@@ -552,23 +552,22 @@ async function ctHandleQFile(file) {
     ctShowParseStatus('info', '⏳ Parsing questions from file…');
 
     try {
-        // Resolve CSRF token — try every location the shared JS might store it
-        let csrfToken = window._csrfToken
-                     || window.csrfToken
-                     || document.querySelector('meta[name="csrf-token"]')?.content
-                     || '';
-
-        // If still empty, fetch it fresh from the endpoint
-        if (!csrfToken) {
-            try {
-                const tr = await fetch('api/csrf-token.php', { credentials: 'same-origin' });
-                const tj = await tr.json();
-                if (tj.success && tj.token) {
-                    csrfToken = tj.token;
-                    window._csrfToken = csrfToken;
-                }
-            } catch (_) {}
+        // Fetch a fresh CSRF token directly from the endpoint.
+        // This avoids any dependency on how the shared JS stores it.
+        const base = window.location.pathname.replace(/\/[^\/]*$/, '');
+        const tokenResp = await fetch(base + '/api/csrf-token.php', { credentials: 'same-origin' });
+        if (!tokenResp.ok) {
+            ctShowParseStatus('error', 'Session expired. Please refresh the page and try again.');
+            return;
         }
+        const tokenData = await tokenResp.json();
+        if (!tokenData.success || !tokenData.token) {
+            ctShowParseStatus('error', 'Could not get CSRF token. Please refresh the page.');
+            return;
+        }
+        const csrfToken = tokenData.token;
+        // Keep in sync with whatever the shared JS uses
+        window._csrfToken = csrfToken;
 
         const formData = new FormData();
         formData.append('file', file);
@@ -578,16 +577,25 @@ async function ctHandleQFile(file) {
             headers: { 'X-CSRF-Token': csrfToken },
             body: formData
         });
-        const d = await resp.json();
+
+        // Read raw text first so a PHP fatal error doesn't break JSON.parse
+        const raw = await resp.text();
+        let d;
+        try { d = JSON.parse(raw); } catch(_) {
+            ctShowParseStatus('error', `Server error (HTTP ${resp.status}). Check PHP error log.`);
+            console.error('api-parse-questions raw response:', raw);
+            return;
+        }
+
         if (!d.success) { ctShowParseStatus('error', d.error || 'Parsing failed.'); return; }
         const parsed = d.questions || [];
         if (!parsed.length) { ctShowParseStatus('warn', 'No questions found. Check the file format and try again.'); return; }
-        // Merge parsed questions into ctQuestions
         parsed.forEach(q => ctQuestions.push(q));
         ctRenderQList();
         ctShowParseStatus('success', `✓ ${parsed.length} question${parsed.length!==1?'s':''} parsed and added.`);
     } catch(e) {
-        ctShowParseStatus('error', 'Network error while parsing. Try again.');
+        ctShowParseStatus('error', 'Upload failed: ' + (e.message || 'Unknown error'));
+        console.error('ctHandleQFile error:', e);
     }
 }
 

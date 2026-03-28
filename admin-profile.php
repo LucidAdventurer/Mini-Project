@@ -173,8 +173,44 @@ $initials    = implode('', array_map(fn($p) => strtoupper($p[0]), array_slice(ex
     --radius-sm:   8px;
     --shadow:      0 4px 24px rgba(0,0,0,0.4);
 }
+[data-theme="light"] {
+    --bg:          #f0f2f9;
+    --bg-card:     #ffffff;
+    --bg-input:    #eef1f8;
+    --border:      #d8dde8;
+    --border-focus:#3b5bdb;
+    --accent:      #3b5bdb;
+    --accent-glow: rgba(59,91,219,0.12);
+    --accent-2:    #00a884;
+    --accent-warn: #d97706;
+    --accent-err:  #dc2626;
+    --text:        #0f1117;
+    --text-muted:  #5a6278;
+    --text-subtle: #9aa3b8;
+    --success:     #059669;
+    --shadow:      0 4px 24px rgba(0,0,0,0.08);
+}
+[data-theme="light"] .alert-success { background: rgba(5,150,105,.08); border-color: rgba(5,150,105,.25); }
+[data-theme="light"] .alert-error   { background: rgba(220,38,38,.08); border-color: rgba(220,38,38,.25); }
+[data-theme="light"] .hero-card { box-shadow: 0 2px 16px rgba(0,0,0,0.07); }
+[data-theme="light"] .activity-table .ip { color: var(--text); }
+/* Profile page theme toggle — fixed top-right */
+.theme-btn {
+    position: fixed; top: 16px; right: 16px; z-index: 999;
+    width: 38px; height: 38px; border-radius: 50%;
+    background: var(--bg-card); border: 1px solid var(--border);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    color: var(--text-muted); transition: color 0.2s, background 0.2s, border-color 0.2s;
+    box-shadow: var(--shadow);
+}
+.theme-btn:hover { color: var(--accent); border-color: var(--accent); }
+.theme-btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; position: absolute; transition: opacity 0.2s, transform 0.2s; }
+.theme-btn .icon-sun  { opacity: 0; transform: rotate(90deg) scale(0.7); }
+.theme-btn .icon-moon { opacity: 1; transform: rotate(0deg) scale(1); }
+[data-theme="light"] .theme-btn .icon-sun  { opacity: 1; transform: rotate(0deg) scale(1); }
+[data-theme="light"] .theme-btn .icon-moon { opacity: 0; transform: rotate(-90deg) scale(0.7); }
 
-html { font-size: 16px; scroll-behavior: smooth; }
+html { font-size: 18px; scroll-behavior: smooth; }
 body {
     background: var(--bg);
     color: var(--text);
@@ -207,15 +243,15 @@ body {
 }
 .page-header h1 {
     font-family: var(--font-head);
-    font-size: 28px;
+    font-size: 32px;
     font-weight: 800;
     color: var(--text);
     line-height: 1.2;
 }
-.page-header p { color: var(--text-muted); font-size: 14px; margin-top: 4px; }
+.page-header p { color: var(--text-muted); font-size: 18px; margin-top: 4px; }
 .breadcrumb {
     display: flex; align-items: center; gap: 6px;
-    font-size: 13px; color: var(--text-muted);
+    font-size: 15px; color: var(--text-muted);
     margin-bottom: 6px;
 }
 .breadcrumb a { color: var(--text-muted); text-decoration: none; }
@@ -226,7 +262,7 @@ body {
 .alert {
     padding: 14px 18px;
     border-radius: var(--radius-sm);
-    font-size: 14px;
+    font-size: 18px;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -268,16 +304,16 @@ body {
 }
 .hero-info .name {
     font-family: var(--font-head);
-    font-size: 24px; font-weight: 800;
+    font-size: 32px; font-weight: 800;
     color: var(--text);
 }
 .hero-meta {
     display: flex; gap: 20px; flex-wrap: wrap;
-    font-size: 13px; color: var(--text-muted);
+    font-size: 15px; color: var(--text-muted);
     margin-top: 8px;
 }
 .hero-meta span { display: flex; align-items: center; gap: 6px; }
-.hero-meta i { color: var(--accent); font-size: 13px; }
+.hero-meta i { color: var(--accent); font-size: 15px; }
 
 /* ── Content grid ── */
 .content-grid {
@@ -296,7 +332,7 @@ body {
 }
 .card-title {
     font-family: var(--font-head);
-    font-size: 16px; font-weight: 700;
+    font-size: 18px; font-weight: 700;
     color: var(--text);
     margin-bottom: 22px;
     display: flex; align-items: center; gap: 10px;
@@ -308,7 +344,7 @@ body {
 .form-row.single { grid-template-columns: 1fr; }
 .form-group { display: flex; flex-direction: column; gap: 6px; }
 .form-group label {
-    font-size: 12px; font-weight: 600;
+    font-size: 18px; font-weight: 600;
     color: var(--text-muted);
     text-transform: uppercase; letter-spacing: .07em;
 }
@@ -318,7 +354,7 @@ body {
     border-radius: var(--radius-sm);
     color: var(--text);
     font-family: var(--font-body);
-    font-size: 14px;
+    font-size: 18px;
     padding: 11px 14px;
     width: 100%;
     outline: none;
@@ -329,14 +365,14 @@ body {
     box-shadow: 0 0 0 3px var(--accent-glow);
 }
 .form-control[readonly] { opacity: .55; cursor: not-allowed; }
-.form-hint { font-size: 11px; color: var(--text-subtle); }
+.form-hint { font-size: 15px; color: var(--text-subtle); }
 
 .pw-wrap { position: relative; }
 .pw-wrap .form-control { padding-right: 42px; }
 .pw-toggle {
     position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
     background: none; border: none; cursor: pointer;
-    color: var(--text-muted); font-size: 14px;
+    color: var(--text-muted); font-size: 18px;
     padding: 4px;
 }
 .pw-toggle:hover { color: var(--text); }
@@ -345,7 +381,7 @@ body {
     display: inline-flex; align-items: center; gap: 8px;
     padding: 11px 22px;
     border: none; border-radius: var(--radius-sm);
-    font-family: var(--font-head); font-size: 14px; font-weight: 600;
+    font-family: var(--font-head); font-size: 18px; font-weight: 600;
     cursor: pointer; transition: all .18s;
     text-decoration: none;
 }
@@ -360,17 +396,17 @@ body {
     color: var(--text-muted);
 }
 .btn-secondary:hover { color: var(--text); border-color: var(--text-muted); }
-.btn-sm { padding: 8px 16px; font-size: 13px; }
+.btn-sm { padding: 8px 16px; font-size: 15px; }
 .form-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; }
 
 /* ── Divider ── */
 .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
 
 /* ── Activity table ── */
-.activity-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.activity-table { width: 100%; border-collapse: collapse; font-size: 15px; }
 .activity-table th {
     color: var(--text-muted);
-    font-size: 11px; font-weight: 600;
+    font-size: 15px; font-weight: 600;
     text-transform: uppercase; letter-spacing: .07em;
     padding: 0 12px 12px 0; text-align: left;
     border-bottom: 1px solid var(--border);
@@ -382,17 +418,17 @@ body {
     vertical-align: top;
 }
 .activity-table tr:last-child td { border-bottom: none; }
-.activity-table .ip { font-family: monospace; font-size: 12px; color: var(--text); }
+.activity-table .ip { font-family: monospace; font-size: 18px; color: var(--text); }
 .activity-table .ua { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .badge {
     display: inline-flex; align-items: center; gap: 4px;
-    padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600;
+    padding: 3px 9px; border-radius: 20px; font-size: 15px; font-weight: 600;
 }
 .badge-ok  { background: rgba(16,185,129,.12); color: var(--success); }
 .badge-err { background: rgba(239,68,68,.12);  color: var(--accent-err); }
 
 /* ── Empty state ── */
-.empty-state { text-align: center; padding: 32px; color: var(--text-muted); font-size: 14px; }
+.empty-state { text-align: center; padding: 32px; color: var(--text-muted); font-size: 18px; }
 .empty-state i { font-size: 32px; color: var(--text-subtle); display: block; margin-bottom: 10px; }
 
 /* ── Responsive ── */
@@ -406,8 +442,13 @@ body {
     .main { padding: 16px; }
 }
 </style>
+<script>(function(){var t=localStorage.getItem('pta_theme');if(t==='light')document.documentElement.setAttribute('data-theme','light');}());</script>
 </head>
 <body>
+<button class="theme-btn" onclick="toggleProfileTheme()" title="Toggle light / dark mode">
+    <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+    <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+</button>
 <div class="page">
 
   <!-- ── Main ── -->
@@ -563,7 +604,7 @@ body {
             <div style="height:4px; background: var(--border); border-radius:4px; overflow:hidden">
               <div id="pwStrengthBar" style="height:100%; width:0; transition: width .3s, background .3s; border-radius:4px;"></div>
             </div>
-            <span id="pwStrengthLabel" style="font-size:11px; color:var(--text-subtle); margin-top:4px; display:block;"></span>
+            <span id="pwStrengthLabel" style="font-size:13px; color:var(--text-subtle); margin-top:4px; display:block;"></span>
           </div>
 
           <div class="form-actions">
@@ -687,6 +728,18 @@ document.querySelectorAll('.alert').forEach(el => {
     setTimeout(() => el.style.opacity = '0', 5000);
     setTimeout(() => el.remove(), 5500);
 });
+
+// ── Theme toggle ──────────────────────────────────────────────────────────────
+function toggleProfileTheme() {
+    var isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    if (isLight) {
+        document.documentElement.removeAttribute('data-theme');
+        localStorage.setItem('pta_theme', 'dark');
+    } else {
+        document.documentElement.setAttribute('data-theme', 'light');
+        localStorage.setItem('pta_theme', 'light');
+    }
+}
 </script>
 </body>
 </html>

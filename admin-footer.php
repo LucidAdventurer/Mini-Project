@@ -1,4 +1,4 @@
-    <!-- ── TOAST ── -->
+<!-- ── TOAST ── -->
     <div class="toast" id="toast"></div>
 
     <script>
@@ -7,6 +7,18 @@
     function fmtNum(n){return Number(n).toLocaleString();}
     function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
     function ucwords(s){return s.replace(/\b\w/g,c=>c.toUpperCase());}
+
+    // ── Theme toggle ──
+    function toggleTheme(){
+        var isLight=document.documentElement.getAttribute('data-theme')==='light';
+        if(isLight){
+            document.documentElement.removeAttribute('data-theme');
+            localStorage.setItem('pta_theme','dark');
+        } else {
+            document.documentElement.setAttribute('data-theme','light');
+            localStorage.setItem('pta_theme','light');
+        }
+    }
 
     // ── Sidebar mobile toggle ──
     function toggleSidebar(){
