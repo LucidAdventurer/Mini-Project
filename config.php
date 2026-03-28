@@ -318,6 +318,8 @@ function ensureDatabaseConnection(&$conn) {
     return ($conn !== null);
 }
 
+$conn->query("SET time_zone = '+05:30'");
+
 // ========================================
 // SHUTDOWN HANDLER
 // ========================================

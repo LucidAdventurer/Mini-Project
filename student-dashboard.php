@@ -43,7 +43,8 @@ if (!empty($_SESSION['login_time']) && empty($_SESSION['due_popup_shown'])) {
            AND a.end_time > NOW()
            AND a.end_time <= DATE_ADD(NOW(), INTERVAL 3 DAY)
            AND (
-               EXISTS (
+               a.visibility = 'public'
+               OR EXISTS (
                    SELECT 1 FROM assessment_targets at2
                    WHERE at2.assessment_id = a.assessment_id
                      AND at2.target_type = 'student'
@@ -134,7 +135,8 @@ $availCountResult = safePreparedQuery($conn,
        AND (a.start_time IS NULL OR a.start_time <= NOW())
        AND (a.end_time   IS NULL OR a.end_time   >= NOW())
        AND (
-           EXISTS (
+           a.visibility = 'public'
+           OR EXISTS (
                SELECT 1 FROM assessment_targets at2
                WHERE at2.assessment_id = a.assessment_id
                  AND at2.target_type = 'student'
@@ -186,7 +188,8 @@ $assessmentsResult = safePreparedQuery($conn,
        AND (a.start_time IS NULL OR a.start_time <= NOW())
        AND (a.end_time   IS NULL OR a.end_time   >= NOW())
        AND (
-           EXISTS (
+           a.visibility = 'public'
+           OR EXISTS (
                SELECT 1 FROM assessment_targets at2
                WHERE at2.assessment_id = a.assessment_id
                  AND at2.target_type = 'student'
@@ -1260,6 +1263,7 @@ function timeAgo(string $datetime): string {
         <span class="left-sidebar-label">Navigation</span>
         <a href="student-dashboard.php" class="active"><i class="fa fa-home"></i> Dashboard</a>
         <a href="student-assessments.php"><i class="fa fa-clipboard-list"></i> Assessments</a>
+        <a href="self-assessment.php"><i class="fa fa-user-check"></i> Self Assessment</a>
         <a href="student-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
 
         <div class="left-sidebar-bottom">

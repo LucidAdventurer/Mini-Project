@@ -1153,7 +1153,10 @@ function dismissResourceNotif(materialId) {
 /* ── Actions ── */
 function openFile(id, type) {
     dismissResourceNotif(id);
-    window.open('api/resources/view-resource.php?material_id='+id, '_blank');
+    if (['pdf','video','document','file','image','article','quiz'].includes(type))
+        window.open('api/resources/view-resource.php?material_id='+id, '_blank');
+    else
+        dlFile(id,'');
 }
 function dlFile(id, title) {
     const a = document.createElement('a');

@@ -34,7 +34,7 @@ function timeAgoPhp(string $dt): string {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Resources — PREPAURA</title>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet">
+
 <style>
 :root {
   --ink:         #0d0a14;
@@ -67,14 +67,15 @@ function timeAgoPhp(string $dt): string {
   --r-xl:        28px;
   --ease:        cubic-bezier(0.22,1,0.36,1);
   --t:           0.22s var(--ease);
-  --font-head:   'Syne', system-ui, sans-serif;
-  --font-body:   'DM Sans', system-ui, sans-serif;
+  --font-head:   'Times New Roman', Arial, serif;
+  --font-body:   'Calibri', 'Segoe UI', Arial, sans-serif;
   --nav-h:       64px;
 }
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 html { -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
 body {
-  font-family: var(--font-body); background: var(--surface);
+  font-family: var(--font-body);
+  font-size: 15px; background: var(--surface);
   color: var(--text-1); min-height: 100vh;
   padding-top: var(--nav-h); overflow-x: hidden;
 }
@@ -232,7 +233,7 @@ body::before {
 }
 .page-header-left { position: relative; z-index: 1; }
 .page-header-label { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--orchid); margin-bottom: 6px; }
-.page-header-left h1 { font-family: var(--font-head); font-size: 26px; font-weight: 800; color: white; margin-bottom: 4px; }
+.page-header-left h1 { font-family: var(--font-head); font-size: 28px; font-weight: 800; color: white; margin-bottom: 4px; }
 .page-header-left p { font-size: 14px; color: rgba(255,255,255,0.55); }
 .btn-upload-header {
   display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px;

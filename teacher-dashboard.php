@@ -201,7 +201,7 @@ default     => ucfirst($status),
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Teacher Dashboard — PREPAURA</title>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet">
+
 <style>
 /* ── DESIGN TOKENS ── */
 :root {
@@ -236,8 +236,8 @@ default     => ucfirst($status),
   --r-xl:        28px;
   --ease:        cubic-bezier(0.22,1,0.36,1);
   --t:           0.22s var(--ease);
-  --font-head:   'Times New Roman', Times, serif;
-  --font-body:   'DM Sans', system-ui, sans-serif;
+  --font-head:   'Times New Roman', Arial, serif;
+  --font-body:   'Calibri', 'Segoe UI', Arial, sans-serif;
   --nav-h:       64px;
 }
 
@@ -247,6 +247,7 @@ html { -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
 
 body {
   font-family: var(--font-body);
+  font-size: 15px;
   background: var(--surface);
   color: var(--text-1);
   min-height: 100vh;
@@ -502,7 +503,7 @@ body::before {
 }
 .welcome-content h1 {
   font-family: var(--font-head);
-  font-size: 30px; font-weight: 800; color: white; margin-bottom: 6px;
+  font-size: 32px; font-weight: 800; color: white; margin-bottom: 6px;
   line-height: 1.15;
 }
 .welcome-subtitle { font-size: 14px; color: rgba(255,255,255,0.55); }
@@ -562,7 +563,7 @@ body::before {
 }
 .stat-card-value {
   font-family: var(--font-head);
-  font-size: 38px; font-weight: 800; color: var(--text-1);
+  font-size: 40px; font-weight: 800; color: var(--text-1);
   line-height: 1; margin-bottom: 6px;
 }
 .stat-card-delta {
@@ -579,7 +580,7 @@ body::before {
 }
 .section-title {
   font-family: var(--font-head);
-  font-size: 20px; font-weight: 700; color: var(--text-1);
+  font-size: 22px; font-weight: 700; color: var(--text-1);
 }
 .section-actions { display: flex; align-items: center; gap: 10px; }
 
@@ -651,7 +652,7 @@ body::before {
 .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; gap: 10px; }
 .assessment-title {
   font-family: var(--font-head);
-  font-size: 15.5px; font-weight: 700; color: var(--text-1);
+  font-size: 16.5px; font-weight: 700; color: var(--text-1);
   line-height: 1.3; flex: 1;
 }
 
@@ -721,7 +722,7 @@ body::before {
 .empty-icon { font-size: 56px; margin-bottom: 18px; opacity: 0.35; }
 .empty-title {
   font-family: var(--font-head);
-  font-size: 20px; font-weight: 700; color: var(--text-1); margin-bottom: 8px;
+  font-size: 22px; font-weight: 700; color: var(--text-1); margin-bottom: 8px;
 }
 .empty-subtitle { font-size: 14.5px; color: var(--text-3); margin-bottom: 28px; }
 .btn-create-empty {
