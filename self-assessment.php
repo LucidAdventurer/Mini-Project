@@ -176,125 +176,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     }
 
     if ($title !== '' && $pdfPath) {
-        // ── Parse PDF inline (extract ALL questions — no slicing) ──
-        $raw  = file_get_contents($pdfPath);
-        $text = '';
-
-        // ── PDF stream extraction ──
-        // Supports: plain FlateDecode, ASCII85+FlateDecode (ReportLab default), uncompressed
-        // ASCII85 streams end with ~>endstream (no newline before endstream)
-        // Plain streams end with \nendstream
-        preg_match_all('/stream[\r\n]+(.*?)(?:[\r\n]+|(?=~>))endstream/s', $raw, $streams);
-        // Also catch ~>endstream pattern specifically
-        preg_match_all('/stream[\r\n]+(.*?~>)endstream/s', $raw, $streams85);
-        $allStreams = array_merge($streams[1], $streams85[1]);
-        foreach ($allStreams as $stream) {
-            $src = null;
-
-            // Try plain zlib first
-            $dec = @gzuncompress($stream);
-            if ($dec === false) $dec = @gzinflate($stream);
-            if ($dec !== false) { $src = $dec; }
-
-            // Try ASCII85 decode then zlib (ReportLab / many modern PDF generators)
-            if ($src === null) {
-                $a85 = trim($stream);
-                if (substr($a85, -2) === '~>') $a85 = substr($a85, 0, -2);
-                // ASCII85: chars 33('!')–117('u'), 'z' for 4 zero bytes
-                $bin = '';
-                $group = '';
-                for ($ci = 0; $ci < strlen($a85); $ci++) {
-                    $c = $a85[$ci];
-                    if ($c === ' ' || $c === "\n" || $c === "\r" || $c === "\t") continue;
-                    if ($c === 'z') {
-                        $bin .= "\0\0\0\0";
-                    } else {
-                        $group .= $c;
-                        if (strlen($group) === 5) {
-                            $n = 0;
-                            for ($gi = 0; $gi < 5; $gi++) $n = $n * 85 + (ord($group[$gi]) - 33);
-                            $bin .= pack('N', $n);
-                            $group = '';
-                        }
-                    }
-                }
-                // Handle remaining partial group
-                if (strlen($group) > 0) {
-                    $pad = 5 - strlen($group);
-                    $group .= str_repeat('u', $pad);
-                    $n = 0;
-                    for ($gi = 0; $gi < 5; $gi++) $n = $n * 85 + (ord($group[$gi]) - 33);
-                    $bin .= substr(pack('N', $n), 0, strlen($group) - $pad);
-                }
-                if (strlen($bin) > 0) {
-                    $dec = @gzuncompress($bin);
-                    if ($dec === false) $dec = @gzinflate($bin);
-                    if ($dec !== false) $src = $dec;
-                }
-            }
-
-            // Fallback: use raw stream as-is
-            if ($src === null) $src = $stream;
-
-            // Extract text from BT...ET blocks
-            preg_match_all('/BT(.*?)ET/s', $src, $bt);
-            foreach ($bt[1] as $block) {
-                // Tj operator — extract strings allowing escaped parens: \( and \)
-                preg_match_all('/\((?:[^)(\\\\]|\\\\.)*\)\s*Tj/s', $block, $tj);
-                foreach ($tj[0] as $t) {
-                    $inner = preg_replace('/\)\s*Tj$/', '', $t);
-                    $inner = preg_replace('/^\(/', '', $inner);
-                    // Only unescape parens — do NOT use stripcslashes (it converts \327 to raw bytes breaking UTF-8)
-                    $inner = str_replace(['\\)', '\\('], [')', '('], $inner);
-                    // Remove other backslash escapes safely (e.g. \327 → just strip the backslash+digits)
-                    $inner = preg_replace('/\\\\[0-9]{1,3}/', '', $inner);
-                    $inner = preg_replace('/\\\\[nrtf\\\\]/', ' ', $inner);
-                    $text .= trim($inner) . "\n";
-                }
-                // TJ operator (array of strings with kerning numbers)
-                preg_match_all('/\[(.*?)\]\s*TJ/s', $block, $tJ);
-                foreach ($tJ[1] as $t) {
-                    preg_match_all('/\((?:[^)(\\\\]|\\\\.)*\)/', $t, $parts);
-                    foreach ($parts[0] as $p) {
-                        $inner = preg_replace('/^\(|\)$/', '', $p);
-                        $inner = str_replace(['\\)', '\\('], [')', '('], $inner);
-                        $inner = preg_replace('/\\\\[0-9]{1,3}/', '', $inner);
-                        $inner = preg_replace('/\\\\[nrtf\\\\]/', ' ', $inner);
-                        $text .= $inner;
-                    }
-                    $text .= "\n";
-                }
-            }
-        }
-
-        // Fallback for very simple unencoded PDFs
-        if (strlen(trim($text)) < 20) {
-            preg_match_all('/\(([^\)]{3,})\)/', $raw, $m);
-            $text = implode("\n", $m[1]);
-        }
+        // ── Extract text from PDF (CID-aware) ──
+        $text = extractPdfText($pdfPath);
 
         // ── Extract ALL questions from PDF ──
-        $allQuestions = [];
-        $lines = array_values(array_filter(array_map('trim', preg_split('/\r?\n/', $text))));
-        $i = 0;
-        while ($i < count($lines)) {
-            if (preg_match('/^(?:Q\.?\s*)?\d+[\.\)]\s+(.+)/i', $lines[$i], $qm)) {
-                $qText = trim($qm[1]); $opts = []; $correct = 'a'; $i++;
-                while ($i < count($lines)) {
-                    // Match "A) text" or "A. text"
-                    if (preg_match('/^([A-D])[\.\)]\s*(.+)/i', $lines[$i], $om)) {
-                        $opts[strtolower($om[1])] = trim($om[2]); $i++;
-                    }
-                    elseif (preg_match('/^(?:Answer|Ans)[\s\.:]*([A-D])/i', $lines[$i], $am)) {
-                        $correct = strtolower($am[1]); $i++; break;
-                    }
-                    elseif (preg_match('/^(?:Q\.?\s*)?\d+[\.\)]\s+/i', $lines[$i])) break;
-                    else $i++;
-                }
-                if ($qText && count($opts) >= 2)
-                    $allQuestions[] = ['text'=>$qText,'a'=>$opts['a']??'','b'=>$opts['b']??'','c'=>$opts['c']??'','d'=>$opts['d']??'','correct'=>$correct];
-            } else $i++;
-        }
+        $allQuestions = parsePdfQuestions($text);
 
         $totalParsed = count($allQuestions);
 
@@ -317,10 +203,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
             $newSaId = $conn->insert_id;
             // ── Insert ALL questions into map ──
             foreach ($allQuestions as $order => $q) {
+                if ($q['type'] === 'true_false') {
+                    $oA = 'True'; $oB = 'False'; $oC = ''; $oD = '';
+                    $ans = strtolower((string)($q['correctAnswer'] ?? 'true'));
+                    $correct = ($ans === 'true' || $ans === 'a') ? 'a' : 'b';
+                } else {
+                    $opts = $q['options'];
+                    $oA = $opts[0] ?? ''; $oB = $opts[1] ?? '';
+                    $oC = $opts[2] ?? ''; $oD = $opts[3] ?? '';
+                    $correct = $q['correctAnswer'] ?? 'a';
+                }
                 safePreparedQuery($conn,
                     "INSERT INTO self_assessment_q_map (sa_id, question_text, option_a, option_b, option_c, option_d, correct_option, q_order)
                      VALUES (?,?,?,?,?,?,?,?)",
-                    "issssssi", [$newSaId, $q['text'], $q['a'], $q['b'], $q['c'], $q['d'], $q['correct'], $order]
+                    "issssssi", [$newSaId, $q['text'], $oA, $oB, $oC, $oD, $correct, $order]
                 );
             }
             // Go directly to test — no setup page
@@ -332,7 +228,321 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     exit;
 }
 
-// ── Handle Level test creation ──
+// ============================================================
+// extractPdfText
+// Tries pdftotext (poppler) first.
+// Falls back to pure-PHP CID-aware extraction supporting:
+//   • Plain strings:  (text) Tj / [(text)] TJ
+//   • CID hex strings: <XXXX> Tj  — used by Google Docs, Word, etc.
+//     Decoded via ToUnicode CMap embedded in the PDF.
+// Falls back to raw parenthesised string grab.
+// ============================================================
+function extractPdfText(string $path): string
+{
+    // Method 1: pdftotext (poppler)
+    $which = trim((string)shell_exec('which pdftotext 2>/dev/null'));
+    if ($which !== '') {
+        $esc = escapeshellarg($path);
+        $out = (string)shell_exec("pdftotext -layout $esc - 2>/dev/null");
+        if (trim($out) !== '') return $out;
+        $out = (string)shell_exec("pdftotext $esc - 2>/dev/null");
+        if (trim($out) !== '') return $out;
+    }
+
+    $raw = file_get_contents($path);
+
+    // Decompress all streams
+    $decompressed = [];
+    preg_match_all('/stream\r?\n(.*?)\r?\nendstream/s', $raw, $sm);
+    foreach ($sm[1] as $stream) {
+        $dec = @gzuncompress($stream);
+        if ($dec === false) $dec = @gzinflate($stream);
+        $decompressed[] = ($dec !== false) ? $dec : $stream;
+    }
+
+    // Build ToUnicode CMap: CID (int) → char
+    // Parse bfchar/bfrange within their own delimited sections ONLY.
+    // Running both regexes over the full stream causes cross-section matches
+    // that corrupt the mapping (e.g. Google Docs PDFs fail silently).
+    $cmap = [];
+    foreach ($decompressed as $src) {
+        if (strpos($src, 'beginbfchar') === false && strpos($src, 'beginbfrange') === false) continue;
+        // bfchar section
+        preg_match_all('/beginbfchar(.*?)endbfchar/s', $src, $bfcharSecs);
+        foreach ($bfcharSecs[1] as $sec) {
+            preg_match_all('/<([0-9A-Fa-f]+)>\s+<([0-9A-Fa-f]+)>/', $sec, $bfc);
+            foreach ($bfc[1] as $k => $cidHex) {
+                $cid = hexdec($cidHex); $uni = hexdec($bfc[2][$k]);
+                if ($uni >= 32) $cmap[$cid] = mb_chr($uni, 'UTF-8');
+            }
+        }
+        // bfrange section
+        preg_match_all('/beginbfrange(.*?)endbfrange/s', $src, $bfrangeSecs);
+        foreach ($bfrangeSecs[1] as $sec) {
+            preg_match_all('/<([0-9A-Fa-f]+)>\s+<([0-9A-Fa-f]+)>\s+<([0-9A-Fa-f]+)>/', $sec, $bfr);
+            foreach ($bfr[1] as $k => $startHex) {
+                $start = hexdec($startHex); $end = hexdec($bfr[2][$k]); $uni = hexdec($bfr[3][$k]);
+                for ($c = $start; $c <= $end; $c++) $cmap[$c] = mb_chr($uni + ($c - $start), 'UTF-8');
+            }
+        }
+    }
+
+    // Decode a CID hex string using CMap, with offset-29 heuristic for unmapped glyphs
+    $decodeCid = function(string $hexStr) use ($cmap): string {
+        $out  = '';
+        $step = (strlen($hexStr) % 4 === 0 && strlen($hexStr) >= 4) ? 4 : 2;
+        for ($i = 0; $i < strlen($hexStr); $i += $step) {
+            $cid = hexdec(substr($hexStr, $i, $step));
+            if (isset($cmap[$cid])) {
+                $out .= $cmap[$cid];
+            } else {
+                $uni = $cid + 29; // Google Docs font offset heuristic
+                $out .= ($uni >= 32 && $uni <= 126) ? chr($uni) : '';
+            }
+        }
+        return $out;
+    };
+
+    // Method 2: BT/ET extraction — plain + hex string support
+    $text = '';
+    foreach ($decompressed as $src) {
+        if (strpos($src, 'BT') === false) continue;
+        preg_match_all('/BT(.*?)ET/s', $src, $bt);
+        foreach ($bt[1] as $block) {
+            $lineText = '';
+            // Plain (text) Tj
+            preg_match_all('/\((?:[^)(\\\\]|\\\\.)*\)\s*Tj/s', $block, $tj);
+            foreach ($tj[0] as $t) {
+                $inner = preg_replace(['/\)\s*Tj$/', '/^\(/'], ['', ''], $t);
+                $inner = str_replace(['\\)', '\\('], [')', '('], $inner);
+                $inner = preg_replace('/\\\\[0-9]{1,3}/', '', $inner);
+                $inner = preg_replace('/\\\\[nrtf\\\\]/', ' ', $inner);
+                $lineText .= trim($inner) . ' ';
+            }
+            // Hex <XXXX> Tj — CID fonts (Google Docs)
+            preg_match_all('/<([0-9A-Fa-f]+)>\s*Tj/', $block, $hexTj);
+            foreach ($hexTj[1] as $h) $lineText .= $decodeCid($h); // no space: each Tj is one glyph
+            // [(text)] TJ array
+            preg_match_all('/\[(.*?)\]\s*TJ/s', $block, $tJ);
+            foreach ($tJ[1] as $t) {
+                preg_match_all('/\((?:[^)(\\\\]|\\\\.)*\)/', $t, $parts);
+                foreach ($parts[0] as $p) {
+                    $inner = preg_replace(['/^\(/', '/\)$/'], '', $p);
+                    $inner = str_replace(['\\)', '\\('], [')', '('], $inner);
+                    $inner = preg_replace('/\\\\[0-9]{1,3}/', '', $inner);
+                    $inner = preg_replace('/\\\\[nrtf\\\\]/', ' ', $inner);
+                    $lineText .= $inner;
+                }
+                // Hex inside TJ
+                preg_match_all('/<([0-9A-Fa-f]+)>/', $t, $hexParts);
+                foreach ($hexParts[1] as $h) $lineText .= $decodeCid($h);
+            }
+            $lineText = trim($lineText);
+            if ($lineText !== '') $text .= $lineText . "\n";
+        }
+    }
+
+    // Collapse single-char-per-line artifacts (e.g. "W\nh\na\nt" → "What")
+    $lines  = explode("\n", $text);
+    $merged = [];
+    $i      = 0;
+    while ($i < count($lines)) {
+        $l = trim($lines[$i]);
+        if (strlen($l) === 1 && ctype_alpha($l)) {
+            $word = $l; $j = $i + 1;
+            while ($j < count($lines) && strlen(trim($lines[$j])) === 1 && ctype_alpha(trim($lines[$j]))) {
+                $word .= trim($lines[$j]); $j++;
+            }
+            $merged[] = strlen($word) >= 2 ? $word : $l;
+            $i = $j;
+        } else { $merged[] = $l; $i++; }
+    }
+    $text = implode("\n", $merged);
+
+    // Method 3: last-resort raw paren grab
+    if (strlen(trim($text)) < 20) {
+        preg_match_all('/\(([^\)]{3,})\)/', $raw, $m);
+        $text = implode("\n", $m[1]);
+    }
+
+    return $text;
+}
+
+// ============================================================
+// parsePdfQuestions — robust multi-format question parser
+// Handles: MCQ + True/False, all common formatting variants
+//   Questions : 1. / 1) / Q1. / Q.1 / Question 1:
+//   Options   : A) a) A. (A) [A] A- A:  (upper or lower)
+//   Answers   : Answer:/Ans:/Key:/Correct: + letter or True/False
+//               bare single letter line after options
+//   True/False: bare True / False lines as options
+// ============================================================
+function parsePdfQuestions(string $text): array
+{
+    $questions = [];
+    $text  = str_replace(["\r\n", "\r", "\f"], "\n", $text);
+    $lines = explode("\n", $text);
+    $lines = array_map(function (string $line): string {
+        $line = preg_replace('/\h+/', ' ', $line);
+        $line = preg_replace('/^(\s*[\[(]?\s*[a-dA-D])\s+([).\]])\s*/', '$1$2 ', $line);
+        return trim($line);
+    }, $lines);
+    $lines = array_values(array_filter($lines, fn($l) => $l !== ''));
+
+    $reAnchor = '/^(?:'
+        . '(?:Q(?:uestion)?\s*)?\d+\s*[.):\s]'
+        . '|[a-dA-D]\s*[).]\s'
+        . '|[a-dA-D][).]\s*$'
+        . '|(?:answer|ans(?:wer)?|key|correct)\s*[:\s.]'
+        . '|true\s*$'
+        . '|false\s*$'
+        . ')/i';
+
+    // Re-join word-per-line fragments
+    $joined = [];
+    foreach ($lines as $line) {
+        if (empty($joined) || preg_match($reAnchor, $line)) {
+            $joined[] = $line;
+        } else {
+            $joined[count($joined) - 1] .= ' ' . $line;
+        }
+    }
+
+    // Reassemble orphan option labels ("a)" on one line, text on next)
+    $assembled = [];
+    for ($j = 0, $jMax = count($joined); $j < $jMax; $j++) {
+        $line = $joined[$j];
+        if (preg_match('/^[a-dA-D][).]$/', $line) && isset($joined[$j + 1])) {
+            $next = $joined[$j + 1];
+            if (!preg_match('/^[a-dA-D0-9][\s).\[:]/', $next)) {
+                $assembled[] = $line . ' ' . $next;
+                $j++;
+                continue;
+            }
+        }
+        $assembled[] = $line;
+    }
+
+    $lines      = $assembled;
+    $totalLines = count($lines);
+    $i          = 0;
+    $qIndex     = 1;
+
+    $reQuestion      = '/^(?:Q(?:uestion)?\s*)?(\d+)\s*[.):\s]\s*(.{3,})/i';
+    $reOption        = '/^\s*[\[(]?\s*([a-dA-D])\s*[\].):\-–\s]\s*(.+)/';
+    $reAnswer        = '/^(?:answer|ans(?:wer)?|key|correct(?:\s+answer)?)\s*(?:is\s*)?[\s:.\-–]*\s*([a-dA-D]|true|false)\b/i';
+    $reAnswerCompact = '/^(?:answer|ans(?:wer)?|key|correct(?:\s+answer)?)\s*[:\s.\-–]*([a-dA-D]|true|false)\.?\s*$/i';
+    $reBareAns       = '/^\(?([a-dA-D])\)?\.?\s*$/i';
+    $reNextQ         = '/^(?:Q(?:uestion)?\s*)?\d+\s*[.):\s]/i';
+    $reTrueFalse     = '/^(true|false)\s*$/i';
+
+    while ($i < $totalLines) {
+        $line = $lines[$i];
+        if (!preg_match($reQuestion, $line, $qMatch)) { $i++; continue; }
+
+        $questionText  = trim($qMatch[2]);
+        $options       = [];
+        $correctAnswer = null;
+        $i++;
+
+        // ── True/False look-ahead ──
+        $tfTokens  = [];
+        $lookahead = 0;
+        while (
+            ($i + $lookahead) < $totalLines
+            && !preg_match($reOption, $lines[$i + $lookahead])
+            && !preg_match($reNextQ,  $lines[$i + $lookahead])
+        ) {
+            $ll = trim($lines[$i + $lookahead]);
+            if (preg_match($reTrueFalse, $ll)) $tfTokens[] = strtolower($ll);
+            $lookahead++;
+        }
+
+        $hasBothTF = in_array('true', $tfTokens, true) && in_array('false', $tfTokens, true);
+
+        if ($hasBothTF) {
+            for ($k = 0; $k < $lookahead; $k++) $i++;
+            $scanFrom = $i - $lookahead;
+            for ($s = $scanFrom; $s < min($scanFrom + $lookahead + 3, $totalLines); $s++) {
+                $sl = trim($lines[$s]);
+                if (preg_match($reAnswer, $sl, $ansMatch) || preg_match($reAnswerCompact, $sl, $ansMatch)) {
+                    $raw = strtolower($ansMatch[1]);
+                    $correctAnswer = ($raw === 'a' || $raw === 'true') ? 'true' : 'false';
+                    if ($s >= $i) $i = $s + 1;
+                    break;
+                }
+                if ($s >= $i && preg_match($reTrueFalse, $sl, $tfAns)) {
+                    $correctAnswer = strtolower($tfAns[1]);
+                    $i = $s + 1;
+                    break;
+                }
+            }
+            while (
+                $i < $totalLines
+                && !preg_match($reNextQ, $lines[$i])
+                && (preg_match($reAnswer, $lines[$i]) || preg_match($reAnswerCompact, $lines[$i]) || preg_match($reTrueFalse, $lines[$i]))
+            ) { $i++; }
+
+            $questions[] = [
+                'id'            => $qIndex++,
+                'type'          => 'true_false',
+                'text'          => $questionText,
+                'options'       => ['True', 'False'],
+                'correctAnswer' => $correctAnswer ?? 'true',
+            ];
+            continue;
+        }
+
+        // ── MCQ branch ──
+        $unrecognised = 0;
+        while ($i < $totalLines && count($options) < 4) {
+            $ol = $lines[$i];
+            if (preg_match($reNextQ, $ol)) break;
+            if (preg_match($reAnswer, $ol, $ansMatch) || preg_match($reAnswerCompact, $ol, $ansMatch)) {
+                $raw = strtolower($ansMatch[1]);
+                $correctAnswer = (strlen($raw) === 1 && ctype_alpha($raw)) ? $raw : null;
+                $i++; break;
+            }
+            if (count($options) >= 2 && preg_match($reBareAns, $ol, $bm)) {
+                $correctAnswer = strtolower($bm[1]);
+                $i++; break;
+            }
+            if (preg_match($reOption, $ol, $optMatch)) {
+                $options[strtolower($optMatch[1])] = trim($optMatch[2]);
+                $unrecognised = 0; $i++; continue;
+            }
+            $i++; $unrecognised++;
+            if (count($options) >= 2 && $unrecognised >= 1) break;
+            if (count($options) === 0 && $unrecognised >= 3) break;
+        }
+        // One more look for straggling answer
+        if ($correctAnswer === null && $i < $totalLines) {
+            $nl = $lines[$i];
+            if (preg_match($reAnswer, $nl, $ansMatch) || preg_match($reAnswerCompact, $nl, $ansMatch)) {
+                $raw = strtolower($ansMatch[1]);
+                $correctAnswer = (strlen($raw) === 1 && ctype_alpha($raw)) ? $raw : null;
+                $i++;
+            } elseif (count($options) >= 2 && preg_match($reBareAns, $nl, $bm)) {
+                $correctAnswer = strtolower($bm[1]); $i++;
+            }
+        }
+        if (count($options) < 2) continue;
+
+        $questions[] = [
+            'id'            => $qIndex++,
+            'type'          => 'mcq',
+            'text'          => $questionText,
+            'options'       => [
+                $options['a'] ?? '',
+                $options['b'] ?? '',
+                $options['c'] ?? '',
+                $options['d'] ?? '',
+            ],
+            'correctAnswer' => $correctAnswer ?? 'a',
+        ];
+    }
+    return $questions;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'create_level_test') {
     if (!hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) die('Invalid CSRF token');
     $levels   = $_POST['levels'] ?? [];           // e.g. ['easy','easy','medium'] — one per checked sublevel
