@@ -93,9 +93,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
 $questions = [];
 $attemptId = 0;
 
-// Use question_limit stored on assessment; fallback to total_questions
+// Resolve how many questions to serve:
+// 1. question_limit column (set at creation time = what student requested)
+// 2. total_questions column (fallback for old rows)
+// 3. Count actual rows in map (safest fallback if above are stale/zero)
 $limit = (int)($sa['question_limit'] ?? 0);
 if ($limit <= 0) $limit = (int)($sa['total_questions'] ?? 0);
+if ($limit <= 0) {
+    // Count actual questions stored for this assessment
+    $cntRes = safePreparedQuery($conn,
+        "SELECT COUNT(*) AS cnt FROM self_assessment_q_map WHERE sa_id = ?", "i", [$saId]);
+    if ($cntRes['success'] && $cntRes['result']) {
+        $cntRow = $cntRes['result']->fetch_assoc();
+        $limit  = (int)($cntRow['cnt'] ?? 0);
+        $cntRes['result']->free();
+    }
+}
 
 $qRes = safePreparedQuery($conn,
     "SELECT * FROM self_assessment_q_map WHERE sa_id = ? ORDER BY RAND() LIMIT " . max(1, $limit),

@@ -179,21 +179,99 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         // ── Parse PDF inline (extract ALL questions — no slicing) ──
         $raw  = file_get_contents($pdfPath);
         $text = '';
-        preg_match_all('/stream\r?\n(.*?)\r?\nendstream/s', $raw, $streams);
-        foreach ($streams[1] as $stream) {
+
+        // ── PDF stream extraction ──
+        // Supports: plain FlateDecode, ASCII85+FlateDecode (ReportLab default), uncompressed
+        // ASCII85 streams end with ~>endstream (no newline before endstream)
+        // Plain streams end with \nendstream
+        preg_match_all('/stream[\r\n]+(.*?)(?:[\r\n]+|(?=~>))endstream/s', $raw, $streams);
+        // Also catch ~>endstream pattern specifically
+        preg_match_all('/stream[\r\n]+(.*?~>)endstream/s', $raw, $streams85);
+        $allStreams = array_merge($streams[1], $streams85[1]);
+        foreach ($allStreams as $stream) {
+            $src = null;
+
+            // Try plain zlib first
             $dec = @gzuncompress($stream);
             if ($dec === false) $dec = @gzinflate($stream);
-            $src = ($dec !== false) ? $dec : $stream;
+            if ($dec !== false) { $src = $dec; }
+
+            // Try ASCII85 decode then zlib (ReportLab / many modern PDF generators)
+            if ($src === null) {
+                $a85 = trim($stream);
+                if (substr($a85, -2) === '~>') $a85 = substr($a85, 0, -2);
+                // ASCII85: chars 33('!')–117('u'), 'z' for 4 zero bytes
+                $bin = '';
+                $group = '';
+                for ($ci = 0; $ci < strlen($a85); $ci++) {
+                    $c = $a85[$ci];
+                    if ($c === ' ' || $c === "\n" || $c === "\r" || $c === "\t") continue;
+                    if ($c === 'z') {
+                        $bin .= "\0\0\0\0";
+                    } else {
+                        $group .= $c;
+                        if (strlen($group) === 5) {
+                            $n = 0;
+                            for ($gi = 0; $gi < 5; $gi++) $n = $n * 85 + (ord($group[$gi]) - 33);
+                            $bin .= pack('N', $n);
+                            $group = '';
+                        }
+                    }
+                }
+                // Handle remaining partial group
+                if (strlen($group) > 0) {
+                    $pad = 5 - strlen($group);
+                    $group .= str_repeat('u', $pad);
+                    $n = 0;
+                    for ($gi = 0; $gi < 5; $gi++) $n = $n * 85 + (ord($group[$gi]) - 33);
+                    $bin .= substr(pack('N', $n), 0, strlen($group) - $pad);
+                }
+                if (strlen($bin) > 0) {
+                    $dec = @gzuncompress($bin);
+                    if ($dec === false) $dec = @gzinflate($bin);
+                    if ($dec !== false) $src = $dec;
+                }
+            }
+
+            // Fallback: use raw stream as-is
+            if ($src === null) $src = $stream;
+
+            // Extract text from BT...ET blocks
             preg_match_all('/BT(.*?)ET/s', $src, $bt);
             foreach ($bt[1] as $block) {
-                preg_match_all('/\(([^)]*)\)\s*Tj/s', $block, $tj);
-                foreach ($tj[1] as $t) $text .= stripcslashes($t) . ' ';
+                // Tj operator — extract strings allowing escaped parens: \( and \)
+                preg_match_all('/\((?:[^)(\\\\]|\\\\.)*\)\s*Tj/s', $block, $tj);
+                foreach ($tj[0] as $t) {
+                    $inner = preg_replace('/\)\s*Tj$/', '', $t);
+                    $inner = preg_replace('/^\(/', '', $inner);
+                    // Only unescape parens — do NOT use stripcslashes (it converts \327 to raw bytes breaking UTF-8)
+                    $inner = str_replace(['\\)', '\\('], [')', '('], $inner);
+                    // Remove other backslash escapes safely (e.g. \327 → just strip the backslash+digits)
+                    $inner = preg_replace('/\\\\[0-9]{1,3}/', '', $inner);
+                    $inner = preg_replace('/\\\\[nrtf\\\\]/', ' ', $inner);
+                    $text .= trim($inner) . "\n";
+                }
+                // TJ operator (array of strings with kerning numbers)
                 preg_match_all('/\[(.*?)\]\s*TJ/s', $block, $tJ);
-                foreach ($tJ[1] as $t) { preg_match_all('/\(([^)]*)\)/', $t, $p); foreach ($p[1] as $pp) $text .= stripcslashes($pp); }
-                $text .= "\n";
+                foreach ($tJ[1] as $t) {
+                    preg_match_all('/\((?:[^)(\\\\]|\\\\.)*\)/', $t, $parts);
+                    foreach ($parts[0] as $p) {
+                        $inner = preg_replace('/^\(|\)$/', '', $p);
+                        $inner = str_replace(['\\)', '\\('], [')', '('], $inner);
+                        $inner = preg_replace('/\\\\[0-9]{1,3}/', '', $inner);
+                        $inner = preg_replace('/\\\\[nrtf\\\\]/', ' ', $inner);
+                        $text .= $inner;
+                    }
+                    $text .= "\n";
+                }
             }
         }
-        if (strlen(trim($text)) < 20) { preg_match_all('/\(([^\)]{3,})\)/', $raw, $m); $text = implode("\n", $m[1]); }
+
+        // Fallback for very simple unencoded PDFs
+        if (strlen(trim($text)) < 20) {
+            preg_match_all('/\(([^\)]{3,})\)/', $raw, $m);
+            $text = implode("\n", $m[1]);
+        }
 
         // ── Extract ALL questions from PDF ──
         $allQuestions = [];
@@ -203,8 +281,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
             if (preg_match('/^(?:Q\.?\s*)?\d+[\.\)]\s+(.+)/i', $lines[$i], $qm)) {
                 $qText = trim($qm[1]); $opts = []; $correct = 'a'; $i++;
                 while ($i < count($lines)) {
-                    if (preg_match('/^([A-D])[\.\)]\s*(.+)/i', $lines[$i], $om)) { $opts[strtolower($om[1])] = trim($om[2]); $i++; }
-                    elseif (preg_match('/^(?:Answer|Ans)[\s\.:]*([A-D])/i', $lines[$i], $am)) { $correct = strtolower($am[1]); $i++; break; }
+                    // Match "A) text" or "A. text"
+                    if (preg_match('/^([A-D])[\.\)]\s*(.+)/i', $lines[$i], $om)) {
+                        $opts[strtolower($om[1])] = trim($om[2]); $i++;
+                    }
+                    elseif (preg_match('/^(?:Answer|Ans)[\s\.:]*([A-D])/i', $lines[$i], $am)) {
+                        $correct = strtolower($am[1]); $i++; break;
+                    }
                     elseif (preg_match('/^(?:Q\.?\s*)?\d+[\.\)]\s+/i', $lines[$i])) break;
                     else $i++;
                 }
@@ -994,6 +1077,7 @@ function timeAgoSA(string $dt): string {
                                     <th>Time</th>
                                     <th>When</th>
                                     <th>Result</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1001,7 +1085,7 @@ function timeAgoSA(string $dt): string {
                                     $pct = round((float)$row['percentage']);
                                     $cls = $pct >= 75 ? 'score-high' : ($pct >= 50 ? 'score-mid' : 'score-low');
                                 ?>
-                                <tr>
+                                <tr id="attempt-row-<?= $row['attempt_id'] ?>">
                                     <td style="font-weight:600;color:var(--text);"><?= htmlspecialchars($row['title']) ?></td>
                                     <td><?= $row['score'] ?>/<?= $row['total'] ?></td>
                                     <td><?= fmtTime((int)$row['time_taken_sec']) ?></td>
@@ -1010,6 +1094,13 @@ function timeAgoSA(string $dt): string {
                                         <span class="score-pill <?= $cls ?>"><?= $pct ?>%</span>
                                         <a href="self-result-pdf.php?attempt=<?= $row['attempt_id'] ?>"
                                            style="font-size:12px;color:var(--accent);margin-left:6px;text-decoration:none;">View →</a>
+                                    </td>
+                                    <td>
+                                        <button onclick="deleteAttempt(<?= $row['attempt_id'] ?>)"
+                                            title="Delete this result"
+                                            style="background:none;border:none;color:var(--text-soft);font-size:15px;cursor:pointer;padding:4px 6px;border-radius:6px;line-height:1;transition:var(--transition);"
+                                            onmouseover="this.style.background='#fee2e2';this.style.color='#ef4444'"
+                                            onmouseout="this.style.background='none';this.style.color='var(--text-soft)'">✕</button>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
@@ -1079,6 +1170,7 @@ function timeAgoSA(string $dt): string {
                                     <th>Time</th>
                                     <th>When</th>
                                     <th>Result</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1087,7 +1179,7 @@ function timeAgoSA(string $dt): string {
                                     $cls = $pct >= 75 ? 'score-high' : ($pct >= 50 ? 'score-mid' : 'score-low');
                                     $levels = array_map('ucfirst', explode(',', $row['levels_used'] ?? 'mixed'));
                                 ?>
-                                <tr>
+                                <tr id="attempt-row-<?= $row['attempt_id'] ?>">
                                     <td>
                                         <?php foreach($levels as $lv): ?>
                                         <span class="diff-badge diff-<?= strtolower($lv) ?>" style="font-size:11px;padding:3px 8px;">
@@ -1102,6 +1194,13 @@ function timeAgoSA(string $dt): string {
                                         <span class="score-pill <?= $cls ?>"><?= $pct ?>%</span>
                                         <a href="self-result-level.php?attempt=<?= $row['attempt_id'] ?>"
                                            style="font-size:12px;color:var(--accent);margin-left:6px;text-decoration:none;">View →</a>
+                                    </td>
+                                    <td>
+                                        <button onclick="deleteAttempt(<?= $row['attempt_id'] ?>)"
+                                            title="Delete this result"
+                                            style="background:none;border:none;color:var(--text-soft);font-size:15px;cursor:pointer;padding:4px 6px;border-radius:6px;line-height:1;transition:var(--transition);"
+                                            onmouseover="this.style.background='#fee2e2';this.style.color='#ef4444'"
+                                            onmouseout="this.style.background='none';this.style.color='var(--text-soft)'">✕</button>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
@@ -1398,14 +1497,14 @@ function updateLevelInfo() {
     const infoBox  = document.getElementById('levelSelectionInfo');
     const infoText = document.getElementById('levelSelectionText');
     if (checked.length === 0) { infoBox.style.display = 'none'; return; }
-    const numQ = document.querySelector('input[name="num_questions"]').value;
+    const numQ = document.querySelector('#levelTestForm input[name="num_questions"]').value;
     const labels = [...checked].map(cb => 'Level ' + cb.dataset.level).join(', ');
     const perLvl = Math.floor(parseInt(numQ) / checked.length) || 1;
     const total  = perLvl * checked.length;
     infoText.textContent = labels + ' selected — ' + total + ' questions total (' + perLvl + ' per level).';
     infoBox.style.display = 'block';
 }
-document.querySelector('input[name="num_questions"]').addEventListener('input', updateLevelInfo);
+document.querySelector('#levelTestForm input[name="num_questions"]').addEventListener('input', updateLevelInfo);
 
 // ── Level form validation ──
 document.getElementById('levelTestForm').addEventListener('submit', function(e) {
@@ -1466,7 +1565,26 @@ function handleNotifClick(notifId, redirectUrl) {
     window.location.href = redirectUrl;
 }
 
-// ── Charts ──
+// ── Delete attempt ──
+async function deleteAttempt(attemptId) {
+    if (!confirm('Delete this result? This cannot be undone.')) return;
+    try {
+        const fd = new FormData();
+        fd.append('attempt_id', attemptId);
+        fd.append('csrf_token', CSRF_TOKEN);
+        const res = await fetch('api/self-assessment/delete-attempt.php', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.success) {
+            const row = document.getElementById('attempt-row-' + attemptId);
+            if (row) { row.style.opacity = '0'; row.style.transition = 'opacity .3s'; setTimeout(() => row.remove(), 300); }
+        } else {
+            alert('Could not delete: ' + (data.error || 'Unknown error'));
+        }
+    } catch(e) {
+        alert('Network error. Please try again.');
+    }
+}
+
 <?php if (!empty($pdfChartData)): ?>
 new Chart(document.getElementById('pdfChart'), {
     type: 'line',
