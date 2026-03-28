@@ -309,53 +309,10 @@ if ($catChartResult['success'] && $catChartResult['result']) {
     $catChartResult['result']->free();
 }
 
-// ── Report status: check if student has any open (pending/in-progress) report ──
-$reportStatusResult = safePreparedQuery($conn,
-    "SELECT status FROM student_reports WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
-    "i", [$userId]
-);
-$latestReportStatus = null;
-if ($reportStatusResult['success'] && $reportStatusResult['result']) {
-    $rrow = $reportStatusResult['result']->fetch_assoc();
-    $latestReportStatus = $rrow['status'] ?? null;
-    $reportStatusResult['result']->free();
-}
-$hasOpenReport = in_array($latestReportStatus, ['pending', 'in_progress']);
-
-// ── Handle report submission ──
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submit_report') {
-    $reportTitle = trim($_POST['report_title'] ?? '');
-    $reportDesc  = trim($_POST['report_description'] ?? '');
-    $reportImage = null;
-
-    if (!empty($_FILES['report_image']) && $_FILES['report_image']['error'] === UPLOAD_ERR_OK) {
-        $file    = $_FILES['report_image'];
-        $allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-        $maxSize = 5 * 1024 * 1024;
-        if ($file['size'] <= $maxSize && in_array($file['type'], $allowed)) {
-            $ext        = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-            $uploadDir  = 'uploads/reports/';
-            if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
-            $storedName = 'report_' . $userId . '_' . time() . '.' . $ext;
-            $fullPath   = $uploadDir . $storedName;
-            if (move_uploaded_file($file['tmp_name'], $fullPath)) {
-                $reportImage = $fullPath;
-            }
-        }
-    }
-
-    if ($reportTitle !== '' && $reportDesc !== '') {
-        $insResult = safePreparedQuery($conn,
-            "INSERT INTO student_reports (user_id, title, description, image_path, status, created_at)
-             VALUES (?, ?, ?, ?, 'pending', NOW())",
-            "isss", [$userId, $reportTitle, $reportDesc, $reportImage]
-        );
-        if ($insResult['success']) {
-            $hasOpenReport = true;
-            $latestReportStatus = 'pending';
-        }
-    }
-    header('Location: student-dashboard.php?report=sent');
+// ── Report submission disabled on student dashboard ──
+    // (report=sent redirect kept for URL safety)
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submit_report') {
+    header('Location: student-dashboard.php');
     exit;
 }
 
@@ -721,132 +678,12 @@ function timeAgo(string $datetime): string {
 
         @media (max-width: 900px) { .left-sidebar { display: none; } .page-content { padding: 20px; } }
 
-        /* ── Report status dot ── */
-        .report-status-dot {
-            width: 11px; height: 11px; border-radius: 50%;
-            background: #ef4444;
-            border: 2px solid var(--primary);
-            display: inline-block;
-            flex-shrink: 0;
-            animation: reportPulse 2s ease-in-out infinite;
-        }
-        .report-status-dot.resolved { background: #10b981; animation: none; }
-        @keyframes reportPulse {
-            0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,.5); }
-            60%      { box-shadow: 0 0 0 6px rgba(239,68,68,0); }
-        }
-        .report-dot-wrap {
-            display: flex; align-items: center; gap: 7px;
-            padding: 6px 10px;
-            background: rgba(255,255,255,.1);
-            border: 1.5px solid rgba(255,255,255,.15);
-            border-radius: 9px;
-            cursor: pointer; transition: var(--transition);
-            font-size: 11px; font-weight: 600; color: rgba(255,255,255,.8);
-        }
-        .report-dot-wrap:hover { background: rgba(255,255,255,.18); }
-
-        /* ── Report Modal ── */
-        .report-modal-overlay {
-            position: fixed; inset: 0;
-            background: rgba(0,0,0,.55);
-            z-index: 9100;
-            display: flex; align-items: center; justify-content: center;
-            backdrop-filter: blur(4px);
-            opacity: 0; visibility: hidden;
-            transition: opacity .25s, visibility .25s;
-        }
-        .report-modal-overlay.open { opacity: 1; visibility: visible; }
-        .report-modal {
-            background: #fff;
-            border-radius: 20px;
-            width: 100%; max-width: 500px;
-            margin: 16px;
-            box-shadow: 0 24px 64px rgba(0,0,0,.22);
-            overflow: hidden;
-            transform: translateY(18px) scale(.97);
-            transition: transform .28s cubic-bezier(.4,0,.2,1);
-        }
-        .report-modal-overlay.open .report-modal { transform: translateY(0) scale(1); }
-        .report-modal-header {
-            background: linear-gradient(135deg, #1a3a52, #1e5276);
-            padding: 22px 24px 18px;
-            display: flex; align-items: flex-start; justify-content: space-between;
-        }
-        .report-modal-title {
-            font-family: 'Times New Roman', Times, serif; font-size: 17px; font-weight: 800; color: #fff;
-            margin-bottom: 4px;
-        }
-        .report-modal-sub { font-size: 12px; color: rgba(255,255,255,.6); }
-        .report-modal-close {
-            background: rgba(255,255,255,.15); border: none; border-radius: 8px;
-            color: #fff; width: 30px; height: 30px; font-size: 16px;
-            cursor: pointer; display: flex; align-items: center; justify-content: center;
-            flex-shrink: 0; transition: background .15s; margin-left: 12px;
-        }
-        .report-modal-close:hover { background: rgba(255,255,255,.28); }
-        .report-modal-body { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
-        .report-field label {
-            display: block; font-size: 11px; font-weight: 700; text-transform: uppercase;
-            letter-spacing: .06em; color: #64748b; margin-bottom: 6px;
-        }
-        .report-field label span { color: #ef4444; margin-left: 2px; }
-        .report-field input, .report-field textarea {
-            width: 100%; padding: 11px 14px;
-            border: 1.5px solid #e2e8f0; border-radius: 10px;
-            font-family: 'Inter', sans-serif; font-size: 13.5px; color: #0f172a;
-            outline: none; transition: border-color .15s, box-shadow .15s;
-            resize: vertical;
-        }
-        .report-field input:focus, .report-field textarea:focus {
-            border-color: #0ea5e9;
-            box-shadow: 0 0 0 3px rgba(14,165,233,.15);
-        }
-        .report-drop-zone {
-            border: 2px dashed #cbd5e1; border-radius: 12px;
-            padding: 20px; text-align: center;
-            cursor: pointer; background: #f8fafc;
-            transition: border-color .2s, background .2s;
-        }
-        .report-drop-zone:hover, .report-drop-zone.dragover {
-            border-color: #0ea5e9; background: #eff8ff;
-        }
-        .report-drop-zone .dz-icon { font-size: 28px; margin-bottom: 6px; }
-        .report-drop-zone .dz-text { font-size: 13.5px; font-weight: 600; color: #475569; }
-        .report-drop-zone .dz-sub  { font-size: 12px; color: #94a3b8; margin-top: 3px; }
-        .report-img-preview {
-            max-width: 100%; max-height: 140px; border-radius: 8px;
-            object-fit: contain; display: none; margin: 8px auto 0;
-        }
-        .report-modal-footer {
-            padding: 0 24px 22px;
-            display: flex; gap: 10px;
-        }
-        .btn-report-cancel {
-            flex: 1; padding: 11px; border-radius: 10px;
-            border: 1.5px solid #e2e8f0; background: #fff;
-            color: #475569; font-size: 13.5px; font-weight: 600;
-            cursor: pointer; font-family: 'Inter', sans-serif; transition: .15s;
-        }
-        .btn-report-cancel:hover { background: #f1f5f9; }
-        .btn-report-submit {
-            flex: 1; padding: 11px; border-radius: 10px; border: none;
-            background: linear-gradient(135deg, #0ea5e9, #06b6d4);
-            color: #fff; font-size: 13.5px; font-weight: 700;
-            cursor: pointer; font-family: 'Inter', sans-serif; transition: .15s;
-        }
-        .btn-report-submit:hover { opacity: .9; }
-        .report-success-banner {
-            background: #d1fae5; border: 1px solid #a7f3d0; border-radius: 10px;
-            padding: 12px 16px; font-size: 13px; font-weight: 600; color: #065f46;
-            display: flex; align-items: center; gap: 8px; margin: 0 24px 4px;
-        }
 
         /* ══════════════════════════════
            WELCOME BANNER
         ══════════════════════════════ */
         .welcome-section {
-            background: linear-gradient(135deg, var(--primary) 0%, #1e5276 60%, #1a6fa0 100%);
+            background: linear-gradient(135deg, #1a3a52 0%, #1e5276 55%, #1a6fa0 100%);
             border-radius: var(--radius);
             padding: 28px 32px;
             margin-bottom: 24px;
@@ -855,32 +692,34 @@ function timeAgo(string $datetime): string {
             align-items: center;
             position: relative;
             overflow: hidden;
-            box-shadow: 0 4px 24px rgba(26,58,82,.3);
+            box-shadow: 0 4px 24px rgba(26,58,82,.45);
+            border: 1px solid rgba(255,255,255,.08);
         }
         .welcome-section::before {
             content: '';
-            position: absolute; top: -60px; right: -60px;
-            width: 220px; height: 220px;
+            position: absolute; top: -40px; right: -40px;
+            width: 200px; height: 200px;
             border-radius: 50%;
-            background: rgba(255,255,255,.05);
+            background: rgba(255,255,255,.04);
             pointer-events: none;
         }
         .welcome-section::after {
             content: '';
-            position: absolute; bottom: -80px; right: 120px;
-            width: 180px; height: 180px;
+            position: absolute; bottom: -60px; right: 100px;
+            width: 160px; height: 160px;
             border-radius: 50%;
-            background: rgba(14,165,233,.08);
+            background: rgba(14,165,233,.06);
             pointer-events: none;
         }
 
+        .welcome-content { position: relative; z-index: 1; }
         .welcome-content h1 {
-            font-family: 'Times New Roman', Times, serif;
+            font-family: 'Sora', sans-serif;
             font-size: 26px; font-weight: 800;
             color: white; margin-bottom: 6px;
             letter-spacing: -.3px;
         }
-        .welcome-content p { font-size: 14px; color: rgba(255,255,255,.7); }
+        .welcome-content p { font-size: 14px; color: rgba(255,255,255,.75); }
 
         .quick-stats { display: flex; gap: 8px; position: relative; z-index: 1; }
 
@@ -1160,13 +999,7 @@ function timeAgo(string $datetime): string {
             <input type="text" id="searchInput" placeholder="Search assessments..." autocomplete="off">
         </div>
         <div class="nav-profile">
-            <!-- Report status dot -->
-            <?php if ($hasOpenReport || $latestReportStatus === 'resolved'): ?>
-            <div class="report-dot-wrap" onclick="openReportModal()" title="<?= $hasOpenReport ? 'Your report is being reviewed' : 'Report resolved' ?>">
-                <span class="report-status-dot <?= $latestReportStatus === 'resolved' ? 'resolved' : '' ?>"></span>
-                <span><?= $hasOpenReport ? 'Report Pending' : 'Resolved' ?></span>
-            </div>
-            <?php endif; ?>
+            <!-- Help & Support accessible via profile dropdown -->
             <div class="notif-dropdown-wrap">
                 <button class="notification-icon" onclick="toggleNotifDropdown()" id="notifBtn">
                     <span>🔔</span>
@@ -1241,9 +1074,9 @@ function timeAgo(string $datetime): string {
                             <span class="dropdown-item-icon">👤</span>
                             <span>My Profile</span>
                         </a>
-                        <button onclick="openReportModal(); closeProfileDropdown();" class="dropdown-item">
+                        <button onclick="closeProfileDropdown();" class="dropdown-item">
                             <span class="dropdown-item-icon">🚩</span>
-                            <span>Help & Support</span>
+                            <span>Help &amp; Support</span>
                         </button>
                         <div class="dropdown-divider"></div>
                         <button onclick="handleLogout()" class="dropdown-item logout">
@@ -1858,118 +1691,5 @@ document.addEventListener('keydown', function(e) {
 </script>
 <?php endif; ?>
 
-
-<!-- ══ REPORT MODAL ══ -->
-<div class="report-modal-overlay" id="reportModalOverlay" onclick="if(event.target===this)closeReportModal()">
-    <div class="report-modal">
-        <div class="report-modal-header">
-            <div>
-                <div class="report-modal-title">🚩 Report an Issue</div>
-                <div class="report-modal-sub">We'll review your report and get back to you</div>
-            </div>
-            <button class="report-modal-close" onclick="closeReportModal()">✕</button>
-        </div>
-
-        <?php if (!empty($_GET['report']) && $_GET['report'] === 'sent'): ?>
-        <div class="report-success-banner">✅ Your report was submitted! We'll look into it soon.</div>
-        <?php endif; ?>
-
-        <?php if ($latestReportStatus): ?>
-        <div style="margin: 16px 24px 0; padding: 12px 16px; border-radius: 10px;
-            background: <?= $hasOpenReport ? '#fff8ed' : '#d1fae5' ?>;
-            border: 1px solid <?= $hasOpenReport ? '#f59e0b' : '#a7f3d0' ?>;
-            font-size: 13px; font-weight: 600;
-            color: <?= $hasOpenReport ? '#92400e' : '#065f46' ?>;
-            display: flex; align-items: center; gap: 8px;">
-            <?= $hasOpenReport ? '⏳ Your last report is currently <strong>'. ucfirst(str_replace('_',' ',$latestReportStatus)).'</strong>. Admin will respond soon.' : '✅ Your last report has been <strong>Resolved</strong>.' ?>
-        </div>
-        <?php endif; ?>
-
-        <form method="POST" enctype="multipart/form-data" id="reportForm">
-            <input type="hidden" name="action" value="submit_report">
-            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
-            <div class="report-modal-body">
-                <div class="report-field">
-                    <label>Report Title <span>*</span></label>
-                    <input type="text" name="report_title" id="reportTitle"
-                        placeholder="e.g. Assessment not loading" required maxlength="150">
-                </div>
-                <div class="report-field">
-                    <label>Explanation <span>*</span></label>
-                    <textarea name="report_description" id="reportDesc" rows="4"
-                        placeholder="Describe the issue in detail..." required maxlength="2000"></textarea>
-                </div>
-                <div class="report-field">
-                    <label>Screenshot / Image <span style="color:#94a3b8;font-weight:500;">(optional)</span></label>
-                    <label for="reportImageInput" class="report-drop-zone" id="reportDropZone">
-                        <div class="dz-icon">📷</div>
-                        <div class="dz-text">Click to upload or drag & drop</div>
-                        <div class="dz-sub">JPG, PNG, GIF, WEBP — max 5 MB</div>
-                    </label>
-                    <input type="file" name="report_image" id="reportImageInput"
-                        accept="image/jpeg,image/png,image/gif,image/webp"
-                        style="display:none" onchange="previewReportImg(this)">
-                    <img id="reportImgPreview" class="report-img-preview" alt="Preview">
-                </div>
-            </div>
-            <div class="report-modal-footer">
-                <button type="button" class="btn-report-cancel" onclick="closeReportModal()">Cancel</button>
-                <button type="submit" class="btn-report-submit">🚩 Submit Report</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<script>
-function openReportModal() {
-    document.getElementById('reportModalOverlay').classList.add('open');
-    document.addEventListener('keydown', escReport);
-}
-function closeReportModal() {
-    document.getElementById('reportModalOverlay').classList.remove('open');
-    document.removeEventListener('keydown', escReport);
-}
-function escReport(e) { if (e.key === 'Escape') closeReportModal(); }
-
-function previewReportImg(input) {
-    const file = input.files[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-        alert('Image must be under 5MB.');
-        input.value = '';
-        return;
-    }
-    const reader = new FileReader();
-    reader.onload = e => {
-        const preview = document.getElementById('reportImgPreview');
-        preview.src = e.target.result;
-        preview.style.display = 'block';
-        document.querySelector('#reportDropZone .dz-text').textContent = file.name;
-        document.querySelector('#reportDropZone .dz-sub').textContent = (file.size / 1024).toFixed(1) + ' KB';
-    };
-    reader.readAsDataURL(file);
-}
-
-// Drag & drop
-const rdz = document.getElementById('reportDropZone');
-if (rdz) {
-    rdz.addEventListener('dragover', e => { e.preventDefault(); rdz.classList.add('dragover'); });
-    rdz.addEventListener('dragleave', () => rdz.classList.remove('dragover'));
-    rdz.addEventListener('drop', e => {
-        e.preventDefault(); rdz.classList.remove('dragover');
-        const file = e.dataTransfer.files[0];
-        if (file && file.type.startsWith('image/')) {
-            const input = document.getElementById('reportImageInput');
-            try { const dt = new DataTransfer(); dt.items.add(file); input.files = dt.files; } catch(e) {}
-            previewReportImg(input);
-        }
-    });
-}
-
-// Auto-open if just submitted
-<?php if (!empty($_GET['report']) && $_GET['report'] === 'sent'): ?>
-window.addEventListener('load', () => openReportModal());
-<?php endif; ?>
-</script>
 </body>
 </html>
