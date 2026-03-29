@@ -3,32 +3,39 @@
 // api/assessments/results.php
 // Returns JSON results for a given assessment (teacher view).
 // GET ?assessment_id=int
-// Returns {
-//   success: bool,
-//   results: [...],       <- best attempt per student
-//   multi_attempt: bool,  <- true when max_attempts > 1
-//   meta: { total_students, avg_score, pass_rate, pass_percentage,
-//           passing_marks, total_marks, max_attempts }
-// }
 //
-// SCHEMA NOTE: Uses only columns confirmed in the LIVE database.
-//   Live status values: 'in_progress', 'submitted', 'timeout'
-//   No correct_answers / wrong_answers / unanswered columns.
+// FIX: ob_start() as first line captures any stray output from
+// config.php / system-settings.php (PHP notices, MySQL warnings
+// printed when display_errors=1 in development mode).
+// ob_clean() discards all buffered output before json_encode()
+// so the response is always pure JSON.
 // ============================================================
+
+ob_start(); // ← MUST be the very first line — captures any stray output
 
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
 
+// Discard anything config/db-guard may have printed, then set JSON header
+ob_clean();
 header('Content-Type: application/json');
 
+// ── Helper: clean JSON exit ──
+function jsonExit(array $payload, int $code = 200): never {
+    ob_clean();
+    http_response_code($code);
+    header('Content-Type: application/json');
+    echo json_encode($payload);
+    exit;
+}
+
+// ── Auth ──
 $currentUser = validateSession($conn, 'teacher');
 $teacherId   = (int) $currentUser['user_id'];
 
 $assessmentId = (int)($_GET['assessment_id'] ?? 0);
 if ($assessmentId <= 0) {
-    http_response_code(400);
-    echo json_encode(['success' => false, 'message' => 'Invalid assessment ID.']);
-    exit;
+    jsonExit(['success' => false, 'message' => 'Invalid assessment ID.'], 400);
 }
 
 // ── Verify teacher owns this assessment ──
@@ -41,9 +48,7 @@ $asmRes = safePreparedQuery(
 );
 
 if (!$asmRes['success'] || !$asmRes['result'] || $asmRes['result']->num_rows === 0) {
-    http_response_code(403);
-    echo json_encode(['success' => false, 'message' => 'Assessment not found or access denied.']);
-    exit;
+    jsonExit(['success' => false, 'message' => 'Assessment not found or access denied.'], 403);
 }
 $asm = $asmRes['result']->fetch_assoc();
 $asmRes['result']->free();
@@ -54,8 +59,8 @@ $maxAttempts    = (int)($asm['max_attempts'] ?? 1);
 $passPct        = $totalMarks > 0 ? round($passingMarks / $totalMarks * 100, 2) : 0;
 $isMultiAttempt = $maxAttempts > 1;
 
-// ── Fetch all completed attempts ──
-// Only columns that exist in the LIVE database.
+// ── Fetch all completed attempts (live schema columns only) ──
+// Status values in live DB: 'submitted', 'timeout'
 $raw = $conn->query(
     "SELECT
         aa.attempt_id,
@@ -77,16 +82,16 @@ $raw = $conn->query(
 );
 
 if (!$raw) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Query failed: ' . $conn->error]);
-    exit;
+    jsonExit(['success' => false, 'message' => 'Query failed: ' . $conn->error], 500);
 }
 
 // ── Group attempts by student ──
 $studentMap = [];
 
 while ($row = $raw->fetch_assoc()) {
-    $uid = $row['user_id'] !== null ? (int)$row['user_id'] : ('guest_' . $row['attempt_id']);
+    $uid = $row['user_id'] !== null
+        ? (int)$row['user_id']
+        : ('guest_' . $row['attempt_id']);
 
     if (!isset($studentMap[$uid])) {
         $studentMap[$uid] = [
@@ -154,7 +159,8 @@ $count    = count($results);
 $avgScore = $count > 0 ? round($totalPct / $count, 1) : 0;
 $passRate = $count > 0 ? round($passCount / $count * 100) : 0;
 
-echo json_encode([
+// ── Emit clean JSON — ob_clean() strips any last stray output ──
+jsonExit([
     'success'       => true,
     'results'       => $results,
     'multi_attempt' => $isMultiAttempt,
