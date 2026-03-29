@@ -314,6 +314,25 @@ $savedJson     = json_encode(
         }
         .submit-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(16,185,129,.5); }
 
+        .report-btn {
+            padding: 10px 18px;
+            background: rgba(255,255,255,.10);
+            color: rgba(255,255,255,.88);
+            border: 1.5px solid rgba(255,255,255,.22);
+            border-radius: var(--radius-sm);
+            font-family: 'Inter', sans-serif; font-weight: 600; font-size: 13px;
+            cursor: pointer; transition: var(--transition);
+            display: flex; align-items: center; gap: 7px;
+            text-decoration: none;
+        }
+        .report-btn:hover {
+            background: rgba(239,68,68,.25);
+            border-color: var(--danger);
+            color: #fca5a5;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(239,68,68,.25);
+        }
+
         /* ══════════════════════════════
            LAYOUT
         ══════════════════════════════ */
@@ -567,6 +586,9 @@ $savedJson     = json_encode(
         <div class="timer-display" id="timer">
             ⏱️ <span id="timeLeft">--:--</span>
         </div>
+        <a class="report-btn" href="help.html" target="_blank" title="Report an issue or get help">
+            🚩 Report
+        </a>
         <button class="submit-btn" onclick="confirmSubmit()">Submit Test</button>
     </div>
 </header>
