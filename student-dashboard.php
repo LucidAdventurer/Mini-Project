@@ -1074,10 +1074,7 @@ function timeAgo(string $datetime): string {
                             <span class="dropdown-item-icon">👤</span>
                             <span>My Profile</span>
                         </a>
-                        <button onclick="closeProfileDropdown();" class="dropdown-item">
-                            <span class="dropdown-item-icon">🚩</span>
-                            <span>Help &amp; Support</span>
-                        </button>
+                        <a href="help.html" class="dropdown-item" style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:8px;font-size:13.5px;color:#475569;font-family:'Inter',sans-serif;text-decoration:none;transition:.15s;"><span class="dropdown-item-icon">🚩</span><span>Help &amp; Support</span></a>
                         <div class="dropdown-divider"></div>
                         <button onclick="handleLogout()" class="dropdown-item logout">
                             <span class="dropdown-item-icon">🚪</span>

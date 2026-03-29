@@ -884,6 +884,10 @@ function timeAgoSA(string $dt): string {
             background:linear-gradient(135deg, var(--accent), var(--accent2));
             color:white; box-shadow:0 2px 10px rgba(14,165,233,.3);
         }
+        .sidebar-tab-active {
+            background:linear-gradient(135deg, var(--accent), var(--accent2)) !important;
+            color:white !important;
+        }
 
         /* ── GRID ── */
         .dash-grid {
@@ -1177,6 +1181,10 @@ function timeAgoSA(string $dt): string {
                         <span class="dropdown-item-icon">👤</span><span>My Profile</span>
                     </a>
                     <div class="dropdown-divider"></div>
+                    <a href="help.html" class="dropdown-item">
+                        <span class="dropdown-item-icon">🚩</span><span>Help &amp; Support</span>
+                    </a>
+                    <div class="dropdown-divider"></div>
                     <button class="dropdown-item logout" onclick="handleLogout()">
                         <span class="dropdown-item-icon">🚪</span><span>Logout</span>
                     </button>
@@ -1199,8 +1207,12 @@ function timeAgoSA(string $dt): string {
         <a href="student-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
 
         <span class="left-sidebar-section">Self Assessment</span>
-        <button class="sidebar-btn" onclick="openPdfModal()"><i class="fa fa-file-pdf" style="color:#ef4444"></i> PDF Test</button>
-        <button class="sidebar-btn" onclick="openLevelModal()"><i class="fa fa-layer-group" style="color:#8b5cf6"></i> Level Test</button>
+        <button class="sidebar-btn <?= ($_GET['tab'] ?? 'pdf') === 'pdf' ? 'sidebar-tab-active' : '' ?>" onclick="switchTab('pdf')" style="justify-content:flex-start;">
+            <i class="fa fa-file-pdf" style="color:#ef4444"></i> PDF Tests
+        </button>
+        <button class="sidebar-btn <?= ($_GET['tab'] ?? '') === 'level' ? 'sidebar-tab-active' : '' ?>" onclick="switchTab('level')" style="justify-content:flex-start;">
+            <i class="fa fa-layer-group" style="color:#8b5cf6"></i> Level Tests
+        </button>
 
         <div class="left-sidebar-bottom">
             <a href="logout.php"><i class="fa fa-sign-out-alt"></i> Logout</a>
@@ -1242,13 +1254,7 @@ function timeAgoSA(string $dt): string {
             </div>
         </div>
 
-        <!-- TAB BAR -->
-        <div class="tab-bar">
-            <button class="tab-btn <?= ($_GET['tab'] ?? 'pdf') === 'pdf' ? 'active' : '' ?>"
-                onclick="switchTab('pdf')">📄 PDF Tests</button>
-            <button class="tab-btn <?= ($_GET['tab'] ?? '') === 'level' ? 'active' : '' ?>"
-                onclick="switchTab('level')">🎯 Level Tests</button>
-        </div>
+
 
         <!-- PDF TAB -->
         <div class="tab-panel <?= ($_GET['tab'] ?? 'pdf') === 'pdf' ? 'active' : '' ?>" id="tab-pdf">
@@ -1308,9 +1314,9 @@ function timeAgoSA(string $dt): string {
                                     <td>
                                         <button onclick="deleteAttempt(<?= $row['attempt_id'] ?>)"
                                             title="Delete this result"
-                                            style="background:none;border:none;color:var(--text-soft);font-size:15px;cursor:pointer;padding:4px 6px;border-radius:6px;line-height:1;transition:var(--transition);"
+                                            style="background:none;border:none;color:#ef4444;font-size:15px;cursor:pointer;padding:4px 6px;border-radius:6px;line-height:1;transition:var(--transition);"
                                             onmouseover="this.style.background='#fee2e2';this.style.color='#ef4444'"
-                                            onmouseout="this.style.background='none';this.style.color='var(--text-soft)'">✕</button>
+                                            onmouseout="this.style.background='none';this.style.color='#ef4444'">✕</button>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
@@ -1408,9 +1414,9 @@ function timeAgoSA(string $dt): string {
                                     <td>
                                         <button onclick="deleteAttempt(<?= $row['attempt_id'] ?>)"
                                             title="Delete this result"
-                                            style="background:none;border:none;color:var(--text-soft);font-size:15px;cursor:pointer;padding:4px 6px;border-radius:6px;line-height:1;transition:var(--transition);"
+                                            style="background:none;border:none;color:#ef4444;font-size:15px;cursor:pointer;padding:4px 6px;border-radius:6px;line-height:1;transition:var(--transition);"
                                             onmouseover="this.style.background='#fee2e2';this.style.color='#ef4444'"
-                                            onmouseout="this.style.background='none';this.style.color='var(--text-soft)'">✕</button>
+                                            onmouseout="this.style.background='none';this.style.color='#ef4444'">✕</button>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
@@ -1447,7 +1453,7 @@ function timeAgoSA(string $dt): string {
                             </p>
                         </div>
                         <button onclick="openLevelModal()" class="btn-primary" style="width:100%;padding:12px;margin-top:8px;">
-                            + Start Level Test
+                            + Create Level Test
                         </button>
                     </div>
                 </div>
@@ -1619,6 +1625,11 @@ function timeAgoSA(string $dt): string {
 <script>
 // ── Tab switch ──
 function switchTab(tab) {
+    // Highlight sidebar tab buttons
+    document.querySelectorAll('.left-sidebar .sidebar-btn').forEach(b => b.classList.remove('sidebar-tab-active'));
+    const sidebarBtns = document.querySelectorAll('.left-sidebar .sidebar-btn');
+    if (tab === 'pdf' && sidebarBtns[0]) sidebarBtns[0].classList.add('sidebar-tab-active');
+    if (tab === 'level' && sidebarBtns[1]) sidebarBtns[1].classList.add('sidebar-tab-active');
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.getElementById('tab-' + tab).classList.add('active');

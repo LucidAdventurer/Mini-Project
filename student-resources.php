@@ -704,7 +704,7 @@ body {
                 </div>
                 <div style="padding: 8px 0;">
                     <a href="student-profile.php" class="dropdown-item"><span class="di">👤</span> My Profile</a>
-                    <button onclick="return false;" class="dropdown-item" style="background:none;border:none;width:100%;text-align:left;cursor:pointer;display:flex;align-items:center;gap:8px;padding:10px 14px;font-size:13.5px;color:var(--text-mid,#475569);font-family:'Inter',sans-serif;border-radius:8px;transition:.15s;"><span class="di">🚩</span> Help &amp; Support</button>
+                    <a href="help.html" class="dropdown-item" style="display:flex;align-items:center;gap:8px;padding:10px 14px;font-size:13.5px;color:var(--text-mid,#475569);font-family:'Inter',sans-serif;border-radius:8px;transition:.15s;text-decoration:none;"><span class="di">🚩</span> Help &amp; Support</a>
                     <div class="dropdown-divider"></div>
                     <a href="#" onclick="if(confirm('Are you sure you want to logout?')) window.location.href='logout.php'" class="dropdown-item logout"><span class="di">🚪</span> Logout</a>
                 </div>
