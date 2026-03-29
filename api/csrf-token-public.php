@@ -5,11 +5,16 @@
 
    For unauthenticated pages (registration, login).
    Does NOT require a logged-in session.
-   config.php seeds $_SESSION['csrf_token'] on session start,
-   so the token is always available here.
+   Starts the session and seeds the token itself —
+   does not rely on config.php to have done it.
    ======================================== */
 
 require_once __DIR__ . '/../config.php';
+
+// Ensure session is active (config.php may or may not call session_start)
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 header('Content-Type: application/json');
 
@@ -19,10 +24,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
+// Seed token if missing
 if (empty($_SESSION['csrf_token'])) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Session not initialized.']);
-    exit;
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
 echo json_encode(['success' => true, 'token' => $_SESSION['csrf_token']]);
