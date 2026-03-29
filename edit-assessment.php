@@ -897,7 +897,7 @@ function fmtDate(?string $dt): string {
                 </div>
                 <div class="dropdown-menu">
                     <a href="teacher-profile.php" class="dropdown-item"><i class="fa fa-user"></i> My Profile</a>
-                    <a href="help.html" target="_blank" rel="noopener" class="dropdown-item"><i class="fa fa-circle-question"></i> Help &amp; Support</a>
+                    <a href="teacher-help.html" target="_blank" rel="noopener" class="dropdown-item"><i class="fa fa-circle-question"></i> Help &amp; Support</a>
                     <div class="dropdown-divider"></div>
                     <button onclick="handleLogout()" class="dropdown-item danger"><i class="fa fa-right-from-bracket"></i> Logout</button>
                 </div>

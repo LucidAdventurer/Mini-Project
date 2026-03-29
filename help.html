@@ -2,178 +2,553 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Help & Support</title>
+  <title>Help & Support — PREPAURA</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --primary:       #1a3a52;
+      --primary-mid:   #234C6A;
+      --accent:        #0ea5e9;
+      --accent-glow:   rgba(14,165,233,.18);
+      --accent2:       #06b6d4;
+      --success:       #10b981;
+      --warning:       #f59e0b;
+      --danger:        #ef4444;
+      --bg:            #f0f4f8;
+      --surface:       #ffffff;
+      --surface2:      #f8fafc;
+      --border:        #e2e8f0;
+      --text:          #0f172a;
+      --text-mid:      #475569;
+      --text-soft:     #94a3b8;
+      --radius:        16px;
+      --radius-sm:     10px;
+      --shadow:        0 1px 3px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.06);
+      --shadow-md:     0 4px 24px rgba(0,0,0,.10);
+      --nav-h:         68px;
+      --transition:    .2s cubic-bezier(.4,0,.2,1);
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
     body {
-      font-family: Arial, sans-serif;
-      margin: 0;
-      background: #f5f7fb;
-      color: #333;
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding-top: var(--nav-h);
+      -webkit-font-smoothing: antialiased;
     }
 
-    header {
-      background: #2c3e50;
-      color: white;
-      padding: 20px;
-      text-align: center;
-    }
-
-    main {
-      max-width: 1000px;
-      margin: auto;
-      padding: 20px;
-    }
-
-    h2 {
-      color: #2c3e50;
-      margin-top: 30px;
-    }
-
-    .card {
-      background: white;
-      padding: 20px;
-      margin-top: 15px;
-      border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    }
-
-    .faq-item {
-      margin-bottom: 15px;
-    }
-
-    .faq-item strong {
-      display: block;
-      margin-bottom: 5px;
-    }
-
-    form {
+    /* ── NAVBAR ── */
+    .navbar {
+      background: var(--primary);
+      padding: 0 28px;
+      height: var(--nav-h);
       display: flex;
-      flex-direction: column;
-      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 1000;
+      box-shadow: 0 1px 0 rgba(255,255,255,.06), 0 4px 20px rgba(0,0,0,.18);
+    }
+    .navbar-brand {
+      display: flex; align-items: center; gap: 12px;
+      text-decoration: none; flex-shrink: 0;
+    }
+    .nav-profile { display: flex; align-items: center; gap: 10px; }
+    .profile-button {
+      display: flex; align-items: center; gap: 9px;
+      padding: 6px 12px 6px 6px;
+      background: rgba(255,255,255,.12);
+      border: 1.5px solid rgba(255,255,255,.15);
+      border-radius: 10px;
+      cursor: pointer; transition: var(--transition);
+      text-decoration: none;
+    }
+    .profile-button:hover { background: rgba(255,255,255,.2); }
+    .profile-avatar {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-weight: 700; font-size: 13px;
+    }
+    .profile-name { font-weight: 600; font-size: 13.5px; color: rgba(255,255,255,.95); }
+
+    /* ── LAYOUT ── */
+    .page-wrapper { min-height: calc(100vh - var(--nav-h)); }
+
+
+
+    .page-content { padding: 28px; max-width: 1200px; margin: 0 auto; }
+
+    /* ── HERO ── */
+    .hero {
+      background: linear-gradient(135deg, var(--primary) 0%, #1e5276 60%, #1a6fa0 100%);
+      border-radius: var(--radius); padding: 28px 32px; margin-bottom: 24px;
+      display: flex; justify-content: space-between; align-items: center;
+      position: relative; overflow: hidden;
+      box-shadow: 0 4px 24px rgba(26,58,82,.3);
+    }
+    .hero::before {
+      content: ''; position: absolute; top: -60px; right: -60px;
+      width: 220px; height: 220px; border-radius: 50%;
+      background: rgba(255,255,255,.05); pointer-events: none;
+    }
+    .hero-title {
+      font-family: 'Sora', sans-serif; font-size: 24px; font-weight: 800;
+      color: white; margin-bottom: 6px;
+    }
+    .hero-sub { font-size: 13.5px; color: rgba(255,255,255,.7); }
+
+    /* ── CARDS ── */
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-family: 'Sora', sans-serif; font-weight: 700; font-size: 16px;
+      color: var(--text); margin-bottom: 16px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .card-title span { font-size: 20px; }
+
+    /* ── GRID ── */
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 24px;
+    }
+    @media (max-width: 1100px) { .content-grid { grid-template-columns: 1fr; } }
+
+    /* ── GETTING STARTED LIST ── */
+    .step-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+    .step-list li {
+      display: flex; align-items: flex-start; gap: 12px;
+      font-size: 14px; color: var(--text-mid); line-height: 1.6;
+    }
+    .step-num {
+      width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: white; font-size: 12px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      margin-top: 1px;
     }
 
-    input, textarea {
-      padding: 10px;
-      border-radius: 6px;
-      border: 1px solid #ccc;
-      font-size: 14px;
+    /* ── FAQ ── */
+    .faq-item {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+    .faq-question {
+      width: 100%; padding: 14px 18px;
+      background: var(--surface2);
+      border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 14px; font-weight: 600; color: var(--text);
+      font-family: 'Inter', sans-serif;
+      text-align: left; transition: var(--transition);
+    }
+    .faq-question:hover { background: #e0f2fe; color: var(--accent); }
+    .faq-question.open { background: linear-gradient(135deg,#e0f2fe,#e0f9ff); color: var(--accent); }
+    .faq-icon { font-size: 12px; transition: transform .25s; flex-shrink: 0; }
+    .faq-question.open .faq-icon { transform: rotate(180deg); }
+    .faq-answer {
+      max-height: 0; overflow: hidden;
+      transition: max-height .3s ease, padding .3s ease;
+      font-size: 13.5px; color: var(--text-mid); line-height: 1.65;
+      padding: 0 18px;
+    }
+    .faq-answer.open { max-height: 400px; padding: 14px 18px; }
+
+    .faq-steps {
+      margin: 0; padding-left: 0; list-style: none;
+      display: flex; flex-direction: column; gap: 8px;
+      counter-reset: step-counter;
+    }
+    .faq-steps li {
+      display: flex; align-items: flex-start; gap: 10px;
+      font-size: 13.5px; color: var(--text-mid); line-height: 1.6;
+      counter-increment: step-counter;
+    }
+    .faq-steps li::before {
+      content: counter(step-counter);
+      min-width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: white; font-size: 11px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      margin-top: 1px;
     }
 
-    button {
-      background: #3498db;
-      color: white;
-      padding: 10px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
+    /* ── TROUBLESHOOTING ── */
+    .tip-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .tip-list li {
+      display: flex; align-items: flex-start; gap: 10px;
+      font-size: 13.5px; color: var(--text-mid); line-height: 1.55;
     }
+    .tip-list li i { color: var(--accent); margin-top: 2px; flex-shrink: 0; width: 16px; }
 
-    button:hover {
-      background: #2980b9;
+    /* ── CONTACT FORM ── */
+    .form-group { margin-bottom: 14px; }
+    .form-group label {
+      display: block; margin-bottom: 6px;
+      font-size: 13px; font-weight: 600; color: var(--text-mid);
     }
+    .form-group input, .form-group textarea, .form-group select {
+      width: 100%; padding: 11px 14px;
+      border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+      font-size: 13.5px; font-family: 'Inter', sans-serif;
+      background: var(--surface2); color: var(--text);
+      transition: var(--transition); outline: none;
+    }
+    .form-group input:focus, .form-group textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+      background: var(--surface);
+    }
+    .form-group textarea { resize: vertical; min-height: 100px; }
+    .btn-primary {
+      width: 100%; padding: 12px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: white; border: none; border-radius: var(--radius-sm);
+      font-size: 14px; font-weight: 700; font-family: 'Inter', sans-serif;
+      cursor: pointer; transition: var(--transition);
+      box-shadow: 0 4px 14px rgba(14,165,233,.3);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(14,165,233,.4); }
 
-    footer {
-      margin-top: 40px;
-      background: #2c3e50;
-      color: white;
-      text-align: center;
-      padding: 15px;
-      font-size: 14px;
+    /* ── CONTACT INFO CARD ── */
+    .contact-info-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px; border-radius: var(--radius-sm);
+      background: var(--surface2); border: 1px solid var(--border);
+      margin-bottom: 10px;
     }
+    .contact-info-icon {
+      width: 36px; height: 36px; border-radius: 9px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    .contact-info-label { font-size: 11px; color: var(--text-soft); margin-bottom: 2px; }
+    .contact-info-value { font-size: 13.5px; font-weight: 600; color: var(--text); }
+
+    /* ── SUCCESS TOAST ── */
+    .toast {
+      display: none; align-items: center; gap: 12px;
+      background: #f0fdf4; border: 1.5px solid var(--success);
+      border-radius: var(--radius-sm); padding: 14px 18px;
+      margin-bottom: 16px; font-size: 13.5px; color: #166534;
+      box-shadow: 0 2px 12px rgba(16,185,129,.15);
+    }
+    .toast.show { display: flex; }
+
+    @media (max-width: 900px) { .page-content { padding: 20px; } }
   </style>
 </head>
-
 <body>
 
-<header>
-  <h1>Help & Support</h1>
-  <p>Find answers or get assistance with the platform</p>
-</header>
+<!-- NAVBAR -->
+<nav class="navbar">
+  <a href="student-dashboard.php" class="navbar-brand">
+    <img src="prepaura-logo.png" alt="Prepaura Logo" style="width:44px;height:44px;border-radius:10px;object-fit:contain;background:white;padding:3px;">
+    <div style="display:flex;flex-direction:column;line-height:1.15;">
+      <span style="font-family:'Sora',sans-serif;font-size:17px;font-weight:800;letter-spacing:.5px;color:white;">PREPAURA</span>
+      <span style="font-size:10.5px;font-weight:400;color:rgba(255,255,255,.65);letter-spacing:.02em;">Placement Training Platform</span>
+    </div>
+  </a>
+  <div class="nav-profile">
+    <a href="student-dashboard.php" class="profile-button">
+      <div class="profile-avatar"><i class="fa fa-arrow-left" style="font-size:12px;"></i></div>
+      <span class="profile-name">Back to Dashboard</span>
+    </a>
+  </div>
+</nav>
 
-<main>
+<!-- LAYOUT -->
+<div class="page-wrapper">
 
-  <!-- Getting Started -->
-  <section class="card">
-    <h2>Getting Started</h2>
-    <p>
-      This platform helps students practice assessments, track performance,
-      and prepare for placements. If you're new:
-    </p>
-    <ul>
-      <li>Create or log into your account</li>
-      <li>Browse available assessments</li>
-      <li>Start a test and track your progress</li>
-      <li>Review analytics and improve weak areas</li>
-    </ul>
-  </section>
+  <!-- MAIN CONTENT -->
+  <main class="page-content">
 
-  <!-- FAQ -->
-  <section class="card">
-    <h2>Frequently Asked Questions</h2>
-
-    <div class="faq-item">
-      <strong>How do I start an assessment?</strong>
-      <span>Select an assessment and click "Start". Your progress will be saved automatically.</span>
+    <!-- HERO -->
+    <div class="hero">
+      <div>
+        <div class="hero-title">🛟 Help & Support</div>
+        <div class="hero-sub">Find answers, troubleshoot issues, or contact our support team</div>
+      </div>
     </div>
 
-    <div class="faq-item">
-      <strong>Can I resume a test later?</strong>
-      <span>Yes, if the test allows it, you can resume from where you left off.</span>
+    <div class="content-grid">
+      <!-- LEFT COLUMN -->
+      <div>
+
+        <!-- Getting Started -->
+        <div class="card">
+          <div class="card-title"><span>🚀</span> Getting Started</div>
+          <p style="font-size:13.5px;color:var(--text-mid);margin-bottom:16px;line-height:1.65;">
+            Welcome to PREPAURA — your placement training companion. Here's how to get going:
+          </p>
+          <ul class="step-list">
+            <li><span class="step-num">1</span> Log in or create your student account</li>
+            <li><span class="step-num">2</span> Browse available assessments from the Assessments page</li>
+            <li><span class="step-num">3</span> Start a test and track your answers in real time</li>
+            <li><span class="step-num">4</span> Review your results and score analytics after submission</li>
+            <li><span class="step-num">5</span> Use Self Assessment to practice with PDFs and level tests</li>
+          </ul>
+        </div>
+
+        <!-- FAQ -->
+        <div class="card">
+          <div class="card-title"><span>❓</span> Frequently Asked Questions</div>
+
+          <div class="faq-item">
+            <button class="faq-question" onclick="toggleFaq(this)">
+              How do I start an assessment?
+              <span class="faq-icon">▼</span>
+            </button>
+            <div class="faq-answer">
+              <ol class="faq-steps">
+                <li>Click <strong>Assessments</strong> in the left sidebar.</li>
+                <li>Browse the list and find the test assigned to you.</li>
+                <li>Click the <strong>Start</strong> or <strong>View</strong> button on the assessment card.</li>
+                <li>Read the instructions on the preview page, then click <strong>Begin Test</strong>.</li>
+                <li>Answer each question — your responses are saved automatically.</li>
+                <li>Click <strong>Submit</strong> when done to see your results.</li>
+              </ol>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-question" onclick="toggleFaq(this)">
+              Can I resume a test after leaving?
+              <span class="faq-icon">▼</span>
+            </button>
+            <div class="faq-answer">
+              <ol class="faq-steps">
+                <li>Go back to the <strong>Assessments</strong> page.</li>
+                <li>Find the test you previously started — it will show an <em>In Progress</em> status.</li>
+                <li>Click <strong>Resume</strong> to continue from where you left off.</li>
+                <li>⚠️ Note: If the test is time-limited, the timer keeps running even when you leave.</li>
+              </ol>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-question" onclick="toggleFaq(this)">
+              How does Self Assessment work?
+              <span class="faq-icon">▼</span>
+            </button>
+            <div class="faq-answer">
+              <ol class="faq-steps">
+                <li>Click <strong>Self Assessment</strong> in the sidebar.</li>
+                <li>Choose <strong>PDF Tests</strong> to upload a study PDF and auto-generate questions, or choose <strong>Level Tests</strong> for structured quizzes.</li>
+                <li>For PDF Tests: click <strong>Create PDF Test</strong>, upload your PDF, set the number of questions, and start.</li>
+                <li>For Level Tests: click <strong>Create Level Test</strong>, pick a difficulty (Easy / Medium / Hard), and begin.</li>
+                <li>After completing the test, your score and history are saved automatically.</li>
+              </ol>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-question" onclick="toggleFaq(this)">
+              Why are some features not working?
+              <span class="faq-icon">▼</span>
+            </button>
+            <div class="faq-answer">
+              <ol class="faq-steps">
+                <li>Try <strong>refreshing the page</strong> (Ctrl+R or Cmd+R).</li>
+                <li>Clear your browser cache: go to Settings → Privacy → Clear browsing data.</li>
+                <li>Disable browser extensions (ad blockers can interfere).</li>
+                <li>Switch to <strong>Chrome</strong> or <strong>Firefox</strong> for best compatibility.</li>
+                <li>Check your internet connection is stable.</li>
+                <li>If the issue persists, use the Contact Support form below to report it.</li>
+              </ol>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-question" onclick="toggleFaq(this)">
+              Is my data secure?
+              <span class="faq-icon">▼</span>
+            </button>
+            <div class="faq-answer">
+              <ol class="faq-steps">
+                <li>Your account is protected with <strong>session-based authentication</strong> — sessions expire after inactivity.</li>
+                <li>All forms use <strong>CSRF tokens</strong> to prevent unauthorized submissions.</li>
+                <li>Never share your password with anyone, including support staff.</li>
+                <li>Always log out after using a shared or public computer.</li>
+              </ol>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-question" onclick="toggleFaq(this)">
+              How do I update my profile picture?
+              <span class="faq-icon">▼</span>
+            </button>
+            <div class="faq-answer">
+              <ol class="faq-steps">
+                <li>Click your name in the <strong>top-right corner</strong> of the navbar.</li>
+                <li>Select <strong>My Profile</strong> from the dropdown menu.</li>
+                <li>On your profile page, click the <strong>profile image area</strong> or the upload button.</li>
+                <li>Choose an image file from your device (JPG or PNG recommended).</li>
+                <li>Click <strong>Save</strong> — your new picture will appear immediately across the platform.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+        <!-- Troubleshooting -->
+        <div class="card">
+          <div class="card-title"><span>🔧</span> Troubleshooting</div>
+          <ul class="tip-list">
+            <li>✅ Clear browser cache if pages don't load correctly</li>
+            <li>✅ Ensure you have a stable internet connection</li>
+            <li>✅ Disable browser extensions if something breaks</li>
+            <li>✅ Use Chrome or Firefox for best compatibility</li>
+            <li>✅ Log out and log back in if your session seems stuck</li>
+            <li>✅ If PDF upload fails, ensure the PDF has selectable text (not scanned images)</li>
+          </ul>
+        </div>
+
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <div>
+
+        <!-- Contact Form -->
+        <div class="card">
+          <div class="card-title"><span>📬</span> Contact Support</div>
+          <p style="font-size:13px;color:var(--text-mid);margin-bottom:16px;">Facing an issue? Fill out the form and we'll get back to you.</p>
+
+          <div id="successToast" class="toast">
+            <i class="fa fa-circle-check" style="color:var(--success);font-size:16px;"></i>
+            <span>Your request has been submitted! We'll respond shortly.</span>
+          </div>
+
+          <form id="contactForm" onsubmit="handleSubmit(event)">
+            <div class="form-group">
+              <label>Your Name</label>
+              <input type="text" name="name" placeholder="Enter your full name" required>
+            </div>
+            <div class="form-group">
+              <label>Email Address</label>
+              <input type="email" name="email" placeholder="your.email@example.com" required>
+            </div>
+            <div class="form-group">
+              <label>Issue Type</label>
+              <select name="issue_type">
+                <option value="">Select a category</option>
+                <option>Assessment / Test Problem</option>
+                <option>Login / Account Issue</option>
+                <option>Self Assessment / PDF Upload</option>
+                <option>Performance / Score Issue</option>
+                <option>Feature Request</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Describe Your Issue</label>
+              <textarea name="message" placeholder="Please describe your issue in detail..." required></textarea>
+            </div>
+            <div id="errorMsg" style="display:none;color:#ef4444;font-size:13px;margin-bottom:10px;padding:10px;background:#fef2f2;border-radius:8px;border:1px solid #fca5a5;"></div>
+            <button type="submit" class="btn-primary" id="submitBtn">
+              <span id="btnText">&#9992; Submit Request</span>
+              <span id="btnSpinner" style="display:none;">⏳ Sending...</span>
+            </button>
+          </form>
+        </div>
+
+        <!-- Contact Info -->
+        <div class="card">
+          <div class="card-title"><span>📞</span> Direct Contact</div>
+          <div class="contact-info-item">
+            <div class="contact-info-icon" style="background:#e0f2fe;">📧</div>
+            <div>
+              <div class="contact-info-label">Email Support</div>
+              <div class="contact-info-value">tempminiprojects6@gmail.com</div>
+            </div>
+          </div>
+          <div class="contact-info-item">
+            <div class="contact-info-icon" style="background:#f0fdf4;">🕐</div>
+            <div>
+              <div class="contact-info-label">Response Time</div>
+              <div class="contact-info-value">Within 24 hours</div>
+            </div>
+          </div>
+          <p style="font-size:12px;color:var(--text-soft);margin-top:10px;line-height:1.6;">
+            For urgent issues, email us directly with your student ID and a description of the problem.
+          </p>
+        </div>
+
+      </div>
     </div>
 
-    <div class="faq-item">
-      <strong>Why are some features not working?</strong>
-      <span>This could be due to browser issues or connectivity. Try refreshing or switching browsers.</span>
-    </div>
-
-    <div class="faq-item">
-      <strong>Is my data secure?</strong>
-      <span>Basic security measures are in place, but always avoid sharing sensitive credentials.</span>
-    </div>
-  </section>
-
-  <!-- Troubleshooting -->
-  <section class="card">
-    <h2>Troubleshooting</h2>
-    <ul>
-      <li>Clear browser cache if pages don’t load correctly</li>
-      <li>Ensure stable internet connection</li>
-      <li>Disable extensions if something breaks</li>
-      <li>Try another browser (Chrome/Firefox recommended)</li>
-    </ul>
-  </section>
-
-  <!-- Contact / Report -->
-  <section class="card">
-    <h2>Contact Support</h2>
-    <p>If you face issues or want to report a bug, use the form below:</p>
-
-    <form onsubmit="handleSubmit(event)">
-      <input type="text" placeholder="Your Name" required>
-      <input type="email" placeholder="Your Email" required>
-      <textarea rows="4" placeholder="Describe your issue..." required></textarea>
-      <button type="submit">Submit</button>
-    </form>
-
-    <p style="margin-top:10px; font-size:14px;">
-      Or report directly via email:
-      <br>
-      <strong>tempminiprojects6@gmail.com</strong>
-    </p>
-  </section>
-
-</main>
-
-<footer>
-  <p>&copy; 2026 Placement & Training Platform</p>
-</footer>
+  </main>
+</div>
 
 <script>
-  function handleSubmit(event) {
+  function toggleFaq(btn) {
+    const answer = btn.nextElementSibling;
+    const isOpen = btn.classList.contains('open');
+    // Close all
+    document.querySelectorAll('.faq-question').forEach(q => {
+      q.classList.remove('open');
+      q.nextElementSibling.classList.remove('open');
+    });
+    // Open clicked if it wasn't open
+    if (!isOpen) {
+      btn.classList.add('open');
+      answer.classList.add('open');
+    }
+  }
+
+  async function handleSubmit(event) {
     event.preventDefault();
-    alert("Your request has been submitted (demo only).");
+    const form      = document.getElementById('contactForm');
+    const btn       = document.getElementById('submitBtn');
+    const btnText   = document.getElementById('btnText');
+    const spinner   = document.getElementById('btnSpinner');
+    const errorMsg  = document.getElementById('errorMsg');
+    const toast     = document.getElementById('successToast');
+
+    // Show loading
+    btn.disabled  = true;
+    btnText.style.display  = 'none';
+    spinner.style.display  = 'inline';
+    errorMsg.style.display = 'none';
+
+    try {
+      const formData = new FormData(form);
+      const res      = await fetch('help-contact.php', { method: 'POST', body: formData });
+      const data     = await res.json();
+
+      if (data.success) {
+        toast.classList.add('show');
+        form.reset();
+        setTimeout(() => toast.classList.remove('show'), 5000);
+      } else {
+        errorMsg.textContent   = data.error || 'Something went wrong. Please try again.';
+        errorMsg.style.display = 'block';
+      }
+    } catch (err) {
+      errorMsg.textContent   = 'Network error. Please check your connection and try again.';
+      errorMsg.style.display = 'block';
+    } finally {
+      btn.disabled           = false;
+      btnText.style.display  = 'inline';
+      spinner.style.display  = 'none';
+    }
   }
 </script>
 

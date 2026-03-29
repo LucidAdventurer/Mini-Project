@@ -752,7 +752,7 @@ function sel(?array $a, string $key, string $value, string $default = ''): strin
             </div>
             <div class="dropdown-menu">
                 <a href="teacher-profile.php" class="dropdown-item"><i class="fa fa-user" style="width:16px;"></i> My Profile</a>
-                <a href="help.html" target="_blank" rel="noopener" class="dropdown-item"><i class="fa fa-circle-question" style="width:16px;"></i> Help &amp; Support</a>
+                <a href="teacher-help.html" target="_blank" rel="noopener" class="dropdown-item"><i class="fa fa-circle-question" style="width:16px;"></i> Help &amp; Support</a>
                 <div class="dropdown-divider"></div>
                 <button onclick="handleLogout()" class="dropdown-item danger"><i class="fa fa-right-from-bracket" style="width:16px;"></i> Logout</button>
             </div>

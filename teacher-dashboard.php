@@ -982,7 +982,7 @@ body::before {
           </div>
           <div class="dropdown-menu">
             <a href="teacher-profile.php" class="dropdown-item"><i class="fa fa-user"></i> My Profile</a>
-            <a href="#" onclick="event.preventDefault(); document.getElementById('profileDropdown').classList.remove('open'); openReportModal();" class="dropdown-item"><i class="fa fa-circle-question"></i> Help &amp; Support</a>
+            <a href="teacher-help.html" class="dropdown-item"><i class="fa fa-circle-question"></i> Help &amp; Support</a>
             <div class="dropdown-divider"></div>
             <a href="#" onclick="handleLogout()" class="dropdown-item"><i class="fa fa-right-from-bracket"></i> Logout</a>
           </div>
