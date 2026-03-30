@@ -74,24 +74,47 @@ $asm = $asmResult['result']->fetch_assoc();
 $asmResult['result']->free();
 $maxAttempts = (int)$asm['max_attempts'];
 
-// ── Resume existing in_progress attempt ──
+// ── Resume existing in_progress attempt (only if time hasn't expired) ──
 $existingResult = safePreparedQuery($conn,
-    "SELECT attempt_id FROM assessment_attempts
+    "SELECT attempt_id,
+            TIMESTAMPDIFF(SECOND, start_time, NOW()) AS elapsed_seconds,
+            (SELECT duration_minutes FROM assessments WHERE assessment_id = ?) * 60 AS total_seconds
+     FROM assessment_attempts
      WHERE assessment_id = ? AND user_id = ? AND status = 'in_progress'
      ORDER BY start_time DESC LIMIT 1",
-    "ii", [$assessmentId, $userId]
+    "iii", [$assessmentId, $assessmentId, $userId]
 );
 
 if ($existingResult['success'] && $existingResult['result'] && $existingResult['result']->num_rows > 0) {
-    $existingRow = $existingResult['result']->fetch_assoc();
+    $existingRow    = $existingResult['result']->fetch_assoc();
     $existingResult['result']->free();
-    echo json_encode([
-        'success'    => true,
-        'attempt_id' => (int)$existingRow['attempt_id'],
-        'resumed'    => true,
-    ]);
-    exit;
+
+    $elapsed = (int)$existingRow['elapsed_seconds'];
+    $total   = (int)$existingRow['total_seconds'];
+
+    if ($elapsed >= $total) {
+        // Attempt has timed out — close it and fall through to create a new one
+        safePreparedQuery($conn,
+            "UPDATE assessment_attempts
+             SET status = 'timeout', submitted_at = NOW()
+             WHERE attempt_id = ? AND status = 'in_progress'",
+            "i", [$existingRow['attempt_id']]
+        );
+        // attemptsUsed will be re-counted below
+    } else {
+        // Still valid — resume it
+        echo json_encode([
+            'success'    => true,
+            'attempt_id' => (int)$existingRow['attempt_id'],
+            'resumed'    => true,
+        ]);
+        exit;
+    }
 }
+if (!empty($existingResult['result'])) {
+    $existingResult['result']->free();
+}
+
 if (!empty($existingResult['result'])) {
     $existingResult['result']->free();
 }
