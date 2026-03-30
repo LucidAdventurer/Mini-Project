@@ -614,8 +614,10 @@ body::before {
     <span class="sidebar-section-label">Navigation</span>
     <a href="teacher-dashboard.php"   class="sidebar-link"><i class="fa fa-house"></i> Dashboard</a>
     <a href="teacher-assessments.php" class="sidebar-link active"><i class="fa fa-clipboard-list"></i> Assessments</a>
+    <a href="teacher-students.php" class="sidebar-link"><i class="fa fa-user-graduate"></i> Students</a>
     <a href="manage-groups.php"       class="sidebar-link"><i class="fa fa-users"></i> Manage Groups</a>
     <a href="teacher-resources.php"   class="sidebar-link"><i class="fa fa-folder-open"></i> Resources</a>
+
 
     <span class="sidebar-section-label">Filter by Category</span>
     <a href="#" class="sidebar-link" id="cat-all"       onclick="setSidebarCat('all',this);return false;"><i class="fa fa-layer-group"></i> All Tests</a>
