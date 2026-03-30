@@ -103,7 +103,7 @@ if (!function_exists('timeAgo')) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>My Assessments — PREPAURA</title>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet">
+
 <style>
 /* ── DESIGN TOKENS ── */
 :root {
@@ -138,8 +138,8 @@ if (!function_exists('timeAgo')) {
   --r-xl:        28px;
   --ease:        cubic-bezier(0.22,1,0.36,1);
   --t:           0.22s var(--ease);
-  --font-head:   'Syne', system-ui, sans-serif;
-  --font-body:   'DM Sans', system-ui, sans-serif;
+  --font-head:   'Times New Roman', Arial, serif;
+  --font-body:   'Calibri', 'Segoe UI', Arial, sans-serif;
   --nav-h:       64px;
 }
 
@@ -147,6 +147,7 @@ if (!function_exists('timeAgo')) {
 html { -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
 body {
   font-family: var(--font-body);
+  font-size: 15px;
   background: var(--surface);
   color: var(--text-1);
   min-height: 100vh;
@@ -323,7 +324,7 @@ body::before {
 }
 .page-header-left { position: relative; z-index: 1; }
 .page-header-label { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--orchid); margin-bottom: 6px; }
-.page-header-left h1 { font-family: var(--font-head); font-size: 26px; font-weight: 800; color: white; margin-bottom: 4px; line-height: 1.2; }
+.page-header-left h1 { font-family: var(--font-head); font-size: 28px; font-weight: 800; color: white; margin-bottom: 4px; line-height: 1.2; }
 .page-header-left p { font-size: 14px; color: rgba(255,255,255,0.55); }
 .btn-create {
   display: inline-flex; align-items: center; gap: 8px;
@@ -379,7 +380,7 @@ body::before {
 
 .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .card-title-group { flex: 1; }
-.card-title { font-family: var(--font-head); font-size: 17px; font-weight: 700; color: var(--text-1); margin-bottom: 4px; line-height: 1.3; }
+.card-title { font-family: var(--font-head); font-size: 18px; font-weight: 700; color: var(--text-1); margin-bottom: 4px; line-height: 1.3; }
 .card-meta-sub { font-size: 12.5px; color: var(--text-3); }
 .card-badges { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
 
@@ -447,7 +448,7 @@ body::before {
   gap: 12px; padding: 72px 20px; border-radius: var(--r-xl); text-align: center;
 }
 .state-message .state-icon { font-size: 48px; opacity: 0.4; }
-.state-message h3 { font-family: var(--font-head); font-size: 20px; font-weight: 700; color: var(--text-1); }
+.state-message h3 { font-family: var(--font-head); font-size: 22px; font-weight: 700; color: var(--text-1); }
 .state-message p  { font-size: 14px; color: var(--text-3); }
 .state-empty { background: var(--surface-3); border: 1px dashed var(--border-2); box-shadow: var(--shadow-xs); }
 .state-error { background: rgba(244,63,94,0.04); border: 1px solid rgba(244,63,94,0.2); }
@@ -507,8 +508,30 @@ body::before {
 }
 .btn-modal-action:hover { opacity: 0.85; transform: translateY(-1px); }
 .btn-csv      { background: var(--emerald); color: white; }
+.btn-excel    { background: #16a34a; color: white; }
 .btn-pdf-dl   { background: var(--violet); color: white; }
 .btn-modal-print { background: var(--sky); color: var(--ink); }
+/* Attempt breakdown styles */
+.attempt-rows td { background: rgba(124,58,237,0.03); }
+.attempt-badge {
+  display:inline-flex;align-items:center;gap:4px;
+  padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;
+  background:var(--violet-dim);color:var(--violet);border:1px solid var(--border-2);
+}
+.attempt-badge.best { background:rgba(245,158,11,0.12);color:#b45309;border-color:rgba(245,158,11,0.25); }
+.attempt-detail-row td { padding: 4px 16px 4px 32px !important; border-bottom:1px solid var(--border); font-size:12.5px; color:var(--text-2); background:rgba(245,243,255,0.5); }
+.attempt-expand-btn {
+  background:none;border:none;cursor:pointer;color:var(--violet);
+  font-size:11px;font-weight:600;padding:2px 6px;border-radius:4px;
+  font-family:var(--font-body);transition:var(--t);
+}
+.attempt-expand-btn:hover{background:var(--violet-dim);}
+.total-attempts-pill {
+  display:inline-flex;align-items:center;gap:3px;
+  padding:2px 7px;border-radius:20px;font-size:11px;font-weight:600;
+  background:var(--violet-dim);color:var(--violet);margin-left:4px;
+  vertical-align:middle;
+}
 .modal-body { padding: 0; overflow-y: auto; flex: 1; }
 .results-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .results-table thead th {
@@ -597,7 +620,7 @@ body::before {
         </div>
         <div class="dropdown-menu">
           <a href="teacher-profile.php" class="dropdown-item"><i class="fa fa-user"></i> My Profile</a>
-          <a href="help.html" target="_blank" rel="noopener" class="dropdown-item"><i class="fa fa-circle-question"></i> Help &amp; Support</a>
+          <a href="teacher-help.html" target="_blank" rel="noopener" class="dropdown-item"><i class="fa fa-circle-question"></i> Help &amp; Support</a>
           <div class="dropdown-divider"></div>
           <button class="dropdown-item danger" onclick="handleLogout()"><i class="fa fa-right-from-bracket"></i> Logout</button>
         </div>
@@ -617,7 +640,6 @@ body::before {
     <a href="teacher-students.php" class="sidebar-link"><i class="fa fa-user-graduate"></i> Students</a>
     <a href="manage-groups.php"       class="sidebar-link"><i class="fa fa-users"></i> Manage Groups</a>
     <a href="teacher-resources.php"   class="sidebar-link"><i class="fa fa-folder-open"></i> Resources</a>
-
 
     <span class="sidebar-section-label">Filter by Category</span>
     <a href="#" class="sidebar-link" id="cat-all"       onclick="setSidebarCat('all',this);return false;"><i class="fa fa-layer-group"></i> All Tests</a>
@@ -822,9 +844,10 @@ body::before {
         <option value="pass">Passed</option>
         <option value="fail">Failed</option>
       </select>
-      <button class="btn-modal-action btn-csv" onclick="downloadCurrentCSV()"><i class="fa fa-file-csv"></i> CSV</button>
-      <button class="btn-modal-action btn-pdf-dl" onclick="downloadCurrentPDF()"><i class="fa fa-file-pdf"></i> PDF</button>
-      <button class="btn-modal-action btn-modal-print" onclick="printModal()"><i class="fa fa-print"></i> Print</button>
+      <button class="btn-modal-action btn-csv"   onclick="exportModal('csv')"  title="Download CSV"><i class="fa fa-file-csv"></i> CSV</button>
+      <button class="btn-modal-action btn-excel" onclick="exportModal('excel')" title="Download Excel"><i class="fa fa-file-excel"></i> Excel</button>
+      <button class="btn-modal-action btn-pdf-dl" onclick="exportModal('pdf')" title="Save as PDF"><i class="fa fa-file-pdf"></i> PDF</button>
+      <button class="btn-modal-action btn-modal-print" onclick="exportModal('print')" title="Print"><i class="fa fa-print"></i> Print</button>
     </div>
     <div class="modal-body" id="modalBody">
       <div style="padding:48px;text-align:center;color:var(--text-3);font-size:14px;">
@@ -984,18 +1007,18 @@ function viewResults(id, title) {
     .then(r => r.json())
     .then(data => {
       if (!data.success) throw new Error(data.message || 'Failed to load');
-      renderResultsTable(data.results, data.meta);
+      renderResultsTable(data.results, data.meta, data.multi_attempt);
     })
     .catch(err => {
       document.getElementById('modalBody').innerHTML = `<div style="padding:48px;text-align:center;color:var(--rose);"><div style="font-size:40px;margin-bottom:14px;">⚠️</div><strong>Failed to load results</strong><br><small>${err.message}</small></div>`;
     });
 }
 
-function renderResultsTable(results, meta) {
+function renderResultsTable(results, meta, isMulti) {
   document.getElementById('modalSubtitle').textContent =
     `${meta?.total_students ?? results.length} students · Avg: ${meta?.avg_score ?? '—'}% · Pass rate: ${meta?.pass_rate ?? '—'}%`;
   document.getElementById('modalFooter').textContent =
-    `Showing ${results.length} result(s) · Pass mark: ${meta?.passing_marks ?? '—'} / ${meta?.total_marks ?? '—'} points`;
+    `Showing ${results.length} result(s) · Pass mark: ${meta?.passing_marks ?? '—'} / ${meta?.total_marks ?? '—'} points${isMulti ? ' · Up to ' + meta?.max_attempts + ' attempts' : ''}`;
   if (!results.length) {
     document.getElementById('modalBody').innerHTML = '<div style="padding:48px;text-align:center;color:var(--text-3);font-size:14px;"><div style="font-size:40px;margin-bottom:14px;opacity:0.4">📭</div>No students have attempted this assessment yet.</div>';
     return;
@@ -1003,10 +1026,21 @@ function renderResultsTable(results, meta) {
   results.sort((a, b) => b.percentage - a.percentage);
   let rows = '';
   results.forEach((r, i) => {
-    const pass = r.percentage >= (meta?.pass_percentage ?? 40);
-    rows += `<tr data-name="${(r.student_name||'').toLowerCase()}" data-email="${(r.email||'').toLowerCase()}" data-result="${pass?'pass':'fail'}">
-      <td class="result-rank">#${i+1}</td>
-      <td><div class="result-name">${escHtml(r.student_name || '—')}</div><div class="result-email">${escHtml(r.email || '')}</div></td>
+    const pass    = r.percentage >= (meta?.pass_percentage ?? 40);
+    const rankNum = i + 1;
+    const rankCls = rankNum === 1 ? 'color:var(--gold);' : rankNum === 2 ? 'color:var(--text-2);' : rankNum === 3 ? 'color:#92400e;' : 'color:var(--text-3);';
+
+    const attemptsInfo = isMulti && r.total_attempts > 1
+      ? `<span class="total-attempts-pill" title="${r.total_attempts} attempt(s)">${r.total_attempts}×</span>`
+      : '';
+
+    const detailsBtn = isMulti && r.attempts && r.attempts.length > 0
+      ? `<button class="attempt-expand-btn" onclick="toggleAttempts(this, ${i})" title="Show all attempts">▶ ${r.attempts.length} attempt${r.attempts.length>1?'s':''}</button>`
+      : `<a href="assessment-results.php?id=${currentModalAssessmentId}" style="color:var(--violet);font-size:12px;font-weight:600;text-decoration:none;">View →</a>`;
+
+    rows += `<tr data-name="${(r.student_name||'').toLowerCase()}" data-email="${(r.email||'').toLowerCase()}" data-result="${pass?'pass':'fail'}" data-rowidx="${i}">
+      <td class="result-rank" style="${rankCls}font-weight:800;">${rankNum}</td>
+      <td><div class="result-name">${escHtml(r.student_name || '—')}${attemptsInfo}</div><div class="result-email">${escHtml(r.email || '')}</div></td>
       <td>${escHtml(r.department || '—')}</td>
       <td>
         <div class="result-score ${pass?'pass':'fail'}">${Number(r.percentage).toFixed(1)}%</div>
@@ -1015,23 +1049,82 @@ function renderResultsTable(results, meta) {
       <td>${r.score ?? '—'} / ${meta?.total_marks ?? '—'}</td>
       <td>${pass ? '<span style="color:var(--emerald);font-weight:700;">✅ Pass</span>' : '<span style="color:var(--rose);font-weight:700;">❌ Fail</span>'}</td>
       <td style="font-size:12px;color:var(--text-3);">${r.submitted_at ? new Date(r.submitted_at).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—'}</td>
-      <td><a href="assessment-results.php?id=${currentModalAssessmentId}" style="color:var(--violet);font-size:12px;font-weight:600;text-decoration:none;">View →</a></td>
+      <td>${detailsBtn}</td>
     </tr>`;
+
+    // Pre-build attempt detail rows (hidden initially) for multi-attempt
+    if (isMulti && r.attempts && r.attempts.length > 0) {
+      r.attempts.forEach((att, ai) => {
+        const attPass = att.percentage >= (meta?.pass_percentage ?? 40);
+        const isBest  = att.percentage === r.percentage;
+        rows += `<tr class="attempt-detail-row" id="att-row-${i}-${ai}" style="display:none;" data-result="${pass?'pass':'fail'}" data-name="${(r.student_name||'').toLowerCase()}" data-email="${(r.email||'').toLowerCase()}">
+          <td></td>
+          <td colspan="2" style="padding-left:32px!important;">
+            <span class="attempt-badge${isBest?' best':''}" style="margin-right:6px;">
+              ${isBest?'★ Best · ':''}Attempt ${att.attempt_number}
+            </span>
+            <span style="color:var(--text-3);font-size:11px;">${att.submitted_at ? new Date(att.submitted_at).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—'}</span>
+          </td>
+          <td>
+            <div style="font-weight:600;color:${attPass?'var(--emerald)':'var(--rose)'};">${att.percentage.toFixed(1)}%</div>
+          </td>
+          <td style="font-size:12px;">${att.score} / ${meta?.total_marks ?? '—'}</td>
+          <td>${attPass ? '<span style="color:var(--emerald);font-size:12px;font-weight:600;">✅ Pass</span>' : '<span style="color:var(--rose);font-size:12px;font-weight:600;">❌ Fail</span>'}</td>
+          <td style="font-size:11.5px;color:var(--text-3);">✓${att.correct} ✗${att.wrong}</td>
+          <td></td>
+        </tr>`;
+      });
+    }
   });
+
   document.getElementById('modalBody').innerHTML = `
     <table class="results-table" id="resultsTable">
       <thead><tr><th>#</th><th>Student</th><th>Department</th><th>Score %</th><th>Marks</th><th>Result</th><th>Date</th><th>Details</th></tr></thead>
       <tbody id="resultsTableBody">${rows}</tbody>
     </table>`;
+
+  // Store data for export
+  window._currentResults = results;
+  window._currentMeta    = meta;
+  window._currentIsMulti = isMulti;
+}
+
+function toggleAttempts(btn, rowIdx) {
+  const rows = document.querySelectorAll(`[id^="att-row-${rowIdx}-"]`);
+  const isOpen = btn.textContent.startsWith('▼');
+  rows.forEach(r => r.style.display = isOpen ? 'none' : '');
+  const cnt = rows.length;
+  btn.textContent = isOpen ? `▶ ${cnt} attempt${cnt>1?'s':''}` : `▼ ${cnt} attempt${cnt>1?'s':''}`;
 }
 
 function filterModalTable() {
   const search = document.getElementById('modalSearch').value.toLowerCase();
   const status = document.getElementById('modalStatusFilter').value;
   document.querySelectorAll('#resultsTableBody tr').forEach(row => {
+    if (row.classList.contains('attempt-detail-row')) {
+      // Attempt rows: hide if parent is hidden
+      const matchSearch = !search || (row.dataset.name||'').includes(search) || (row.dataset.email||'').includes(search);
+      const matchStatus = status === 'all' || row.dataset.result === status;
+      if (!matchSearch || !matchStatus) row.style.display = 'none';
+      // (shown state controlled by toggleAttempts — only collapse if hidden)
+      return;
+    }
     const matchSearch = !search || (row.dataset.name||'').includes(search) || (row.dataset.email||'').includes(search);
     const matchStatus = status === 'all' || row.dataset.result === status;
-    row.style.display = matchSearch && matchStatus ? '' : 'none';
+    const visible = matchSearch && matchStatus;
+    row.style.display = visible ? '' : 'none';
+    // Also collapse attempt rows when parent is hidden
+    if (!visible) {
+      const idx = row.dataset.rowidx;
+      if (idx !== undefined) {
+        document.querySelectorAll(`[id^="att-row-${idx}-"]`).forEach(ar => ar.style.display = 'none');
+        const btn = row.querySelector('.attempt-expand-btn');
+        if (btn) {
+          const cnt = document.querySelectorAll(`[id^="att-row-${idx}-"]`).length;
+          btn.textContent = `▶ ${cnt} attempt${cnt>1?'s':''}`;
+        }
+      }
+    }
   });
 }
 
@@ -1043,38 +1136,32 @@ document.getElementById('resultsModal').addEventListener('click', function(e) {
   if (e.target === this) closeResultsModal();
 });
 
-function downloadResults(id, type) { window.location.href = `api/assessment/export-results.php?assessment_id=${id}&format=${type}`; }
-function downloadCurrentCSV()      { if (currentModalAssessmentId) downloadResults(currentModalAssessmentId, 'csv'); }
-function downloadCurrentPDF()      { if (currentModalAssessmentId) window.location.href = `api/assessment/export-results.php?assessment_id=${currentModalAssessmentId}&format=pdf`; }
+// ── Unified export: respects current pass/fail filter ──
+function exportModal(format) {
+  if (!currentModalAssessmentId) return;
+  const filter = document.getElementById('modalStatusFilter')?.value || 'all';
+  const url = `api/assessment/export-results.php?assessment_id=${currentModalAssessmentId}&format=${format}&filter=${filter}`;
+  if (format === 'pdf' || format === 'print') {
+    const w = window.open(url, '_blank');
+    if (w) w.focus();
+  } else {
+    window.location.href = url;
+  }
+}
 
+// Legacy aliases (card-level buttons)
+function downloadResults(id, type) {
+  const url = `api/assessment/export-results.php?assessment_id=${id}&format=${type}`;
+  if (type === 'pdf' || type === 'print') { const w = window.open(url, '_blank'); if (w) w.focus(); }
+  else window.location.href = url;
+}
+function downloadCurrentCSV()  { exportModal('csv'); }
+function downloadCurrentPDF()  { exportModal('pdf'); }
 function printResults(id) {
   const w = window.open(`api/assessment/export-results.php?assessment_id=${id}&format=print`, '_blank');
   if (w) w.focus();
 }
-function printModal() {
-  const content = document.getElementById('modalBody')?.innerHTML;
-  const title   = currentModalTitle;
-  const w = window.open('', '_blank');
-  if (!w) return;
-  w.document.write(`<!DOCTYPE html><html><head>
-    <title>Results - ${escHtml(title)}</title>
-    <style>
-      body { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #1a1425; padding: 20px; }
-      h1 { font-size: 18px; margin-bottom: 4px; } p { color: #8b7fa8; font-size: 12px; margin-bottom: 20px; }
-      table { width: 100%; border-collapse: collapse; }
-      th { background: #f7f5fb; padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; border-bottom: 2px solid rgba(124,58,237,0.1); }
-      td { padding: 10px 12px; border-bottom: 1px solid #ede9f6; }
-      .pass { color: #10b981; font-weight: 700; } .fail { color: #f43f5e; font-weight: 700; }
-      .result-mini-bar, a[href] { display: none; }
-    </style>
-  </head><body>
-    <h1>📋 ${escHtml(title)}</h1>
-    <p>Printed on ${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})}</p>
-    ${content}
-  </body></html>`);
-  w.document.close();
-  setTimeout(() => { w.print(); }, 400);
-}
+function printModal() { exportModal('print'); }
 
 function escHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
