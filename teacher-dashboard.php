@@ -1001,6 +1001,7 @@ body::before {
     <a href="teacher-assessments.php" class="sidebar-link"><i class="fa fa-clipboard-list"></i> Assessments</a>
     <a href="manage-groups.php" class="sidebar-link"><i class="fa fa-users"></i> Manage Groups</a>
     <a href="teacher-resources.php" class="sidebar-link"><i class="fa fa-folder-open"></i> Resources</a>
+    <a href="teacher-students.php" class="sidebar-link"><i class="fa fa-user-graduate"></i> Students</a>
     <div class="sidebar-bottom">
       <button onclick="handleLogout()" class="sidebar-logout"><i class="fa fa-right-from-bracket"></i> Logout</button>
     </div>
