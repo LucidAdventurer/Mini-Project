@@ -219,6 +219,13 @@ foreach ($categoryMap as $type => $counts) {
 }
 
 // ── 9. Build questions list with student's answer and correct options ──
+// The frontend (buildQuestionCard) expects:
+//   options       => { 'a': 'text', 'b': 'text', ... }  (label-keyed map)
+//   correctAnswer => 'a' | 'b' | ...  (label of the correct option)
+//   userAnswer    => 'a' | 'b' | null (label of the student's selected option)
+//   marksObtained => float            (alias for marksAwarded used by frontend)
+$labels = ['a', 'b', 'c', 'd', 'e', 'f'];
+
 $questionList = [];
 $qNum = 1;
 foreach ($questionIds as $qid) {
@@ -226,41 +233,50 @@ foreach ($questionIds as $qid) {
     $ans  = $answersByQuestion[$qid] ?? null;
     $opts = $optionsByQuestion[$qid] ?? [];
 
-    // Build options array for the response
-    $optionsOut = [];
-    foreach ($opts as $opt) {
-        $optionsOut[] = [
-            'option_id'   => $opt['option_id'],
-            'option_text' => $opt['option_text'],
-            'is_correct'  => $opt['is_correct'],
-        ];
-    }
-
-    $selectedOptionId = $ans['option_id'] ?? null;
-    $textAnswer       = $ans['text']       ?? null;
+    $selectedOptionId = $ans['option_id']    ?? null;
+    $textAnswer       = $ans['text']          ?? null;
     $marksAwarded     = $ans['marks_awarded'] ?? 0.0;
 
-    // Is the selected option correct?
+    // Sort options by option_order so labels are always a, b, c, d in order
+    usort($opts, fn($x, $y) => $x['option_order'] <=> $y['option_order']);
+
+    // Build label-keyed map; track which label is correct and which the student picked
+    $optionsMap   = [];
+    $correctLabel = null;
+    $userLabel    = null;
+    $idx          = 0;
+    foreach ($opts as $opt) {
+        $label = $labels[$idx] ?? chr(97 + $idx);
+        $optionsMap[$label] = $opt['option_text'];
+        if ($opt['is_correct'])                      $correctLabel = $label;
+        if ($opt['option_id'] === $selectedOptionId) $userLabel    = $label;
+        $idx++;
+    }
+
+    // Determine correctness
     $isCorrect = false;
-    if ($selectedOptionId !== null && isset($opts[$selectedOptionId])) {
-        $isCorrect = $opts[$selectedOptionId]['is_correct'];
+    if ($userLabel !== null) {
+        $isCorrect = ($userLabel === $correctLabel);
     } elseif ($textAnswer !== null && $marksAwarded > 0) {
         $isCorrect = true;
     }
 
     $questionList[] = [
-        'questionNumber'  => $qNum++,
-        'questionId'      => $qid,
-        'text'            => $q['question_text'],
-        'type'            => $q['question_type'],
-        'marks'           => (int)$q['marks'],
-        'negativeMarks'   => (float)$q['negative_marks'],
-        'explanation'     => $q['explanation'],
-        'options'         => $optionsOut,
-        'selectedOptionId' => $selectedOptionId,
-        'textAnswer'      => $textAnswer,
-        'isCorrect'       => $isCorrect,
-        'marksAwarded'    => $marksAwarded,
+        'questionNumber' => $qNum++,
+        'questionId'     => $qid,
+        'text'           => $q['question_text'],
+        'questionText'   => $q['question_text'],
+        'type'           => $q['question_type'],
+        'marks'          => (int)$q['marks'],
+        'negativeMarks'  => (float)$q['negative_marks'],
+        'explanation'    => $q['explanation'],
+        'options'        => $optionsMap,
+        'correctAnswer'  => $correctLabel,
+        'userAnswer'     => $userLabel,
+        'textAnswer'     => $textAnswer,
+        'isCorrect'      => $isCorrect,
+        'marksAwarded'   => $marksAwarded,
+        'marksObtained'  => $marksAwarded,
     ];
 }
 

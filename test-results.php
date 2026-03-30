@@ -1102,17 +1102,11 @@ function renderResults(d) {
     renderCategories(d.categoryPerformance);
     renderTime(d);
 
-    if (d.showCorrectAnswers && d.questions && d.questions.length) {
+    if (d.questions && d.questions.length) {
         renderQuestions(d.questions, d.correctAnswers, d.wrongAnswers, d.unanswered);
         updateFilterCounts(d.correctAnswers, d.wrongAnswers, d.unanswered);
         document.getElementById('filterButtons').style.display = 'flex';
         setupFilters();
-    } else if (!d.showCorrectAnswers) {
-        document.getElementById('questionsList').innerHTML = `
-            <div class="hidden-results-notice">
-                <div class="notice-icon">🔒</div>
-                <p>The teacher has not enabled answer review for this assessment.</p>
-            </div>`;
     }
 
     document.getElementById('loadingState').style.display  = 'none';
