@@ -720,6 +720,7 @@ body {
     <span class="sidebar-section">Navigation</span>
     <a href="student-dashboard.php"><i class="fa fa-home"></i> Dashboard</a>
     <a href="student-assessments.php"><i class="fa fa-clipboard-list"></i> Assessments</a>
+    <a href="self-assessment.php"><i class="fa fa-user-check"></i> Self Assessment</a>
     <a href="student-resources.php" class="active"><i class="fa fa-folder-open"></i> Resources</a>
 
     <span class="sidebar-section">Filter by Category</span>

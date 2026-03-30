@@ -35,7 +35,6 @@ require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
-$conn = createDatabaseConnection();
 if (!$conn) { http_response_code(503); echo json_encode(['success'=>false,'error'=>'Database unavailable.']); exit; }
 
 $user   = validateSession($conn, 'student');

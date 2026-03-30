@@ -29,7 +29,7 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-$saId = (int)($_GET['sa_id'] ?? 0);
+$saId = (int)($_GET['sa_id'] ?? $_POST['sa_id'] ?? 0);
 if (!$saId) { header('Location: self-assessment.php'); exit; }
 
 $saRes = safePreparedQuery($conn,
@@ -51,15 +51,39 @@ if ($sa['status'] !== 'ready') {
 /* ── Submit handler ── */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submit_attempt') {
     if (!hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) die('CSRF error');
+    set_time_limit(0); // Disable timeout for submit — bulk INSERTs can be slow
 
     $attemptId = (int)($_POST['attempt_id'] ?? 0);
     $timeTaken = max(0, (int)($_POST['time_taken'] ?? 0));
     $answers   = $_POST['answers'] ?? [];
 
     if ($attemptId) {
+        // Collect map_ids that were actually shown (all hidden inputs are submitted,
+        // answered ones have a value like 'a'/'b'/'c'/'d', unanswered have empty string).
+        $submittedMapIds = [];
+        foreach ($answers as $mid => $val) {
+            $mid = (int)$mid;
+            if ($mid > 0) $submittedMapIds[] = $mid;
+        }
+
+        if (empty($submittedMapIds)) {
+            // No questions were in the form — record 0 and redirect
+            safePreparedQuery($conn,
+                "UPDATE self_assessment_attempts
+                 SET score=0, total=0, percentage=0, time_taken_sec=?, status='submitted', submitted_at=NOW()
+                 WHERE attempt_id=? AND user_id=?",
+                "iii", [$timeTaken, $attemptId, $userId]
+            );
+            header("Location: self-result-pdf.php?attempt=$attemptId");
+            exit;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($submittedMapIds), '?'));
+        $types        = str_repeat('i', count($submittedMapIds));
         $mapRes = safePreparedQuery($conn,
-            "SELECT map_id, correct_option FROM self_assessment_q_map WHERE sa_id = ?",
-            "i", [$saId]
+            "SELECT map_id, correct_option FROM self_assessment_q_map
+             WHERE sa_id = ? AND map_id IN ($placeholders)",
+            "i" . $types, array_merge([$saId], $submittedMapIds)
         );
         $maps = [];
         if ($mapRes['success'] && $mapRes['result']) {
@@ -69,8 +93,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
 
         $score = 0; $total = count($maps);
         foreach ($maps as $mapId => $correct) {
-            $selected  = $answers[$mapId] ?? null;
-            $isCorrect = ($selected === $correct) ? 1 : 0;
+            // Treat empty string as NULL (skipped question)
+            $selected  = (isset($answers[$mapId]) && $answers[$mapId] !== '') ? $answers[$mapId] : null;
+            $isCorrect = ($selected !== null && $selected === $correct) ? 1 : 0;
             if ($isCorrect) $score++;
             safePreparedQuery($conn,
                 "INSERT INTO self_assessment_answers (attempt_id, map_id, selected_option, is_correct)
@@ -292,10 +317,11 @@ $questionsJson = json_encode($jsQ, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_AMP);
 </header>
 
 <!-- HIDDEN SUBMIT FORM -->
-<form method="POST" id="testForm" style="display:none">
+<form method="POST" id="testForm" action="self-take-pdf-test.php?sa_id=<?= $saId ?>" style="display:none">
     <input type="hidden" name="action"     value="submit_attempt">
     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
     <input type="hidden" name="attempt_id" value="<?= $attemptId ?>">
+    <input type="hidden" name="sa_id"      value="<?= $saId ?>">
     <input type="hidden" name="time_taken" id="timeTakenInput" value="0">
     <?php foreach ($questions as $q): ?>
     <input type="hidden" name="answers[<?= $q['map_id'] ?>]" id="ans_<?= $q['map_id'] ?>" value="">

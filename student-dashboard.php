@@ -126,6 +126,7 @@ if ($notifResult['success'] && $notifResult['result']) {
     $unreadCount = (int)($notifRow['cnt'] ?? 0);
     $notifResult['result']->free();
 }
+// Assessment notif count will be added to badge after $assessNotifNew is populated (see below)
 
 // ── Available assessment count (only assigned to this student) ──
 $availCountResult = safePreparedQuery($conn,
@@ -260,6 +261,80 @@ if ($notifDropResult['success'] && $notifDropResult['result']) {
     }
     $notifDropResult['result']->free();
 }
+
+// ── Assessment notifications: new tests (not started) + previous tests (at least 1 attempt) ──
+// ── Fetch dismissed assessment IDs (table may not exist yet — handled gracefully) ──
+$dismissedAssessIds = [];
+$dismissRes = safePreparedQuery($conn,
+    "SELECT assessment_id FROM student_notif_dismiss WHERE user_id = ?",
+    "i", [$userId]
+);
+if ($dismissRes['success'] && $dismissRes['result']) {
+    while ($row = $dismissRes['result']->fetch_assoc()) {
+        $dismissedAssessIds[] = (int)$row['assessment_id'];
+    }
+    $dismissRes['result']->free();
+}
+$dismissedSet = array_flip($dismissedAssessIds);
+
+// ── Assessment notifications: new tests + previous tests ──
+$assessNotifResult = safePreparedQuery($conn,
+    "SELECT
+        a.assessment_id,
+        a.title,
+        a.category,
+        a.end_time,
+        a.created_at,
+        (SELECT COUNT(*) FROM assessment_attempts aa
+          WHERE aa.assessment_id = a.assessment_id
+            AND aa.user_id = ?
+            AND aa.status = 'submitted') AS attempts_used,
+        (SELECT aa2.percentage FROM assessment_attempts aa2
+          WHERE aa2.assessment_id = a.assessment_id
+            AND aa2.user_id = ?
+            AND aa2.status = 'submitted'
+          ORDER BY aa2.submitted_at DESC LIMIT 1) AS last_score
+     FROM assessments a
+     WHERE a.status = 'published'
+       AND (
+           a.visibility = 'public'
+           OR EXISTS (
+               SELECT 1 FROM assessment_targets at2
+               WHERE at2.assessment_id = a.assessment_id
+                 AND at2.target_type = 'student'
+                 AND at2.target_id = ?
+           )
+           OR EXISTS (
+               SELECT 1 FROM assessment_targets at2
+               JOIN group_members gm ON gm.group_id = at2.target_id
+               WHERE at2.assessment_id = a.assessment_id
+                 AND at2.target_type = 'group'
+                 AND gm.student_id = ?
+           )
+       )
+     ORDER BY a.created_at DESC
+     LIMIT 20",
+    "iiii", [$userId, $userId, $userId, $userId]
+);
+
+$assessNotifNew  = []; // Tests not yet attempted
+$assessNotifPrev = []; // Tests with at least 1 attempt (and not dismissed)
+
+if ($assessNotifResult['success'] && $assessNotifResult['result']) {
+    while ($row = $assessNotifResult['result']->fetch_assoc()) {
+        $row['attempts_used'] = (int)$row['attempts_used'];
+        $isDismissed = isset($dismissedSet[(int)$row['assessment_id']]);
+        if ($row['attempts_used'] === 0) {
+            $assessNotifNew[] = $row; // New tests are never dismissable
+        } elseif (!$isDismissed) {
+            $assessNotifPrev[] = $row; // Previous tests only show if not dismissed
+        }
+    }
+    $assessNotifResult['result']->free();
+}
+
+// Total assessment notification count (for badge supplement)
+$assessNotifCount = count($assessNotifNew);
 
 // ── Overall completion % (attempts used vs available) ──
 $completionPct = ($availableTests > 0)
@@ -519,6 +594,17 @@ function timeAgo(string $datetime): string {
 .notif-dismiss-btn:hover { background: rgba(239,68,68,.1); color: #ef4444; }
 .notif-item-time { font-size: 11px; color: var(--text-soft); margin-top: 4px; }
         .notif-empty { padding: 32px 20px; text-align: center; color: var(--text-soft); font-size: 13px; }
+        .notif-section-label {
+            padding: 8px 20px 5px;
+            font-size: 10.5px;
+            font-weight: 700;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+            color: var(--text-soft);
+            background: var(--surface2);
+            border-bottom: 1px solid var(--border);
+            border-top: 1px solid var(--border);
+        }
 
         .notification-badge {
             position: absolute;
@@ -1003,26 +1089,109 @@ function timeAgo(string $datetime): string {
             <div class="notif-dropdown-wrap">
                 <button class="notification-icon" onclick="toggleNotifDropdown()" id="notifBtn">
                     <span>🔔</span>
-                    <?php if ($unreadCount > 0): ?>
-                    <div class="notification-badge"><?= $unreadCount ?></div>
+                    <?php
+                    $totalBadge = $unreadCount + $assessNotifCount;
+                    if ($totalBadge > 0): ?>
+                    <div class="notification-badge"><?= $totalBadge > 99 ? '99+' : $totalBadge ?></div>
                     <?php endif; ?>
                 </button>
                 <div class="notif-dropdown" id="notifDropdown">
-                    <div class="notif-dropdown-header">Notifications</div>
+                    <div class="notif-dropdown-header">
+                        <span>🔔 Notifications</span>
+                        <?php if ($unreadCount > 0): ?>
+                        <button onclick="markAllRead()" style="
+                            background:none;border:none;font-size:11.5px;color:var(--accent);
+                            font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;
+                            padding:3px 8px;border-radius:6px;transition:.15s;"
+                            onmouseover="this.style.background='#eff8ff'"
+                            onmouseout="this.style.background='none'">
+                            Mark all read
+                        </button>
+                        <?php endif; ?>
+                    </div>
                     <div class="notif-list">
-                        <?php if (empty($notifItems)): ?>
-                            <div class="notif-empty">No notifications yet.</div>
-                        <?php else: foreach ($notifItems as $n):
+
+                        <?php /* ── NEW TESTS section ── */
+                        if (!empty($assessNotifNew)): ?>
+                        <div class="notif-section-label">🆕 New Tests</div>
+                        <?php foreach ($assessNotifNew as $an):
+                            $anEnd = $an['end_time'] ? date('d M, h:i A', strtotime($an['end_time'])) : null;
+                            $isExpiringSoon = $an['end_time'] && strtotime($an['end_time']) < strtotime('+3 days');
+                        ?>
+                        <div class="notif-item unread assess-notif" id="assess-notif-<?= $an['assessment_id'] ?>" data-assess-id="<?= $an['assessment_id'] ?>">
+                            <div class="notif-dot"></div>
+                            <div class="notif-item-body">
+                                <div class="notif-item-title">📋 <?= htmlspecialchars($an['title']) ?></div>
+                                <div class="notif-item-msg">
+                                    <?php if ($an['category']): ?>
+                                    <span style="display:inline-block;background:#e0f2fe;color:#0369a1;font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:10px;margin-bottom:3px;">
+                                        <?= htmlspecialchars(ucfirst($an['category'])) ?>
+                                    </span>
+                                    <?php endif; ?>
+                                    <?php if ($anEnd): ?>
+                                    <span style="display:block;margin-top:2px;<?= $isExpiringSoon ? 'color:#ef4444;font-weight:600;' : '' ?>">
+                                        <?= $isExpiringSoon ? '⚠️' : '📅' ?> Due: <?= $anEnd ?>
+                                    </span>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="notif-item-time"><?= timeAgo($an['created_at']) ?></div>
+                                <div style="margin-top:6px;">
+                                    <button onclick="event.stopPropagation(); window.location.href='student-assessments.php'"
+                                        style="font-size:11.5px;font-weight:600;color:#fff;
+                                            background:linear-gradient(135deg,#0ea5e9,#06b6d4);
+                                            border:none;border-radius:6px;padding:4px 12px;cursor:pointer;">
+                                        Take Test →
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- No dismiss on new (unstarted) tests -->
+                        </div>
+                        <?php endforeach; endif; ?>
+
+                        <?php /* ── PREVIOUS TESTS section ── */
+                        if (!empty($assessNotifPrev)): ?>
+                        <div class="notif-section-label">📁 Previous Tests</div>
+                        <?php foreach ($assessNotifPrev as $ap):
+                            $score = $ap['last_score'] !== null ? round((float)$ap['last_score']) . '%' : '—';
+                            $apEnd = $ap['end_time'] ? date('d M, h:i A', strtotime($ap['end_time'])) : null;
+                        ?>
+                        <div class="notif-item assess-notif" id="assess-notif-<?= $ap['assessment_id'] ?>" data-assess-id="<?= $ap['assessment_id'] ?>">
+                            <div class="notif-dot read"></div>
+                            <div class="notif-item-body">
+                                <div class="notif-item-title">✅ <?= htmlspecialchars($ap['title']) ?></div>
+                                <div class="notif-item-msg">
+                                    <?php if ($ap['category']): ?>
+                                    <span style="display:inline-block;background:#f0fdf4;color:#166534;font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:10px;margin-bottom:3px;">
+                                        <?= htmlspecialchars(ucfirst($ap['category'])) ?>
+                                    </span>
+                                    <?php endif; ?>
+                                    <span style="display:block;margin-top:2px;color:#10b981;font-weight:600;">
+                                        Last score: <?= $score ?>
+                                        · <?= $ap['attempts_used'] ?> attempt<?= $ap['attempts_used'] > 1 ? 's' : '' ?>
+                                    </span>
+                                </div>
+                                <div class="notif-item-time"><?= timeAgo($ap['created_at']) ?></div>
+                            </div>
+                            <button class="notif-dismiss-btn" title="Remove from notifications"
+                                onclick="event.stopPropagation(); dismissAssessNotif(<?= $ap['assessment_id'] ?>)"
+                                aria-label="Remove test notification">✕</button>
+                        </div>
+                        <?php endforeach; endif; ?>
+
+                        <?php /* ── Regular system notifications ── */
+                        if (!empty($notifItems)): ?>
+                        <?php if (!empty($assessNotifNew) || !empty($assessNotifPrev)): ?>
+                        <div class="notif-section-label">🔔 Notifications</div>
+                        <?php endif; ?>
+                        <?php foreach ($notifItems as $n):
                             $isUnread = !$n['is_read'];
                             $icon = '🔔';
-                        ?>
-                        <?php
                             $entityId  = (int)($n['related_entity_id'] ?? 0);
-                        $nType     = $n['type'] ?? '';
-                        $hasLink   = in_array($nType, ['assessment', 'material', 'result']) && $entityId > 0;
-                        $redirectUrl = $hasLink
-                            ? 'api/notifications/notification-redirect.php?notification_id=' . $n['notification_id']
-                            : '';
+                            $nType     = $n['type'] ?? '';
+                            $hasLink   = in_array($nType, ['assessment', 'material', 'result']) && $entityId > 0;
+                            $redirectUrl = $hasLink
+                                ? 'api/notifications/notification-redirect.php?notification_id=' . $n['notification_id']
+                                : '';
                         ?>
                         <div class="notif-item <?= $isUnread ? 'unread' : '' ?>" id="notif-<?= $n['notification_id'] ?>"
                              <?php if ($redirectUrl): ?>
@@ -1042,6 +1211,10 @@ function timeAgo(string $datetime): string {
                                 aria-label="Dismiss notification">✕</button>
                         </div>
                         <?php endforeach; endif; ?>
+
+                        <?php if (empty($notifItems) && empty($assessNotifNew) && empty($assessNotifPrev)): ?>
+                            <div class="notif-empty">No notifications yet.</div>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -1442,9 +1615,71 @@ function timeAgo(string $datetime): string {
             });
         });
 
+        // ── Dismiss an assessment notification (previous tests only) ──
+        function dismissAssessNotif(assessmentId) {
+            const el = document.getElementById('assess-notif-' + assessmentId);
+            if (!el) return;
+
+            // Animate out
+            el.style.transition  = 'opacity .25s, max-height .3s, padding .3s';
+            el.style.overflow    = 'hidden';
+            el.style.maxHeight   = el.offsetHeight + 'px';
+            el.style.opacity     = '0';
+            requestAnimationFrame(() => {
+                el.style.maxHeight   = '0';
+                el.style.padding     = '0';
+                el.style.borderWidth = '0';
+            });
+            setTimeout(() => {
+                el.remove();
+                // Also remove section label if no siblings left
+                document.querySelectorAll('.notif-section-label').forEach(label => {
+                    let next = label.nextElementSibling;
+                    let hasItems = false;
+                    while (next && !next.classList.contains('notif-section-label')) {
+                        if (next.classList.contains('notif-item')) { hasItems = true; break; }
+                        next = next.nextElementSibling;
+                    }
+                    if (!hasItems) label.remove();
+                });
+                // Show empty state if everything gone
+                const list = document.querySelector('.notif-list');
+                if (list && list.querySelectorAll('.notif-item').length === 0
+                        && !list.querySelector('.notif-empty')) {
+                    list.innerHTML = '<div class="notif-empty">No notifications yet.</div>';
+                }
+            }, 320);
+
+            // Persist dismissal to server
+            fetch('api/notifications/dismiss-assess-notif.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ assessment_id: assessmentId, csrf_token: '<?= $_SESSION['csrf_token'] ?>' })
+            }).catch(() => {});
+        }
+
+        // ── Mark all regular notifications read ──
+        function markAllRead() {
+            fetch('api/notifications/mark-all-read.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ csrf_token: '<?= $_SESSION['csrf_token'] ?>' })
+            }).then(() => {
+                document.querySelectorAll('.notif-item.unread:not(.assess-notif)').forEach(el => {
+                    el.classList.remove('unread');
+                    const dot = el.querySelector('.notif-dot');
+                    if (dot) dot.classList.add('read');
+                });
+                // Remove "Mark all read" button
+                const btn = document.querySelector('[onclick="markAllRead()"]');
+                if (btn) btn.remove();
+                updateNotifBadge(0);
+            }).catch(() => {});
+        }
+
         // ── Live notification sync (badge + DOM) ──
-        let lastUnreadCount = <?= $unreadCount ?>;
-        let lastPollTime    = 0; // 0 so first poll fires immediately on load
+        let lastUnreadCount = <?= $unreadCount + $assessNotifCount ?>;
+        let lastPollTime    = 0;
 
         function updateNotifBadge(count) {
             let badge = document.querySelector('.notification-badge');

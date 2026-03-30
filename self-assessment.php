@@ -159,25 +159,22 @@ $lvlChartData   = array_reverse($lvlChartData);
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'create_pdf_test') {
     if (!hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) die('Invalid CSRF token');
 
-    $title        = trim($_POST['title'] ?? '');
-    $duration     = max(1, (int)($_POST['duration'] ?? 30));
-    $questionLimit = max(1, min(200, (int)($_POST['num_questions'] ?? 10))); // how many to show per test
-    $pdfPath      = null;
+    $title         = trim($_POST['title'] ?? '');
+    $duration      = max(1, (int)($_POST['duration'] ?? 30));
+    $questionLimit = max(1, min(200, (int)($_POST['num_questions'] ?? 10)));
+    $tmpPath       = null;
 
+    // Use the temp file directly — no need to save the PDF to disk
     if (!empty($_FILES['pdf_file']) && $_FILES['pdf_file']['error'] === UPLOAD_ERR_OK) {
         $file = $_FILES['pdf_file'];
         if ($file['type'] === 'application/pdf' && $file['size'] <= 50 * 1024 * 1024) {
-            $dir = 'uploads/self_assessment_pdfs/';
-            if (!is_dir($dir)) mkdir($dir, 0755, true);
-            $name     = 'sa_pdf_' . $userId . '_' . time() . '.pdf';
-            $fullPath = $dir . $name;
-            if (move_uploaded_file($file['tmp_name'], $fullPath)) $pdfPath = $fullPath;
+            $tmpPath = $file['tmp_name']; // parse from temp, never move to uploads
         }
     }
 
-    if ($title !== '' && $pdfPath) {
+    if ($title !== '' && $tmpPath && file_exists($tmpPath)) {
         // ── Extract text from PDF (CID-aware) ──
-        $text = extractPdfText($pdfPath);
+        $text = extractPdfText($tmpPath);
 
         // ── Extract ALL questions from PDF ──
         $allQuestions = parsePdfQuestions($text);
@@ -185,7 +182,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         $totalParsed = count($allQuestions);
 
         if ($totalParsed === 0) {
-            // Parse failed — stay on self-assessment with error, never go to setup page
             header('Location: self-assessment.php?error=parse');
             exit;
         }
@@ -193,11 +189,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         // Cap question_limit to however many were actually parsed
         if ($questionLimit > $totalParsed) $questionLimit = $totalParsed;
 
-        // ── Insert assessment — store ALL count + the per-test limit ──
+        // ── Insert assessment — pdf_path left empty since we don't store the file ──
         $ins = safePreparedQuery($conn,
             "INSERT INTO self_assessments (user_id, type, title, duration_minutes, total_questions, question_limit, pdf_path, status)
-             VALUES (?, 'pdf', ?, ?, ?, ?, ?, 'ready')",
-            "isiiss", [$userId, $title, $duration, $totalParsed, $questionLimit, $pdfPath]
+             VALUES (?, 'pdf', ?, ?, ?, ?, '', 'ready')",
+            "isiis", [$userId, $title, $duration, $totalParsed, $questionLimit]
         );
         if ($ins['success']) {
             $newSaId = $conn->insert_id;
@@ -271,25 +267,23 @@ function extractPdfText(string $path): string
         return $result;
     };
 
-    // ── Per-object filter detection ───────────────────────────
-    // Parse object headers to know which filters each stream uses.
-    // Format: "N 0 obj\n<<...Filter...>>\nstream\n...\nendstream"
-    preg_match_all('/(\d+)\s+0\s+obj\s*<<(.*?)>>\s*stream\r?\n(.*?)\r?\nendstream/s', $raw, $objs, PREG_SET_ORDER);
-
+    // ── Per-stream filter detection (nested-dict safe) ─────────
+    // The old <<(.*?)>> regex broke on PDFs with nested dicts like
+    // /Resources << /Font ... >> because non-greedy .* stops at the
+    // first >> (inside the nested dict) not the outer one.
+    // Fix: scan for stream...endstream directly, then look back up to
+    // 1500 bytes for the /Filter declaration of that stream.
     $decompressed = [];
-    foreach ($objs as $obj) {
-        $header  = $obj[2];
-        $stream  = $obj[3];
-        // Extract Filter value (may be /Filter /Name or /Filter [/A /B])
-        $filters = [];
-        if (preg_match('/\/Filter\s*(\[[^\]]*\]|\/\w+)/', $header, $fm)) {
-            $fval = $fm[1];
-            preg_match_all('/\/(\w+)/', $fval, $fnames);
+    preg_match_all('/stream\r?\n(.*?)(?:\r?\n)?endstream/s', $raw, $streamMatches, PREG_OFFSET_CAPTURE);
+    foreach ($streamMatches[1] as $sm) {
+        $data    = $sm[0];
+        $offset  = $sm[1];
+        $lookback = substr($raw, max(0, $offset - 1500), min(1500, $offset));
+        $filters  = [];
+        if (preg_match('/\/Filter\s*(\[[^\]]*\]|\/\w+)/', $lookback, $fm)) {
+            preg_match_all('/\/([A-Za-z0-9]+)/', $fm[1], $fnames);
             $filters = $fnames[1];
         }
-
-        $data = $stream;
-
         // Apply filters in order
         foreach ($filters as $filter) {
             if ($filter === 'ASCII85Decode') {
@@ -301,20 +295,14 @@ function extractPdfText(string $path): string
             } elseif ($filter === 'ASCIIHexDecode') {
                 $data = pack('H*', preg_replace('/[^0-9A-Fa-f]/', '', $data));
             }
-            // LZWDecode, RunLengthDecode etc. — leave as-is (rare in modern PDFs)
         }
-
+        // If no filter found, try decompressing anyway
+        if (empty($filters)) {
+            $dec = @gzuncompress($data);
+            if ($dec === false) $dec = @gzinflate($data);
+            if ($dec !== false) $data = $dec;
+        }
         $decompressed[] = $data;
-    }
-
-    // Fallback: if no objects matched the pattern, try raw stream extraction
-    if (empty($decompressed)) {
-        preg_match_all('/stream\r?\n(.*?)\r?\nendstream/s', $raw, $sm);
-        foreach ($sm[1] as $stream) {
-            $dec = @gzuncompress($stream);
-            if ($dec === false) $dec = @gzinflate($stream);
-            $decompressed[] = ($dec !== false) ? $dec : $stream;
-        }
     }
 
     // ── Build ToUnicode CMap ──────────────────────────────────
@@ -472,7 +460,7 @@ function parsePdfQuestions(string $text): array
     $lines = $expandedKeys;
 
     // 6. Re-join word-wrapped fragments
-    $reAnchor = '/^(?:(?:Q(?:uestions?|ues?\.?)?\s*[-–.]?\s*)?\d+\s*[.):\-\s]|[a-dA-D1-4ivx]+\s*[).]\s|[a-dA-D1-4ivx]+[).]\s*$|(?:answer|ans(?:wer)?|key|correct|solution|right)\s*[:\s.\-=]|(?:true|false|yes|no)\s*$|(?:option|opt|choice)\s*[a-dA-D])/i';
+    $reAnchor = '/^(?:(?:Q(?:uestions?|ues?\.?)?\s*[-–.]?\s*)?\d+\s*[.):\-\s]|[a-dA-D1-4ivx]+\s*[).]\s|[a-dA-D1-4ivx]+[).]\s*$|(?:answer(?:\s+is)?|ans(?:wer)?\.?|ans\.|key|correct(?:\s+answer)?|solution|right\s+answer)\s*[=:\-–.\s]|(?:true|false|yes|no)\s*$|(?:option|opt|choice)\s*[a-dA-D])/i';
     $joined = [];
     foreach ($lines as $line) {
         if (empty($joined) || preg_match($reAnchor, $line)) $joined[] = $line;
@@ -625,6 +613,12 @@ function parsePdfQuestions(string $text): array
                 $key = $normaliseOptLabel($optM[1]);
                 if (isset($options[$key])) { $i++; $unrecognised++; continue; }
                 $optText = trim(preg_replace('/\s*(?:←|→|✓|\*{1,2}|correct|right)\s*$/i', '', $optM[2]));
+                // Strip any "Ans: X" / "Answer: X" that got merged onto the end of the option text
+                if (preg_match('/^(.*?)\s+(?:ans(?:wer)?|ans\.)\s*[=:\-–.\s]+[a-dA-D]\s*\.?\s*$/i', $optText, $ansInOpt)) {
+                    $inlineAns = preg_match('/(?:ans(?:wer)?|ans\.)\s*[=:\-–.\s]+([a-dA-D])\s*\.?\s*$/i', $optText, $ansInOptM) ? strtolower($ansInOptM[1]) : null;
+                    if ($inlineAns !== null && $correctAnswer === null) $correctAnswer = $inlineAns;
+                    $optText = trim($ansInOpt[1]);
+                }
                 $options[$key] = $optText; $unrecognised = 0; $i++; continue;
             }
             if (count($options) > 0 && $unrecognised === 0 && strlen($ol) < 80 && !preg_match($reNextQ, $ol)) {

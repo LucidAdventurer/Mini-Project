@@ -1,24 +1,24 @@
 <?php
 /* ============================================================
- * API: Parse PDF for Self Assessment
+ * API: Parse PDF → Questions JSON
  * api/self-assessment/parse-pdf.php
- * POST: sa_id, csrf_token
  *
- * Flow:
- *  1. Read PDF from stored path (already uploaded)
- *  2. Extract text — tries pdftotext first, falls back to
- *     pure-PHP stream extraction
- *  3. Parse via parseQuestions() — ultra-robust parser. Handles:
- *       MCQ  : 1. / Q1. / Ques.1 / Question 1: / no prefix
- *              a) A) (a) [A] a. A- A: *A) ✓A  Option A:  1) i)
- *              Answer:/Ans:/Key:/Correct:/Solution: + letter
- *              bare letter line (A) after options
- *              inline all-on-one-line options split automatically
- *              trailing answer key: 1-A / 1.A / 1)A / columns
- *       T/F  : True/False or Yes/No as options
- *              Answer: True/False/Yes/No or Ans: a/b
- *  4. Save to self_assessment_q_map, mark assessment 'ready'
- *  5. Return count
+ * POST params:
+ *   pdf         — file upload  (multipart/form-data)
+ *   sa_id       — (optional) save to DB after parsing
+ *   csrf_token  — (required only when sa_id is given)
+ *
+ * Modes:
+ *  A) pdf upload only  → returns { success, count, questions[] }
+ *  B) pdf + sa_id      → parses, saves to self_assessment_q_map,
+ *                         returns { success, count, message }
+ *  C) sa_id only       → re-parses the already-stored pdf_path
+ *
+ * PDF format compatibility (all handled):
+ *   Questions : "1."  "1)"  "Q1."  "Question 1:"  etc.
+ *   Options   : "A)"  "a)"  "(A)"  "[A]"  "A."  indented  etc.
+ *   Answers   : "Answer: B"  "Ans: C"  bare letter  trailing key
+ *   T/F       : True/False or Yes/No as options
  * ============================================================ */
 
 require_once '../../config.php';
@@ -26,154 +26,164 @@ require_once '../../db-guard.php';
 
 header('Content-Type: application/json');
 
-$user   = validateSession($conn, 'student');
-$userId = (int)$user['user_id'];
-
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(['success' => false, 'error' => 'Invalid method']); exit;
 }
 
-if (!hash_equals($_SESSION['csrf_token'] ?? '', $_POST['csrf_token'] ?? '')) {
-    echo json_encode(['success' => false, 'error' => 'CSRF error']); exit;
+// ── Mode detection ───────────────────────────────────────────
+$saId      = (int)($_POST['sa_id'] ?? 0);
+$saveToDb  = $saId > 0;
+$hasUpload = !empty($_FILES['pdf']['tmp_name']) && is_uploaded_file($_FILES['pdf']['tmp_name']);
+
+// ── Auth guard (only for DB operations) ─────────────────────
+if ($saveToDb) {
+    $user   = validateSession($conn, 'student');
+    $userId = (int)$user['user_id'];
+
+    if (!hash_equals($_SESSION['csrf_token'] ?? '', $_POST['csrf_token'] ?? '')) {
+        echo json_encode(['success' => false, 'error' => 'CSRF error']); exit;
+    }
 }
 
-$saId = (int)($_POST['sa_id'] ?? 0);
-if (!$saId) {
-    echo json_encode(['success' => false, 'error' => 'Missing sa_id']); exit;
+// ── Resolve PDF path ─────────────────────────────────────────
+$pdfPath = null;
+
+if ($hasUpload) {
+    // Mode A / B: fresh file upload
+    $pdfPath = $_FILES['pdf']['tmp_name'];
+} elseif ($saveToDb) {
+    // Mode C: re-parse a previously stored PDF
+    $saRes = safePreparedQuery($conn,
+        "SELECT pdf_path FROM self_assessments WHERE sa_id = ? AND user_id = ? AND type = 'pdf'",
+        "ii", [$saId, $userId]
+    );
+    $sa = null;
+    if ($saRes['success'] && $saRes['result']) {
+        $sa = $saRes['result']->fetch_assoc();
+        $saRes['result']->free();
+    }
+    if (!$sa || !$sa['pdf_path']) {
+        echo json_encode(['success' => false, 'error' => 'Assessment or PDF not found']); exit;
+    }
+    $pdfPath = $sa['pdf_path'];
+    if (!file_exists($pdfPath)) {
+        $pdfPath = __DIR__ . '/../../' . ltrim($sa['pdf_path'], '/');
+    }
 }
 
-// ── Load assessment ──
-$saRes = safePreparedQuery($conn,
-    "SELECT pdf_path, status FROM self_assessments WHERE sa_id = ? AND user_id = ? AND type = 'pdf'",
-    "ii", [$saId, $userId]
-);
-$sa = null;
-if ($saRes['success'] && $saRes['result']) {
-    $sa = $saRes['result']->fetch_assoc();
-    $saRes['result']->free();
-}
-if (!$sa || !$sa['pdf_path']) {
-    echo json_encode(['success' => false, 'error' => 'Assessment or PDF not found']); exit;
+if (!$pdfPath || !file_exists($pdfPath)) {
+    echo json_encode(['success' => false, 'error' => 'No PDF provided or file not found on server.']); exit;
 }
 
-// ── Resolve PDF path ──
-$pdfPath = $sa['pdf_path'];
-if (!file_exists($pdfPath)) {
-    $pdfPath = __DIR__ . '/../../' . ltrim($sa['pdf_path'], '/');
-}
-if (!file_exists($pdfPath)) {
-    echo json_encode(['success' => false, 'error' => 'PDF file missing on server. Please re-upload.']); exit;
-}
-
-// ── Extract text ──
+// ── Extract text from PDF ────────────────────────────────────
 $rawText = extractTextFromPDF($pdfPath);
+
+$debugMode = !empty($_POST['debug']) || !empty($_GET['debug']);
+
+if ($debugMode) {
+    echo json_encode([
+        'debug'        => true,
+        'text_length'  => strlen(trim($rawText)),
+        'text_preview' => substr(trim($rawText), 0, 1000),
+        'pdftotext'    => trim((string)shell_exec('which pdftotext 2>/dev/null')),
+    ]); exit;
+}
 
 if (strlen(trim($rawText)) < 20) {
     echo json_encode([
         'success' => false,
-        'error'   => 'Could not extract text from PDF. '
-                   . 'Make sure the PDF has selectable (not scanned/image-based) text.',
-    ]);
-    exit;
+        'error'   => 'Could not extract text from this PDF.',
+        'hint'    => 'Make sure the PDF contains selectable text (not a scanned image).',
+        'text_length' => strlen(trim($rawText)),
+    ]); exit;
 }
 
-// ── Parse questions ──
+// ── Parse questions ──────────────────────────────────────────
 $questions = parseQuestions($rawText);
 
 if (empty($questions)) {
     echo json_encode([
         'success' => false,
-        'error'   => 'No questions could be extracted from your PDF.',
-        'hint'    => 'Make sure the PDF has selectable text (not a scanned image). '
-                   . 'Supported question formats: "1." / "Q1." / "Question 1:" etc. '
-                   . 'Supported option formats: A) / a) / (A) / [A] / A. / 1) / i). '
-                   . 'Supported answer formats: "Answer: A" / "Ans: B" / "Key: C" / bare letter / trailing answer key (1-A, 2-B...).',
-    ]);
-    exit;
+        'error'   => 'No questions could be extracted from this PDF.',
+        'hint'    => 'Supported formats — questions: "1." / "Q1." / "Question 1:" '
+                   . '| options: A) a) (A) [A] A. 1) i) '
+                   . '| answers: "Answer: A" / "Ans: B" / bare letter / trailing key.',
+        'text_preview' => substr(trim($rawText), 0, 500),
+    ]); exit;
 }
 
-// ── Save to DB ──
-safePreparedQuery($conn, "DELETE FROM self_assessment_q_map WHERE sa_id = ?", "i", [$saId]);
+// ── DB save (Mode B / C only) ────────────────────────────────
+if ($saveToDb) {
+    safePreparedQuery($conn, "DELETE FROM self_assessment_q_map WHERE sa_id = ?", "i", [$saId]);
 
-$order = 0;
-foreach ($questions as $q) {
-    if ($q['type'] === 'true_false') {
-        $optA    = 'True';
-        $optB    = 'False';
-        $optC    = '';
-        $optD    = '';
-        $ans     = strtolower((string)($q['correctAnswer'] ?? 'true'));
-        $correct = ($ans === 'true' || $ans === 'a') ? 'a' : 'b';
-    } else {
-        $opts    = $q['options'];
-        $optA    = $opts[0] ?? '';
-        $optB    = $opts[1] ?? '';
-        $optC    = $opts[2] ?? '';
-        $optD    = $opts[3] ?? '';
-        $correct = $q['correctAnswer'] ?? 'a';
+    $saved = 0;
+    foreach ($questions as $q) {
+        if ($q['type'] === 'true_false') {
+            $opts    = ['True', 'False', '', ''];
+            $ans     = strtolower((string)($q['correctAnswer'] ?? 'true'));
+            $correct = ($ans === 'true' || $ans === 'a') ? 'a' : 'b';
+        } else {
+            $opts    = array_pad(array_values($q['options']), 4, '');
+            $correct = $q['correctAnswer'] ?? 'a';
+        }
+
+        $res = safePreparedQuery($conn,
+            "INSERT INTO self_assessment_q_map
+             (sa_id, question_text, option_a, option_b, option_c, option_d, correct_option, explanation, q_order)
+             VALUES (?, ?, ?, ?, ?, ?, ?, '', ?)",
+            "issssssi",
+            [$saId, $q['text'], $opts[0], $opts[1], $opts[2], $opts[3], $correct, $saved]
+        );
+        if ($res['success']) $saved++;
     }
 
-    $res = safePreparedQuery($conn,
-        "INSERT INTO self_assessment_q_map
-         (sa_id, question_text, option_a, option_b, option_c, option_d, correct_option, explanation, q_order)
-         VALUES (?, ?, ?, ?, ?, ?, ?, '', ?)",
-        "issssssi",
-        [$saId, $q['text'], $optA, $optB, $optC, $optD, $correct, $order]
-    );
-    if ($res['success']) $order++;
-}
+    if ($saved === 0) {
+        echo json_encode(['success' => false, 'error' => 'Questions parsed but failed to save to database.']); exit;
+    }
 
-if ($order === 0) {
-    echo json_encode(['success' => false, 'error' => 'Questions found but could not save to database.']);
+    safePreparedQuery($conn,
+        "UPDATE self_assessments SET total_questions = ?, status = 'ready' WHERE sa_id = ?",
+        "ii", [$saved, $saId]
+    );
+
+    echo json_encode(['success' => true, 'count' => $saved, 'message' => "$saved questions extracted and saved."]);
     exit;
 }
 
-// ── Mark assessment ready ──
-safePreparedQuery($conn,
-    "UPDATE self_assessments SET total_questions = ?, status = 'ready' WHERE sa_id = ?",
-    "ii", [$order, $saId]
-);
-
-echo json_encode([
-    'success' => true,
-    'count'   => $order,
-    'message' => "$order questions extracted and saved.",
-]);
-
+// ── Mode A: return questions as JSON (no DB) ─────────────────
+echo json_encode(['success' => true, 'count' => count($questions), 'questions' => $questions]);
 
 
 // ============================================================
 // extractTextFromPDF
-// Tries pdftotext (poppler) first — highest quality.
-// Pure-PHP fallback handles ALL common filter chains:
-//   • FlateDecode (gzip)
-//   • ASCII85Decode + FlateDecode  (ReportLab, Word-exported PDFs)
-//   • No compression (raw streams)
-//   • CID/hex encoded fonts (Google Docs)
+//
+// 1. pdftotext (poppler) — best quality.
+//    -layout mode preserves indented option lines like
+//    "   A) London" which trim() later normalises to "A) London".
+// 2. Pure-PHP fallback — FlateDecode, ASCII85+Flat, raw, CID fonts.
 // ============================================================
 function extractTextFromPDF(string $path): string
 {
-    // Method 1: pdftotext (poppler)
+    // ── Method 1: pdftotext ───────────────────────────────────
     $which = trim((string)shell_exec('which pdftotext 2>/dev/null'));
     if ($which !== '') {
-        $esc  = escapeshellarg($path);
-        $out  = (string)shell_exec("pdftotext -layout $esc - 2>/dev/null");
+        $esc = escapeshellarg($path);
+        $out = (string)shell_exec("pdftotext -layout $esc - 2>/dev/null");
         if (trim($out) !== '') return $out;
-        $out  = (string)shell_exec("pdftotext $esc - 2>/dev/null");
+        $out = (string)shell_exec("pdftotext $esc - 2>/dev/null");
         if (trim($out) !== '') return $out;
     }
 
+    // ── Method 2: pure-PHP stream extraction ─────────────────
     $raw = file_get_contents($path);
 
-    // ── ASCII85Decode helper ──────────────────────────────────
     $ascii85Decode = function(string $data): string {
         $data = preg_replace('/\s+/', '', $data);
         if (substr($data, -2) === '~>') $data = substr($data, 0, -2);
         $result = ''; $i = 0; $len = strlen($data);
         while ($i < $len) {
             if ($data[$i] === 'z') { $result .= "\x00\x00\x00\x00"; $i++; continue; }
-            $chunk = substr($data, $i, 5); $i += 5;
-            $n = 0;
+            $chunk = substr($data, $i, 5); $i += 5; $n = 0;
             for ($k = 0; $k < strlen($chunk); $k++) $n = $n * 85 + (ord($chunk[$k]) - 33);
             $pad = 5 - strlen($chunk);
             for ($k = 0; $k < $pad; $k++) $n = $n * 85 + 84;
@@ -182,63 +192,85 @@ function extractTextFromPDF(string $path): string
         return $result;
     };
 
-    // ── Per-object filter detection & decompression ───────────
-    preg_match_all('/(\d+)\s+0\s+obj\s*<<(.*?)>>\s*stream\r?\n(.*?)\r?\nendstream/s', $raw, $objs, PREG_SET_ORDER);
+    // ── Find all streams with their filter info ─────────────────────────
+    // Replaces the old <<(.*?)>> approach which broke on PDFs with nested
+    // dictionaries (e.g. ReportLab PDFs with /Resources << /Font ... >>).
+    // Instead we scan for every stream...endstream block, then look back
+    // up to 1500 bytes to find the /Filter declaration for that stream.
     $decompressed = [];
-    foreach ($objs as $obj) {
-        $header = $obj[2]; $data = $obj[3];
-        $filters = [];
-        if (preg_match('/\/Filter\s*(\[[^\]]*\]|\/\w+)/', $header, $fm)) {
-            preg_match_all('/\/(\w+)/', $fm[1], $fnames);
+    preg_match_all('/stream\r?\n(.*?)(?:\r?\n)?endstream/s', $raw, $streamMatches, PREG_OFFSET_CAPTURE);
+    foreach ($streamMatches[1] as $sm) {
+        $data    = $sm[0];
+        $offset  = $sm[1];
+        // Look backwards for /Filter within the preceding obj header
+        $lookback = substr($raw, max(0, $offset - 1500), min(1500, $offset));
+        $filters  = [];
+        if (preg_match('/\/Filter\s*(\[[^\]]*\]|\/\w+)/', $lookback, $fm)) {
+            preg_match_all('/\/([A-Za-z0-9]+)/', $fm[1], $fnames);
             $filters = $fnames[1];
         }
         foreach ($filters as $filter) {
-            if ($filter === 'ASCII85Decode') { $data = $ascii85Decode($data); }
-            elseif ($filter === 'FlateDecode') { $dec = @gzuncompress($data); if ($dec === false) $dec = @gzinflate($data); if ($dec !== false) $data = $dec; }
-            elseif ($filter === 'ASCIIHexDecode') { $data = pack('H*', preg_replace('/[^0-9A-Fa-f]/', '', $data)); }
+            if ($filter === 'ASCII85Decode') {
+                $data = $ascii85Decode($data);
+            } elseif ($filter === 'FlateDecode') {
+                $dec = @gzuncompress($data);
+                if ($dec === false) $dec = @gzinflate($data);
+                if ($dec !== false) $data = $dec;
+            } elseif ($filter === 'ASCIIHexDecode') {
+                $data = pack('H*', preg_replace('/[^0-9A-Fa-f]/', '', $data));
+            }
+        }
+        // If no filter found, attempt decompression anyway (handles omitted /Filter)
+        if (empty($filters)) {
+            $dec = @gzuncompress($data);
+            if ($dec === false) $dec = @gzinflate($data);
+            if ($dec !== false) $data = $dec;
         }
         $decompressed[] = $data;
     }
-    if (empty($decompressed)) {
-        preg_match_all('/stream\r?\n(.*?)\r?\nendstream/s', $raw, $sm);
-        foreach ($sm[1] as $stream) {
-            $dec = @gzuncompress($stream);
-            if ($dec === false) $dec = @gzinflate($stream);
-            $decompressed[] = ($dec !== false) ? $dec : $stream;
-        }
-    }
 
-    // ── Build ToUnicode CMap ──────────────────────────────────
     $cmap = [];
     foreach ($decompressed as $src) {
         if (strpos($src, 'beginbfchar') === false && strpos($src, 'beginbfrange') === false) continue;
         preg_match_all('/beginbfchar(.*?)endbfchar/s', $src, $bfcharSecs);
         foreach ($bfcharSecs[1] as $sec) {
             preg_match_all('/<([0-9A-Fa-f]+)>\s+<([0-9A-Fa-f]+)>/', $sec, $bfc);
-            foreach ($bfc[1] as $k => $cidHex) { $cid = hexdec($cidHex); $uni = hexdec($bfc[2][$k]); if ($uni > 0) $cmap[$cid] = mb_chr($uni, 'UTF-8'); }
+            foreach ($bfc[1] as $k => $cidHex) {
+                $cid = hexdec($cidHex); $uni = hexdec($bfc[2][$k]);
+                if ($uni > 0) $cmap[$cid] = mb_chr($uni, 'UTF-8');
+            }
         }
         preg_match_all('/beginbfrange(.*?)endbfrange/s', $src, $bfrangeSecs);
         foreach ($bfrangeSecs[1] as $sec) {
             preg_match_all('/<([0-9A-Fa-f]+)>\s+<([0-9A-Fa-f]+)>\s+<([0-9A-Fa-f]+)>/', $sec, $bfr);
-            foreach ($bfr[1] as $k => $startHex) { $start = hexdec($startHex); $end = hexdec($bfr[2][$k]); $uni = hexdec($bfr[3][$k]); for ($c = $start; $c <= $end; $c++) $cmap[$c] = mb_chr($uni + ($c - $start), 'UTF-8'); }
+            foreach ($bfr[1] as $k => $startHex) {
+                $start = hexdec($startHex); $end = hexdec($bfr[2][$k]); $uni = hexdec($bfr[3][$k]);
+                for ($c = $start; $c <= $end; $c++) $cmap[$c] = mb_chr($uni + ($c - $start), 'UTF-8');
+            }
         }
     }
     $decodeCidHex = function(string $hexStr) use ($cmap): string {
         $result = ''; $step = (strlen($hexStr) % 4 === 0 && strlen($hexStr) >= 4) ? 4 : 2;
-        for ($i = 0; $i < strlen($hexStr); $i += $step) { $cid = hexdec(substr($hexStr, $i, $step)); if (isset($cmap[$cid])) { $result .= $cmap[$cid]; } else { $uni = $cid + 29; $result .= ($uni >= 32 && $uni <= 126) ? chr($uni) : ''; } }
+        for ($i = 0; $i < strlen($hexStr); $i += $step) {
+            $cid = hexdec(substr($hexStr, $i, $step));
+            if (isset($cmap[$cid])) { $result .= $cmap[$cid]; }
+            else { $uni = $cid + 29; $result .= ($uni >= 32 && $uni <= 126) ? chr($uni) : ''; }
+        }
         return $result;
     };
 
-    // ── PDF string unescape (handles \) \( \\ and octal \NNN) ─
     $pdfUnescape = function(string $s): string {
         return preg_replace_callback('/\\\\([0-7]{1,3}|[\\\\nrtfb()])/', function($m) {
             $c = $m[1];
-            if (strlen($c) >= 1 && $c[0] >= '0' && $c[0] <= '7') return chr(octdec($c));
-            return match($c) { 'n'=>"\n",'r'=>"\r",'t'=>"\t",'f'=>"\f",'b'=>"\x08",'\\'=>'\\','('=>'(',')'=>')', default=>$c };
+            if ($c[0] >= '0' && $c[0] <= '7') return chr(octdec($c));
+            return match($c) {
+                'n' => "\n", 'r' => "\r", 't' => "\t", 'f' => "\f",
+                'b' => "\x08", '\\' => '\\', '(' => '(', ')' => ')',
+                default => $c
+            };
         }, $s);
     };
 
-    // ── Method 2: BT/ET block extraction ─────────────────────
     $text = '';
     foreach ($decompressed as $src) {
         if (strpos($src, 'BT') === false) continue;
@@ -246,7 +278,10 @@ function extractTextFromPDF(string $path): string
         foreach ($bt[1] as $block) {
             $lineText = '';
             preg_match_all('/\((?:[^)(\\\\]|\\\\.)*\)\s*Tj/s', $block, $tj);
-            foreach ($tj[0] as $t) { $inner = preg_replace('/\)\s*Tj$/', '', preg_replace('/^\(/', '', $t)); $lineText .= $pdfUnescape($inner) . ' '; }
+            foreach ($tj[0] as $t) {
+                $inner = preg_replace('/\)\s*Tj$/', '', preg_replace('/^\(/', '', $t));
+                $lineText .= $pdfUnescape($inner) . ' ';
+            }
             preg_match_all('/<([0-9A-Fa-f]+)>\s*Tj/', $block, $hexTj);
             foreach ($hexTj[1] as $h) { $lineText .= $decodeCidHex($h); }
             preg_match_all('/\[(.*?)\]\s*TJ/s', $block, $tJ);
@@ -261,19 +296,21 @@ function extractTextFromPDF(string $path): string
         }
     }
 
-    // Collapse single-char-per-line artifacts
+    // Collapse single-char-per-line artefacts
     $lines = explode("\n", $text); $merged = []; $i = 0;
     while ($i < count($lines)) {
         $line = trim($lines[$i]);
         if (strlen($line) === 1 && ctype_alpha($line)) {
             $word = $line; $j = $i + 1;
-            while ($j < count($lines) && strlen(trim($lines[$j])) === 1 && ctype_alpha(trim($lines[$j]))) { $word .= trim($lines[$j]); $j++; }
+            while ($j < count($lines) && strlen(trim($lines[$j])) === 1 && ctype_alpha(trim($lines[$j]))) {
+                $word .= trim($lines[$j]); $j++;
+            }
             $merged[] = strlen($word) >= 2 ? $word : $line; $i = $j;
         } else { $merged[] = $line; $i++; }
     }
     $text = implode("\n", $merged);
 
-    // Method 3: last-resort raw parenthesised string grab
+    // Last-resort: raw parenthesised string grab
     if (strlen(trim($text)) < 20) {
         preg_match_all('/\(([^\)]{3,})\)/', $raw, $m);
         $text = implode("\n", $m[1]);
@@ -283,60 +320,20 @@ function extractTextFromPDF(string $path): string
 }
 
 
-
 // ============================================================
-// parseQuestions  — ultra-robust edition
+// parseQuestions — ultra-robust MCQ / True-False parser
 //
-// Handles every real-world MCQ/T-F layout variant:
-//
-// QUESTION PREFIXES
-//   1.  1)  1:  1 -   Q1.  Q.1  Q1)  Q-1  Qn.1
-//   Q1  Question 1.  Question 1:  Ques.1  Qs1.
-//   No prefix at all (plain numbered lines)
-//
-// OPTION PREFIXES  (A–D or a–d, 1–4, i–iv)
-//   A)  A.  A:  A-  A–  (A)  [A]  *A)  A]  A |
-//   a)  a.  (a)  1)  1.  i)  ii)  iii)  iv)
-//   Option A:  Opt. A)  Choice A.
-//   Options on same line as question: "... A)x B)y C)z D)w"
-//   Options all on one line separated by spaces/tabs
-//   Option label alone on its own line, text on next line
-//
-// ANSWER INDICATORS
-//   Answer: A       Ans: a        Ans. B       Answer is C
-//   Correct: D      Correct Answer: B           Key: A
-//   Solution: C     Right Answer: D             Ans = B
-//   *A)  **A**      ✓A)            [A] ← marked  A ← (arrow)
-//   Highlighted/bold markers stripped to bare letter
-//   Bare letter line after options: A  /  (A)  /  A.
-//   Trailing answer key block: "1-A  2-B  3-C …"
-//   Inline key: "1.A  2.B" or "1)A  2)B" on same line
-//   Column-formatted key: two/three columns side by side
-//   Answer embedded in question line: "… Answer: B"
-//   T/F answer: True/False  t/f  Yes/No  y/n  1/0
-//
-// QUESTION TYPES
-//   MCQ (2–4 options), True/False, Yes/No
-//   Fill-in-the-blank (treated as MCQ if options follow)
-//   Assertion–Reason (parsed as MCQ)
-//   Match-the-following (parsed as MCQ if A–D options present)
-//
-// NOISE TOLERANCE
-//   Page numbers, headers, footers, watermarks skipped
-//   Unicode dashes, bullets, smart-quotes normalised
-//   Multi-column PDF text re-linearised
-//   Inline options (all on one line) split automatically
-//   Word-wrapped question text re-joined
-//   Explanation / Rationale blocks after answers consumed
+// Compatible with your sample PDF format:
+//   "1. What is the capital of France?"
+//   "   A) London"   ← leading spaces stripped by trim() in step 2
+//   "   Answer: B"   ← matched by $reAnswer after trim()
 // ============================================================
 function parseQuestions(string $text): array
 {
     $questions = [];
 
-    // ── 1. Normalise whitespace & encoding ───────────────────
+    // ── 1. Normalise line endings & encoding ─────────────────
     $text = str_replace(["\r\n", "\r", "\f"], "\n", $text);
-
-    // Smart quotes / typographic punctuation → ASCII
     $text = str_replace(
         ["\u{2018}", "\u{2019}", "\u{201C}", "\u{201D}", "\u{2013}", "\u{2014}",
          "\u{00A0}", "\u{2022}", "\u{25CF}", "\u{2023}", "\u{25B6}", "\u{2192}"],
@@ -344,160 +341,97 @@ function parseQuestions(string $text): array
          ' ',        '-',        '-',        '-',        '-',        '->'],
         $text
     );
-
-    // Unicode fraction / superscript artefacts from some PDF extractors
     $text = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}]/u', '', $text);
 
     $lines = explode("\n", $text);
 
     // ── 2. Per-line normalisation ─────────────────────────────
-    $lines = array_map(function (string $line): string {
-        // Collapse all horizontal whitespace runs
+    // trim() is what makes indented "   A) London" → "A) London"
+    $lines = array_map(function(string $line): string {
         $line = preg_replace('/\h+/', ' ', $line);
-        // Remove leading bullets / decorators: • ▪ ► ✓ ★ * #
         $line = preg_replace('/^[\s\*#•▪►✓★]+/', '', $line);
-        // Collapse space between option letter and its delimiter: "A )" → "A)"
         $line = preg_replace('/^(\s*[\[(]?\s*[a-dA-D1-4])\s+([).\]])\s*/', '$1$2 ', $line);
         return trim($line);
     }, $lines);
     $lines = array_values(array_filter($lines, fn($l) => $l !== ''));
 
-    // ── 3. Skip obvious noise lines ──────────────────────────
-    // (page numbers, "Page X of Y", copyright, URLs, pure-numeric lines)
-    $reNoise = '/^(?:'
-        . 'page\s+\d+(\s+of\s+\d+)?'
-        . '|\d+\s+of\s+\d+'
-        . '|https?:\/\/'
-        . '|www\.'
-        . '|copyright\b'
-        . '|all\s+rights\s+reserved'
-        . '|\d+$'                      // lone page number
-        . ')/i';
+    // ── 3. Skip noise lines ───────────────────────────────────
+    $reNoise = '/^(?:page\s+\d+(\s+of\s+\d+)?|\d+\s+of\s+\d+|https?:\/\/|www\.|copyright\b|all\s+rights\s+reserved|\d+$)/i';
     $lines = array_values(array_filter($lines, fn($l) => !preg_match($reNoise, $l)));
 
     // ── 4. Inline-options splitter ────────────────────────────
-    // "1. Question text  A) opt1  B) opt2  C) opt3  D) opt4"
-    // → split into separate lines so the main parser sees them normally.
     $reInlineOpts = '/\b([A-Da-d])\s*[).]\s*[^\s].*\b([A-Da-d])\s*[).]/';
     $expanded = [];
     foreach ($lines as $line) {
-        // Detect: line contains ≥2 option markers
         if (preg_match($reInlineOpts, $line)) {
-            // Split on each option delimiter (keep delimiter with the option text)
             $parts = preg_split('/(?=\b[A-Da-d]\s*[).])/i', $line);
-            foreach ($parts as $part) {
-                $part = trim($part);
-                if ($part !== '') $expanded[] = $part;
-            }
-        } else {
-            $expanded[] = $line;
-        }
+            foreach ($parts as $part) { $part = trim($part); if ($part !== '') $expanded[] = $part; }
+        } else { $expanded[] = $line; }
     }
     $lines = $expanded;
 
-    // ── 5. Inline-answer-key splitter ────────────────────────
-    // "1.A  2.B  3.C" or "1)A 2)B 3)C" — compact key rows
+    // ── 5. Compact key-row splitter ───────────────────────────
     $reCompactKeyRow = '/^(\d+\s*[-–.)]\s*[A-Da-d]\s*){2,}$/i';
     $expandedKeys = [];
     foreach ($lines as $line) {
         if (preg_match($reCompactKeyRow, trim($line))) {
             preg_match_all('/(\d+)\s*[-–.)]\s*([A-Da-d])/i', $line, $km);
-            foreach ($km[1] as $ki => $knum) {
-                $expandedKeys[] = $knum . '-' . $km[2][$ki];
-            }
-        } else {
-            $expandedKeys[] = $line;
-        }
+            foreach ($km[1] as $ki => $knum) { $expandedKeys[] = $knum . '-' . $km[2][$ki]; }
+        } else { $expandedKeys[] = $line; }
     }
     $lines = $expandedKeys;
 
-    // ── 6. Anchor pattern for line re-joining ────────────────
+    // ── 6. Word-wrap rejoining ────────────────────────────────
     $reAnchor = '/^(?:'
-        . '(?:Q(?:uestions?|ues?\.?)?\s*[-–.]?\s*)?\d+\s*[.):\-\s]'  // numbered Q
-        . '|[a-dA-D1-4ivx]+\s*[).]\s'                                  // option labels
-        . '|[a-dA-D1-4ivx]+[).]\s*$'                                   // bare option label
-        . '|(?:answer|ans(?:wer)?|key|correct|solution|right)\s*[:\s.\-=]'
+        . '(?:Q(?:uestions?|ues?\.?)?\s*[-–.]?\s*)?\d+\s*[.):\-\s]'
+        . '|[a-dA-D1-4ivx]+\s*[).]\s'
+        . '|[a-dA-D1-4ivx]+[).]\s*$'
+        . '|(?:answer(?:\s+is)?|ans(?:wer)?\.?|ans\.|key|correct(?:\s+answer)?|solution|right\s+answer)\s*[=:\-–.\s]'
         . '|(?:true|false|yes|no)\s*$'
         . '|(?:option|opt|choice)\s*[a-dA-D]'
         . ')/i';
-
-    // Re-join word-wrapped fragments
     $joined = [];
     foreach ($lines as $line) {
-        if (empty($joined) || preg_match($reAnchor, $line)) {
-            $joined[] = $line;
-        } else {
-            $joined[count($joined) - 1] .= ' ' . $line;
-        }
+        if (empty($joined) || preg_match($reAnchor, $line)) { $joined[] = $line; }
+        else { $joined[count($joined) - 1] .= ' ' . $line; }
     }
 
-    // ── 7. Orphan option label re-join ───────────────────────
-    // "A)" alone on a line, actual text on next line
+    // ── 7. Orphan option label rejoining ─────────────────────
     $assembled = [];
     for ($j = 0, $jMax = count($joined); $j < $jMax; $j++) {
         $line = $joined[$j];
         if (preg_match('/^(?:[(\[]?\s*)?[a-dA-D1-4]\s*[).]\s*$/', $line) && isset($joined[$j + 1])) {
             $next = $joined[$j + 1];
             if (!preg_match('/^[a-dA-D0-9][\s).\[:]/', $next)) {
-                $assembled[] = rtrim($line) . ' ' . $next;
-                $j++;
-                continue;
+                $assembled[] = rtrim($line) . ' ' . $next; $j++; continue;
             }
         }
         $assembled[] = $line;
     }
     $lines = $assembled;
 
-    // ── 8. Pre-scan for trailing / separate answer key ────────
-    //
-    // Formats recognised:
-    //   1-A   1.A   1)A   1: A   1 - A   1 A   (1) A
-    //   Q1-A  No.1-A
-    //   Under heading: "Answer Key", "Answers", "Key", "Solutions"
-    //   Column format: two/three columns of pairs on same line
-    //   "1.A 2.B 3.C" compact row (already split above → "1-A" etc.)
-
+    // ── 8. Trailing answer key pre-scan ──────────────────────
     $trailingAnswers = [];
-
-    // Pattern for a single answer-key pair
     $reAKPair    = '/^\s*(?:Q(?:uestion)?\s*|No\.?\s*)?(\d+)\s*[-–.:)\s]+\s*([a-dA-D])\s*\.?\s*$/i';
-    // Heading that signals a key section
     $reAKHeading = '/^(?:answer\s*(?:key|sheet)?|answers?|key|solutions?|correct\s+answers?)\s*[:\-]?\s*$/i';
-    // Multi-column key on one line: "1-A  2-B  3-C"  (already split above, but catch anything remaining)
     $reAKMulti   = '/^(?:\d+\s*[-–.]\s*[A-Da-d]\s+){2,}/i';
+    $totalLines  = count($lines);
+    $akStart     = -1;
 
-    $totalLines = count($lines);
-    $akStart    = -1;
-
-    // Walk backwards — answer keys always trail the questions
     for ($r = $totalLines - 1; $r >= 0; $r--) {
         $l = $lines[$r];
-        if (preg_match($reAKPair, $l) || preg_match($reAKMulti, $l)) {
-            $akStart = $r;
-        } elseif (preg_match($reAKHeading, $l)) {
-            $akStart = $r;
-            break;  // found the section header — stop here
-        } elseif ($akStart !== -1) {
-            break;  // hit non-key line after key lines started — done
-        } else {
-            // Allow up to 6 non-pair lines at very bottom (blank / page header artefacts)
-            if (($totalLines - 1 - $r) > 6) break;
-        }
+        if (preg_match($reAKPair, $l) || preg_match($reAKMulti, $l)) { $akStart = $r; }
+        elseif (preg_match($reAKHeading, $l)) { $akStart = $r; break; }
+        elseif ($akStart !== -1) { break; }
+        elseif (($totalLines - 1 - $r) > 6) { break; }
     }
-
     if ($akStart !== -1) {
         for ($r = $akStart; $r < $totalLines; $r++) {
             $l = $lines[$r];
-            // Single pair
-            if (preg_match($reAKPair, $l, $akm)) {
-                $trailingAnswers[(int)$akm[1]] = strtolower($akm[2]);
-            }
-            // Multi-pair on one line
+            if (preg_match($reAKPair, $l, $akm)) { $trailingAnswers[(int)$akm[1]] = strtolower($akm[2]); }
             if (preg_match($reAKMulti, $l)) {
                 preg_match_all('/(\d+)\s*[-–.]\s*([A-Da-d])/i', $l, $akms);
-                foreach ($akms[1] as $ki => $knum) {
-                    $trailingAnswers[(int)$knum] = strtolower($akms[2][$ki]);
-                }
+                foreach ($akms[1] as $ki => $knum) { $trailingAnswers[(int)$knum] = strtolower($akms[2][$ki]); }
             }
         }
         array_splice($lines, $akStart);
@@ -505,79 +439,28 @@ function parseQuestions(string $text): array
     }
 
     // ── 9. Core regex patterns ────────────────────────────────
+    $reQuestion      = '/^(?:(?:Qs?(?:uestions?|ues?\.?)?\s*[-–.]?\s*)?(\d+)\s*[.):\-–\s]\s*(.{2,}))/i';
+    $reOption        = '/^(?:(?:option|opt\.?|choice)\s*)?[\[(]?\s*([a-dA-D]|[1-4]|i{1,3}v?|vi{0,3})\s*[\].):\-–|*\s]\s*(.+)/ix';
+    $reAnswer        = '/^(?:answer(?:\s+is)?|ans(?:wer)?|ans\.|key|correct(?:\s+answer)?|solution|right\s+answer|marked\s+answer)\s*[=:\-–.\s]*\s*([a-dA-D]|true|false|yes|no|[1-4])\b/i';
+    $reAnswerCompact = '/^(?:answer(?:\s+is)?|ans(?:wer)?|ans\.|key|correct(?:\s+answer)?|solution|right\s+answer)\s*[=:\-–.\s]*([a-dA-D]|true|false|yes|no|[1-4])\.?\s*$/i';
+    $reBareAns       = '/^\(?([a-dA-D])\)?\.?\s*$/i';
+    $reMarkedAns     = '/^(?:\*{1,2}|✓|→|←|>)\s*([a-dA-D])\s*(?:[).\*].*)?$/i';
+    $reEmbeddedAns   = '/(?:answer(?:\s+is)?|ans(?:wer)?|correct)\s*[=:.\-–\s]+([a-dA-D])\s*\.?\s*$/i';
+    $reNextQ         = '/^(?:Q(?:uestions?|ues?\.?)?\s*[-–.]?\s*)?\d+\s*[.):\-–\s]/i';
+    $reTrueFalse     = '/^(true|false|yes|no)\s*$/i';
+    $reExplain       = '/^(?:explanation|rationale|reason|solution|note)\s*[:\-–]/i';
 
-    // Question starters — very broad:
-    //   1.  1)  1:  1-   Q1.  Q.1  Q-1  Q1)  Qn.1  Ques.1  Question 1.  Qs1:
-    $reQuestion = '/^(?:'
-        . '(?:Qs?(?:uestions?|ues?\.?)?\s*[-–.]?\s*)?'   // optional Q/Ques/Question prefix
-        . '(\d+)'                                          // capture: question number
-        . '\s*[.):\-–\s]\s*'                              // delimiter
-        . '(.{2,})'                                        // capture: question text (≥2 chars)
-        . ')/i';
-
-    // Option lines — covers:
-    //   A) A. A: A- A– (A) [A] A| A] *A  A→   a) (a) [a]
-    //   1) 1. (1) — numeric options
-    //   i) ii) iii) iv) — roman numeral options (map to a–d)
-    //   Option A:  Opt A.  Choice A)
-    $reOption = '/^(?:'
-        . '(?:option|opt\.?|choice)\s*'   // optional "Option" prefix
-        . ')?'
-        . '[\[(]?\s*'
-        . '([a-dA-D]|[1-4]|i{1,3}v?|vi{0,3})'   // letter, digit, or roman
-        . '\s*[\].):\-–|*\s]\s*'
-        . '(.+)/ix';
-
-    // Answer keyword lines
-    $reAnswer = '/^(?:'
-        . 'answer(?:\s+is)?|ans(?:wer)?|ans\.|key|correct(?:\s+answer)?'
-        . '|solution|right\s+answer|marked\s+answer'
-        . ')\s*[=:\-–.\s]*\s*([a-dA-D]|true|false|yes|no|[1-4])\b/i';
-
-    // Answer = letter at end of line (compact)
-    $reAnswerCompact = '/^(?:'
-        . 'answer(?:\s+is)?|ans(?:wer)?|ans\.|key|correct(?:\s+answer)?'
-        . '|solution|right\s+answer'
-        . ')\s*[=:\-–.\s]*([a-dA-D]|true|false|yes|no|[1-4])\.?\s*$/i';
-
-    // Bare single-letter answer after options  (A)  /  A.  /  A  /  (A.)
-    $reBareAns  = '/^\(?([a-dA-D])\)?\.?\s*$/i';
-
-    // Asterisk / checkmark marked answer  *A)  **A**  ✓A  →A
-    $reMarkedAns = '/^(?:\*{1,2}|✓|→|←|>)\s*([a-dA-D])\s*(?:[).\*].*)?$/i';
-
-    // Answer embedded at end of question/option line:  "… Answer: B"
-    $reEmbeddedAns = '/(?:answer(?:\s+is)?|ans(?:wer)?|correct)\s*[=:.\-–\s]+([a-dA-D])\s*\.?\s*$/i';
-
-    // Next question detector
-    $reNextQ = '/^(?:Q(?:uestions?|ues?\.?)?\s*[-–.]?\s*)?\d+\s*[.):\-–\s]/i';
-
-    // True/False / Yes/No lines
-    $reTrueFalse = '/^(true|false|yes|no)\s*$/i';
-
-    // Explanation/rationale block to skip
-    $reExplain = '/^(?:explanation|rationale|reason|solution|note)\s*[:\-–]/i';
-
-    // ── 10. Helper: normalise answer letter ──────────────────
+    // ── 10. Normalisation helpers ─────────────────────────────
     $normaliseAnswer = function(string $raw): string {
         $raw = strtolower(trim($raw));
-        // Numeric → letter
-        if ($raw === '1') return 'a';
-        if ($raw === '2') return 'b';
-        if ($raw === '3') return 'c';
-        if ($raw === '4') return 'd';
-        // Roman → letter
-        if ($raw === 'i')   return 'a';
-        if ($raw === 'ii')  return 'b';
-        if ($raw === 'iii') return 'c';
-        if ($raw === 'iv')  return 'd';
-        // Yes/No
-        if ($raw === 'yes') return 'true';
-        if ($raw === 'no')  return 'false';
-        return $raw;  // already a/b/c/d or true/false
+        if ($raw === '1') return 'a'; if ($raw === '2') return 'b';
+        if ($raw === '3') return 'c'; if ($raw === '4') return 'd';
+        if ($raw === 'i')   return 'a'; if ($raw === 'ii')  return 'b';
+        if ($raw === 'iii') return 'c'; if ($raw === 'iv')  return 'd';
+        if ($raw === 'yes') return 'true'; if ($raw === 'no') return 'false';
+        return $raw;
     };
 
-    // ── 11. Helper: normalise option letter ──────────────────
     $normaliseOptLabel = function(string $raw): string {
         $raw = strtolower(trim($raw));
         if ($raw === '1' || $raw === 'i')   return 'a';
@@ -587,52 +470,40 @@ function parseQuestions(string $text): array
         return $raw;
     };
 
-    // ── 12. Main parsing loop ─────────────────────────────────
-    $i       = 0;
-    $qNum    = 0;   // question number from the text (used for key lookup)
-    $qIndex  = 1;   // sequential index for our output
+    // ── 11. Main parsing loop ─────────────────────────────────
+    $i = 0; $qNum = 0; $qIndex = 1;
 
     while ($i < $totalLines) {
         $line = $lines[$i];
-
-        // Skip explanation/rationale blocks
         if (preg_match($reExplain, $line)) { $i++; continue; }
-
         if (!preg_match($reQuestion, $line, $qMatch)) { $i++; continue; }
 
-        $qNum         = (int)$qMatch[1];
-        $questionText = trim($qMatch[2]);
-        $options      = [];
+        $qNum          = (int)$qMatch[1];
+        $questionText  = trim($qMatch[2]);
+        $options       = [];
         $correctAnswer = null;
         $i++;
-        $unrecognised = 0;
+        $unrecognised  = 0;
 
-        // Check if the question line itself embeds an answer at the end
         if (preg_match($reEmbeddedAns, $questionText, $eaM)) {
             $correctAnswer = $normaliseAnswer($eaM[1]);
             $questionText  = trim(preg_replace($reEmbeddedAns, '', $questionText));
         }
 
-        // ── True/False / Yes/No look-ahead ───────────────────
-        $tfTokens  = [];
-        $lookahead = 0;
-        while (
-            ($i + $lookahead) < $totalLines
+        // ── True/False look-ahead ────────────────────────────
+        $tfTokens = []; $lookahead = 0;
+        while (($i + $lookahead) < $totalLines
             && !preg_match($reOption, $lines[$i + $lookahead])
-            && !preg_match($reNextQ,  $lines[$i + $lookahead])
-        ) {
+            && !preg_match($reNextQ, $lines[$i + $lookahead])) {
             $ll = trim($lines[$i + $lookahead]);
             if (preg_match($reTrueFalse, $ll)) $tfTokens[] = strtolower($ll);
             $lookahead++;
         }
-
         $hasTF = (in_array('true',  $tfTokens, true) && in_array('false', $tfTokens, true))
               || (in_array('yes',   $tfTokens, true) && in_array('no',    $tfTokens, true));
 
         if ($hasTF) {
             for ($k = 0; $k < $lookahead; $k++) $i++;
-
-            // Look for the answer within the T/F block + 3 more lines
             $scanFrom = $i - $lookahead;
             for ($s = $scanFrom; $s < min($scanFrom + $lookahead + 3, $totalLines); $s++) {
                 $sl = trim($lines[$s]);
@@ -643,28 +514,17 @@ function parseQuestions(string $text): array
                     break;
                 }
                 if ($s >= $i && preg_match($reTrueFalse, $sl, $tfA)) {
-                    $correctAnswer = ($tfA[1] === 'yes') ? 'true'
-                                  : (($tfA[1] === 'no') ? 'false' : strtolower($tfA[1]));
-                    $i = $s + 1;
-                    break;
+                    $correctAnswer = ($tfA[1] === 'yes') ? 'true' : (($tfA[1] === 'no') ? 'false' : strtolower($tfA[1]));
+                    $i = $s + 1; break;
                 }
             }
-
-            // Consume trailing noise before next Q
             while ($i < $totalLines && !preg_match($reNextQ, $lines[$i])
-                && (preg_match($reAnswer, $lines[$i])
-                    || preg_match($reAnswerCompact, $lines[$i])
-                    || preg_match($reTrueFalse, $lines[$i])
-                    || preg_match($reExplain, $lines[$i]))) {
-                $i++;
-            }
-
-            // Fall back to trailing key
+                && (preg_match($reAnswer, $lines[$i]) || preg_match($reAnswerCompact, $lines[$i])
+                    || preg_match($reTrueFalse, $lines[$i]) || preg_match($reExplain, $lines[$i]))) { $i++; }
             if ($correctAnswer === null && isset($trailingAnswers[$qNum])) {
                 $r = $trailingAnswers[$qNum];
                 $correctAnswer = ($r === 'a') ? 'true' : 'false';
             }
-
             $questions[] = [
                 'id'            => $qIndex++,
                 'type'          => 'true_false',
@@ -678,17 +538,11 @@ function parseQuestions(string $text): array
         // ── MCQ branch ───────────────────────────────────────
         while ($i < $totalLines && count($options) < 4) {
             $ol = $lines[$i];
-
-            // Hit next question?
             if (preg_match($reNextQ, $ol)) break;
-
-            // Skip explanation lines
             if (preg_match($reExplain, $ol)) { $i++; break; }
 
-            // Marked answer (asterisk/checkmark on option line)
             if (preg_match($reMarkedAns, $ol, $maM)) {
                 $correctAnswer = $normaliseAnswer($maM[1]);
-                // Also try to capture the option text if present
                 if (preg_match($reOption, ltrim($ol, '*✓→←> '), $optM)) {
                     $key = $normaliseOptLabel($optM[1]);
                     $options[$key] = trim($optM[2]);
@@ -696,51 +550,35 @@ function parseQuestions(string $text): array
                 $i++; continue;
             }
 
-            // Answer keyword line
             if (preg_match($reAnswer, $ol, $ansM) || preg_match($reAnswerCompact, $ol, $ansM)) {
                 $r = $normaliseAnswer($ansM[1]);
                 $correctAnswer = (strlen($r) === 1 && ctype_alpha($r)) ? $r : $correctAnswer;
                 $i++; break;
             }
 
-            // Bare single-letter answer after ≥2 options
             if (count($options) >= 2 && preg_match($reBareAns, $ol, $bm)) {
-                $correctAnswer = strtolower($bm[1]);
-                $i++; break;
+                $correctAnswer = strtolower($bm[1]); $i++; break;
             }
 
-            // Option line
             if (preg_match($reOption, $ol, $optM)) {
                 $key = $normaliseOptLabel($optM[1]);
-                if (isset($options[$key])) {
-                    // Duplicate label — treat as unrecognised to avoid overwriting
-                    $i++; $unrecognised++; continue;
-                }
-                $optText = trim($optM[2]);
-                // Strip trailing answer marker embedded in option text: "25,15 ← Correct"
-                $optText = preg_replace('/\s*(?:←|→|✓|\*{1,2}|correct|right)\s*$/i', '', $optText);
-                $options[$key] = $optText;
-                $unrecognised  = 0;
-                $i++;
-                continue;
+                if (isset($options[$key])) { $i++; $unrecognised++; continue; }
+                $optText = preg_replace('/\s*(?:←|→|✓|\*{1,2}|correct|right)\s*$/i', '', trim($optM[2]));
+                $options[$key] = $optText; $unrecognised = 0; $i++; continue;
             }
 
-            // Unrecognised line — be lenient, try appending to last option
             if (count($options) > 0 && $unrecognised === 0) {
                 $lastKey = array_key_last($options);
-                // Only append if short (continuation) and no next-Q signal
                 if (strlen($ol) < 80 && !preg_match($reNextQ, $ol)) {
-                    $options[$lastKey] .= ' ' . $ol;
-                    $i++; continue;
+                    $options[$lastKey] .= ' ' . $ol; $i++; continue;
                 }
             }
-            $i++;
-            $unrecognised++;
+            $i++; $unrecognised++;
             if (count($options) >= 2 && $unrecognised >= 2) break;
             if (count($options) === 0 && $unrecognised >= 4) break;
         }
 
-        // One more look for straggling answer line immediately after options
+        // Straggling answer line right after options
         if ($correctAnswer === null && $i < $totalLines) {
             $nl = $lines[$i];
             if (preg_match($reAnswer, $nl, $ansM) || preg_match($reAnswerCompact, $nl, $ansM)) {
@@ -748,11 +586,9 @@ function parseQuestions(string $text): array
                 $correctAnswer = (strlen($r) === 1 && ctype_alpha($r)) ? $r : null;
                 $i++;
             } elseif (count($options) >= 2 && preg_match($reBareAns, $nl, $bm)) {
-                $correctAnswer = strtolower($bm[1]);
-                $i++;
+                $correctAnswer = strtolower($bm[1]); $i++;
             } elseif (preg_match($reMarkedAns, $nl, $maM)) {
-                $correctAnswer = $normaliseAnswer($maM[1]);
-                $i++;
+                $correctAnswer = $normaliseAnswer($maM[1]); $i++;
             }
         }
 
@@ -763,7 +599,6 @@ function parseQuestions(string $text): array
 
         if (count($options) < 2) continue;
 
-        // Fall back to trailing answer key
         if ($correctAnswer === null && isset($trailingAnswers[$qNum])) {
             $correctAnswer = $trailingAnswers[$qNum];
         }

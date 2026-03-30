@@ -19,7 +19,7 @@ if (!$attemptId) { header('Location: self-assessment.php'); exit; }
 
 // Load attempt
 $aRes = safePreparedQuery($conn,
-    "SELECT sa.*, s.title, s.duration_minutes, s.pdf_path
+    "SELECT sa.*, s.title, s.duration_minutes, s.pdf_path, s.total_questions
      FROM self_assessment_attempts sa
      JOIN self_assessments s ON s.sa_id = sa.sa_id
      WHERE sa.attempt_id = ? AND sa.user_id = ? AND sa.type = 'pdf' AND sa.status = 'submitted'",
@@ -116,8 +116,8 @@ foreach ($answerRows as $r) {
     elseif (!$r['is_correct'])  $wrong++;
 }
 $pct    = round((float)$attempt['percentage']);
-$passed = $pct >= 60;
-$grade  = $pct >= 90 ? 'A+' : ($pct >= 75 ? 'A' : ($pct >= 60 ? 'B' : ($pct >= 45 ? 'C' : 'F')));
+$passed = $pct >= 40;
+$grade  = $pct >= 90 ? 'A+' : ($pct >= 75 ? 'A' : ($pct >= 60 ? 'B' : ($pct >= 40 ? 'C' : 'F')));
 
 function timeAgoSA(string $dt): string {
     $diff = time() - strtotime($dt);
@@ -461,11 +461,20 @@ function fmtTimeSA(int $s): string { return floor($s/60).'m '.($s%60).'s'; }
                 <div class="score-circle" id="scoreCircle" style="--score-pct:<?= $pct ?>%">
                     <div class="score-content">
                         <div class="score-value"><?= $attempt['score'] ?></div>
-                        <div class="score-denom">out of <?= $attempt['total'] ?></div>
+                        <div class="score-denom">out of <?= $totalQ ?></div>
                         <div class="score-pct-text"><?= $pct ?>%</div>
                     </div>
                 </div>
             </div>
+
+            <?php
+            // Show how many questions were selected vs total in bank (if limit was applied)
+            $saTotal = (int)($attempt['total_questions'] ?? 0);
+            if ($saTotal > 0 && $saTotal > $totalQ): ?>
+            <p style="position:relative;z-index:1;margin:-10px 0 16px;font-size:12.5px;color:rgba(255,255,255,.65);">
+                📋 <?= $totalQ ?> questions selected from <?= $saTotal ?> in the PDF bank
+            </p>
+            <?php endif; ?>
 
             <?php
             if ($pct >= 90)      { $badgeCls = 'badge-excellent'; $badgeTxt = '🏆 Excellent Performance!'; }

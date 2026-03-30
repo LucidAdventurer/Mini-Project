@@ -127,7 +127,7 @@ function safeQuery(mysqli &$conn, string $query, int $maxRetries = 3): mysqli_re
 
             if ($attempt < $maxRetries) {
                 ensureDatabaseConnection($conn);
-                sleep(1);
+                sleep(min(1, $attempt));
             } else {
                 error_log("Query failed after $maxRetries attempts");
                 return false;
@@ -143,6 +143,11 @@ function safeQuery(mysqli &$conn, string $query, int $maxRetries = 3): mysqli_re
  * Returns ['success', 'result', 'insert_id', 'affected_rows', 'error'].
  */
 function safePreparedQuery(mysqli &$conn, string $query, string $types = "", array $params = []): array {
+    // Extend time limit for bulk operations (INSERT/UPDATE with many rows)
+    if (php_sapi_name() !== 'cli') {
+        $current = ini_get('max_execution_time');
+        if ($current > 0 && $current < 300) set_time_limit(300);
+    }
     $maxRetries = 3;
     $attempt    = 0;
 
@@ -186,7 +191,7 @@ function safePreparedQuery(mysqli &$conn, string $query, string $types = "", arr
 
             if ($attempt < $maxRetries) {
                 ensureDatabaseConnection($conn);
-                sleep(1);
+                sleep(min(1, $attempt)); // only sleep after first retry, not immediately
             } else {
                 return ['success' => false, 'error' => "Failed after $maxRetries attempts", 'result' => null, 'insert_id' => 0, 'affected_rows' => 0];
             }
