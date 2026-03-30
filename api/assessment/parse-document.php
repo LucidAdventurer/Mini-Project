@@ -18,15 +18,7 @@
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../db-guard.php';
 
-$conn = createDatabaseConnection();
-if (!$conn) {
-    http_response_code(503);
-    echo json_encode(['success' => false, 'error' => 'Database unavailable.']);
-    exit;
-}
-
-validateSession($conn, 'teacher');
-
+// Send JSON header early so all error responses are JSON
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -34,6 +26,28 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(['success' => false, 'error' => 'Method not allowed.']);
     exit;
 }
+
+$conn = createDatabaseConnection();
+if (!$conn) {
+    http_response_code(503);
+    echo json_encode(['success' => false, 'error' => 'Database unavailable.']);
+    exit;
+}
+
+// ── Auth: allow admin or teacher only ──
+// We must NOT call validateSession() for both roles in a loop —
+// it calls exit() internally on role mismatch, which cannot be caught.
+// Instead, read the session role first and validate against it directly.
+$sessionRole = getSessionRole();
+
+if (!in_array($sessionRole, ['admin', 'teacher'], true)) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'Access denied. Insufficient permissions.']);
+    exit;
+}
+
+// Safe to call now — role is confirmed to match
+$user = validateSession($conn, $sessionRole);
 
 // ── Validate upload ──
 if (!isset($_FILES['document']) || $_FILES['document']['error'] !== UPLOAD_ERR_OK) {
