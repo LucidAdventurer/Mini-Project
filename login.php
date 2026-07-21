@@ -18,6 +18,17 @@
    2. Remember-me token stored (hashed) in DB.
    3. CSRF token seeded into session on successful login.
    4. session_regenerate_id() called exactly once, after auth confirmed.
+
+   MIGRATION NOTE (mysqli -> PDO/Postgres):
+   - All bind_param()/get_result()/close() calls replaced with
+     $stmt->execute([...]) / $stmt->fetch() (PDO style).
+   - mysqli type-hints replaced with PDO.
+   - MySQL's DATE_SUB(NOW(), INTERVAL ? MINUTE) replaced with
+     Postgres interval arithmetic: NOW() - (?::int * INTERVAL '1 minute').
+   - Postgres returns boolean columns as 't'/'f' strings via PDO_PGSQL
+     (not native PHP bool), so a pgBool() helper normalizes them before
+     any truthiness check — without this, !$user['is_active'] would be
+     wrong (both 't' and 'f' are non-empty, truthy PHP strings).
    ======================================== */
 
 // Output buffer: catches any stray echo/warning from included files
@@ -100,8 +111,19 @@ function failLogin(
     exit;
 }
 
+/**
+ * Normalizes a Postgres boolean value fetched via PDO into a real PHP bool.
+ * PDO_PGSQL returns boolean columns as the strings 't'/'f' (not native
+ * PHP true/false), so a plain (bool) cast or truthiness check is unsafe.
+ */
+function pgBool($val): bool {
+    if (is_bool($val)) return $val;
+    if (is_int($val))  return $val === 1;
+    return in_array($val, ['t', 'true', '1'], true);
+}
+
 function logLoginAttempt(
-    mysqli  $conn,
+    PDO     $conn,
     ?int    $userId,
     string  $ip,
     string  $ua,
@@ -110,63 +132,61 @@ function logLoginAttempt(
 ): void {
     if ($userId === null) return;
     if (!tableExists($conn, 'login_activity')) return;
-    $stmt = $conn->prepare(
-        "INSERT INTO login_activity (user_id, ip_address, user_agent, is_success, failure_reason)
-         VALUES (?, ?, ?, ?, ?)"
-    );
-    if (!$stmt) return;
-    $ok = (int) $success;
-    $stmt->bind_param("issis", $userId, $ip, $ua, $ok, $reason);
-    $stmt->execute();
-    $stmt->close();
+    try {
+        $stmt = $conn->prepare(
+            "INSERT INTO login_activity (user_id, ip_address, user_agent, is_success, failure_reason)
+             VALUES (?, ?, ?, ?, ?)"
+        );
+        $stmt->execute([$userId, $ip, $ua, $success ? 1 : 0, $reason]);
+    } catch (PDOException $e) {
+        error_log("logLoginAttempt failed: " . $e->getMessage());
+    }
 }
 
-function updateLastLogin(mysqli $conn, int $userId): void {
-    $stmt = $conn->prepare("UPDATE users SET last_login = NOW() WHERE user_id = ?");
-    if (!$stmt) return;
-    $stmt->bind_param("i", $userId);
-    $stmt->execute();
-    $stmt->close();
+function updateLastLogin(PDO $conn, int $userId): void {
+    try {
+        $stmt = $conn->prepare("UPDATE users SET last_login = NOW() WHERE user_id = ?");
+        $stmt->execute([$userId]);
+    } catch (PDOException $e) {
+        error_log("updateLastLogin failed: " . $e->getMessage());
+    }
 }
 
-function recentFailCount(mysqli $conn, int $userId, int $windowMinutes): array {
+function recentFailCount(PDO $conn, int $userId, int $windowMinutes): array {
     if (!tableExists($conn, 'login_activity')) {
         return ['count' => 0, 'last_fail' => null];
     }
-    $stmt = $conn->prepare(
-        "SELECT COUNT(*) AS cnt, MAX(created_at) AS last_fail
-         FROM login_activity
-         WHERE user_id = ? AND is_success = 0
-           AND created_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)"
-    );
-    if (!$stmt) return ['count' => 0, 'last_fail' => null];
-    $stmt->bind_param("ii", $userId, $windowMinutes);
-    $stmt->execute();
-    $row = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-    return ['count' => (int)($row['cnt'] ?? 0), 'last_fail' => $row['last_fail'] ?? null];
+    try {
+        $stmt = $conn->prepare(
+            "SELECT COUNT(*) AS cnt, MAX(created_at) AS last_fail
+             FROM login_activity
+             WHERE user_id = ? AND is_success = FALSE
+               AND created_at >= NOW() - (?::int * INTERVAL '1 minute')"
+        );
+        $stmt->execute([$userId, $windowMinutes]);
+        $row = $stmt->fetch();
+        return ['count' => (int)($row['cnt'] ?? 0), 'last_fail' => $row['last_fail'] ?? null];
+    } catch (PDOException $e) {
+        error_log("recentFailCount failed: " . $e->getMessage());
+        return ['count' => 0, 'last_fail' => null];
+    }
 }
 
-function storeRememberToken(mysqli $conn, int $userId): ?string {
+function storeRememberToken(PDO $conn, int $userId): ?string {
     $selector  = bin2hex(random_bytes(12));
     $token     = bin2hex(random_bytes(32));
     $tokenHash = hash('sha256', $token);
     $expiresAt = date('Y-m-d H:i:s', time() + 30 * 24 * 3600);
-    $stmt = $conn->prepare(
-        "INSERT INTO remember_tokens (user_id, selector, token_hash, expires_at) VALUES (?, ?, ?, ?)"
-    );
-    if (!$stmt) {
-        error_log("Failed to prepare remember_tokens insert: " . $conn->error);
+    try {
+        $stmt = $conn->prepare(
+            "INSERT INTO remember_tokens (user_id, selector, token_hash, expires_at) VALUES (?, ?, ?, ?)"
+        );
+        $stmt->execute([$userId, $selector, $tokenHash, $expiresAt]);
+        return $selector . ':' . $token;
+    } catch (PDOException $e) {
+        error_log("Failed to insert remember token: " . $e->getMessage());
         return null;
     }
-    $stmt->bind_param("isss", $userId, $selector, $tokenHash, $expiresAt);
-    if (!$stmt->execute()) {
-        error_log("Failed to insert remember token: " . $stmt->error);
-        $stmt->close();
-        return null;
-    }
-    $stmt->close();
-    return $selector . ':' . $token;
 }
 
 
@@ -200,39 +220,34 @@ $lockoutMinutes = ($settings !== null) ? (int) $settings->get('lockout_duration_
 // LOOK UP USER
 // ════════════════════════════════════════
 
-if ($isJson) {
-    // Admin login: accept email OR registration_number
-    $stmt = $conn->prepare(
-        "SELECT user_id, full_name, email, password_hash,
-                role, department, registration_number,
-                is_verified, is_active, profile_image
-         FROM users
-         WHERE (email = ? OR registration_number = ?) AND role = 'admin'
-         LIMIT 1"
-    );
-    if (!$stmt) failLogin($isJson, 'database_error', 'Database error.', 500);
-    $stmt->bind_param("ss", $identifier, $identifier);
-} else {
-    $stmt = $conn->prepare(
-        "SELECT user_id, full_name, email, password_hash,
-                role, department, registration_number,
-                is_verified, is_active, profile_image
-         FROM users
-         WHERE email = ? AND role = ?
-         LIMIT 1"
-    );
-    if (!$stmt) failLogin($isJson, 'database_error', 'Database error.', 500);
-    $stmt->bind_param("ss", $identifier, $role);
-}
-
-if (!$stmt->execute()) {
-    error_log("Login query execute failed: " . $stmt->error);
-    $stmt->close();
+try {
+    if ($isJson) {
+        // Admin login: accept email OR registration_number
+        $stmt = $conn->prepare(
+            "SELECT user_id, full_name, email, password_hash,
+                    role, department, registration_number,
+                    is_verified, is_active, profile_image
+             FROM users
+             WHERE (email = ? OR registration_number = ?) AND role = 'admin'
+             LIMIT 1"
+        );
+        $stmt->execute([$identifier, $identifier]);
+    } else {
+        $stmt = $conn->prepare(
+            "SELECT user_id, full_name, email, password_hash,
+                    role, department, registration_number,
+                    is_verified, is_active, profile_image
+             FROM users
+             WHERE email = ? AND role = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$identifier, $role]);
+    }
+    $user = $stmt->fetch() ?: null;
+} catch (PDOException $e) {
+    error_log("Login query execute failed: " . $e->getMessage());
     failLogin($isJson, 'database_error', 'Database error.', 500);
 }
-
-$user = $stmt->get_result()->fetch_assoc() ?: null;
-$stmt->close();
 
 
 // ════════════════════════════════════════
@@ -264,12 +279,12 @@ if (!$user) {
     // Run a probe to distinguish "wrong role" from "user not found" for the form path
     $reason = 'user_not_found';
     if (!$isJson) {
-        $probe = $conn->prepare("SELECT role FROM users WHERE email = ? LIMIT 1");
-        if ($probe) {
-            $probe->bind_param("s", $identifier);
-            $probe->execute();
-            if ($probe->get_result()->fetch_assoc()) $reason = 'role_mismatch';
-            $probe->close();
+        try {
+            $probe = $conn->prepare("SELECT role FROM users WHERE email = ? LIMIT 1");
+            $probe->execute([$identifier]);
+            if ($probe->fetch()) $reason = 'role_mismatch';
+        } catch (PDOException $e) {
+            error_log("Role probe failed: " . $e->getMessage());
         }
     }
     logLoginAttempt($conn, null, $clientIp, $userAgent, false, $reason);
@@ -277,13 +292,13 @@ if (!$user) {
         'Invalid credentials.');
 }
 
-if (!$user['is_active']) {
+if (!pgBool($user['is_active'])) {
     logLoginAttempt($conn, (int) $user['user_id'], $clientIp, $userAgent, false, 'account_inactive');
     failLogin($isJson, 'account_inactive',
         'This account has been deactivated. Contact the system administrator.', 403);
 }
 
-if (!$user['is_verified']) {
+if (!pgBool($user['is_verified'])) {
     logLoginAttempt($conn, (int) $user['user_id'], $clientIp, $userAgent, false, 'email_not_verified');
     failLogin($isJson, 'email_not_verified',
         $isJson ? 'Account email is not verified. Contact the system administrator.' : '', 403);
@@ -324,12 +339,11 @@ if (!password_verify($password, $user['password_hash'])) {
 
 if (password_needs_rehash($user['password_hash'], PASSWORD_DEFAULT)) {
     $newHash = password_hash($password, PASSWORD_DEFAULT);
-    $rehash  = $conn->prepare("UPDATE users SET password_hash = ? WHERE user_id = ?");
-    if ($rehash) {
-        $userId = (int) $user['user_id'];
-        $rehash->bind_param("si", $newHash, $userId);
-        $rehash->execute();
-        $rehash->close();
+    try {
+        $rehash = $conn->prepare("UPDATE users SET password_hash = ? WHERE user_id = ?");
+        $rehash->execute([$newHash, (int) $user['user_id']]);
+    } catch (PDOException $e) {
+        error_log("Password rehash failed: " . $e->getMessage());
     }
 }
 
@@ -343,7 +357,7 @@ session_regenerate_id(true);
 
 error_log("Login successful — user_id: {$user['user_id']}, Role: {$user['role']}");
 logLoginAttempt($conn, (int) $user['user_id'], $clientIp, $userAgent, true, null);
-updateLastLogin($conn, $user['user_id']);
+updateLastLogin($conn, (int) $user['user_id']);
 
 $_SESSION = [];
 
@@ -359,8 +373,8 @@ $_SESSION['department']    = $user['department']         ?? '';
 $_SESSION['profile_image'] = $user['profile_image']      ?? '';
 $_SESSION['login_time']    = time();
 $_SESSION['ip_address']    = $clientIp;
-$_SESSION['is_verified']   = (bool) $user['is_verified'];
-$_SESSION['is_active']     = (bool) $user['is_active'];
+$_SESSION['is_verified']   = pgBool($user['is_verified']);
+$_SESSION['is_active']     = pgBool($user['is_active']);
 
 // session_regenerate_id() cleared the old CSRF token — seed a fresh one
 $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
