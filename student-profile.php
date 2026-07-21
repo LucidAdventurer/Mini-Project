@@ -18,6 +18,12 @@ if ($freshUser['success'] && $freshUser['result']) {
     if ($row) $user = array_merge($user, $row);
     $freshUser['result']->free();
 }
+
+// Postgres returns boolean columns via PDO as 't'/'f' strings, both of which
+// are truthy in plain PHP — normalize once here so every ?: / truthiness
+// check on these two fields below works correctly.
+if (array_key_exists('is_active', $user))   $user['is_active']   = pgBoolGuard($user['is_active']);
+if (array_key_exists('is_verified', $user)) $user['is_verified'] = pgBoolGuard($user['is_verified']);
  
 $userName     = $user['full_name']           ?? 'Student';
 $userEmail    = $user['email']               ?? '';
@@ -38,7 +44,7 @@ $lastLogin = $user['last_login'] ?? null;
  
 // ── Unread notification count ──
 $unreadResult = safePreparedQuery($conn,
-    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
+    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = false",
     "i", [$userId]
 );
 $unreadCount = 0;
@@ -100,7 +106,7 @@ $recentQuery = "
         a.percentage,
         a.score,
         a.submitted_at,
-        TIMESTAMPDIFF(MINUTE, a.start_time, a.submitted_at) AS time_taken_minutes,
+        FLOOR(EXTRACT(EPOCH FROM (a.submitted_at - a.start_time)) / 60)::int AS time_taken_minutes,
         t.title      AS test_title,
         t.category,
         t.total_marks,
@@ -165,7 +171,7 @@ if ($accResult['success'] && $accResult['result']) {
 // ── Notifications (unread count) ──
 $notifResult = safePreparedQuery(
     $conn,
-    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
+    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = false",
     "i", [$userId]
 );
 $unreadCount = 0;
@@ -354,7 +360,7 @@ $loginResult = safePreparedQuery(
     $conn,
     "SELECT ip_address, user_agent, created_at
      FROM login_activity
-     WHERE user_id = ? AND is_success = 1
+     WHERE user_id = ? AND is_success = true
      ORDER BY created_at DESC LIMIT 5",
     "i", [$userId]
 );
@@ -953,7 +959,7 @@ function parseUA(string $ua): string {
                     <?php if (empty($notifItems)): ?>
                         <div class="notif-dd-empty">No notifications yet.</div>
                     <?php else: foreach ($notifItems as $n):
-                        $isU = !$n['is_read'];
+                        $isU = !pgBoolGuard($n['is_read']);
                         $typeIcons = ['info'=>'ℹ️','success'=>'✅','warning'=>'⚠️','error'=>'❌','assessment'=>'📝','result'=>'🏆','material'=>'📚'];
                         $ico = $typeIcons[$n['type']] ?? '🔔';
                     ?>
