@@ -23,7 +23,7 @@ if (!$user) {
 $userId = (int) $user['user_id'];
 
 $res = safePreparedQuery($conn,
-    "UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0",
+    "UPDATE notifications SET is_read = true WHERE user_id = ? AND is_read = false",
     "i", [$userId]
 );
 
