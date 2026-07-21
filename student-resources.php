@@ -27,7 +27,7 @@ if (empty($_SESSION['csrf_token'])) {
 
 // ── Unread notification count ──
 $notifResult = safePreparedQuery($conn,
-    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
+    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = false",
     "i", [$userId]
 );
 $unreadCount = 0;
@@ -647,7 +647,7 @@ body {
                     <?php if (empty($notifItems)): ?>
                         <div class="notif-empty">No notifications yet.</div>
                     <?php else: foreach ($notifItems as $n):
-                        $isUnread  = !$n['is_read'];
+                        $isUnread  = !pgBoolGuard($n['is_read']);
                         $entityId  = (int)($n['related_entity_id'] ?? 0);
                         $nType     = $n['type'] ?? '';
                         $icon      = ['info'=>'ℹ️','success'=>'✅','warning'=>'⚠️','error'=>'❌','assessment'=>'📝','result'=>'🏆','material'=>'📚'][$nType] ?? '🔔';
