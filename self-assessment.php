@@ -66,7 +66,7 @@ if ($lvlStats['success'] && $lvlStats['result']) {
 $maxDiffResult = safePreparedQuery($conn,
     "SELECT levels_used FROM self_assessment_attempts
      WHERE user_id = ? AND type = 'level' AND status = 'submitted' AND percentage >= 60
-     ORDER BY FIELD(levels_used,'easy','medium','hard') DESC LIMIT 1",
+     ORDER BY CASE levels_used WHEN 'hard' THEN 3 WHEN 'medium' THEN 2 WHEN 'easy' THEN 1 ELSE 0 END DESC LIMIT 1",
     "i", [$userId]
 );
 $maxDiff = 'None yet';
@@ -196,7 +196,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
             "isiis", [$userId, $title, $duration, $totalParsed, $questionLimit]
         );
         if ($ins['success']) {
-            $newSaId = $conn->insert_id;
+            $newSaId = $ins['insert_id'];
             // ── Insert ALL questions into map ──
             foreach ($allQuestions as $order => $q) {
                 if ($q['type'] === 'true_false') {
@@ -681,7 +681,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
             $bankQ = safePreparedQuery($conn,
                 "SELECT question_id FROM self_assessment_question_bank
                  WHERE difficulty = ? $exclude
-                 ORDER BY RAND() LIMIT $numQEach",
+                 ORDER BY RANDOM() LIMIT $numQEach",
                 "s", [$diff]
             );
             if ($bankQ['success'] && $bankQ['result']) {
@@ -702,7 +702,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
                 "isiss", [$userId, $title, $duration, $totalQ, $levStr]
             );
             if ($ins['success']) {
-                $newSaId = $conn->insert_id;
+                $newSaId = $ins['insert_id'];
                 foreach ($qids as $order => $qid) {
                     safePreparedQuery($conn,
                         "INSERT INTO self_assessment_q_map (sa_id, bank_qid, q_order) VALUES (?,?,?)",
@@ -720,7 +720,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
 
 // ── Unread notification count ──
 $notifResult = safePreparedQuery($conn,
-    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
+    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = false",
     "i", [$userId]
 );
 $unreadCount = 0;
@@ -1242,7 +1242,7 @@ function timeAgoSA(string $dt): string {
                     <?php if (empty($notifItems)): ?>
                         <div class="notif-empty">No notifications yet.</div>
                     <?php else: foreach ($notifItems as $n):
-                        $isUnread = !$n['is_read'];
+                        $isUnread = !pgBoolGuard($n['is_read']);
                         $entityId  = (int)($n['related_entity_id'] ?? 0);
                         $nType     = $n['type'] ?? '';
                         $hasLink   = in_array($nType, ['assessment', 'material', 'result']) && $entityId > 0;
