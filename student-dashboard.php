@@ -36,12 +36,12 @@ if (!empty($_SESSION['login_time']) && empty($_SESSION['due_popup_shown'])) {
 
     $dueResult = safePreparedQuery($conn,
         "SELECT a.assessment_id, a.title, a.end_time,
-                TIMESTAMPDIFF(HOUR, NOW(), a.end_time) AS hours_left
+                FLOOR(EXTRACT(EPOCH FROM (a.end_time - NOW())) / 3600)::int AS hours_left
          FROM assessments a
          WHERE a.status = 'published'
            AND a.end_time IS NOT NULL
            AND a.end_time > NOW()
-           AND a.end_time <= DATE_ADD(NOW(), INTERVAL 3 DAY)
+           AND a.end_time <= NOW() + INTERVAL '3 days'
            AND (
                a.visibility = 'public'
                OR EXISTS (
@@ -117,7 +117,7 @@ if ($statsResult['success'] && $statsResult['result']) {
 
 // ── Unread notification count ──
 $notifResult = safePreparedQuery($conn,
-    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
+    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = false",
     "i", [$userId]
 );
 $unreadCount = 0;
@@ -1184,7 +1184,7 @@ function timeAgo(string $datetime): string {
                         <div class="notif-section-label">🔔 Notifications</div>
                         <?php endif; ?>
                         <?php foreach ($notifItems as $n):
-                            $isUnread = !$n['is_read'];
+                            $isUnread = !pgBoolGuard($n['is_read']);
                             $icon = '🔔';
                             $entityId  = (int)($n['related_entity_id'] ?? 0);
                             $nType     = $n['type'] ?? '';
