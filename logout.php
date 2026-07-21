@@ -20,11 +20,11 @@ if (isset($_COOKIE['remember_me'])) {
     $selector = $parts[0] ?? '';
 
     if ($selector !== '' && preg_match('/^[0-9a-f]{24}$/', $selector)) {
-        $stmt = $conn->prepare("DELETE FROM remember_tokens WHERE selector = ?");
-        if ($stmt) {
-            $stmt->bind_param("s", $selector);
-            $stmt->execute();
-            $stmt->close();
+        try {
+            $stmt = $conn->prepare("DELETE FROM remember_tokens WHERE selector = ?");
+            $stmt->execute([$selector]);
+        } catch (PDOException $e) {
+            error_log("logout.php: failed to delete remember token: " . $e->getMessage());
         }
     }
 
