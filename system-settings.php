@@ -15,7 +15,7 @@
  * 3. cache_expiry_seconds is clamped (30–3600) when loaded from DB.
  * 4. initializeSettings() uses a DB advisory lock to prevent race conditions.
  * 5. getAllowedFileTypes() whitelists safe extensions only.
- * 6. Constructor validates that $conn is a live mysqli instance.
+ * 6. Constructor validates that $conn is a live PDO instance.
  * 7. APCu key is namespaced with a versioned prefix to prevent cross-app collisions.
  *
  * SECURITY FIXES (round 2):
@@ -33,7 +33,7 @@ class SystemSettings {
     private array   $cache          = [];
     private int     $cacheExpiry    = 300;   // seconds — also stored as a setting
     private ?int    $cacheTimestamp = null;
-    private ?mysqli $conn           = null;
+    private ?PDO    $conn           = null;
     private bool    $initialized    = false;
 
     // FIX 7: versioned prefix prevents cross-app APCu collisions
@@ -91,7 +91,7 @@ class SystemSettings {
         global $conn;
 
         // FIX 6: validate DB connection before use
-        if (!$conn instanceof mysqli) {
+        if (!$conn instanceof PDO) {
             throw new RuntimeException("SystemSettings: database connection not initialized or invalid");
         }
         $this->conn = $conn;
@@ -190,20 +190,19 @@ class SystemSettings {
         }
 
         try {
-            $result = $this->conn->query(
+            $stmt = $this->conn->query(
                 "SELECT setting_key, setting_value, setting_type FROM system_settings"
             );
 
-            if ($result) {
+            if ($stmt) {
                 $this->cache = [];
-                while ($row = $result->fetch_assoc()) {
+                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                     $this->cache[$row['setting_key']] = [
                         'value' => $this->convertValue($row['setting_value'], $row['setting_type']),
                         'type'  => $row['setting_type'],
                     ];
                 }
                 $this->cacheTimestamp = time();
-                $result->free();
 
                 // FIX 3: clamp cache_expiry_seconds to a safe range (30–3600 s)
                 if (isset($this->cache['cache_expiry_seconds'])) {
@@ -216,9 +215,9 @@ class SystemSettings {
 
                 error_log("SystemSettings: loaded " . count($this->cache) . " settings from DB");
             } else {
-                error_log("SystemSettings: failed to load — " . $this->conn->error);
+                error_log("SystemSettings: failed to load — query returned false");
             }
-        } catch (Exception $e) {
+        } catch (PDOException $e) {
             error_log("SystemSettings loadCache error: " . $e->getMessage());
         }
     }
@@ -325,11 +324,8 @@ class SystemSettings {
             $stmt = $this->conn->prepare(
                 "SELECT is_editable FROM system_settings WHERE setting_key = ?"
             );
-            $stmt->bind_param("s", $key);
-            $stmt->execute();
-            $result  = $stmt->get_result();
-            $setting = $result->fetch_assoc();
-            $stmt->close();
+            $stmt->execute([$key]);
+            $setting = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if ($setting) {
                 if (!$setting['is_editable']) {
@@ -341,7 +337,7 @@ class SystemSettings {
                      SET setting_value = ?, setting_type = ?, updated_by = ?, updated_at = NOW()
                      WHERE setting_key = ?"
                 );
-                $stmt->bind_param("ssis", $valueStr, $type, $userId, $key);
+                $ok = $stmt->execute([$valueStr, $type, $userId, $key]);
             } else {
                 $description = $this->getSettingDescription($key);
                 $stmt = $this->conn->prepare(
@@ -349,11 +345,8 @@ class SystemSettings {
                         (setting_key, setting_value, setting_type, description, updated_by)
                      VALUES (?, ?, ?, ?, ?)"
                 );
-                $stmt->bind_param("ssssi", $key, $valueStr, $type, $description, $userId);
+                $ok = $stmt->execute([$key, $valueStr, $type, $description, $userId]);
             }
-
-            $ok = $stmt->execute();
-            $stmt->close();
 
             if ($ok) {
                 // Update in-process cache immediately
@@ -364,7 +357,7 @@ class SystemSettings {
 
             return $ok;
 
-        } catch (Exception $e) {
+        } catch (PDOException $e) {
             error_log("SystemSettings set() error: " . $e->getMessage());
             return false;
         }
@@ -376,15 +369,14 @@ class SystemSettings {
 
     private function needsInitialization(): bool {
         try {
-            $result = $this->conn->query("SELECT COUNT(*) AS count FROM system_settings");
-            if ($result) {
-                $row   = $result->fetch_assoc();
+            $stmt = $this->conn->query("SELECT COUNT(*) AS count FROM system_settings");
+            if ($stmt) {
+                $row   = $stmt->fetch(PDO::FETCH_ASSOC);
                 $count = (int) $row['count'];
-                $result->free();
                 return $count < count(self::DEFAULT_CONFIGURABLE_SETTINGS);
             }
             return true;
-        } catch (Exception $e) {
+        } catch (PDOException $e) {
             error_log("SystemSettings needsInitialization error: " . $e->getMessage());
             return false;
         }
@@ -403,19 +395,32 @@ class SystemSettings {
             return;
         }
 
-        // Acquire advisory lock (wait up to 5 seconds)
-        $lockResult = $this->conn->query("SELECT GET_LOCK('pta_settings_init', 5) AS acquired");
-        $lockRow    = $lockResult ? $lockResult->fetch_assoc() : null;
-        $lockResult && $lockResult->free();
+        // Acquire advisory lock (Postgres session-level lock keyed by a fixed
+        // hashed name — pg_try_advisory_lock is non-blocking, so we poll briefly
+        // to emulate MySQL's GET_LOCK(name, timeout) behaviour).
+        $lockKey    = "SELECT hashtext('pta_settings_init')::bigint AS k";
+        $keyRow     = $this->conn->query($lockKey)->fetch(PDO::FETCH_ASSOC);
+        $lockId     = $keyRow['k'];
 
-        if (!$lockRow || (int) $lockRow['acquired'] !== 1) {
+        $acquired = false;
+        $deadline = microtime(true) + 5; // wait up to 5 seconds, like the old GET_LOCK timeout
+        do {
+            $stmt = $this->conn->prepare("SELECT pg_try_advisory_lock(?) AS acquired");
+            $stmt->execute([$lockId]);
+            $acquired = (bool) $stmt->fetchColumn();
+            if (!$acquired) {
+                usleep(100000); // 100ms
+            }
+        } while (!$acquired && microtime(true) < $deadline);
+
+        if (!$acquired) {
             error_log("SystemSettings: could not acquire init lock — skipping initialization");
             return;
         }
 
         // Re-check after acquiring lock; another worker may have already initialized
         if (!$this->needsInitialization()) {
-            $this->conn->query("SELECT RELEASE_LOCK('pta_settings_init')");
+            $this->conn->prepare("SELECT pg_advisory_unlock(?)")->execute([$lockId]);
             $this->initialized = true;
             return;
         }
@@ -423,42 +428,34 @@ class SystemSettings {
         error_log("SystemSettings: initializing missing default settings...");
 
         try {
-            $values = [];
-            $types  = "";
-            $params = [];
+            $rowsAffected = 0;
+
+            // Postgres has no INSERT IGNORE — use ON CONFLICT DO NOTHING per row
+            // (setting_key is expected to be the unique/primary key on this table).
+            $stmt = $this->conn->prepare(
+                "INSERT INTO system_settings
+                    (setting_key, setting_value, setting_type, description, is_editable)
+                 VALUES (?, ?, ?, ?, true)
+                 ON CONFLICT (setting_key) DO NOTHING"
+            );
 
             foreach (self::DEFAULT_CONFIGURABLE_SETTINGS as $key => $value) {
                 $type        = $this->determineType($value);
                 $valueStr    = $this->convertToString($value, $type);
                 $description = $this->getSettingDescription($key);
 
-                $params[]  = $key;
-                $params[]  = $valueStr;
-                $params[]  = $type;
-                $params[]  = $description;
-                $types    .= "ssss";
-                $values[]  = "(?, ?, ?, ?, 1)";
+                $stmt->execute([$key, $valueStr, $type, $description]);
+                $rowsAffected += $stmt->rowCount();
             }
 
-            if (!empty($values)) {
-                $sql  = "INSERT IGNORE INTO system_settings
-                            (setting_key, setting_value, setting_type, description, is_editable)
-                         VALUES " . implode(', ', $values);
-                $stmt = $this->conn->prepare($sql);
-                if ($stmt) {
-                    $stmt->bind_param($types, ...$params);
-                    $stmt->execute();
-                    error_log("SystemSettings: initialized {$stmt->affected_rows} settings");
-                    $stmt->close();
-                }
-            }
+            error_log("SystemSettings: initialized {$rowsAffected} settings");
 
             $this->initialized = true;
 
-        } catch (Exception $e) {
+        } catch (PDOException $e) {
             error_log("SystemSettings initializeSettings error: " . $e->getMessage());
         } finally {
-            $this->conn->query("SELECT RELEASE_LOCK('pta_settings_init')");
+            $this->conn->prepare("SELECT pg_advisory_unlock(?)")->execute([$lockId]);
         }
     }
 
@@ -631,19 +628,16 @@ class SystemSettings {
     private function userIsAdmin(int $userId): bool {
         try {
             $stmt = $this->conn->prepare(
-                "SELECT role FROM users WHERE user_id = ? AND is_active = 1 LIMIT 1"
+                "SELECT role FROM users WHERE user_id = ? AND is_active = true LIMIT 1"
             );
             if (!$stmt) {
                 return false;
             }
-            $stmt->bind_param("i", $userId);
-            $stmt->execute();
-            $result = $stmt->get_result();
-            $row    = $result->fetch_assoc();
-            $stmt->close();
+            $stmt->execute([$userId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
             return isset($row['role']) && $row['role'] === 'admin';
-        } catch (Exception $e) {
+        } catch (PDOException $e) {
             error_log("SystemSettings userIsAdmin error: " . $e->getMessage());
             return false;
         }
