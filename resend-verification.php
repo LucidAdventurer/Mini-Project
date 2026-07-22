@@ -26,6 +26,7 @@ ini_set('error_log', $logDir . '/php_errors.log');
 set_time_limit(30);
 
 require_once "config.php";
+require_once "db-guard.php";
 
 if (!ensureDatabaseConnection($conn)) {
     die(renderPage('error', 'Database connection failed. Please try again later.'));
@@ -80,22 +81,16 @@ try {
          WHERE  email = ?
          LIMIT  1"
     );
-    if (!$stmt) throw new Exception("DB prepare failed: " . $conn->error);
-    $stmt->bind_param("s", $email);
-    $stmt->execute();
-    $result = $stmt->get_result();
+    $stmt->execute([$email]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
     // Neutral response — don't reveal whether the email exists
-    if ($result->num_rows === 0) {
-        $stmt->close();
+    if (!$user) {
         die(renderPage('sent', 'If that email is registered and unverified, a new link has been sent.'));
     }
 
-    $user = $result->fetch_assoc();
-    $stmt->close();
-
     // Already verified — just redirect
-    if ($user['is_verified']) {
+    if (pgBoolGuard($user['is_verified'])) {
         die(renderPage('already_verified', 'Your email is already verified. You can log in.', $user['full_name']));
     }
 
@@ -107,13 +102,10 @@ try {
          FROM   email_verification_tokens
          WHERE  user_id    = ?
            AND  is_used    = FALSE
-           AND  created_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE)"
+           AND  created_at > NOW() - INTERVAL '5 minutes'"
     );
-    if (!$stmt) throw new Exception("DB prepare (rate limit) failed: " . $conn->error);
-    $stmt->bind_param("i", $user['user_id']);
-    $stmt->execute();
-    $rl = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
+    $stmt->execute([$user['user_id']]);
+    $rl = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ((int) $rl['recent'] > 0) {
         die(renderPage('rate_limit',
@@ -127,10 +119,7 @@ try {
     $stmt = $conn->prepare(
         "UPDATE email_verification_tokens SET is_used = TRUE WHERE user_id = ? AND is_used = FALSE"
     );
-    if (!$stmt) throw new Exception("DB prepare (invalidate) failed: " . $conn->error);
-    $stmt->bind_param("i", $user['user_id']);
-    $stmt->execute();
-    $stmt->close();
+    $stmt->execute([$user['user_id']]);
 
     /* ========================================
        GENERATE NEW TOKEN
@@ -142,10 +131,7 @@ try {
     $stmt = $conn->prepare(
         "INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES (?, ?, ?)"
     );
-    if (!$stmt) throw new Exception("DB prepare (insert token) failed: " . $conn->error);
-    $stmt->bind_param("iss", $user['user_id'], $tokenHash, $expiresAt);
-    if (!$stmt->execute()) throw new Exception("Failed to insert new token: " . $stmt->error);
-    $stmt->close();
+    $stmt->execute([$user['user_id'], $tokenHash, $expiresAt]);
 
     /* ========================================
        QUEUE EMAIL
