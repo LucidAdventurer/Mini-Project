@@ -40,21 +40,23 @@ $r = safePreparedQuery($conn,
     "ii", [$notificationId, $userId]
 );
 
-if (!$r['success'] || !$r['result'] || $r['result']->num_rows === 0) {
+$notif = ($r['success'] && $r['result']) ? $r['result']->fetch_assoc() : null;
+if ($r['result']) {
+    $r['result']->free();
+}
+
+if (!$notif) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'Notification not found.']);
     exit;
 }
-
-$notif      = $r['result']->fetch_assoc();
-$r['result']->free();
 
 $entityType = $notif['related_entity_type'];
 $entityId   = (int) $notif['related_entity_id'];
 
 // ── Mark as read ──
 safePreparedQuery($conn,
-    "UPDATE notifications SET is_read = 1 WHERE notification_id = ? AND user_id = ?",
+    "UPDATE notifications SET is_read = true WHERE notification_id = ? AND user_id = ?",
     "ii", [$notificationId, $userId]
 );
 
