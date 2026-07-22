@@ -46,7 +46,7 @@ $asmResult = safePreparedQuery($conn,
         a.randomize_questions,
         a.randomize_options,
 
-        TIMESTAMPDIFF(SECOND, aa.start_time, NOW()) AS elapsed_seconds
+        FLOOR(EXTRACT(EPOCH FROM (NOW() - aa.start_time)))::int AS elapsed_seconds
 
      FROM assessment_attempts aa
      JOIN assessments a ON a.assessment_id = aa.assessment_id
@@ -55,12 +55,17 @@ $asmResult = safePreparedQuery($conn,
     "ii", [$attemptId, $userId]
 );
 
-if (!$asmResult['success'] || !$asmResult['result'] || $asmResult['result']->num_rows === 0) {
+if (!$asmResult['success'] || !$asmResult['result']) {
     header('Location: student-dashboard.php?error=attempt_not_found');
     exit;
 }
 $attempt = $asmResult['result']->fetch_assoc();
 $asmResult['result']->free();
+
+if (!$attempt) {
+    header('Location: student-dashboard.php?error=attempt_not_found');
+    exit;
+}
 
 /* ── Guard: only allow 'in_progress' attempts ── */
 if ($attempt['status'] !== 'in_progress') {
@@ -126,7 +131,7 @@ if ($qResult['success'] && $qResult['result']) {
 
 $qIds = array_keys($questionsRaw);
 
-if ($attempt['randomize_questions']) {
+if (pgBoolGuard($attempt['randomize_questions'])) {
     shuffle($qIds);
 }
 
@@ -161,7 +166,7 @@ foreach ($qIds as $pos => $qid) {
 
     $opts = $q['options'];
 
-    if ($attempt['randomize_options'] && count($opts) > 1) {
+    if (pgBoolGuard($attempt['randomize_options']) && count($opts) > 1) {
         shuffle($opts);
     }
 
