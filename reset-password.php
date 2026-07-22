@@ -33,6 +33,7 @@ if (!file_exists("config.php")) {
     die(renderPage('error', 'Configuration error. Please contact support.'));
 }
 require_once "config.php";
+require_once "db-guard.php";
 
 if (!ensureDatabaseConnection($conn)) {
     ob_end_clean();
@@ -53,33 +54,29 @@ if (empty($rawToken) || strlen($rawToken) > 200) {
 
 $tokenHash = hash('sha256', $rawToken);
 
-$stmt = $conn->prepare(
-    "SELECT t.token_id, t.user_id, t.expires_at, t.is_used,
-            u.full_name, u.email, u.is_active
-     FROM   password_reset_tokens t
-     JOIN   users u ON u.user_id = t.user_id
-     WHERE  t.token = ?
-     LIMIT  1"
-);
-if (!$stmt) {
-    error_log("reset-password: prepare failed: " . $conn->error);
+try {
+    $stmt = $conn->prepare(
+        "SELECT t.token_id, t.user_id, t.expires_at, t.is_used,
+                u.full_name, u.email, u.is_active
+         FROM   password_reset_tokens t
+         JOIN   users u ON u.user_id = t.user_id
+         WHERE  t.token = ?
+         LIMIT  1"
+    );
+    $stmt->execute([$tokenHash]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log("reset-password: token lookup failed: " . $e->getMessage());
     ob_end_clean();
     die(renderPage('error', 'Something went wrong. Please try again.'));
 }
-$stmt->bind_param("s", $tokenHash);
-$stmt->execute();
-$result = $stmt->get_result();
 
-if ($result->num_rows === 0) {
-    $stmt->close();
+if (!$row) {
     ob_end_clean();
     die(renderPage('error', 'This reset link is invalid or does not exist.'));
 }
 
-$row = $result->fetch_assoc();
-$stmt->close();
-
-if ($row['is_used']) {
+if (pgBoolGuard($row['is_used'])) {
     ob_end_clean();
     die(renderPage('error', 'This reset link has already been used. Please request a new one.'));
 }
@@ -89,7 +86,7 @@ if (strtotime($row['expires_at']) < time()) {
     die(renderPage('expired', 'This reset link has expired. Please request a new one.'));
 }
 
-if (!$row['is_active']) {
+if (!pgBoolGuard($row['is_active'])) {
     ob_end_clean();
     die(renderPage('error', 'This account is inactive. Please contact the administrator.'));
 }
@@ -158,21 +155,15 @@ if (!empty($errors)) {
 $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
 
 try {
-    $conn->begin_transaction();
+    $conn->beginTransaction();
 
     // Update password
     $upd = $conn->prepare("UPDATE users SET password_hash = ? WHERE user_id = ?");
-    if (!$upd) throw new Exception("Prepare update users failed: " . $conn->error);
-    $upd->bind_param("si", $newHash, $row['user_id']);
-    if (!$upd->execute()) throw new Exception("Execute update users failed: " . $upd->error);
-    $upd->close();
+    $upd->execute([$newHash, $row['user_id']]);
 
     // Mark token used
     $tok = $conn->prepare("UPDATE password_reset_tokens SET is_used = TRUE WHERE token_id = ?");
-    if (!$tok) throw new Exception("Prepare update token failed: " . $conn->error);
-    $tok->bind_param("i", $row['token_id']);
-    if (!$tok->execute()) throw new Exception("Execute update token failed: " . $tok->error);
-    $tok->close();
+    $tok->execute([$row['token_id']]);
 
     $conn->commit();
 
@@ -184,7 +175,7 @@ try {
         $row['full_name']);
     exit;
 
-} catch (Exception $e) {
+} catch (PDOException $e) {
     $conn->rollback();
     error_log("reset-password error: " . $e->getMessage());
     ob_end_clean();
