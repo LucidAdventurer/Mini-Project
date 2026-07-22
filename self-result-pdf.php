@@ -59,7 +59,7 @@ if ($imgRes['success'] && $imgRes['result']) {
 }
 
 // Notifications
-$notifResult = safePreparedQuery($conn, "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0", "i", [$userId]);
+$notifResult = safePreparedQuery($conn, "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = false", "i", [$userId]);
 $unreadCount = 0;
 if ($notifResult['success'] && $notifResult['result']) {
     $notifRow = $notifResult['result']->fetch_assoc();
@@ -109,11 +109,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
 
 // Computed stats
 $totalQ   = count($answerRows);
-$correct  = array_sum(array_column($answerRows, 'is_correct'));
+$correct  = count(array_filter($answerRows, fn($r) => pgBoolGuard($r['is_correct'])));
 $wrong    = 0; $skipped = 0;
 foreach ($answerRows as $r) {
-    if (!$r['selected_option']) $skipped++;
-    elseif (!$r['is_correct'])  $wrong++;
+    if (!$r['selected_option'])       $skipped++;
+    elseif (!pgBoolGuard($r['is_correct'])) $wrong++;
 }
 $pct    = round((float)$attempt['percentage']);
 $passed = $pct >= 40;
@@ -387,7 +387,7 @@ function fmtTimeSA(int $s): string { return floor($s/60).'m '.($s%60).'s'; }
                     <?php if (empty($notifItems)): ?>
                         <div class="notif-empty">No notifications yet.</div>
                     <?php else: foreach ($notifItems as $n):
-                        $isUnread = !$n['is_read'];
+                        $isUnread = !pgBoolGuard($n['is_read']);
                         $typeIcons = ['info'=>'ℹ️','success'=>'✅','warning'=>'⚠️','error'=>'❌','assessment'=>'📝','result'=>'🏆','material'=>'📚'];
                         $icon = $typeIcons[$n['type']] ?? '🔔';
                     ?>
@@ -534,7 +534,7 @@ function fmtTimeSA(int $s): string { return floor($s/60).'m '.($s%60).'s'; }
                 <?php foreach ($answerRows as $i => $row):
                     $sel     = $row['selected_option'];
                     $correct_opt = $row['correct_option'];
-                    $status  = !$sel ? 'skipped' : ($row['is_correct'] ? 'correct' : 'incorrect');
+                    $status  = !$sel ? 'skipped' : (pgBoolGuard($row['is_correct']) ? 'correct' : 'incorrect');
                     $opts    = ['a'=>$row['option_a'],'b'=>$row['option_b'],'c'=>$row['option_c'],'d'=>$row['option_d']];
                 ?>
                 <div class="question-card <?= $status ?>" data-status="<?= $status ?>" data-text="<?= strtolower(htmlspecialchars($row['question_text'])) ?>">
@@ -557,14 +557,14 @@ function fmtTimeSA(int $s): string { return floor($s/60).'m '.($s%60).'s'; }
                             $cls = '';
                             if ($isCorrect)                    $cls .= ' correct-highlight';
                             if ($isSelected && $isCorrect)     $cls .= ' user-selected';
-                            if ($isSelected && !$row['is_correct']) $cls .= ' wrong-highlight user-selected';
+                            if ($isSelected && !pgBoolGuard($row['is_correct'])) $cls .= ' wrong-highlight user-selected';
                         ?>
                         <div class="answer-option<?= $cls ?>">
                             <span class="option-label"><?= strtoupper($letter) ?>)</span>
                             <span class="option-text"><?= htmlspecialchars($text) ?></span>
                             <?php if ($isCorrect): ?><span class="option-badge badge-correct-lbl">Correct Answer</span><?php endif; ?>
-                            <?php if ($isSelected && !$row['is_correct']): ?><span class="option-badge badge-yours">Your Answer</span><?php endif; ?>
-                            <?php if ($isSelected && $row['is_correct']): ?><span class="option-badge badge-correct-lbl">Your Answer ✓</span><?php endif; ?>
+                            <?php if ($isSelected && !pgBoolGuard($row['is_correct'])): ?><span class="option-badge badge-yours">Your Answer</span><?php endif; ?>
+                            <?php if ($isSelected && pgBoolGuard($row['is_correct'])): ?><span class="option-badge badge-correct-lbl">Your Answer ✓</span><?php endif; ?>
                         </div>
                         <?php endforeach; ?>
                     </div>
