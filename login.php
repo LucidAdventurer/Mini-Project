@@ -4,8 +4,8 @@
    File: login.php
 
    ① FORM POST  (application/x-www-form-urlencoded)
-      Used by: index.html — student / teacher
-      On error  → redirect index.html?error=<code>
+      Used by: login.html — student / teacher
+      On error  → redirect login.html?error=<code>
       On success → redirect <role>-dashboard.php
 
    ② JSON POST  (application/json)
@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         header('Content-Type: application/json');
         echo json_encode(['success' => false, 'error' => 'Method not allowed.']);
     } else {
-        header('Location: index.html?error=invalid_request');
+        header('Location: login.html?error=invalid_request');
     }
     exit;
 }
@@ -106,7 +106,7 @@ function failLogin(
         header('Content-Type: application/json');
         echo json_encode(array_merge(['success' => false, 'error' => $message], $extra));
     } else {
-        header('Location: index.html?error=' . urlencode($code));
+        header('Location: login.html?error=' . urlencode($code));
     }
     exit;
 }

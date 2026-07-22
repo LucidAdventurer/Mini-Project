@@ -334,7 +334,7 @@ function renderForm(string $email = '', string $error = ''): string {
         <input type="email" id="email" name="email" value="{$emailVal}" required placeholder="you@example.com">
         <button type="submit">Send Verification Link</button>
       </form>
-      <a href="index.html" class="back">← Back to Login</a>
+      <a href="login.html" class="back">← Back to Login</a>
     </div>
   </div>
 </body>
@@ -377,7 +377,7 @@ function renderPage(string $status, string $message, string $name = ''): string 
           . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '</strong>,</p>'
         : '';
 
-    $loginLink = '<a href="index.html"
+    $loginLink = '<a href="login.html"
                      style="display:inline-block;margin-top:16px;padding:10px 28px;
                             background:#1a56db;color:#fff;text-decoration:none;
                             border-radius:6px;font-size:14px;font-weight:600;">

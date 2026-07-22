@@ -92,7 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     ob_end_clean();
-    header('Location: index.html');
+    header('Location: login.html');
     exit;
 }
 
@@ -439,7 +439,7 @@ function renderForm(string $error = ''): string {
                required autocomplete="email">
         <button type="submit">Send Reset Link</button>
       </form>
-      <a class="back" href="index.html">← Back to Login</a>
+      <a class="back" href="login.html">← Back to Login</a>
     </div>
   </div>
 </body>
@@ -514,7 +514,7 @@ function renderPage(string $status, string $message): string {
       <span class="icon">{$icon}</span>
       <h2 class="status">{$title}</h2>
       <p class="message">{$msgHtml}</p>
-      <a class="btn" href="index.html">Back to Login</a>
+      <a class="btn" href="login.html">Back to Login</a>
     </div>
   </div>
 </body>

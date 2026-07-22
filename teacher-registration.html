@@ -245,7 +245,7 @@
       </form>
 
       <div class="form-footer">
-        <p>Already have an account? <a href="index.html">Login here</a></p>
+        <p>Already have an account? <a href="login.html">Login here</a></p>
         <p><a href="student-registration.html">Register as Student</a></p>
       </div>
     </div>
@@ -425,7 +425,7 @@
           showAlert('success', result.message);
           form.reset();
           setTimeout(() => {
-            window.location.href = result.redirect || 'index.html';
+            window.location.href = result.redirect || 'login.html';
           }, 2000);
         } else {
           showAlert('error', result.message || 'Registration failed');

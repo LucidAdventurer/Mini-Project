@@ -109,7 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     ob_end_clean();
-    header('Location: index.html');
+    header('Location: login.html');
     exit;
 }
 
@@ -310,7 +310,7 @@ function renderForm(string $rawToken, string $name, array $errors = []): string 
 
         <button type="submit">Set New Password</button>
       </form>
-      <a class="back" href="index.html">← Back to Login</a>
+      <a class="back" href="login.html">← Back to Login</a>
     </div>
   </div>
 
@@ -370,7 +370,7 @@ function renderPage(string $status, string $message, string $name = ''): string 
                      border-radius:6px;font-size:14px;font-weight:600;">
              Request New Link
            </a>'
-        : '<a href="index.html"
+        : '<a href="login.html"
               style="display:inline-block;margin-top:16px;padding:10px 28px;
                      background:#1a56db;color:#fff;text-decoration:none;
                      border-radius:6px;font-size:14px;font-weight:600;">

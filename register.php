@@ -414,7 +414,7 @@ try {
     sendResponse(true, $message, [
         'user_id'               => $userId,
         'requires_verification' => $requireVerification,
-        'redirect'              => 'index.html?success=' . urlencode($message),
+        'redirect'              => 'login.html?success=' . urlencode($message),
     ]);
 
 } catch (Throwable $e) {

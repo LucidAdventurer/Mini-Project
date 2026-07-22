@@ -153,7 +153,7 @@ function renderPage($status, $message, $name = '', $email = '') {
                        </a>';
     }
 
-    $loginLink = '<a href="index.html"
+    $loginLink = '<a href="login.html"
                      style="display:inline-block;margin-top:16px;padding:10px 28px;
                             background:#1a56db;color:#fff;text-decoration:none;
                             border-radius:6px;font-size:14px;font-weight:600;">

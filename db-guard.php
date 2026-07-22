@@ -367,13 +367,13 @@ function validateSession(PDO $conn, ?string $requiredRole = null): array {
     // ── 1. Session must exist ──
     if ($uid === 0 || $role === '') {
         sessionAbort(401, 'Session expired. Please log in again.',
-            'index.html?error=session_expired');
+            'login.html?error=session_expired');
     }
 
     // ── 2. Role check ──
     if ($requiredRole !== null && $role !== $requiredRole) {
         sessionAbort(403, 'Access denied. Insufficient permissions.',
-            'index.html?error=unauthorized');
+            'login.html?error=unauthorized');
     }
 
     // ── 3. CSRF check on all state-changing requests ──
@@ -387,7 +387,7 @@ function validateSession(PDO $conn, ?string $requiredRole = null): array {
     if (!$user) {
         session_destroy();
         sessionAbort(401, 'User account not found. Please log in again.',
-            'index.html?error=user_not_found');
+            'login.html?error=user_not_found');
     }
 
     // FIX: Postgres booleans arrive via PDO as 't'/'f' strings, both of
@@ -395,7 +395,7 @@ function validateSession(PDO $conn, ?string $requiredRole = null): array {
     if (!pgBoolGuard($user['is_active'])) {
         session_destroy();
         sessionAbort(403, 'Your account has been deactivated.',
-            'index.html?error=account_deactivated');
+            'login.html?error=account_deactivated');
     }
 
     // Ensure session reflects current DB role
