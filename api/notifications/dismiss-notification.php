@@ -85,7 +85,7 @@ switch ($action) {
 
 // Return updated unread count so badge can be updated
 $countRes    = safePreparedQuery($conn,
-    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
+    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = false",
     "i", [$userId]
 );
 $unreadCount = 0;
