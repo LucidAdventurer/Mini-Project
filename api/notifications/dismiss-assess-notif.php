@@ -6,12 +6,12 @@
  * Requires:  student_notif_dismiss  table (see SQL below).
  *
  * CREATE TABLE IF NOT EXISTS student_notif_dismiss (
- *     id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
- *     user_id       INT UNSIGNED NOT NULL,
- *     assessment_id INT UNSIGNED NOT NULL,
- *     dismissed_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
- *     UNIQUE KEY uq_user_assess (user_id, assessment_id)
- * ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+ *     id            SERIAL PRIMARY KEY,
+ *     user_id       INTEGER NOT NULL,
+ *     assessment_id INTEGER NOT NULL,
+ *     dismissed_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+ *     CONSTRAINT uq_user_assess UNIQUE (user_id, assessment_id)
+ * );
  * ============================================================ */
 
 require_once "../../config.php";
@@ -78,7 +78,8 @@ if ($attemptCnt === 0) {
 
 // Insert dismissal (ignore duplicate)
 $insertResult = safePreparedQuery($conn,
-    "INSERT IGNORE INTO student_notif_dismiss (user_id, assessment_id) VALUES (?, ?)",
+    "INSERT INTO student_notif_dismiss (user_id, assessment_id) VALUES (?, ?)
+     ON CONFLICT (user_id, assessment_id) DO NOTHING",
     "ii", [$userId, $assessmentId]
 );
 
