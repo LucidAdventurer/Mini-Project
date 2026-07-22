@@ -17,9 +17,8 @@ $stmt = $conn->prepare("
     FROM users
     WHERE user_id = ?
 ");
-$stmt->bind_param("i", $teacherId);
-$stmt->execute();
-$user = $stmt->get_result()->fetch_assoc();
+$stmt->execute([$teacherId]);
+$user = $stmt->fetch(PDO::FETCH_ASSOC);
 
 $userName     = $user['full_name']     ?? 'Teacher';
 $userEmail    = $user['email']         ?? '';
@@ -35,16 +34,15 @@ $statsStmt = $conn->prepare("
     SELECT
         COUNT(DISTINCT a.assessment_id)       AS total_assessments,
         COUNT(DISTINCT aa.user_id)            AS total_students,
-        IFNULL(AVG(aa.percentage), 0)         AS avg_score
+        COALESCE(AVG(aa.percentage), 0)       AS avg_score
     FROM assessments a
     LEFT JOIN assessment_attempts aa
         ON aa.assessment_id = a.assessment_id
         AND aa.status = 'completed'
     WHERE a.created_by = ?
 ");
-$statsStmt->bind_param("i", $teacherId);
-$statsStmt->execute();
-$stats = $statsStmt->get_result()->fetch_assoc();
+$statsStmt->execute([$teacherId]);
+$stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
 
 $totalAssessments = (int)($stats['total_assessments'] ?? 0);
 $totalStudents    = (int)($stats['total_students']    ?? 0);
@@ -57,8 +55,8 @@ $activityStmt = $conn->prepare("
     (
         SELECT
             'login' AS activity_type,
-            CASE WHEN is_success = 1 THEN 'Logged in successfully' ELSE 'Failed login attempt' END AS title,
-            CONCAT('From IP: ', IFNULL(ip_address, 'unknown')) AS description,
+            CASE WHEN is_success = true THEN 'Logged in successfully' ELSE 'Failed login attempt' END AS title,
+            CONCAT('From IP: ', COALESCE(ip_address, 'unknown')) AS description,
             created_at
         FROM login_activity
         WHERE user_id = ?
@@ -88,9 +86,8 @@ $activityStmt = $conn->prepare("
     ORDER BY created_at DESC
     LIMIT 8
 ");
-$activityStmt->bind_param("ii", $teacherId, $teacherId);
-$activityStmt->execute();
-$activityRows = $activityStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$activityStmt->execute([$teacherId, $teacherId]);
+$activityRows = $activityStmt->fetchAll(PDO::FETCH_ASSOC);
 
 /* ── Handle POST actions ── */
 $successMsg = '';
@@ -106,8 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $errorMsg = 'Full name is required.';
         } else {
             $upd = $conn->prepare("UPDATE users SET full_name = ?, department = ? WHERE user_id = ?");
-            $upd->bind_param("ssi", $newName, $newDept, $teacherId);
-            if ($upd->execute()) {
+            if ($upd->execute([$newName, $newDept, $teacherId])) {
                 $userName     = $newName;
                 $userDept     = $newDept;
                 $userInitials = strtoupper(substr($userName, 0, 2));
@@ -124,9 +120,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $confirmPwd = $_POST['confirm_password'] ?? '';
 
         $pwdQuery = $conn->prepare("SELECT password_hash FROM users WHERE user_id = ?");
-        $pwdQuery->bind_param("i", $teacherId);
-        $pwdQuery->execute();
-        $pwdResult = $pwdQuery->get_result()->fetch_assoc();
+        $pwdQuery->execute([$teacherId]);
+        $pwdResult = $pwdQuery->fetch(PDO::FETCH_ASSOC);
 
         if (!password_verify($currentPwd, $pwdResult['password_hash'])) {
             $errorMsg = 'Current password is incorrect.';
@@ -137,8 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         } else {
             $hashedPwd = password_hash($newPwd, PASSWORD_DEFAULT);
             $updPwd    = $conn->prepare("UPDATE users SET password_hash = ? WHERE user_id = ?");
-            $updPwd->bind_param("si", $hashedPwd, $teacherId);
-            if ($updPwd->execute()) {
+            if ($updPwd->execute([$hashedPwd, $teacherId])) {
                 $successMsg = 'Password changed successfully.';
             } else {
                 $errorMsg = 'Failed to change password. Please try again.';
@@ -167,8 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
             if (move_uploaded_file($file['tmp_name'], $fullPath)) {
                 $updPic = $conn->prepare("UPDATE users SET profile_image = ? WHERE user_id = ?");
-                $updPic->bind_param("si", $fullPath, $teacherId);
-                $updPic->execute();
+                $updPic->execute([$fullPath, $teacherId]);
 
                 $insFile = $conn->prepare("
                     INSERT INTO uploaded_files
@@ -179,12 +172,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $fileType = $ext;
                 $mimeType = $file['type'];
                 $fileSize = (int)$file['size'];
-                $insFile->bind_param("sssssiii",
+                $insFile->execute([
                     $file['name'], $storedName, $fullPath,
                     $fileType, $mimeType, $fileSize,
                     $teacherId, $teacherId
-                );
-                $insFile->execute();
+                ]);
 
                 $userPicture = $fullPath;
                 $successMsg  = 'Profile picture updated successfully.';

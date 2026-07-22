@@ -14,9 +14,8 @@ $userEmail    = htmlspecialchars($currentUser['email'] ?? '');
 $userInitials = strtoupper(substr($currentUser['full_name'] ?? 'T', 0, 2));
 
 $picStmt = $conn->prepare("SELECT profile_image FROM users WHERE user_id = ?");
-$picStmt->bind_param("i", $teacherId);
-$picStmt->execute();
-$picRow      = $picStmt->get_result()->fetch_assoc();
+$picStmt->execute([$teacherId]);
+$picRow      = $picStmt->fetch(PDO::FETCH_ASSOC);
 $userPicture = $picRow['profile_image'] ?? '';
 
 $activeFilter   = trim($_GET['filter']   ?? 'all');
@@ -69,7 +68,7 @@ if ($pgRes['success'] && $pgRes['result']) {
 // ── Fetch all students for publish modal ──
 $pubStudents = [];
 $psRes = safePreparedQuery($conn,
-    "SELECT user_id, full_name, email, department FROM users WHERE role = 'student' AND is_active = 1 ORDER BY full_name",
+    "SELECT user_id, full_name, email, department FROM users WHERE role = 'student' AND is_active = true ORDER BY full_name",
     "", []
 );
 if ($psRes['success'] && $psRes['result']) {
