@@ -37,7 +37,7 @@ $unreadCount = 0;
 if ($res['success'] && $res['result']) {
     while ($row = $res['result']->fetch_assoc()) {
         $ids[] = (int) $row['notification_id'];
-        if (!(int)$row['is_read']) $unreadCount++;
+        if (!pgBoolGuard($row['is_read'])) $unreadCount++;
     }
     $res['result']->free();
 }
