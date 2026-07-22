@@ -23,6 +23,7 @@ if (!file_exists("config.php")) {
     die(renderPage('error', 'Configuration error. Please contact support.'));
 }
 require_once "config.php";
+require_once "db-guard.php";
 
 if (!ensureDatabaseConnection($conn)) {
     die(renderPage('error', 'Database connection failed. Please try again later.'));
@@ -52,27 +53,22 @@ try {
          LIMIT  1"
     );
     if (!$stmt) {
-        throw new Exception("DB prepare failed: " . $conn->error);
+        throw new Exception("DB prepare failed");
     }
-    $stmt->bind_param("s", $tokenHash);
-    $stmt->execute();
-    $result = $stmt->get_result();
+    $stmt->execute([$tokenHash]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if ($result->num_rows === 0) {
-        $stmt->close();
+    if (!$row) {
         die(renderPage('error', 'Verification link is invalid or does not exist.'));
     }
 
-    $row = $result->fetch_assoc();
-    $stmt->close();
-
     // 2. Already verified?
-    if ($row['is_verified']) {
+    if (pgBoolGuard($row['is_verified'])) {
         die(renderPage('already_verified', 'Your email is already verified. You can log in.', $row['full_name']));
     }
 
     // 3. Token already used?
-    if ($row['is_used']) {
+    if (pgBoolGuard($row['is_used'])) {
         die(renderPage('error', 'This verification link has already been used. Please request a new one.'));
     }
 
@@ -83,23 +79,19 @@ try {
     }
 
     // 5. Everything OK — verify the user
-    $conn->begin_transaction();
+    $conn->beginTransaction();
 
     $upd = $conn->prepare(
         "UPDATE users SET is_verified = TRUE WHERE user_id = ?"
     );
-    if (!$upd) throw new Exception("DB prepare (update users) failed: " . $conn->error);
-    $upd->bind_param("i", $row['user_id']);
-    if (!$upd->execute()) throw new Exception("Failed to verify user: " . $upd->error);
-    $upd->close();
+    if (!$upd) throw new Exception("DB prepare (update users) failed");
+    $upd->execute([$row['user_id']]);
 
     $tok = $conn->prepare(
         "UPDATE email_verification_tokens SET is_used = TRUE WHERE token_id = ?"
     );
-    if (!$tok) throw new Exception("DB prepare (update token) failed: " . $conn->error);
-    $tok->bind_param("i", $row['token_id']);
-    if (!$tok->execute()) throw new Exception("Failed to mark token used: " . $tok->error);
-    $tok->close();
+    if (!$tok) throw new Exception("DB prepare (update token) failed");
+    $tok->execute([$row['token_id']]);
 
     $conn->commit();
 
@@ -108,8 +100,8 @@ try {
     die(renderPage('success', 'Your email has been verified successfully! You can now log in.', $row['full_name']));
 
 } catch (Exception $e) {
-    if (isset($conn)) {
-        $conn->rollback(); // safe to call even if no transaction is active
+    if (isset($conn) && $conn->inTransaction()) {
+        $conn->rollBack();
     }
     error_log("Verification error: " . $e->getMessage());
     die(renderPage('error', 'Something went wrong. Please try again or contact support.'));

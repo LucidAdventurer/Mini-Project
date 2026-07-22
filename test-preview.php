@@ -64,6 +64,12 @@ if (!$asmResult['success'] || !$asmResult['result'] || $asmResult['result']->num
 $a = $asmResult['result']->fetch_assoc();
 $asmResult['result']->free();
 
+// Postgres returns boolean columns via PDO as 't'/'f' strings, both of which
+// are truthy in plain PHP — normalize once here so every truthiness check
+// on these two fields below (tag display + conditional blocks) works correctly.
+$a['randomize_questions'] = pgBoolGuard($a['randomize_questions']);
+$a['randomize_options']   = pgBoolGuard($a['randomize_options']);
+
 /* ── Access check for non-public assessments ── */
 if ($a['visibility'] !== 'public') {
     $accessCheck = safePreparedQuery($conn,
@@ -185,7 +191,7 @@ if (empty($_SESSION['csrf_token'])) {
 
 /* ── Unread notification count ── */
 $notifResult = safePreparedQuery($conn,
-    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
+    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = false",
     "i", [$userId]
 );
 $unreadCount = 0;
@@ -740,7 +746,7 @@ function timeAgoPreview(string $datetime): string {
                     <?php if (empty($notifItems)): ?>
                         <div class="notif-empty">No notifications yet.</div>
                     <?php else: foreach ($notifItems as $n):
-                        $isUnread = !$n['is_read'];
+                        $isUnread = !pgBoolGuard($n['is_read']);
                         $typeIcons = ['info'=>'ℹ️','success'=>'✅','warning'=>'⚠️','error'=>'❌','assessment'=>'📝','result'=>'🏆','material'=>'📚'];
                         $icon = $typeIcons[$n['type']] ?? '🔔';
                     ?>

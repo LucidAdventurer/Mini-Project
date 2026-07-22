@@ -9,9 +9,8 @@ $userEmail    = htmlspecialchars($currentUser['email'] ?? '');
 $userInitials = strtoupper(substr($currentUser['full_name'] ?? 'T', 0, 2));
 
 $picStmt = $conn->prepare("SELECT profile_image FROM users WHERE user_id = ?");
-$picStmt->bind_param("i", $teacherId);
-$picStmt->execute();
-$picRow      = $picStmt->get_result()->fetch_assoc();
+$picStmt->execute([$teacherId]);
+$picRow      = $picStmt->fetch(PDO::FETCH_ASSOC);
 $userPicture = $picRow['profile_image'] ?? '';
 
 if (empty($_SESSION['csrf_token'])) {
