@@ -72,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
                 while ($adminRow = $adminResult['result']->fetch_assoc()) {
                     safePreparedQuery($conn,
                         "INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
-                         VALUES (?, ?, ?, 'warning', 0, NOW())",
+                         VALUES (?, ?, ?, 'warning', false, NOW())",
                         "iss", [(int)$adminRow['user_id'], $notifTitle, $notifMessage]
                     );
                 }
@@ -86,9 +86,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
 
 // Fetch profile_image (validateSession may not include it)
 $picStmt = $conn->prepare("SELECT profile_image FROM users WHERE user_id = ?");
-$picStmt->bind_param("i", $teacherId);
-$picStmt->execute();
-$picRow      = $picStmt->get_result()->fetch_assoc();
+$picStmt->execute([$teacherId]);
+$picRow      = $picStmt->fetch(PDO::FETCH_ASSOC);
 $userPicture = $picRow['profile_image'] ?? '';
 // ============================================================
 // DATABASE QUERIES
@@ -100,7 +99,7 @@ $newThisMonth     = 0;
 $r = safePreparedQuery($conn,
 "SELECT
 COUNT(*) AS total,
-SUM(CASE WHEN MONTH(created_at) = MONTH(CURDATE()) AND YEAR(created_at) = YEAR(CURDATE()) THEN 1 ELSE 0 END) AS new_this_month
+SUM(CASE WHEN EXTRACT(MONTH FROM created_at) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM created_at) = EXTRACT(YEAR FROM CURRENT_DATE) THEN 1 ELSE 0 END) AS new_this_month
 FROM assessments
 WHERE created_by = ?",
 "i", [$teacherId]
@@ -119,7 +118,7 @@ $newStudentsWeek = 0;
 $r2 = safePreparedQuery($conn,
 "SELECT
 COUNT(DISTINCT aa.user_id) AS total_students,
-COUNT(DISTINCT CASE WHEN aa.created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) THEN aa.user_id END) AS new_this_week
+COUNT(DISTINCT CASE WHEN aa.created_at >= CURRENT_DATE - INTERVAL '7 days' THEN aa.user_id END) AS new_this_week
 FROM assessment_attempts aa
 JOIN assessments a ON aa.assessment_id = a.assessment_id
 WHERE a.created_by = ?
@@ -163,7 +162,7 @@ AND aa.status IN ('submitted','timeout')
 WHERE a.created_by = ?
 GROUP BY a.assessment_id, a.title, a.category, a.difficulty, a.status, a.duration_minutes, a.total_marks, a.passing_marks, a.start_time, a.end_time, a.created_at, a.updated_at
 ORDER BY
-        FIELD(a.status, 'active', 'draft', 'archived') ASC,
+        CASE a.status WHEN 'active' THEN 1 WHEN 'draft' THEN 2 WHEN 'archived' THEN 3 ELSE 4 END ASC,
         a.updated_at DESC",
 "i", [$teacherId]
 );
