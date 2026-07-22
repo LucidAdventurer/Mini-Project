@@ -343,7 +343,7 @@ try {
     $tokenHash = hash('sha256', $rawToken);
     $expiresAt = (new DateTime('+24 hours'))->format('Y-m-d H:i:s');
 
-    $conn->begin_transaction();
+    $conn->beginTransaction();
 
     try {
         $stmt = $conn->prepare(
@@ -351,47 +351,34 @@ try {
                 (full_name, email, password_hash, role, department, registration_number, is_verified, is_active)
              VALUES (?, ?, ?, ?, ?, ?, FALSE, TRUE)"
         );
+        $stmt->execute([$fullName, $email, $passwordHash, $role, $department, $regNumber]);
 
-        if (!$stmt) {
-            throw new RuntimeException("Database prepare failed: " . $conn->error);
-        }
-
-        $stmt->bind_param('ssssss', $fullName, $email, $passwordHash, $role, $department, $regNumber);
-
-        if (!$stmt->execute()) {
-            if ($stmt->errno === 1062) {
-                $conn->rollback();
-                if (str_contains($stmt->error, 'email')) {
-                    sendResponse(false, 'This email cannot be used for registration');
-                }
-                if (str_contains($stmt->error, 'registration_number')) {
-                    sendResponse(false, 'Registration number already exists');
-                }
-            }
-            throw new RuntimeException("Failed to create account: " . $stmt->error);
-        }
-
-        $userId = $stmt->insert_id;
-        $stmt->close();
+        $userId = $conn->lastInsertId();
 
         $stmt = $conn->prepare(
             "INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES (?, ?, ?)"
         );
-
-        if ($stmt) {
-            $stmt->bind_param('iss', $userId, $tokenHash, $expiresAt);
-            if (!$stmt->execute()) {
-                error_log("Failed to insert verification token for user_id=$userId IP=$clientIp: " . $stmt->error);
-            }
-            $stmt->close();
-        } else {
-            error_log("Failed to prepare token insert for user_id=$userId: " . $conn->error);
+        try {
+            $stmt->execute([$userId, $tokenHash, $expiresAt]);
+        } catch (PDOException $e) {
+            error_log("Failed to insert verification token for user_id=$userId IP=$clientIp: " . $e->getMessage());
         }
 
         $conn->commit();
 
-    } catch (Throwable $e) {
+    } catch (PDOException $e) {
         $conn->rollback();
+
+        // Postgres unique_violation SQLSTATE (replaces mysqli's errno === 1062 check)
+        if ($e->getCode() === '23505') {
+            if (str_contains($e->getMessage(), 'email')) {
+                sendResponse(false, 'This email cannot be used for registration');
+            }
+            if (str_contains($e->getMessage(), 'registration_number')) {
+                sendResponse(false, 'Registration number already exists');
+            }
+        }
+
         error_log("Registration transaction failed IP=$clientIp: " . $e->getMessage());
         sendResponse(false, 'Registration failed. Please try again.');
     }
