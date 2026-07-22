@@ -100,7 +100,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
             safePreparedQuery($conn,
                 "INSERT INTO self_assessment_answers (attempt_id, map_id, selected_option, is_correct)
                  VALUES (?,?,?,?)
-                 ON DUPLICATE KEY UPDATE selected_option=VALUES(selected_option), is_correct=VALUES(is_correct)",
+                 ON CONFLICT (attempt_id, map_id) DO UPDATE SET
+                     selected_option = EXCLUDED.selected_option,
+                     is_correct      = EXCLUDED.is_correct",
                 "issi", [$attemptId, $mapId, $selected, $isCorrect]
             );
         }
@@ -133,7 +135,7 @@ if ($limit <= 0) {
 }
 
 $qRes = safePreparedQuery($conn,
-    "SELECT * FROM self_assessment_q_map WHERE sa_id = ? ORDER BY RAND() LIMIT " . max(1, $limit),
+    "SELECT * FROM self_assessment_q_map WHERE sa_id = ? ORDER BY RANDOM() LIMIT " . max(1, $limit),
     "i", [$saId]
 );
 if ($qRes['success'] && $qRes['result']) {
@@ -147,7 +149,7 @@ $ains = safePreparedQuery($conn,
     "INSERT INTO self_assessment_attempts (sa_id, user_id, type, status) VALUES (?, ?, 'pdf', 'in_progress')",
     "ii", [$saId, $userId]
 );
-if ($ains['success']) $attemptId = $conn->insert_id;
+if ($ains['success']) $attemptId = $conn->lastInsertId();
 
 $durationSec    = (int)$sa['duration_minutes'] * 60;
 $totalQuestions = count($questions);

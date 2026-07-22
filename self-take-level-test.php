@@ -68,7 +68,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
             safePreparedQuery($conn,
                 "INSERT INTO self_assessment_answers (attempt_id, map_id, selected_option, is_correct)
                  VALUES (?,?,?,?)
-                 ON DUPLICATE KEY UPDATE selected_option=VALUES(selected_option), is_correct=VALUES(is_correct)",
+                 ON CONFLICT (attempt_id, map_id) DO UPDATE SET
+                     selected_option = EXCLUDED.selected_option,
+                     is_correct      = EXCLUDED.is_correct",
                 "issi", [$attemptId, $mapId, $selected, $isCorrect]
             );
         }
@@ -118,7 +120,7 @@ $ains = safePreparedQuery($conn,
      VALUES (?, ?, 'level', ?, 'in_progress')",
     "iis", [$saId, $userId, $sa['levels_selected']]
 );
-if ($ains['success']) $attemptId = $conn->insert_id;
+if ($ains['success']) $attemptId = $conn->lastInsertId();
 
 $durationSec = (int)$sa['duration_minutes'] * 60;
 $levelsArr   = array_map('ucfirst', explode(',', $sa['levels_selected'] ?? ''));
