@@ -14,14 +14,8 @@ $userName     = $user['full_name'] ?? 'Student';
 $userEmail    = $user['email']     ?? '';
 $userInitials = strtoupper(substr($userName, 0, 2));
 
-// Fetch profile image
-$imgRes = safePreparedQuery($conn, "SELECT profile_image FROM users WHERE user_id = ?", "i", [$userId]);
-$userProfileImage = '';
-if ($imgRes['success'] && $imgRes['result']) {
-    $imgRow = $imgRes['result']->fetch_assoc();
-    $userProfileImage = $imgRow['profile_image'] ?? '';
-    $imgRes['result']->free();
-}
+// Profile image (already provided by validateSession)
+$userProfileImage = $user['profile_image'] ?? '';
 
 // CSRF
 if (empty($_SESSION['csrf_token'])) {
