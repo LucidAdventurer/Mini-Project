@@ -98,23 +98,20 @@ function createDatabaseConnection() {
     $retryDelay = 1;
 
     $dsn = sprintf(
-        "pgsql:host=%s;port=%s;dbname=%s;sslmode=disable",
+        "pgsql:host=%s;port=%s;dbname=%s;sslmode=disable;options='--timezone=Asia/Kolkata'",
         DB_HOST, DB_PORT, DB_NAME
     );
 
     while ($retryCount < DB_MAX_RETRIES) {
         try {
             $conn = new PDO($dsn, DB_USER, DB_PASS, [
+                PDO::ATTR_PERSISTENT         => true,
                 PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES   => false,
                 PDO::ATTR_TIMEOUT            => DB_CONNECT_TIMEOUT,
             ]);
 
-            // Verify connection is alive
-            $conn->query("SELECT 1");
-
-            error_log("✓ DB connected on attempt " . ($retryCount + 1));
             return $conn;
 
         } catch (PDOException $e) {
@@ -277,12 +274,8 @@ function ensureDatabaseConnection(&$conn) {
     return ($conn !== null);
 }
 
-// Set timezone for this session (adjust if your users aren't in IST)
-try {
-    $conn->query("SET TIME ZONE 'Asia/Kolkata'");
-} catch (PDOException $e) {
-    error_log("Failed to set timezone: " . $e->getMessage());
-}
+// Set PHP default timezone
+date_default_timezone_set('Asia/Kolkata');
 
 // ========================================
 // SHUTDOWN HANDLER

@@ -104,7 +104,12 @@ class SystemSettings {
             return;
         }
 
-        // APCu miss (or unavailable) — load from DB
+        // Try Session cache next (avoids DB query for active user requests)
+        if ($this->loadFromSession()) {
+            return;
+        }
+
+        // Cache miss (or unavailable) — load from DB
         $this->loadCache();
 
         if (empty($this->cache)) {
@@ -181,6 +186,48 @@ class SystemSettings {
     }
 
     // ────────────────────────────────────────
+    // SESSION CACHE FALLBACK
+    // ────────────────────────────────────────
+
+    private function loadFromSession(): bool {
+        if (session_status() !== PHP_SESSION_ACTIVE || empty($_SESSION['pta_sys_settings'])) {
+            return false;
+        }
+
+        $data = $_SESSION['pta_sys_settings'];
+        if (
+            is_array($data) &&
+            isset($data['cache'], $data['timestamp'], $data['expiry']) &&
+            is_array($data['cache']) &&
+            is_int($data['timestamp']) &&
+            (time() - $data['timestamp']) < $data['expiry']
+        ) {
+            $this->cache          = $data['cache'];
+            $this->cacheTimestamp = $data['timestamp'];
+            $this->cacheExpiry    = max(30, min(3600, (int)$data['expiry']));
+            return true;
+        }
+
+        return false;
+    }
+
+    private function saveToSession(): void {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION['pta_sys_settings'] = [
+                'cache'     => $this->cache,
+                'timestamp' => $this->cacheTimestamp,
+                'expiry'    => $this->cacheExpiry,
+            ];
+        }
+    }
+
+    private function invalidateSessionCache(): void {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            unset($_SESSION['pta_sys_settings']);
+        }
+    }
+
+    // ────────────────────────────────────────
     // DB CACHE
     // ────────────────────────────────────────
 
@@ -210,8 +257,9 @@ class SystemSettings {
                     $this->cache['cache_expiry_seconds']['value'] = $this->cacheExpiry;
                 }
 
-                // Persist to APCu so the next request skips this DB query
+                // Persist to APCu and Session so the next request skips this DB query
                 $this->saveToApcu();
+                $this->saveToSession();
 
                 error_log("SystemSettings: loaded " . count($this->cache) . " settings from DB");
             } else {
@@ -225,6 +273,7 @@ class SystemSettings {
     public function refreshCache(): void {
         $this->cacheTimestamp = null;
         $this->invalidateApcu();
+        $this->invalidateSessionCache();
         $this->loadCache();
     }
 
@@ -232,6 +281,7 @@ class SystemSettings {
         $this->cache          = [];
         $this->cacheTimestamp = null;
         $this->invalidateApcu();
+        $this->invalidateSessionCache();
     }
 
     // ────────────────────────────────────────
@@ -348,8 +398,9 @@ class SystemSettings {
             if ($ok) {
                 // Update in-process cache immediately
                 $this->cache[$key] = ['value' => $value, 'type' => $type];
-                // Bust APCu so other workers pick up the change on next request
+                // Bust APCu & Session cache so changes are picked up immediately
                 $this->invalidateApcu();
+                $this->invalidateSessionCache();
             }
 
             return $ok;

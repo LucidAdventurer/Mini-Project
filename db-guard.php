@@ -314,7 +314,7 @@ function getUserData(PDO $conn, int $userId): ?array {
     $result = safePreparedQuery(
         $conn,
         "SELECT user_id, full_name, email, role, department,
-                registration_number, is_verified, is_active
+                registration_number, is_verified, is_active, profile_image
          FROM users WHERE user_id = ?",
         "i",
         [$userId]
@@ -327,6 +327,13 @@ function getUserData(PDO $conn, int $userId): ?array {
     }
 
     return null;
+}
+
+/**
+ * Invalidate cached user session data so fresh DB data is loaded on next check.
+ */
+function invalidateUserSessionCache(): void {
+    unset($_SESSION['cached_user_data'], $_SESSION['cached_user_time']);
 }
 
 /**
@@ -381,7 +388,21 @@ function validateSession(PDO $conn, ?string $requiredRole = null): array {
         validateCsrfToken();
     }
 
-    // ── 4. User still exists and is active in DB ──
+    // ── 4. User cache check (reduces remote DB round-trips) ──
+    $cachedUser = $_SESSION['cached_user_data'] ?? null;
+    $cacheTime  = $_SESSION['cached_user_time'] ?? 0;
+    $ttl        = 180; // 3 minutes
+
+    if (
+        is_array($cachedUser) &&
+        isset($cachedUser['user_id']) &&
+        (int)$cachedUser['user_id'] === $uid &&
+        (time() - $cacheTime) < $ttl
+    ) {
+        return $cachedUser;
+    }
+
+    // ── 5. User still exists and is active in DB ──
     $user = getUserData($conn, $uid);
 
     if (!$user) {
@@ -398,8 +419,10 @@ function validateSession(PDO $conn, ?string $requiredRole = null): array {
             'login.html?error=account_deactivated');
     }
 
-    // Ensure session reflects current DB role
-    $_SESSION['role'] = $user['role'];
+    // Ensure session reflects current DB role & update cache
+    $_SESSION['role']             = $user['role'];
+    $_SESSION['cached_user_data'] = $user;
+    $_SESSION['cached_user_time'] = time();
 
     return $user;
 }

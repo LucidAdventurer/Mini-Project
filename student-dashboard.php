@@ -13,14 +13,8 @@ $userDept     = $user['department'] ?? '';
 $userInitials = strtoupper(substr($userName, 0, 2));
 $userId       = (int) $user['user_id'];
 
-// Fetch fresh profile image
-$imgRes = safePreparedQuery($conn, "SELECT profile_image FROM users WHERE user_id = ?", "i", [$userId]);
-$userProfileImage = '';
-if ($imgRes['success'] && $imgRes['result']) {
-    $imgRow = $imgRes['result']->fetch_assoc();
-    $userProfileImage = $imgRow['profile_image'] ?? '';
-    $imgRes['result']->free();
-}
+// Profile image (already provided by validateSession)
+$userProfileImage = $user['profile_image'] ?? '';
 
 // Ensure CSRF token exists
 if (empty($_SESSION['csrf_token'])) {

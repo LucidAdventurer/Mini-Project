@@ -84,11 +84,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
     exit;
 }
 
-// Fetch profile_image (validateSession may not include it)
-$picStmt = $conn->prepare("SELECT profile_image FROM users WHERE user_id = ?");
-$picStmt->execute([$teacherId]);
-$picRow      = $picStmt->fetch(PDO::FETCH_ASSOC);
-$userPicture = $picRow['profile_image'] ?? '';
+// Profile image (already provided by validateSession)
+$userPicture = $currentUser['profile_image'] ?? '';
 // ============================================================
 // DATABASE QUERIES
 // ============================================================
