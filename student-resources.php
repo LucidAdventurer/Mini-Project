@@ -656,7 +656,9 @@ body {
                             ? 'api/notifications/notification-redirect.php?notification_id=' . $n['notification_id']
                             : '';
                     ?>
-                    <div class="notif-item <?= $isUnread ? 'unread' : '' ?>" id="notif-<?= $n['notification_id'] ?>"
+                    <div class="notif-item <?= $isUnread ? 'unread' : '' ?>"
+                        id="notif-<?= $n['notification_id'] ?>"
+                        data-material-id="<?= $nType === 'material' ? $entityId : 0 ?>"
                          <?php if ($redirectUrl): ?>
                          onclick="handleNotifClick(<?= $n['notification_id'] ?>, '<?= $redirectUrl ?>')"
                          style="cursor:pointer;"
@@ -720,7 +722,6 @@ body {
     <span class="sidebar-section">Navigation</span>
     <a href="student-dashboard.php"><i class="fa fa-home"></i> Dashboard</a>
     <a href="student-assessments.php"><i class="fa fa-clipboard-list"></i> Assessments</a>
-    <a href="self-assessment.php"><i class="fa fa-user-check"></i> Self Assessment</a>
     <a href="student-resources.php" class="active"><i class="fa fa-folder-open"></i> Resources</a>
 
     <span class="sidebar-section">Filter by Category</span>
@@ -779,7 +780,7 @@ body {
             <div class="stat-icon si-blue"><i class="fa fa-book-open"></i></div>
             <div><div class="stat-val" id="st-total">—</div><div class="stat-lbl">Total Resources</div></div>
         </div>
-        <div class="stat-card">
+        <!-- <div class="stat-card">
             <div class="stat-icon si-green"><i class="fa fa-eye"></i></div>
             <div><div class="stat-val" id="st-views">—</div><div class="stat-lbl">Total Views</div></div>
         </div>
@@ -788,6 +789,21 @@ body {
             <div><div class="stat-val" id="st-dl">—</div><div class="stat-lbl">Downloads</div></div>
         </div>
         <div class="stat-card">
+            <div class="stat-icon si-purple"><i class="fa fa-hard-drive"></i></div>
+            <div><div class="stat-val" id="st-size">—</div><div class="stat-lbl">Storage Used</div></div>
+        </div> -->
+
+        <div class="stat-card" style="display:none;">
+            <div class="stat-icon si-green"><i class="fa fa-eye"></i></div>
+            <div><div class="stat-val" id="st-views">—</div><div class="stat-lbl">Total Views</div></div>
+        </div>
+
+        <div class="stat-card" style="display:none;">
+            <div class="stat-icon si-orange"><i class="fa fa-download"></i></div>
+            <div><div class="stat-val" id="st-dl">—</div><div class="stat-lbl">Downloads</div></div>
+        </div>
+
+        <div class="stat-card" style="display:none;">
             <div class="stat-icon si-purple"><i class="fa fa-hard-drive"></i></div>
             <div><div class="stat-val" id="st-size">—</div><div class="stat-lbl">Storage Used</div></div>
         </div>
@@ -896,7 +912,10 @@ async function dismissNotification(notifId) {
     try {
         await fetch('api/notifications/dismiss-notification.php', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': CSRF_TOKEN
+            },
             body: JSON.stringify({ action: 'dismiss_one', notification_id: notifId })
         });
     } catch(e) {}
@@ -987,7 +1006,7 @@ function renderGrid(mats, total) {
         const isLink = m.material_type === 'link';
 
         const primaryBtn = isLink
-            ? `<a class="btn-view" href="${esc(m.external_url)}" target="_blank" rel="noopener" onclick="dismissResourceNotif(${m.material_id})"><i class="fa fa-external-link-alt"></i> Open</a>`
+? `<a class="btn-view" href="${esc(m.external_url)}" target="_blank" rel="noopener" onclick="dismissResourceNotif(${m.material_id}); trackResource(${m.material_id}, 'view')"><i class="fa fa-external-link-alt"></i> Open</a>`
             : `<button class="btn-view" onclick="openFile(${m.material_id},'${esc(m.material_type)}')"><i class="fa fa-eye"></i> View</button>`;
 
         // Show download button for all non-link resources (file_path replaced by external_url)
@@ -1039,7 +1058,10 @@ function goPage(p) { currentPage=p; window.scrollTo({top:0,behavior:'smooth'}); 
 function dismissResourceNotif(materialId) {
     fetch('api/notifications/dismiss-notification.php', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': CSRF_TOKEN
+        },
         body: JSON.stringify({ action: 'resource_viewed', material_id: materialId })
     })
     .then(r => r.json())
@@ -1058,19 +1080,46 @@ function dismissResourceNotif(materialId) {
     .catch(() => {});
 }
 
+/* ── Resource tracking ── */
+function trackResource(materialId, action) {
+    fetch('api/resources/track-resource.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': CSRF_TOKEN
+        },
+        body: JSON.stringify({
+            material_id: materialId,
+            action: action
+        }),
+        keepalive: true
+    }).catch(() => {});
+}
+
 /* ── Actions ── */
 function openFile(id, type) {
     dismissResourceNotif(id);
-    if (['pdf','video','document','file','image','article','quiz'].includes(type))
-        window.open('api/resources/view-resource.php?material_id='+id, '_blank');
-    else
-        dlFile(id,'');
+    trackResource(id, 'view');
+
+    if (['pdf','video','document','file','image','article','quiz'].includes(type)) {
+        window.open(
+            'api/resources/view-resource.php?material_id=' + id,
+            '_blank'
+        );
+    } else {
+        dlFile(id, '');
+    }
 }
 function dlFile(id, title) {
+    trackResource(id, 'download');
+
     const a = document.createElement('a');
-    a.href = 'api/resources/serve-resource.php?material_id='+id+'&action=download';
-    a.download = title||'';
-    document.body.appendChild(a); a.click(); a.remove();
+    a.href = 'api/resources/serve-resource.php?material_id=' + id + '&action=download';
+    a.download = title || '';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
     toast('Downloading…');
 }
 

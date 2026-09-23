@@ -76,44 +76,53 @@ foreach ($questions as $idx => $q) {
 }
 
 // ── Transaction: insert assessment + questions + options ─────────
-$conn->begin_transaction();
+
+$userId = (int)$user['user_id'];
+
+$conn->beginTransaction();
 
 try {
     // 1. Insert assessment (status = 'draft' so admin can review before publishing)
     $stmt = $conn->prepare(
-        "INSERT INTO assessments
-            (created_by, title, description, visibility, status, category, difficulty,
-             duration_minutes, total_marks, passing_marks, max_attempts,
-             randomize_questions, randomize_options, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())"
+    "INSERT INTO assessments
+        (created_by, title, description, visibility, status, category, difficulty,
+        duration_minutes, total_marks, passing_marks, max_attempts,
+        randomize_questions, randomize_options, created_at, updated_at)
+    VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    RETURNING assessment_id"
     );
-    $userId = (int) $user['user_id'];
-    $stmt->bind_param(
-        "isssssiiiiii",
-        $userId, $title, $description, $visibility,
-        $category, $difficulty, $duration_minutes,
-        $total_marks, $passing_marks, $max_attempts,
-        $randomize_q, $randomize_o
-    );
-    $stmt->execute();
-    $assessmentId = (int) $conn->insert_id;
-    $stmt->close();
+
+    $stmt->execute([
+        $userId,
+        $title,
+        $description,
+        $visibility,
+        $category,
+        $difficulty,
+        $duration_minutes,
+        $total_marks,
+        $passing_marks,
+        $max_attempts,
+        (bool)$randomize_q,
+        (bool)$randomize_o
+    ]);
+
+    $assessmentId = (int)$stmt->fetchColumn();
 
     // 2. Insert each question and its options
     $qStmt = $conn->prepare(
         "INSERT INTO questions
             (assessment_id, question_text, question_type, marks, negative_marks,
-             explanation, question_order, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())"
+            explanation, question_order, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+        RETURNING question_id"
     );
-    if (!$qStmt) throw new Exception("Prepare questions failed: " . $conn->error);
 
     $oStmt = $conn->prepare(
         "INSERT INTO question_options
             (question_id, option_text, is_correct, option_order)
          VALUES (?, ?, ?, ?)"
     );
-    if (!$oStmt) throw new Exception("Prepare question_options failed: " . $conn->error);
 
     foreach ($questions as $order => $q) {
         $qText    = trim($q['question_text']);
@@ -123,21 +132,30 @@ try {
         $expl     = trim($q['explanation'] ?? '');
         $qOrder   = $order + 1;
 
-        $qStmt->bind_param("issidsi", $assessmentId, $qText, $qType, $marks, $negMarks, $expl, $qOrder);
-        $qStmt->execute();
-        $questionId = (int) $conn->insert_id;
+        $qStmt->execute([
+            $assessmentId,
+            $qText,
+            $qType,
+            $marks,
+            $negMarks,
+            $expl,
+            $qOrder
+        ]);
+
+        $questionId = (int)$qStmt->fetchColumn();
 
         foreach ($q['options'] as $optOrder => $o) {
             $optText   = trim($o['option_text']);
             $isCorrect = !empty($o['is_correct']) ? 1 : 0;
             $optOrd    = $optOrder + 1;
-            $oStmt->bind_param("isii", $questionId, $optText, $isCorrect, $optOrd);
-            $oStmt->execute();
+            $oStmt->execute([
+                $questionId,
+                $optText,
+                (bool)$isCorrect,
+                $optOrd
+            ]);
         }
     }
-
-    $qStmt->close();
-    $oStmt->close();
 
     $conn->commit();
 
@@ -148,7 +166,7 @@ try {
     ]);
 
 } catch (Exception $e) {
-    $conn->rollback();
+    $conn->rollBack();
     error_log('[api-upload-test] DB error: ' . $e->getMessage());
     echo json_encode(['success' => false, 'error' => 'Database error: ' . $e->getMessage()]);
 }

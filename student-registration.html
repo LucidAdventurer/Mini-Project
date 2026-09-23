@@ -113,18 +113,17 @@
 
         <div class="form-group">
           <label for="department">Department<span class="required">*</span></label>
-          <select name="department" id="department" class="form-control" required>
-            <option value="">Select Department</option>
-            <option value="Computer Science">Computer Science</option>
-            <option value="Information Technology">Information Technology</option>
-            <option value="Electronics">Electronics</option>
-            <option value="Mechanical">Mechanical</option>
-            <option value="Civil">Civil</option>
-            <option value="Electrical">Electrical</option>
-            <option value="Chemical">Chemical</option>
-            <option value="Biotechnology">Biotechnology</option>
-            <option value="Other">Other</option>
-          </select>
+            <select name="department" id="department" class="form-control" required>
+              <option value="">Select Department</option>
+              <option value="CE">CE</option>
+              <option value="CSE">CSE</option>
+              <option value="ECE">ECE</option>
+              <option value="EEE">EEE</option>
+              <option value="ME">ME</option>
+              <option value="ASH">ASH</option>
+              <option value="AI & ML">AI & ML</option>
+              <option value="Robotics">Robotics</option>
+            </select>
           <div class="field-error" id="deptError"></div>
         </div>
 
@@ -334,7 +333,7 @@
 
       try {
         // 1. Fetch CSRF token (public endpoint — no login required)
-        const csrfRes = await fetch('/pta/api/csrf-token-public.php');
+        const csrfRes = await fetch('api/csrf-token-public.php');
         if (!csrfRes.ok) throw new Error('Failed to fetch CSRF token');
         const { token } = await csrfRes.json();
 

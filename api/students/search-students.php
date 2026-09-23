@@ -21,7 +21,7 @@ $r = safePreparedQuery($conn,
     "SELECT user_id, full_name, email, department, registration_number
      FROM users
      WHERE role = 'student'
-       AND is_active = 1
+       AND is_active = TRUE
        AND (full_name LIKE ? OR email LIKE ? OR registration_number LIKE ?)
      ORDER BY full_name ASC
      LIMIT ?",

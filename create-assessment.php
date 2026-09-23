@@ -21,9 +21,8 @@ $userInitials = strtoupper(substr($currentUser['full_name'] ?? 'T', 0, 2));
 
 // Fetch profile_image (validateSession may not include it)
 $picStmt = $conn->prepare("SELECT profile_image FROM users WHERE user_id = ?");
-$picStmt->bind_param("i", $teacherId);
-$picStmt->execute();
-$picRow      = $picStmt->get_result()->fetch_assoc();
+$picStmt->execute([$teacherId]);
+$picRow      = $picStmt->fetch(PDO::FETCH_ASSOC);
 $userPicture = $picRow['profile_image'] ?? '';
 
 $editMode     = false;
@@ -45,7 +44,7 @@ if (isset($_GET['edit']) && (int)$_GET['edit'] > 0) {
     );
     if ($r['success'] && $r['result']) {
         $assessment = $r['result']->fetch_assoc();
-        $r['result']->free();
+        $r['result'] = null;
     }
 
     if (!$assessment) {
@@ -75,30 +74,33 @@ if (isset($_GET['edit']) && (int)$_GET['edit'] > 0) {
             $row['options'] = [];
             $questions[$row['question_id']] = $row;
         }
-        $rq['result']->free();
+        $rq['result'] = null;
     }
 
     if (!empty($questions)) {
-        $qids  = implode(',', array_keys($questions));
-        $ropts = $conn->query(
-            "SELECT option_id, question_id, option_text, is_correct, option_order
-             FROM question_options
-             WHERE question_id IN ($qids)
-             ORDER BY option_order ASC, option_id ASC"
-        );
-        if ($ropts) {
-            while ($opt = $ropts->fetch_assoc()) {
-                $qid = (int)$opt['question_id'];
-                if (isset($questions[$qid])) {
-                    $questions[$qid]['options'][] = $opt;
-                }
-            }
-            $ropts->free();
-        }
-    }
-    $questions = array_values($questions);
-}
+    $qids = implode(',', array_keys($questions));
 
+    $ropts = $conn->query(
+        "SELECT option_id, question_id, option_text, is_correct, option_order
+         FROM question_options
+         WHERE question_id IN ($qids)
+         ORDER BY option_order ASC, option_id ASC"
+    );
+
+    if ($ropts) {
+        while ($opt = $ropts->fetch(PDO::FETCH_ASSOC)) {
+            $qid = (int)$opt['question_id'];
+
+            if (isset($questions[$qid])) {
+                $questions[$qid]['options'][] = $opt;
+            }
+        }
+
+        $ropts = null;
+    }
+
+    }
+}
 // ── Load teacher's groups ──
 $teacherGroups = [];
 $rg = safePreparedQuery($conn,
@@ -113,7 +115,7 @@ if ($rg['success'] && $rg['result']) {
     while ($row = $rg['result']->fetch_assoc()) {
         $teacherGroups[] = $row;
     }
-    $rg['result']->free();
+    $rg['result'] = null;
 }
 
 // ── Load existing targets (edit mode) ──
@@ -125,9 +127,12 @@ if ($assessmentId > 0) {
     );
     if ($rt['success'] && $rt['result']) {
         while ($row = $rt['result']->fetch_assoc()) {
-            $existingTargets[] = ['type' => $row['target_type'], 'id' => (int)$row['target_id']];
+            $existingTargets[] = [
+                'type' => $row['target_type'],
+                'id' => (int)$row['target_id']
+            ];
         }
-        $rt['result']->free();
+        $rt['result'] = null;
     }
 }
 
@@ -968,8 +973,8 @@ function sel(?array $a, string $key, string $value, string $default = ''): strin
                             "i", [$t['id']]);
                         $su = null;
                         if ($rs['success'] && $rs['result']) {
-                            $su = $rs['result']->fetch_assoc();
-                            $rs['result']->free();
+                            $su = $rs['result']->fetch(PDO::FETCH_ASSOC);
+                            $rs['result'] = null;
                         }
                     ?>
                     <?php if ($su): ?>

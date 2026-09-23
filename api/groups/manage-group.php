@@ -34,13 +34,17 @@ $body   = json_decode(file_get_contents('php://input'), true) ?? [];
 $action = trim($body['action'] ?? '');
 
 // ── Helper: verify group belongs to this teacher ──
-function ownsGroup(mysqli $conn, int $groupId, int $teacherId): bool {
-    global $safePreparedQuery;
-    $r = safePreparedQuery($conn,
-        "SELECT group_id FROM groups WHERE group_id = ? AND teacher_id = ?",
-        "ii", [$groupId, $teacherId]
+function ownsGroup(PDO $conn, int $groupId, int $teacherId): bool
+{
+    $stmt = $conn->prepare(
+        "SELECT 1
+         FROM groups
+         WHERE group_id = ? AND teacher_id = ?"
     );
-    return $r['success'] && $r['result'] && $r['result']->num_rows > 0;
+
+    $stmt->execute([$groupId, $teacherId]);
+
+    return (bool) $stmt->fetchColumn();
 }
 
 switch ($action) {
@@ -69,7 +73,9 @@ switch ($action) {
         // Add initial members
         foreach ($studentIds as $sid) {
             safePreparedQuery($conn,
-                "INSERT IGNORE INTO group_members (group_id, student_id) VALUES (?, ?)",
+                "INSERT INTO group_members (group_id, student_id)
+                VALUES (?, ?)
+                ON CONFLICT (group_id, student_id) DO NOTHING",
                 "ii", [$groupId, $sid]
             );
         }
@@ -141,7 +147,9 @@ switch ($action) {
         $added = 0;
         foreach ($studentIds as $sid) {
             $r = safePreparedQuery($conn,
-                "INSERT IGNORE INTO group_members (group_id, student_id) VALUES (?, ?)",
+                "INSERT INTO group_members (group_id, student_id)
+                VALUES (?, ?)
+                ON CONFLICT (group_id, student_id) DO NOTHING",
                 "ii", [$groupId, $sid]
             );
             if ($r['success'] && $r['affected_rows'] > 0) $added++;

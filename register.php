@@ -69,9 +69,14 @@ set_exception_handler(function (Throwable $e) {
    ======================================== */
 
 const VALID_DEPARTMENTS = [
-    'Computer Science', 'Information Technology', 'Electronics',
-    'Mechanical', 'Civil', 'Electrical', 'Chemical',
-    'Biotechnology', 'Mathematics', 'Physics', 'Chemistry', 'Other',
+    'CE',
+    'CSE',
+    'ECE',
+    'EEE',
+    'ME',
+    'ASH',
+    'AI & ML',
+    'Robotics',
 ];
 
 /* ========================================

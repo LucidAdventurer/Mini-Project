@@ -2,7 +2,7 @@
 // ============================================================
 // api/resources/upload-resource.php
 //
-// File uploads go to Cloudinary (unsigned upload preset).
+// File uploads are stored locally; external links are stored in external_url.
 // External links are stored directly in external_url.
 // ============================================================
 
@@ -80,9 +80,22 @@ if ($isJson) {
     $visibilityRaw      = trim($body['visibility']       ?? '');
     $isPublic           = ($visibilityRaw === 'public' || ($body['is_public'] ?? 0) == 1) ? 1 : 0;
     $targets            = $body['targets']               ?? [];
-    $externalUrl        = trim($body['external_url']     ?? '');
+        $externalUrl        = trim($body['external_url']     ?? '');
     $cloudinaryPublicId = trim($body['cloudinary_public_id'] ?? '');
-    $uploadedFile       = null;
+
+    $availableFrom = !empty($body['available_from'])
+        ? $body['available_from']
+        : null;
+
+    $availableUntil = !empty($body['available_until'])
+        ? $body['available_until']
+        : null;
+
+    $autoDeleteAfterExpiry = !empty($body['auto_delete_after_expiry'])
+        ? filter_var($body['auto_delete_after_expiry'], FILTER_VALIDATE_BOOLEAN)
+        : false;
+
+    $uploadedFile = null;
 } else {
     // FormData (action = upload)
     $action             = $_POST['action']          ?? 'upload';
@@ -94,7 +107,19 @@ if ($isJson) {
     $targets            = json_decode($_POST['targets'] ?? '[]', true) ?: [];
     $externalUrl        = '';
     $cloudinaryPublicId = '';
-    $uploadedFile       = $_FILES['file'] ?? null;
+
+    $availableFrom = !empty($_POST['available_from'])
+        ? $_POST['available_from']
+        : null;
+
+    $availableUntil = !empty($_POST['available_until'])
+        ? $_POST['available_until']
+        : null;
+
+    $autoDeleteAfterExpiry = !empty($_POST['auto_delete_after_expiry'])
+        && $_POST['auto_delete_after_expiry'] === '1';
+
+    $uploadedFile = $_FILES['file'] ?? null;
 }
 
 // ── Validate title ────────────────────────────────────────────────────────
@@ -114,85 +139,141 @@ $allowedVisibilities = ['public', 'group', 'private'];
 $visibility = in_array($visibilityRaw, $allowedVisibilities, true) ? $visibilityRaw : ($isPublic ? 'public' : 'private');
 $createdBy  = (int) $_SESSION['user_id'];
 
+// ── Validate availability dates ───────────────────────────────────────────
+foreach ([
+    'available_from'  => $availableFrom,
+    'available_until' => $availableUntil
+] as $field => $date) {
+    if ($date !== null) {
+        $parsed = DateTime::createFromFormat('Y-m-d', $date);
+
+        if (!$parsed || $parsed->format('Y-m-d') !== $date) {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Invalid ' . str_replace('_', ' ', $field) . ' date.'
+            ]);
+            exit;
+        }
+    }
+}
+
+if ($availableFrom !== null && $availableUntil !== null &&
+    $availableUntil < $availableFrom) {
+    http_response_code(400);
+    echo json_encode([
+        'success' => false,
+        'error' => 'Available To cannot be earlier than Available From.'
+    ]);
+    exit;
+}
+
 $cloudinaryPublicId = null;
 $storedExternalUrl  = null;
 
-// ── Handle file upload → Cloudinary ──────────────────────────────────────
+// ── Handle file upload → local storage ───────────────────────────────────
 if ($action === 'upload' && $uploadedFile) {
     if ($uploadedFile['error'] !== UPLOAD_ERR_OK) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'File upload error code: ' . $uploadedFile['error']]);
+        echo json_encode([
+            'success' => false,
+            'error' => 'File upload error code: ' . $uploadedFile['error']
+        ]);
         exit;
     }
 
     $maxBytes = 50 * 1024 * 1024;
+
     if ($uploadedFile['size'] > $maxBytes) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'File exceeds 50 MB limit.']);
+        echo json_encode([
+            'success' => false,
+            'error' => 'File exceeds 50 MB limit.'
+        ]);
         exit;
     }
 
     $allowedMimes = [
         'application/pdf',
-        'video/mp4', 'video/webm', 'video/ogg',
-        'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+        'video/mp4',
+        'video/webm',
+        'video/ogg',
+        'image/jpeg',
+        'image/png',
+        'image/gif',
+        'image/webp',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         'application/msword',
     ];
+
     $mime = mime_content_type($uploadedFile['tmp_name']);
+
     if (!in_array($mime, $allowedMimes, true)) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'File type not allowed. Accepted: PDF, MP4, JPEG, PNG, DOCX.']);
+        echo json_encode([
+            'success' => false,
+            'error' => 'File type not allowed. Accepted: PDF, MP4, JPEG, PNG, DOCX.'
+        ]);
         exit;
     }
 
-    // Determine Cloudinary resource_type
-    if (str_starts_with($mime, 'video/')) {
-        $resourceType = 'video';
-    } elseif (str_starts_with($mime, 'image/')) {
-        $resourceType = 'image';
-    } else {
-        $resourceType = 'raw';  // PDF, DOCX, etc.
-    }
+    $extension = strtolower(
+        pathinfo($uploadedFile['name'], PATHINFO_EXTENSION)
+    );
 
-    $cloudName    = defined('CLOUDINARY_CLOUD_NAME') ? CLOUDINARY_CLOUD_NAME : 'dmysg5azm';
-    $uploadPreset = 'ptauploads';
-    $uploadUrl    = "https://api.cloudinary.com/v1_1/{$cloudName}/{$resourceType}/upload";
+    $safeExtension = preg_replace(
+        '/[^a-z0-9]/',
+        '',
+        $extension
+    );
 
-    $postFields = [
-        'file'          => new CURLFile($uploadedFile['tmp_name'], $mime, $uploadedFile['name']),
-        'upload_preset' => $uploadPreset,
-        'folder'        => 'materials',
-    ];
-
-    $ch = curl_init($uploadUrl);
-    curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => $postFields,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 60,
-    ]);
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curlErr  = curl_error($ch);
-    curl_close($ch);
-
-    if ($curlErr || $httpCode !== 200) {
-        error_log("Cloudinary upload failed: HTTP $httpCode — $curlErr — $response");
-        http_response_code(502);
-        echo json_encode(['success' => false, 'error' => 'Failed to upload file to Cloudinary. Please try again.']);
+    if ($safeExtension === '') {
+        http_response_code(400);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Unable to determine file extension.'
+        ]);
         exit;
     }
 
-    $cloudData = json_decode($response, true);
-    if (empty($cloudData['public_id'])) {
-        error_log("Cloudinary missing public_id: $response");
-        http_response_code(502);
-        echo json_encode(['success' => false, 'error' => 'Cloudinary did not return a valid response.']);
+    // Generate a unique filename; do not trust the original filename.
+    $filename = bin2hex(random_bytes(16)) . '.' . $safeExtension;
+
+    $uploadDir = __DIR__ . '/../../uploads/materials/';
+    $destination = $uploadDir . $filename;
+
+    if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true)) {
+        error_log("Failed to create resource upload directory: $uploadDir");
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Failed to prepare upload directory.'
+        ]);
         exit;
     }
 
-    $cloudinaryPublicId = $cloudData['public_id'];
+    if (!is_writable($uploadDir)) {
+        error_log("Resource upload directory is not writable: $uploadDir");
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Upload directory is not writable.'
+        ]);
+        exit;
+    }
+
+    if (!move_uploaded_file($uploadedFile['tmp_name'], $destination)) {
+        error_log("Failed to move uploaded resource to: $destination");
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Failed to store uploaded file.'
+        ]);
+        exit;
+    }
+
+    // Store relative path in existing external_url column.
+    $storedExternalUrl = 'uploads/materials/' . $filename;
 
 } elseif ($action === 'upload_link') {
     if ($externalUrl === '') {
@@ -219,17 +300,21 @@ $ins = safePreparedQuery(
     $conn,
     'INSERT INTO materials
          (title, description, created_by, visibility,
-          cloudinary_public_id, external_url, category)
-     VALUES (?, ?, ?, ?, ?, ?, ?)',
-    'ssissss',
+          cloudinary_public_id, external_url, category,
+          available_from, available_until, auto_delete_after_expiry)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'ssissssssi',
     [
         $title,
         $description,
-        $createdBy,           // created_by: user_id of the uploader
-        $visibility,          // visibility: 'public' or 'private'
-        $cloudinaryPublicId ?: null,  // cloudinary_public_id from frontend
-        $storedExternalUrl ?: null,   // external_url: Cloudinary URL or external link
+        $createdBy,
+        $visibility,
+        $cloudinaryPublicId ?: null,
+        $storedExternalUrl ?: null,
         $category,
+        $availableFrom,
+        $availableUntil,
+        $autoDeleteAfterExpiry ? 1 : 0
     ]
 );
 
@@ -248,8 +333,15 @@ if (!empty($targets) && is_array($targets) && in_array($visibility, ['group'], t
         $tId   = (int)($target['id'] ?? 0);
         if (!in_array($tType, ['group', 'student'], true) || $tId <= 0) continue;
         safePreparedQuery($conn,
-            'INSERT IGNORE INTO material_targets (material_id, target_type, target_id) VALUES (?, ?, ?)',
-            'isi', [$newId, $tType, $tId]
+            'INSERT INTO material_targets (
+                material_id,
+                target_type,
+                target_id
+            )
+            VALUES (?, ?, ?)
+            ON CONFLICT DO NOTHING',
+            'isi',
+            [$newId, $tType, $tId]
         );
     }
 }
@@ -261,7 +353,10 @@ if ($visibility === 'public') {
 
     $students = safePreparedQuery(
         $conn,
-        "SELECT user_id FROM users WHERE role = 'student' AND is_active = 1",
+        "SELECT user_id
+            FROM users
+            WHERE role = 'student'
+            AND is_active = TRUE",
         '', []
     );
 
@@ -283,11 +378,18 @@ if ($visibility === 'public') {
                 $params[] = 'material';
                 $params[] = $newId;
             }
-            safePreparedQuery(
-                $conn,
-                "INSERT IGNORE INTO notifications (user_id, title, message, type, related_entity_id)
-                 VALUES $placeholders",
-                $types, $params
+            safePreparedQuery($conn,
+                "INSERT INTO notifications (
+                    user_id,
+                    title,
+                    message,
+                    type,
+                    related_entity_id
+                )
+                VALUES $placeholders
+                ON CONFLICT DO NOTHING",
+                $types,
+                $params
             );
         }
     }

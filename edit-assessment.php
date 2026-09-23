@@ -17,10 +17,12 @@ $userEmail    = htmlspecialchars($currentUser['email'] ?? '');
 $userInitials = strtoupper(substr($currentUser['full_name'] ?? 'T', 0, 2));
 
 // Fetch profile_image (validateSession may not include it)
-$picStmt = $conn->prepare("SELECT profile_image FROM users WHERE user_id = ?");
-$picStmt->bind_param("i", $teacherId);
-$picStmt->execute();
-$picRow      = $picStmt->get_result()->fetch_assoc();
+$picStmt = $conn->prepare(
+    "SELECT profile_image FROM users WHERE user_id = ?"
+);
+$picStmt->execute([$teacherId]);
+
+$picRow = $picStmt->fetch(PDO::FETCH_ASSOC);
 $userPicture = $picRow['profile_image'] ?? '';
 
 
@@ -108,13 +110,13 @@ if (!empty($questions)) {
          ORDER BY option_order ASC, option_id ASC"
     );
     if ($ropts2) {
-        while ($opt = $ropts2->fetch_assoc()) {
+        while ($opt = $ropts2->fetch(PDO::FETCH_ASSOC)) {
             $qid = (int)$opt['question_id'];
             if (isset($questions[$qid])) {
                 $questions[$qid]['options'][] = $opt;
             }
         }
-        $ropts2->free();
+        $ropts2 = null;
     }
 }
 $questions = array_values($questions);
@@ -125,7 +127,9 @@ $rs = safePreparedQuery($conn,
     "SELECT
         COUNT(*) AS total_attempts,
         ROUND(AVG(percentage), 1) AS avg_score,
-        ROUND(AVG(TIMESTAMPDIFF(MINUTE, aa.start_time, aa.submitted_at)), 0) AS avg_time,
+        ROUND(
+            AVG(EXTRACT(EPOCH FROM (aa.submitted_at - aa.start_time)) / 60.0)
+        ) AS avg_time,
         ROUND(
             100.0 * SUM(CASE WHEN status IN ('submitted','timeout') THEN 1 ELSE 0 END)
             / NULLIF(COUNT(*), 0), 1

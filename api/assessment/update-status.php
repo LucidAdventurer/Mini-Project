@@ -70,33 +70,52 @@ if (!empty($body['targets']) && is_array($body['targets'])) {
     }
 }
 
-// ── Require targets when publishing ──
-if ($status === 'published' && empty($targets)) {
-    http_response_code(400);
-    echo json_encode(['success' => false, 'message' => 'Please assign the assessment to at least one group or student before publishing.']);
-    exit;
-}
-
-// ── Verify ownership ──
+// ── Verify ownership and get visibility ──
 $check = safePreparedQuery($conn,
-    "SELECT assessment_id FROM assessments WHERE assessment_id = ? AND created_by = ?",
+    "SELECT assessment_id, visibility
+     FROM assessments
+     WHERE assessment_id = ? AND created_by = ?",
     "ii", [$assessmentId, $teacherId]
 );
+
 if (!$check['success'] || !$check['result'] || $check['result']->num_rows === 0) {
     http_response_code(403);
-    echo json_encode(['success' => false, 'message' => 'Assessment not found or access denied.']);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Assessment not found or access denied.'
+    ]);
     exit;
 }
 
-// ── Update status ──
-$result = safePreparedQuery($conn,
-    "UPDATE assessments SET status = ?, updated_at = NOW() WHERE assessment_id = ? AND created_by = ?",
-    "sii", [$status, $assessmentId, $teacherId]
+$assessmentRow = $check['result']->fetch_assoc();
+$visibility = $assessmentRow['visibility'] ?? 'public';
+
+// ── Require targets for non-public assessments ──
+if ($status === 'published' && $visibility !== 'public' && empty($targets)) {
+    http_response_code(400);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Please assign the assessment to at least one group or student before publishing.'
+    ]);
+    exit;
+}
+
+// ── Update assessment status ──
+$result = safePreparedQuery(
+    $conn,
+    "UPDATE assessments
+     SET status = ?, updated_at = NOW()
+     WHERE assessment_id = ? AND created_by = ?",
+    "sii",
+    [$status, $assessmentId, $teacherId]
 );
 
 if (!$result['success']) {
     http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Failed to update status.']);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Failed to update status.'
+    ]);
     exit;
 }
 
@@ -108,8 +127,16 @@ if ($status === 'published' && !empty($targets)) {
     );
     foreach ($targets as $t) {
         safePreparedQuery($conn,
-            "INSERT IGNORE INTO assessment_targets (assessment_id, target_type, target_id) VALUES (?, ?, ?)",
-            "isi", [$assessmentId, $t['type'], $t['id']]
+            "INSERT INTO assessment_targets (
+                assessment_id,
+                target_type,
+                target_id
+            )
+            VALUES (?, ?, ?)
+            ON CONFLICT (assessment_id, target_type, target_id)
+            DO NOTHING",
+            "isi",
+            [$assessmentId, $t['type'], $t['id']]
         );
     }
 }
@@ -155,15 +182,27 @@ if ($status === 'published' && !empty($targets)) {
         $notifType    = 'assessment';
 
         $stmt = $conn->prepare(
-            "INSERT INTO notifications (user_id, title, message, type, related_entity_id, created_at)
-             VALUES (?, ?, ?, ?, ?, NOW())"
+            "INSERT INTO notifications (
+                user_id,
+                title,
+                message,
+                type,
+                related_entity_id,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?, NOW())"
         );
+
         if ($stmt) {
             foreach ($studentIds as $uid) {
-                $stmt->bind_param("isssi", $uid, $notifTitle, $notifMessage, $notifType, $assessmentId);
-                $stmt->execute();
+                $stmt->execute([
+                    $uid,
+                    $notifTitle,
+                    $notifMessage,
+                    $notifType,
+                    $assessmentId
+                ]);
             }
-            $stmt->close();
         }
     }
 }

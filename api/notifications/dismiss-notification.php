@@ -33,10 +33,26 @@ if (!$user) {
 $userId = (int) $user['user_id'];
 
 // Parse JSON body
-$body   = json_decode(file_get_contents('php://input'), true) ?? [];
+$body = json_decode(file_get_contents('php://input'), true) ?? [];
+
 $action = trim($body['action'] ?? '');
 
+// The current notifications.php sends only notification_id
+// for the X/dismiss button, so treat that as dismiss_one.
+if ($action === '' && !empty($body['notification_id'])) {
+    $action = 'dismiss_one';
+}
+
 $success = false;
+
+$sentToken    = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+$sessionToken = $_SESSION['csrf_token'] ?? '';
+
+if ($sessionToken === '' || $sentToken === '' || !hash_equals($sessionToken, $sentToken)) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Invalid CSRF token']);
+    exit;
+}
 
 switch ($action) {
 

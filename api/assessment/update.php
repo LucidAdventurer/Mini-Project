@@ -163,29 +163,43 @@ if ($visibilityRaw === 'public') {
 }
 
 // ── Status — map 'active' → 'published' to match DB enum('draft','published','archived') ──
-$status = trim($body['status'] ?? 'draft');
-if ($status === 'active') $status = 'published';
-if (!in_array($status, ['draft', 'published', 'archived'], true)) {
-    $status = 'draft';
+$status = isset($body['status'])
+    ? trim($body['status'])
+    : null;
+
+if ($status === 'active') {
+    $status = 'published';
 }
 
 // ── Verify ownership ──
-$chk = $conn->prepare("SELECT assessment_id FROM assessments WHERE assessment_id = ? AND created_by = ?");
+$chk = $conn->prepare(
+    "SELECT assessment_id, status
+     FROM assessments
+     WHERE assessment_id = ? AND created_by = ?"
+);
+
 if (!$chk) {
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'DB error (ownership check).']);
     exit;
 }
-$chk->bind_param("ii", $assessmentId, $teacherId);
-$chk->execute();
-$chk->store_result();
-if ($chk->num_rows === 0) {
-    $chk->close();
+
+$chk->execute([$assessmentId, $teacherId]);
+$chkRow = $chk->fetch(PDO::FETCH_ASSOC);
+
+if (!$chkRow) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'Assessment not found or access denied.']);
     exit;
 }
-$chk->close();
+
+if ($status === null) {
+    $status = $chkRow['status'];
+}
+
+if (!in_array($status, ['draft', 'published', 'archived'], true)) {
+    $status = 'draft';
+}
 
 // ── UPDATE assessments ──
 //
@@ -215,78 +229,79 @@ $chk->close();
 
 $upd = $conn->prepare(
     "UPDATE assessments
-     SET title               = ?,
-         description         = ?,
-         category            = ?,
-         difficulty          = ?,
-         duration_minutes    = ?,
-         total_marks         = ?,
-         passing_marks       = ?,
-         max_attempts        = ?,
-         start_time          = ?,
-         end_time            = ?,
+     SET title = ?,
+         description = ?,
+         category = ?,
+         difficulty = ?,
+         duration_minutes = ?,
+         total_marks = ?,
+         passing_marks = ?,
+         max_attempts = ?,
+         start_time = ?,
+         end_time = ?,
          randomize_questions = ?,
-         randomize_options   = ?,
-         visibility          = ?,
-         status              = ?,
-         updated_at          = NOW()
+         randomize_options = ?,
+         visibility = ?,
+         status = ?,
+         updated_at = NOW()
      WHERE assessment_id = ? AND created_by = ?"
 );
 
 if (!$upd) {
-    error_log("update.php prepare failed: " . $conn->error);
     http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'DB prepare error: ' . $conn->error]);
+    echo json_encode([
+        'success' => false,
+        'error' => 'DB prepare error.'
+    ]);
     exit;
 }
 
-$upd->bind_param(
-    "ssssiiiissiissii",   // 16 chars: ssss iiii ss ii ss ii
-    $title,               //  1 s
-    $description,         //  2 s
-    $category,            //  3 s
-    $difficulty,          //  4 s
-    $duration,            //  5 i
-    $totalMarks,          //  6 i
-    $passingMarks,        //  7 i
-    $maxAttempts,         //  8 i
-    $startTime,           //  9 s  (nullable)
-    $endTime,             // 10 s  (nullable)
-    $randomizeQuestions,  // 11 i
-    $randomizeOptions,    // 12 i
-    $visibility,          // 13 s
-    $status,              // 14 s
-    $assessmentId,        // 15 i  WHERE
-    $teacherId            // 16 i  WHERE
-);
-
-if (!$upd->execute()) {
-    error_log("update.php execute failed: assessment_id=$assessmentId err=" . $upd->error);
-    http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Update failed: ' . $upd->error]);
-    $upd->close();
-    exit;
-}
-$upd->close();
+$upd->execute([
+    $title,
+    $description,
+    $category,
+    $difficulty,
+    $duration,
+    $totalMarks,
+    $passingMarks,
+    $maxAttempts,
+    $startTime,
+    $endTime,
+    $randomizeQuestions,
+    $randomizeOptions,
+    $visibility,
+    $status,
+    $assessmentId,
+    $teacherId
+]);
 
 // ── Sync assessment_targets ──
-$del = $conn->prepare("DELETE FROM assessment_targets WHERE assessment_id = ?");
+$del = $conn->prepare(
+    "DELETE FROM assessment_targets WHERE assessment_id = ?"
+);
+
 if ($del) {
-    $del->bind_param("i", $assessmentId);
-    $del->execute();
-    $del->close();
+    $del->execute([$assessmentId]);
 }
 
 if ($visibility !== 'public' && !empty($targets)) {
     $ins = $conn->prepare(
-        "INSERT IGNORE INTO assessment_targets (assessment_id, target_type, target_id) VALUES (?, ?, ?)"
+        "INSERT INTO assessment_targets (
+            assessment_id,
+            target_type,
+            target_id
+        )
+        VALUES (?, ?, ?)"
     );
+
     if ($ins) {
         foreach ($targets as $t) {
-            $ins->bind_param("isi", $assessmentId, $t['type'], $t['id']);
-            $ins->execute();
+            $ins->execute([
+                $assessmentId,
+                $t['type'],
+                $t['id']
+            ]);
         }
-        $ins->close();
     }
 }
 

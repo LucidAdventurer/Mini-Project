@@ -68,7 +68,7 @@ $entityId = (int)($notif['related_entity_id'] ?? 0);
 
 // Mark as read
 safePreparedQuery($conn,
-    "UPDATE notifications SET is_read = 1 WHERE notification_id = ? AND user_id = ?",
+    "UPDATE notifications SET is_read = TRUE WHERE notification_id = ? AND user_id = ?",
     "ii", [$notifId, $userId]
 );
 

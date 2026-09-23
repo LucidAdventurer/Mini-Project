@@ -635,6 +635,28 @@ body::before {
           <input type="url" class="form-control" id="up-link" placeholder="https://…">
         </div>
       </div>
+      <!-- Availability -->
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Available From</label>
+          <input type="date" class="form-control" id="up-from">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Available To</label>
+          <input type="date" class="form-control" id="up-to">
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-top:2px;">
+        <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:13px;color:var(--text-2);">
+          <input type="checkbox" id="up-auto-delete" style="width:16px;height:16px;accent-color:var(--violet);">
+          <span>Automatically delete the uploaded file after the availability period ends</span>
+        </label>
+        <div style="font-size:11px;color:var(--text-3);margin-left:25px;margin-top:3px;">
+          The resource will remain visible to you, but the local file will be permanently removed.
+        </div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn-secondary" onclick="closeUploadModal()">Cancel</button>
@@ -693,9 +715,20 @@ body::before {
           <label class="form-label">Available From</label>
           <input type="date" class="form-control" id="edit-from">
         </div>
+
         <div class="form-group">
           <label class="form-label">Available To</label>
           <input type="date" class="form-control" id="edit-to">
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-top:2px;">
+        <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:13px;color:var(--text-2);">
+          <input type="checkbox" id="edit-auto-delete" style="width:16px;height:16px;accent-color:var(--violet);">
+          <span>Automatically delete the uploaded file after the availability period ends</span>
+        </label>
+        <div style="font-size:11px;color:var(--text-3);margin-left:25px;margin-top:3px;">
+          The resource will remain visible to you, but the local file will be permanently removed.
         </div>
       </div>
     </div>
@@ -812,7 +845,6 @@ function renderGrid(mats, total) {
         const visBadge = `<span class="badge-vis ${vis}"> ${vis === 'public' ? '🌐 Public' :vis === 'group'  ? '👥 Group' :'🔒 Private'}</span>`;
         const isLink   = m.material_type === 'link';
         const primaryBtn = isLink ? `<a class="btn-view" href="${esc(m.external_url)}" target="_blank" rel="noopener"><i class="fa fa-external-link-alt"></i> Open</a>`: `<button class="btn-view" onclick="openFile(${m.material_id},'${esc(m.material_type)}')"><i class="fa fa-eye"></i> View</button>`;
-        const visIcon  = vis === 'public' ? 'fa-lock-open' : 'fa-lock';
 
         return `
         <div class="resource-card" id="rcard-${m.material_id}">
@@ -832,10 +864,19 @@ function renderGrid(mats, total) {
                 <span><i class="fa fa-clock"></i>${timeAgo(m.created_at)}</span>
             </div>
             <div class="card-actions">
-                ${primaryBtn}
-                <button class="btn-icon" onclick="openEditModal(${m.material_id})" title="Edit"><i class="fa fa-pen"></i></button>
-                <button class="btn-icon" onclick="openEditModal(${m.material_id})" title="Change visibility"><i class="fa ${visIcon}"></i></button>
-                <button class="btn-icon danger" onclick="openDeleteModal(${m.material_id},'${esc(m.title)}')" title="Delete"><i class="fa fa-trash"></i></button>
+              ${primaryBtn}
+
+              <button class="btn-icon"
+                      onclick="openEditModal(${m.material_id})"
+                      title="Edit">
+                  <i class="fa fa-pen"></i>
+              </button>
+
+              <button class="btn-icon danger"
+                      onclick="openDeleteModal(${m.material_id},'${esc(m.title)}')"
+                      title="Delete">
+                  <i class="fa fa-trash"></i>
+              </button>
             </div>
         </div>`;
     }).join('');
@@ -887,6 +928,9 @@ document.getElementById('searchInput').addEventListener('input', e => {
 function openUploadModal() {
     ['up-title','up-desc','up-link'].forEach(id => document.getElementById(id).value='');
     document.getElementById('up-category').value   = '';
+    document.getElementById('up-from').value       = '';
+    document.getElementById('up-to').value         = '';
+    document.getElementById('up-auto-delete').checked = false;
     document.getElementById('up-visibility').value = 'public';
     document.getElementById('up-file').value        = '';
     document.getElementById('fileNameDisplay').style.display = 'none';
@@ -979,12 +1023,29 @@ async function submitUpload() {
             body.append('category', document.getElementById('up-category').value);
             body.append('visibility', visibility);
             body.append('targets', JSON.stringify(targets));
+            body.append('available_from', document.getElementById('up-from').value || '');
+            body.append('available_until', document.getElementById('up-to').value || '');
+            body.append('auto_delete_after_expiry',
+                document.getElementById('up-auto-delete').checked ? '1' : '0'
+            );
             body.append('file', file);
         } else {
             const link = document.getElementById('up-link').value.trim();
-            if (!link) { toast('Please enter a URL.', 'error'); btn.disabled=false; btn.innerHTML='<i class="fa fa-upload"></i> Upload'; return; }
-            body = JSON.stringify({ action: 'upload_link', title, description: document.getElementById('up-desc').value.trim(), category: document.getElementById('up-category').value, visibility, targets, external_url: link });
-            headers['Content-Type'] = 'application/json';
+            if (!link) { 
+              toast('Please enter a URL.', 'error'); btn.disabled=false; btn.innerHTML='<i class="fa fa-upload"></i> Upload'; return;
+            }
+            body = JSON.stringify({
+              action: 'upload_link',
+              title,
+              description: document.getElementById('up-desc').value.trim(),
+              category: document.getElementById('up-category').value,
+              visibility,
+              targets,
+              available_from: document.getElementById('up-from').value || null,
+              available_until: document.getElementById('up-to').value || null,
+              auto_delete_after_expiry: document.getElementById('up-auto-delete').checked
+            });            
+          headers['Content-Type'] = 'application/json';
         }
 
         const res  = await fetch('api/resources/upload-resource.php', { method:'POST', credentials:'same-origin', headers, body });
@@ -1003,23 +1064,30 @@ async function submitUpload() {
 /* ── Edit modal ── */
 let _editData = {};
 async function openEditModal(id) {
-    try {
-        const res  = await fetch('api/resources/get-teacher-resources.php?material_id='+id);
-        const data = await res.json();
-        const m    = data.materials?.[0];
-        if (!m) { toast('Could not load resource.', 'error'); return; }
-        _editData = m;
-        document.getElementById('edit-id').value         = m.material_id;
-        document.getElementById('edit-title').value      = m.title || '';
-        document.getElementById('edit-desc').value       = m.description || '';
-        document.getElementById('edit-category').value   = m.category || '';
-        document.getElementById('edit-from').value = m.available_from ? m.available_from.substring(0,10) : '';
-        const vis = m.visibility || (m.is_public ? 'public' : 'private');
-        document.getElementById('edit-visibility').value = vis;
-        await toggleEditTargeting(vis, m.group_id);
-        document.getElementById('edit-to').value   = m.available_until ? m.available_until.substring(0,10) : '';
-        document.getElementById('editModal').classList.add('open');
-    } catch(e) { toast('Error loading resource.', 'error'); }
+  try {
+      const res  = await fetch('api/resources/get-teacher-resources.php?material_id='+id);
+      const data = await res.json();
+      const m    = data.materials?.[0];
+      if (!m) { toast('Could not load resource.', 'error'); return; }
+      _editData = m;
+      document.getElementById('edit-id').value         = m.material_id;
+      document.getElementById('edit-title').value      = m.title || '';
+      document.getElementById('edit-desc').value       = m.description || '';
+      document.getElementById('edit-category').value   = m.category || '';
+      document.getElementById('edit-from').value = m.available_from ? m.available_from.substring(0,10) : '';
+      const vis = m.visibility || (m.is_public ? 'public' : 'private');
+      document.getElementById('edit-visibility').value = vis;
+      await toggleEditTargeting(vis, m.group_id);
+      document.getElementById('edit-to').value =
+        m.available_until ? m.available_until.substring(0,10) : '';
+
+      document.getElementById('edit-auto-delete').checked =
+        m.auto_delete_after_expiry === true ||
+        m.auto_delete_after_expiry === 1 ||
+        m.auto_delete_after_expiry === '1';
+
+      document.getElementById('editModal').classList.add('open');
+  } catch(e) { toast('Error loading resource.', 'error'); }
 }
 function closeEditModal() { document.getElementById('editModal').classList.remove('open'); }
 
@@ -1045,21 +1113,22 @@ async function submitEdit() {
     }
 
     const res = await fetch('api/resources/update-resource.php', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-Token': CSRF_TOKEN
-        },
-        body: JSON.stringify({
-            material_id: id,
-            title,
-            description: document.getElementById('edit-desc').value.trim(),
-            category: document.getElementById('edit-category').value,
-            available_from: document.getElementById('edit-from').value || null,
-            available_until: document.getElementById('edit-to').value || null,
-            visibility,
-            targets
-        })
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': CSRF_TOKEN
+      },
+      body: JSON.stringify({
+        material_id: id,
+        title,
+        description: document.getElementById('edit-desc').value.trim(),
+        category: document.getElementById('edit-category').value,
+        available_from: document.getElementById('edit-from').value || null,
+        available_until: document.getElementById('edit-to').value || null,
+        auto_delete_after_expiry: document.getElementById('edit-auto-delete').checked,
+        visibility,
+        targets
+      })
     });
 
     const data = await res.json();

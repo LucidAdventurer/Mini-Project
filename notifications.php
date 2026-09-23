@@ -9,7 +9,7 @@ $currentUser  = validateSession($conn);
 $userName     = htmlspecialchars($currentUser['full_name']);
 $userInitials = strtoupper(substr($currentUser['full_name'], 0, 2));
 $userId       = (int) $currentUser['user_id'];
-$userRole     = $currentUser['user_type'] ?? 'student'; // from users.user_type: 'admin', 'teacher', 'student'
+$userRole     = $currentUser['role'] ?? 'student'; // from users.role: 'admin', 'teacher', 'student'
 $canEdit      = ($userRole === 'admin');                // only admins can edit/delete notifications (no created_by column)
 
 // Ensure CSRF token exists
@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canEdit) {
         $nid     = (int)($body['notification_id'] ?? 0);
         $title   = trim($body['title']   ?? '');
         $message = trim($body['message'] ?? '');
-        $type    = $body['notification_type'] ?? '';
+        $type    = $body['type'] ?? '';
         $allowed_types = ['info','success','warning','error','assessment','result','material'];
 
         if (!$nid || $title === '' || !in_array($type, $allowed_types, true)) {
@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canEdit) {
 
         // Only admins can edit notifications (no created_by column in schema)
         $editResult = safePreparedQuery($conn,
-            "UPDATE notifications SET title=?, message=?, notification_type=? WHERE notification_id=?",
+            "UPDATE notifications SET title=?, message=?, type=? WHERE notification_id=?",
             "sssi", [$title, $message, $type, $nid]);
 
         echo json_encode(['success' => (bool)($editResult['success'] ?? false)]);
@@ -71,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canEdit) {
 
 // ── Unread count for sidebar badge & navbar ──
 $unreadResult = safePreparedQuery($conn,
-    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
+    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = FALSE",
     "i", [$userId]
 );
 $unreadCount = 0;
@@ -83,7 +83,7 @@ if ($unreadResult['success'] && $unreadResult['result']) {
 
 // ── Latest 5 for navbar dropdown ──
 $notifDropResult = safePreparedQuery($conn,
-    "SELECT notification_id, title, message, notification_type, is_read, created_at
+    "SELECT notification_id, title, message, type, is_read, created_at
      FROM notifications WHERE user_id = ?
      ORDER BY created_at DESC LIMIT 5",
     "i", [$userId]
@@ -107,15 +107,11 @@ $params     = [$userId];
 $types      = 'i';
 
 if ($filter === 'unread') {
-    $whereExtra = ' AND is_read = 0';
-} elseif ($filter !== 'all') {
-    $whereExtra = ' AND notification_type = ?';
-    $params[]   = $filter;
-    $types     .= 's';
+    $whereExtra = ' AND is_read = FALSE';
 }
 
 $allNotifsResult = safePreparedQuery($conn,
-    "SELECT notification_id, title, message, notification_type, is_read, read_at, action_url, created_at
+    "SELECT notification_id, title, message, type, is_read, created_at
      FROM notifications
      WHERE user_id = ? $whereExtra
      ORDER BY created_at DESC",
@@ -129,12 +125,6 @@ if ($allNotifsResult['success'] && $allNotifsResult['result']) {
     }
     $allNotifsResult['result']->free();
 }
-
-// ── Mark all as read on page load ──
-safePreparedQuery($conn,
-    "UPDATE notifications SET is_read = 1, read_at = NOW() WHERE user_id = ? AND is_read = 0",
-    "i", [$userId]
-);
 
 // ── Helpers ──
 function timeAgoFull(string $datetime): string {
@@ -605,8 +595,9 @@ body {
                     <?php if (empty($notifItems)): ?>
                         <div class="notif-empty-dd">No notifications yet.</div>
                     <?php else: foreach ($notifItems as $n):
-                        $isU = !$n['is_read'];
-                        $ico = $typeIcons[$n['notification_type']] ?? ['🔔','#4facfe','#ebf8ff'];
+                        $isRead = ($n['is_read'] === true || $n['is_read'] === 1 || $n['is_read'] === '1' || $n['is_read'] === 't' || $n['is_read'] === 'true');
+                        $isU = !$isRead;
+                        $ico = $typeIcons[$n['type']] ?? ['🔔','#4facfe','#ebf8ff'];
                     ?>
                     <div class="nd-item <?= $isU ? 'unread' : '' ?>" data-id="<?= $n['notification_id'] ?>">
                         <div class="nd-dot <?= $isU ? '' : 'read' ?>"></div>
@@ -713,8 +704,9 @@ body {
         <?php else: ?>
         <div class="notif-card-list" id="notifCardList">
             <?php foreach ($allNotifs as $n):
-                $isUnread = !$n['is_read'];
-                $info     = $typeIcons[$n['notification_type']] ?? ['🔔','#4facfe','#ebf8ff'];
+                $isRead = ($n['is_read'] === true || $n['is_read'] === 1 || $n['is_read'] === '1' || $n['is_read'] === 't' || $n['is_read'] === 'true');
+                $isUnread = !$isRead;
+                $info     = $typeIcons[$n['type']] ?? ['🔔','#4facfe','#ebf8ff'];
                 $ico      = $info[0]; $color = $info[1]; $bg = $info[2];
             ?>
             <div class="notif-card <?= $isUnread ? 'unread' : '' ?>" data-id="<?= $n['notification_id'] ?>" data-title="<?= htmlspecialchars(strtolower($n['title'])) ?>" data-msg="<?= htmlspecialchars(strtolower($n['message'] ?? '')) ?>">
@@ -728,20 +720,15 @@ body {
                     <?php endif; ?>
                     <div class="notif-card-meta">
                         <span class="notif-card-time"><i class="fa fa-clock" style="margin-right:4px;"></i><?= timeAgoFull($n['created_at']) ?></span>
-                        <span class="notif-type-badge" style="background:<?= $bg ?>;color:<?= $color ?>"><?= ucfirst($n['notification_type']) ?></span>
+                        <span class="notif-type-badge" style="background:<?= $bg ?>;color:<?= $color ?>"><?= ucfirst($n['type']) ?></span>
                         <?php if ($isUnread): ?>
                         <span style="font-size:11px;color:#4facfe;font-weight:600;">● Unread</span>
                         <?php endif; ?>
                     </div>
-                    <?php if (!empty($n['action_url'])): ?>
-                    <div class="notif-card-action" style="margin-top:8px;">
-                        <a href="<?= htmlspecialchars($n['action_url']) ?>">View details →</a>
-                    </div>
-                    <?php endif; ?>
                     <?php if ($canEdit): ?>
                     <div class="notif-card-actions">
                         <button class="btn-edit-notif"
-                            onclick="openEditModal(<?= $n['notification_id'] ?>, <?= htmlspecialchars(json_encode($n['title'])) ?>, <?= htmlspecialchars(json_encode($n['message'] ?? '')) ?>, <?= htmlspecialchars(json_encode($n['notification_type'])) ?>)">
+                            onclick="openEditModal(<?= $n['notification_id'] ?>, <?= htmlspecialchars(json_encode($n['title'])) ?>, <?= htmlspecialchars(json_encode($n['message'] ?? '')) ?>, <?= htmlspecialchars(json_encode($n['type'])) ?>)">
                             <i class="fa fa-pen"></i> Edit
                         </button>
                         <button class="btn-delete-notif"
@@ -912,7 +899,7 @@ async function saveEditModal() {
         const res  = await fetch('notifications.php', {
             method: 'POST',
             headers: { 'X-CSRF-Token': CSRF_TOKEN, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'edit', notification_id: id, title, message, notification_type: type })
+            body: JSON.stringify({ action: 'edit', notification_id: id, title, message, type })
         });
         const data = await res.json();
 
@@ -996,7 +983,7 @@ function dismissDropdownNotif(event, btn, id) {
     // DELETE the notification permanently so it's gone on all pages
     fetch('api/notifications/dismiss-notification.php', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
         body: JSON.stringify({ notification_id: id })
     })
     .then(r => r.json())
@@ -1039,7 +1026,7 @@ function dismissCardNotif(btn, id) {
     // DELETE the notification permanently so it's gone on all pages
     fetch('api/notifications/dismiss-notification.php', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
         body: JSON.stringify({ notification_id: id })
     })
     .then(r => r.json())

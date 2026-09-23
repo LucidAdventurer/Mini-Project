@@ -137,7 +137,7 @@ function logLoginAttempt(
             "INSERT INTO login_activity (user_id, ip_address, user_agent, is_success, failure_reason)
              VALUES (?, ?, ?, ?, ?)"
         );
-        $stmt->execute([$userId, $ip, $ua, $success ? 1 : 0, $reason]);
+        $stmt->execute([$userId, $ip, $ua, $success, $reason]);
     } catch (PDOException $e) {
         error_log("logLoginAttempt failed: " . $e->getMessage());
     }

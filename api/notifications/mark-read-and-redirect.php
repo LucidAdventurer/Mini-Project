@@ -14,14 +14,47 @@ require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
-$currentUser = validateSession($conn, 'student'); // students click notifications
-$userId      = (int) $currentUser['user_id'];
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+$sentToken    = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+$sessionToken = $_SESSION['csrf_token'] ?? '';
+
+if (
+    $sessionToken === '' ||
+    $sentToken === '' ||
+    !hash_equals($sessionToken, $sentToken)
+) {
+    http_response_code(403);
+    echo json_encode([
+        'success' => false,
+        'error'   => 'Invalid CSRF token.'
+    ]);
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    echo json_encode(['success' => false, 'error' => 'Method not allowed.']);
+    echo json_encode([
+        'success' => false,
+        'error'   => 'Method not allowed.'
+    ]);
     exit;
 }
+
+$currentUser = validateSession($conn, 'student');
+
+if (!$currentUser) {
+    http_response_code(401);
+    echo json_encode([
+        'success' => false,
+        'error'   => 'Unauthorized.'
+    ]);
+    exit;
+}
+
+$userId = (int) $currentUser['user_id'];
 
 $body           = json_decode(file_get_contents('php://input'), true);
 $notificationId = (int)($body['notification_id'] ?? 0);
@@ -62,10 +95,10 @@ safePreparedQuery($conn,
 
 // ── Build redirect URL ──
 // ⚠️  UPDATE THESE PATHS to match your actual page URLs
-$redirectUrl = match($entityType) {
-    'assessment' => '/student/assessment.php?id=' . $entityId,
-    'material'   => '/student/material.php?id='   . $entityId,
-    default      => '/student/dashboard.php',
+$redirectUrl = match ($entityType) {
+    'assessment' => '/prepaura/student-assessments.php',
+    'material'   => '/prepaura/student-resources.php',
+    default      => '/prepaura/student-dashboard.php',
 };
 
 echo json_encode(['success' => true, 'redirect_url' => $redirectUrl]);

@@ -7,8 +7,8 @@
 // - visibility = 'public'|'group'|'private'
 // - start_time / end_time
 // - assessment_targets (target_type: 'student'|'group')
-// - answers.marks_obtained
-// - attempt status 'completed'
+// - answers.marks_awarded
+// - attempt status 'submitted'|'timeout'
 // ============================================================
 
 require_once __DIR__ . '/../../config.php';
@@ -49,9 +49,9 @@ $result = safePreparedQuery($conn,
         (SELECT COUNT(*) FROM questions q WHERE q.assessment_id = a.assessment_id) AS question_count,
 
         (SELECT COUNT(*) FROM assessment_attempts aa
-         WHERE aa.assessment_id = a.assessment_id
-           AND aa.user_id = ?
-           AND aa.status IN ('completed', 'timeout')) AS attempts_used,
+            WHERE aa.assessment_id = a.assessment_id
+            AND aa.user_id = ?
+            AND aa.status IN ('submitted', 'timeout')) AS attempts_used,
 
         (SELECT aa2.attempt_id FROM assessment_attempts aa2
          WHERE aa2.assessment_id = a.assessment_id
@@ -69,25 +69,22 @@ $result = safePreparedQuery($conn,
      JOIN users u ON u.user_id = a.created_by
 
      LEFT JOIN (
-         SELECT
-             aa.assessment_id,
-             aa.attempt_id,
-             aa.score,
-             aa.percentage,
-             aa.submitted_at,
-             aa.attempt_number
-         FROM assessment_attempts aa
-         WHERE aa.user_id = ?
-           AND aa.status  = 'completed'
-           AND aa.percentage = (
-               SELECT MAX(aa2.percentage)
-               FROM assessment_attempts aa2
-               WHERE aa2.assessment_id = aa.assessment_id
-                 AND aa2.user_id       = aa.user_id
-                 AND aa2.status        = 'completed'
-           )
-         GROUP BY aa.assessment_id
-     ) best ON best.assessment_id = a.assessment_id
+        SELECT DISTINCT ON (aa.assessment_id)
+            aa.assessment_id,
+            aa.attempt_id,
+            aa.score,
+            aa.percentage,
+            aa.submitted_at,
+            aa.attempt_number
+        FROM assessment_attempts aa
+        WHERE aa.user_id = ?
+        AND aa.status IN ('submitted', 'timeout')
+        ORDER BY
+            aa.assessment_id,
+            aa.percentage DESC NULLS LAST,
+            aa.attempt_number DESC,
+            aa.attempt_id DESC
+    ) best ON best.assessment_id = a.assessment_id
 
      WHERE a.status = 'published'
        AND (a.start_time IS NULL OR a.start_time <= ?)
@@ -137,8 +134,15 @@ if ($result['result']) {
             'visibility'             => $row['visibility'],
             'start_time'             => $row['start_time'],
             'end_time'               => $row['end_time'],
-            'randomize_questions'    => (bool) $row['randomize_questions'],
-            'randomize_options'      => (bool) $row['randomize_options'],
+            'randomize_questions' => $row['randomize_questions'] === true
+                || $row['randomize_questions'] === 't'
+                || $row['randomize_questions'] === 1
+                || $row['randomize_questions'] === '1',
+
+            'randomize_options' => $row['randomize_options'] === true
+                || $row['randomize_options'] === 't'
+                || $row['randomize_options'] === 1
+                || $row['randomize_options'] === '1',
             'question_count'         => (int) $row['question_count'],
             'created_by_name'        => $row['created_by_name'],
             'attempts_used'          => (int) $row['attempts_used'],
@@ -157,8 +161,8 @@ if ($result['result']) {
             $statsResult = safePreparedQuery($conn,
                 "SELECT
                     COUNT(ans.answer_id)                                         AS total_answered,
-                    SUM(CASE WHEN ans.marks_obtained > 0 THEN 1 ELSE 0 END)     AS correct_count,
-                    SUM(CASE WHEN ans.marks_obtained < 0 THEN 1 ELSE 0 END)     AS wrong_count,
+                    SUM(CASE WHEN ans.marks_awarded > 0 THEN 1 ELSE 0 END)     AS correct_count,
+                    SUM(CASE WHEN ans.marks_awarded < 0 THEN 1 ELSE 0 END)     AS wrong_count,
                     (SELECT COUNT(*) FROM questions qq
                      WHERE qq.assessment_id = ?) AS total_questions
                  FROM answers ans

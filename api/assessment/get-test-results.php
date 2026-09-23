@@ -140,17 +140,23 @@ if (!empty($questionIds)) {
          WHERE question_id IN ($qidList)
          ORDER BY option_order ASC"
     );
-    if ($optsResult) {
-        while ($row = $optsResult->fetch_assoc()) {
+    if ($optsResult !== false) {
+        while ($row = $optsResult->fetch(PDO::FETCH_ASSOC)) {
             $qid = (int)$row['question_id'];
+
+            $isCorrect =
+                $row['is_correct'] === true ||
+                $row['is_correct'] === 't' ||
+                $row['is_correct'] === 1 ||
+                $row['is_correct'] === '1';
+
             $optionsByQuestion[$qid][(int)$row['option_id']] = [
                 'option_id'    => (int)$row['option_id'],
                 'option_text'  => $row['option_text'],
-                'is_correct'   => (bool)$row['is_correct'],
+                'is_correct'   => $isCorrect,
                 'option_order' => (int)$row['option_order'],
             ];
         }
-        $optsResult->free();
     }
 }
 

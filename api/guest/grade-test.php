@@ -85,7 +85,7 @@ $aRes = safePreparedQuery(
        AND a.visibility     = 'public'
        AND a.status         = 'published'
        AND u.role           IN ('admin', 'teacher')
-       AND u.is_active      = 1
+       AND u.is_active      = TRUE
        AND (a.start_time IS NULL OR a.start_time <= NOW())
        AND (a.end_time   IS NULL OR a.end_time   >= NOW())",
     "i", [$assessmentId]
@@ -172,7 +172,7 @@ $oRes = safePreparedQuery(
     "SELECT question_id, option_id
      FROM question_options
      WHERE question_id IN ($oPlaceholders)
-       AND is_correct = 1",
+       AND is_correct = TRUE",
     $oTypes, $qIds
 );
 

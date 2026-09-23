@@ -131,29 +131,50 @@ if (!$check['success'] || !$check['result'] || $check['result']->num_rows === 0)
 $check['result']->free();
 
 // ── Insert question + options in a transaction ──
-$conn->begin_transaction();
+$conn->beginTransaction();
 
 try {
-    // Lock rows to get a safe question_order
+    // Lock assessment
+    $stmt = $conn->prepare(
+        "SELECT assessment_id
+         FROM assessments
+         WHERE assessment_id = ?
+         FOR UPDATE"
+    );
+
+    if (!$stmt) throw new Exception("Prepare failed.");
+
+    $stmt->execute([$assessmentId]);
+    $stmt->fetch();
+    $stmt = null;
+
+    // Get next question order
     $stmt = $conn->prepare(
         "SELECT COALESCE(MAX(question_order), 0) + 1 AS next_order
-         FROM questions WHERE assessment_id = ? FOR UPDATE"
+         FROM questions
+         WHERE assessment_id = ?"
     );
-    if (!$stmt) throw new Exception("Prepare failed: " . $conn->error);
-    $stmt->bind_param("i", $assessmentId);
-    $stmt->execute();
-    $row       = $stmt->get_result()->fetch_assoc();
-    $nextOrder = (int)($row['next_order'] ?? 1);
-    $stmt->close();
 
-    // Insert question — no option columns, no correct_answer, no topic
+    if (!$stmt) throw new Exception("Prepare failed.");
+
+    $stmt->execute([$assessmentId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    $nextOrder = (int)($row['next_order'] ?? 1);
+    $stmt = null;
+
+    // Insert question
     $stmt = $conn->prepare(
         "INSERT INTO questions
             (assessment_id, question_type, question_text, marks, negative_marks, explanation, question_order)
          VALUES (?, ?, ?, ?, ?, ?, ?)"
     );
-    if (!$stmt) throw new Exception("Prepare question failed: " . $conn->error);
-    $stmt->bind_param("ississi",
+
+    if (!$stmt) {
+        throw new Exception("Prepare question failed.");
+    }
+
+    $stmt->execute([
         $assessmentId,
         $questionType,
         $questionText,
@@ -161,35 +182,40 @@ try {
         $negMarks,
         $explanation,
         $nextOrder
-    );
-    $stmt->execute();
-    $newQuestionId = $stmt->insert_id;
-    $stmt->close();
+    ]);
+
+    // Get the ID of the newly inserted question
+    $newQuestionId = (int)$conn->lastInsertId();
 
     // Insert each option into question_options
     $optStmt = $conn->prepare(
         "INSERT INTO question_options (question_id, option_text, is_correct, option_order)
          VALUES (?, ?, ?, ?)"
     );
-    if (!$optStmt) throw new Exception("Prepare options failed: " . $conn->error);
+    if (!$optStmt) {
+        throw new Exception("Prepare options failed.");
+    }
 
     foreach ($cleanOptions as $opt) {
         $optText      = $opt['option_text'];
         $optIsCorrect = $opt['is_correct'];
         $optOrder     = $opt['option_order'];
-        $optStmt->bind_param("isii", $newQuestionId, $optText, $optIsCorrect, $optOrder);
-        $optStmt->execute();
+        $optStmt->execute([
+            $newQuestionId,
+            $optText,
+            $optIsCorrect,
+            $optOrder
+        ]);
     }
-    $optStmt->close();
+    $optStmt = null;
 
     // Touch assessment updated_at
     $stmt = $conn->prepare(
         "UPDATE assessments SET updated_at = NOW() WHERE assessment_id = ? AND created_by = ?"
     );
     if ($stmt) {
-        $stmt->bind_param("ii", $assessmentId, $teacherId);
-        $stmt->execute();
-        $stmt->close();
+        $stmt->execute([$assessmentId, $teacherId]);
+        $stmt = null;
     }
 
     $conn->commit();
@@ -199,7 +225,7 @@ try {
 } catch (Exception $e) {
     $conn->rollback();
 
-    if ($conn->errno === 1062 || str_contains($e->getMessage(), '1062')) {
+    if (str_contains($e->getMessage(), 'duplicate key')) {
         http_response_code(409);
         echo json_encode(['success' => false, 'error' => 'Conflict adding question. Please try again.']);
     } else {

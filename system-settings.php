@@ -322,30 +322,27 @@ class SystemSettings {
 
         try {
             $stmt = $this->conn->prepare(
-                "SELECT is_editable FROM system_settings WHERE setting_key = ?"
+                "SELECT setting_key FROM system_settings WHERE setting_key = ?"
             );
             $stmt->execute([$key]);
             $setting = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if ($setting) {
-                if (!$setting['is_editable']) {
-                    error_log("SystemSettings: attempted to modify non-editable setting: $key");
-                    return false;
-                }
                 $stmt = $this->conn->prepare(
                     "UPDATE system_settings
-                     SET setting_value = ?, setting_type = ?, updated_by = ?, updated_at = NOW()
-                     WHERE setting_key = ?"
+                    SET setting_value = ?, setting_type = ?, updated_at = NOW()
+                    WHERE setting_key = ?"
                 );
-                $ok = $stmt->execute([$valueStr, $type, $userId, $key]);
+                $ok = $stmt->execute([$valueStr, $type, $key]);
             } else {
                 $description = $this->getSettingDescription($key);
+
                 $stmt = $this->conn->prepare(
                     "INSERT INTO system_settings
-                        (setting_key, setting_value, setting_type, description, updated_by)
-                     VALUES (?, ?, ?, ?, ?)"
+                        (setting_key, setting_value, setting_type, description)
+                    VALUES (?, ?, ?, ?)"
                 );
-                $ok = $stmt->execute([$key, $valueStr, $type, $description, $userId]);
+                $ok = $stmt->execute([$key, $valueStr, $type, $description]);
             }
 
             if ($ok) {
@@ -383,7 +380,7 @@ class SystemSettings {
     }
 
     /**
-     * FIX 4: use a MySQL advisory lock to prevent concurrent initialization
+     * FIX 4: use a PostgreSQL advisory lock to prevent concurrent initialization
      * across multiple PHP workers starting simultaneously.
      */
     private function initializeSettings(): void {
@@ -434,9 +431,9 @@ class SystemSettings {
             // (setting_key is expected to be the unique/primary key on this table).
             $stmt = $this->conn->prepare(
                 "INSERT INTO system_settings
-                    (setting_key, setting_value, setting_type, description, is_editable)
-                 VALUES (?, ?, ?, ?, true)
-                 ON CONFLICT (setting_key) DO NOTHING"
+                    (setting_key, setting_value, setting_type, description)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT (setting_key) DO NOTHING"
             );
 
             foreach (self::DEFAULT_CONFIGURABLE_SETTINGS as $key => $value) {

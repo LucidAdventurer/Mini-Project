@@ -1,4 +1,5 @@
 <?php
+date_default_timezone_set('Asia/Kolkata');
 /*
  * ========================================
  * PTA GLOBAL CONFIGURATION - SUPABASE (POSTGRES) v3.0
@@ -97,7 +98,7 @@ function createDatabaseConnection() {
     $retryDelay = 1;
 
     $dsn = sprintf(
-        "pgsql:host=%s;port=%s;dbname=%s;sslmode=require",
+        "pgsql:host=%s;port=%s;dbname=%s;sslmode=disable",
         DB_HOST, DB_PORT, DB_NAME
     );
 

@@ -96,12 +96,20 @@ foreach ($answers as $questionId => $answer) {
     if ($optionId === null && $textAns === null) continue;
 
     safePreparedQuery($conn,
-        "INSERT INTO answers (attempt_id, question_id, selected_option_id, text_answer, marks_awarded)
-         VALUES (?, ?, ?, ?, 0)
-         ON DUPLICATE KEY UPDATE
-            selected_option_id = VALUES(selected_option_id),
-            text_answer        = VALUES(text_answer)",
-        "iiis", [$attemptId, $questionId, $optionId, $textAns]
+        "INSERT INTO answers (
+            attempt_id,
+            question_id,
+            selected_option_id,
+            text_answer,
+            marks_awarded
+        )
+        VALUES (?, ?, ?, ?, 0)
+        ON CONFLICT (attempt_id, question_id)
+            DO UPDATE SET
+                selected_option_id = EXCLUDED.selected_option_id,
+                text_answer        = EXCLUDED.text_answer",
+            "iiis",
+        [$attemptId, $questionId, $optionId, $textAns]
     );
 }
 

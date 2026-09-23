@@ -18,7 +18,7 @@ require_once __DIR__ . '/../../db-guard.php';
 
 // ── Optional session ──────────────────────────────────────────────────────
 $sessionUid  = (int)($_SESSION['user_id'] ?? 0);
-$sessionRole = $_SESSION['role'] ?? '';
+$sessionRole = $_SESSION['role'] ?? $_SESSION['user_type'] ?? '';
 $userId      = $sessionUid > 0 ? $sessionUid : null;
 $role        = $sessionUid > 0 ? $sessionRole : 'guest';
 $isGuest     = $userId === null;
@@ -27,9 +27,9 @@ $action = in_array($_GET['action'] ?? '', ['view', 'download'], true) ? $_GET['a
 
 // ── Determine source: resources table or materials table ──────────────────
 $resourceId = (int)($_GET['resource_id'] ?? 0);
-$materialId = (int)($_GET['material_id'] ?? 0);
+$itemId = (int)($_GET['material_id'] ?? 0);
 
-if ($resourceId <= 0 && $materialId <= 0) {
+if ($resourceId <= 0 && $itemId <= 0) {
     http_response_code(400);
     echo 'Invalid resource or material ID.';
     exit;
@@ -55,7 +55,12 @@ if ($resourceId > 0) {
     $r['result']->free();
 
     // Guests and students may only access public resources
-    if (!$item['is_public'] && ($isGuest || $role === 'student')) {
+    $isPublic = $item['is_public'] === true ||
+                $item['is_public'] === 't' ||
+                $item['is_public'] === 1 ||
+                $item['is_public'] === '1';
+
+    if (!$isPublic && ($isGuest || $role === 'student')) {
         http_response_code(403);
         echo 'Access denied.';
         exit;
@@ -72,16 +77,18 @@ if ($resourceId > 0) {
     if ($userId && $role === 'student') {
         safePreparedQuery($conn,
             "DELETE FROM notifications WHERE user_id = ? AND type = 'material' AND related_entity_id = ?",
-            "ii", [$userId, $materialId]
+            "ii", [$userId, $itemId]
         );
     }
 
     $r = safePreparedQuery($conn,
-        "SELECT material_id AS id, title, cloudinary_public_id, external_url,
-                NULL AS file_path,
-                visibility
-         FROM materials WHERE material_id = ?",
-        'i', [$materialId]
+    "SELECT material_id AS id, title, cloudinary_public_id, external_url,
+            NULL AS file_path,
+            visibility,
+            available_from,
+            available_until
+        FROM materials WHERE material_id = ?",
+        'i', [$itemId]
     );
 
     if (!$r['success'] || !$r['result'] || $r['result']->num_rows === 0) {
@@ -92,6 +99,20 @@ if ($resourceId > 0) {
 
     $item = $r['result']->fetch_assoc();
     $r['result']->free();
+
+    // ── Availability window ───────────────────────────────────────────────────
+    $today = date('Y-m-d');
+
+    if ($role !== 'teacher' && (
+        ($item['available_from'] !== null &&
+        $today < $item['available_from']) ||
+        ($item['available_until'] !== null &&
+        $today > $item['available_until'])
+    )) {
+        http_response_code(403);
+        echo 'This resource is not currently available.';
+        exit;
+    }
 
     $vis = $item['visibility'] ?? 'private';
 
@@ -112,7 +133,7 @@ if ($resourceId > 0) {
                  SELECT 1 FROM material_targets mt
                  WHERE mt.material_id = ? AND mt.target_type = 'student' AND mt.target_id = ?
                  LIMIT 1",
-                'iiii', [$materialId, $userId, $materialId, $userId]
+                'iiii', [$itemId, $userId, $itemId, $userId]
             );
             $hasAccess = $access['success'] && $access['result'] && $access['result']->num_rows > 0;
             if ($access['result']) $access['result']->free();

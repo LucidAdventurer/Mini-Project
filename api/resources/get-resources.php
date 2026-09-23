@@ -25,13 +25,12 @@ if (!in_array($role, ['admin', 'teacher', 'student'], true)) {
 $page         = max(1, (int) ($_GET['page']          ?? 1));
 $limit        = min(100, max(1, (int) ($_GET['limit'] ?? 20)));
 $offset       = ($page - 1) * $limit;
-$category     = trim($_GET['category']      ?? '');
-$search       = trim($_GET['search']        ?? '');
-$uploaderRole = trim($_GET['uploader_role'] ?? '');
+$category = trim($_GET['category'] ?? '');
+$search   = trim($_GET['search']   ?? '');
+$type     = trim($_GET['type']     ?? '');
 
 $conditions = [];
 $params     = [];
-$types      = '';
 
 if ($role === 'student') {
     // Public materials OR group-targeted where student is a member OR student-targeted directly
@@ -40,48 +39,69 @@ if ($role === 'student') {
         OR (
             m.visibility = 'group'
             AND EXISTS (
-                SELECT 1 FROM material_targets mt
+                SELECT 1
+                FROM material_targets mt
                 JOIN group_members gm ON gm.group_id = mt.target_id
                 WHERE mt.material_id = m.material_id
-                  AND mt.target_type = 'group'
-                  AND gm.student_id = ?
+                AND mt.target_type = 'group'
+                AND gm.student_id = ?
             )
         )
         OR (
             m.visibility = 'group'
             AND EXISTS (
-                SELECT 1 FROM material_targets mt
+                SELECT 1
+                FROM material_targets mt
                 WHERE mt.material_id = m.material_id
-                  AND mt.target_type = 'student'
-                  AND mt.target_id = ?
+                AND mt.target_type = 'student'
+                AND mt.target_id = ?
             )
         )
-    )";
+    )
+    AND (m.available_from IS NULL OR CURRENT_DATE >= m.available_from)
+    AND (m.available_until IS NULL OR CURRENT_DATE <= m.available_until)";
     $params[] = $userId;
     $params[] = $userId;
-    $types   .= 'ii';
-    if ($uploaderRole !== '') {
-        $conditions[] = 'u.role = ?';
-        $params[]     = $uploaderRole;
-        $types       .= 's';
-    }
+    $conditions[] = "u.role = 'teacher'";
 } elseif ($role === 'teacher') {
     $conditions[] = 'm.created_by = ?';
     $params[]     = $userId;
-    $types       .= 'i';
 }
 
 if ($category !== '') {
     $conditions[] = 'm.category = ?';
     $params[]     = $category;
-    $types       .= 's';
 }
 if ($search !== '') {
     $conditions[] = '(m.title LIKE ? OR m.description LIKE ?)';
     $like         = '%' . $search . '%';
     $params[]     = $like;
     $params[]     = $like;
-    $types       .= 'ss';
+}
+
+if ($type !== '' && in_array($type, ['file', 'link'], true)) {
+    if ($type === 'file') {
+        $conditions[] = "(
+            (m.cloudinary_public_id IS NOT NULL
+             AND m.cloudinary_public_id != '')
+            OR
+            (
+                m.external_url IS NOT NULL
+                AND m.external_url != ''
+                AND m.external_url NOT LIKE 'http://%'
+                AND m.external_url NOT LIKE 'https://%'
+            )
+        )";
+    } else {
+        $conditions[] = "(
+            m.external_url IS NOT NULL
+            AND m.external_url != ''
+            AND (
+                m.external_url LIKE 'http://%'
+                OR m.external_url LIKE 'https://%'
+            )
+        )";
+    }
 }
 
 $where = $conditions ? 'WHERE ' . implode(' AND ', $conditions) : '';
@@ -93,13 +113,35 @@ $countStmt = $conn->prepare(
      LEFT JOIN users u ON u.user_id = m.created_by
      $where"
 );
-if ($types !== '') {
-    $countStmt->bind_param($types, ...$params);
-}
-$countStmt->execute();
-$totalRows  = (int) $countStmt->get_result()->fetch_assoc()['total'];
-$countStmt->close();
+$countStmt->execute($params);
+
+$countRow  = $countStmt->fetch(PDO::FETCH_ASSOC);
+$totalRows = (int)($countRow['total'] ?? 0);
+
+$countStmt = null;
 $totalPages = max(1, (int) ceil($totalRows / $limit));
+
+$progressSelect = "NULL AS user_progress, NULL AS is_completed";
+$progressParams = [];
+
+if ($role === 'student') {
+    $progressSelect = "
+        (
+            SELECT mp.progress_percentage
+            FROM material_progress mp
+            WHERE mp.material_id = m.material_id
+              AND mp.user_id = ?
+        ) AS user_progress,
+        (
+            SELECT mp.completed
+            FROM material_progress mp
+            WHERE mp.material_id = m.material_id
+              AND mp.user_id = ?
+        ) AS is_completed
+    ";
+
+    $progressParams = [$userId, $userId];
+}
 
 // ── Fetch ─────────────────────────────────────────────────────────────────
 $sql = "
@@ -111,15 +153,28 @@ $sql = "
         m.visibility,
         m.cloudinary_public_id,
         m.external_url,
+        m.available_from,
+        m.available_until,
+        m.difficulty,
         m.created_at,
-        m.created_by                AS uploaded_by,
-        u.full_name                 AS created_by_name,
-        u.full_name                 AS uploaded_by_name,
+        m.created_by AS uploaded_by,
+        u.full_name AS created_by_name,
+        u.full_name AS uploaded_by_name,
+        $progressSelect,
         CASE
-            WHEN m.cloudinary_public_id IS NOT NULL AND m.cloudinary_public_id != '' THEN 'file'
-            WHEN m.external_url IS NOT NULL AND m.external_url != ''                 THEN 'link'
+            WHEN m.cloudinary_public_id IS NOT NULL
+                AND m.cloudinary_public_id != '' THEN 'file'
+
+            WHEN m.external_url IS NOT NULL
+                AND m.external_url != ''
+                AND m.external_url NOT LIKE 'http://%'
+                AND m.external_url NOT LIKE 'https://%' THEN 'file'
+
+            WHEN m.external_url IS NOT NULL
+                AND m.external_url != '' THEN 'link'
+
             ELSE 'file'
-        END                         AS material_type,
+        END AS material_type,
         0                           AS file_size,
         0                           AS views,
         0                           AS downloads,
@@ -131,23 +186,36 @@ $sql = "
     LIMIT ? OFFSET ?
 ";
 
-$fetchTypes  = $types . 'ii';
-$fetchParams = array_merge($params, [$limit, $offset]);
+$fetchParams = array_merge(
+    $progressParams,
+    $params,
+    [$limit, $offset]
+);
 
 $stmt = $conn->prepare($sql);
-$stmt->bind_param($fetchTypes, ...$fetchParams);
-$stmt->execute();
-$result    = $stmt->get_result();
+$stmt->execute($fetchParams);
+
 $materials = [];
-while ($row = $result->fetch_assoc()) {
+
+while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $row['material_id'] = (int) $row['material_id'];
+
+    if ($row['user_progress'] !== null) {
+        $row['user_progress'] = (float) $row['user_progress'];
+    }
+
+    if ($row['is_completed'] !== null) {
+        $row['is_completed'] = pgBoolGuard($row['is_completed']);
+    }
+
     $materials[] = $row;
 }
-$stmt->close();
+
+$stmt = null;
 
 // ── Stats ─────────────────────────────────────────────────────────────────
 $statsConditions = [];
 $statsParams     = [];
-$statsTypes      = '';
 
 if ($role === 'student') {
     $statsConditions[] = "(
@@ -155,52 +223,54 @@ if ($role === 'student') {
         OR (
             m.visibility = 'group'
             AND EXISTS (
-                SELECT 1 FROM material_targets mt
+                SELECT 1
+                FROM material_targets mt
                 JOIN group_members gm ON gm.group_id = mt.target_id
                 WHERE mt.material_id = m.material_id
-                  AND mt.target_type = 'group'
-                  AND gm.student_id = ?
+                AND mt.target_type = 'group'
+                AND gm.student_id = ?
             )
         )
         OR (
             m.visibility = 'group'
             AND EXISTS (
-                SELECT 1 FROM material_targets mt
+                SELECT 1
+                FROM material_targets mt
                 WHERE mt.material_id = m.material_id
-                  AND mt.target_type = 'student'
-                  AND mt.target_id = ?
+                AND mt.target_type = 'student'
+                AND mt.target_id = ?
             )
         )
-    )";
+    )
+    AND (m.available_from IS NULL OR CURRENT_DATE >= m.available_from)
+    AND (m.available_until IS NULL OR CURRENT_DATE <= m.available_until)";
     $statsParams[] = $userId;
     $statsParams[] = $userId;
-    $statsTypes   .= 'ii';
-    if ($uploaderRole !== '') {
-        $statsConditions[] = 'u.role = ?';
-        $statsParams[]     = $uploaderRole;
-        $statsTypes       .= 's';
-    }
+    $statsConditions[] = "u.role = 'teacher'";
 } elseif ($role === 'teacher') {
     $statsConditions[] = 'm.created_by = ?';
     $statsParams[]     = $userId;
-    $statsTypes       .= 'i';
 }
 
 $statsWhere = $statsConditions ? 'WHERE ' . implode(' AND ', $statsConditions) : '';
 $statsJoin  = 'LEFT JOIN users u ON u.user_id = m.created_by';
 
 $statsStmt = $conn->prepare(
-    "SELECT COUNT(*) AS total_materials FROM materials m $statsJoin $statsWhere"
+    "SELECT COUNT(*) AS total_materials
+     FROM materials m
+     $statsJoin
+     $statsWhere"
 );
-if ($statsTypes !== '') {
-    $statsStmt->bind_param($statsTypes, ...$statsParams);
-}
-$statsStmt->execute();
-$stats = $statsStmt->get_result()->fetch_assoc();
+$statsStmt->execute($statsParams);
+
+$stats = $statsStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+$stats['total_materials']    = (int)($stats['total_materials'] ?? 0);
 $stats['total_views']        = 0;
 $stats['total_downloads']    = 0;
 $stats['storage_used_bytes'] = 0;
-$statsStmt->close();
+
+$statsStmt = null;
 
 echo json_encode([
     'success'   => true,

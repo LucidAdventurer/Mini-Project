@@ -55,20 +55,75 @@ $passingPct = $aRow['total_marks'] > 0
 // ── Aggregate stats ──
 // 'submitted' is the terminal success status; 'timeout' is terminal failure.
 // Both count as completed for stats purposes.
+
 $rs = safePreparedQuery($conn,
     "SELECT
-        COUNT(*)                                                                        AS total_attempts,
-        SUM(CASE WHEN status IN ('submitted','timeout') THEN 1 ELSE 0 END)             AS completed,
-        ROUND(AVG(CASE WHEN status IN ('submitted','timeout') THEN percentage END), 1) AS avg_score,
-        ROUND(MAX(percentage), 1)                                                       AS highest_score,
-        ROUND(MIN(CASE WHEN status IN ('submitted','timeout') THEN percentage END), 1) AS lowest_score,
-        SUM(CASE WHEN status IN ('submitted','timeout') AND percentage >= ? THEN 1 ELSE 0 END) AS pass_count,
-        ROUND(AVG(CASE WHEN status IN ('submitted','timeout')
-                  THEN TIMESTAMPDIFF(MINUTE, start_time, submitted_at) END), 0)        AS avg_time,
-        COUNT(DISTINCT user_id)                                                         AS unique_students
+        COUNT(*) AS total_attempts,
+
+        SUM(
+            CASE
+                WHEN status IN ('submitted', 'timeout')
+                THEN 1 ELSE 0
+            END
+        ) AS completed,
+
+        ROUND(
+            AVG(
+                CASE
+                    WHEN status IN ('submitted', 'timeout')
+                    THEN percentage
+                END
+            ),
+            1
+        ) AS avg_score,
+
+        ROUND(
+            MAX(
+                CASE
+                    WHEN status IN ('submitted', 'timeout')
+                    THEN percentage
+                END
+            ),
+            1
+        ) AS highest_score,
+
+        ROUND(
+            AVG(
+                CASE
+                    WHEN status IN ('submitted', 'timeout')
+                        AND start_time IS NOT NULL
+                        AND submitted_at IS NOT NULL
+                    THEN EXTRACT(EPOCH FROM (submitted_at - start_time)) / 60.0
+                END
+            ),
+            0
+        ) AS avg_time,
+
+        ROUND(
+            MIN(
+                CASE
+                    WHEN status IN ('submitted', 'timeout')
+                    THEN percentage
+                END
+            ),
+            1
+        ) AS lowest_score,
+
+        SUM(
+            CASE
+                WHEN status IN ('submitted', 'timeout')
+                     AND percentage >= ?
+                THEN 1 ELSE 0
+            END
+        ) AS pass_count,
+
+        COUNT(DISTINCT user_id) AS unique_students
+
      FROM assessment_attempts
+
      WHERE assessment_id = ?",
-    "di", [$passingPct, $assessmentId]
+    "di",
+    [$passingPct, $assessmentId]
 );
 
 $stats = [

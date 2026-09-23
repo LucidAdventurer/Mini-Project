@@ -56,7 +56,7 @@ $raw = $conn->query(
 if (!$raw) { http_response_code(500); echo 'Query failed.'; exit; }
 
 $studentMap = [];
-while ($row = $raw->fetch_assoc()) {
+while ($row = $raw->fetch(PDO::FETCH_ASSOC)) {
     $uid = $row['user_id'] !== null ? (int)$row['user_id'] : ('guest_'.$row['attempt_id']);
     if (!isset($studentMap[$uid])) {
         $studentMap[$uid] = [
@@ -80,7 +80,6 @@ while ($row = $raw->fetch_assoc()) {
         $studentMap[$uid]['best_idx'] = count($studentMap[$uid]['attempts']) - 1;
     }
 }
-$raw->free();
 
 uasort($studentMap, fn($a,$b) => $b['best_pct'] <=> $a['best_pct']);
 

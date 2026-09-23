@@ -47,9 +47,17 @@ $asmRes = safePreparedQuery(
     [$assessmentId, $teacherId]
 );
 
-if (!$asmRes['success'] || !$asmRes['result'] || $asmRes['result']->num_rows === 0) {
-    jsonExit(['success' => false, 'message' => 'Assessment not found or access denied.'], 403);
+if (
+    !$asmRes['success'] ||
+    !$asmRes['result'] ||
+    $asmRes['result']->num_rows === 0
+) {
+    jsonExit(
+        ['success' => false, 'message' => 'Assessment not found or access denied.'],
+        403
+    );
 }
+
 $asm = $asmRes['result']->fetch_assoc();
 $asmRes['result']->free();
 
@@ -81,14 +89,19 @@ $raw = $conn->query(
      ORDER BY aa.user_id ASC, aa.attempt_number ASC"
 );
 
-if (!$raw) {
-    jsonExit(['success' => false, 'message' => 'Query failed: ' . $conn->error], 500);
+if ($raw === false) {
+    $errorInfo = $conn->errorInfo();
+    $message = $errorInfo[2] ?? 'Database query failed.';
+    jsonExit(
+        ['success' => false, 'message' => 'Query failed: ' . $message],
+        500
+    );
 }
 
 // ── Group attempts by student ──
 $studentMap = [];
 
-while ($row = $raw->fetch_assoc()) {
+while ($row = $raw->fetch(PDO::FETCH_ASSOC)) {
     $uid = $row['user_id'] !== null
         ? (int)$row['user_id']
         : ('guest_' . $row['attempt_id']);
@@ -121,7 +134,6 @@ while ($row = $raw->fetch_assoc()) {
         $studentMap[$uid]['best_idx'] = count($studentMap[$uid]['attempts']) - 1;
     }
 }
-$raw->free();
 
 // ── Build result rows (one per student, using best attempt) ──
 $results   = [];

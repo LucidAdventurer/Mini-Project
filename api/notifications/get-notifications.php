@@ -26,7 +26,9 @@ $unreadOnly = !empty($_GET['unread_only']);
 $limit      = min(50, max(1, (int)($_GET['limit'] ?? 20)));
 
 // ── Fetch notifications ──
-$whereClause = $unreadOnly ? "WHERE user_id = ? AND is_read = 0" : "WHERE user_id = ?";
+$whereClause = $unreadOnly
+    ? "WHERE user_id = ? AND is_read = FALSE"
+    : "WHERE user_id = ?";
 
 $r = safePreparedQuery($conn,
     "SELECT notification_id, title, message, type,
@@ -49,7 +51,13 @@ if ($r['success'] && $r['result']) {
             'type'               => $row['type'],
             'related_entity_type' => $row['related_entity_type'],
             'related_entity_id'   => $row['related_entity_id'] ? (int)$row['related_entity_id'] : null,
-            'is_read'             => (bool)$row['is_read'],
+            'is_read' => (
+                $row['is_read'] === true ||
+                $row['is_read'] === 1 ||
+                $row['is_read'] === '1' ||
+                $row['is_read'] === 't' ||
+                $row['is_read'] === 'true'
+            ),
             'created_at'          => $row['created_at'],
             'time_ago'            => timeAgo($row['created_at']),
         ];
@@ -60,7 +68,7 @@ if ($r['success'] && $r['result']) {
 // ── Unread count (always fresh) ──
 $unreadCount = 0;
 $rc = safePreparedQuery($conn,
-    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
+    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = FALSE",
     "i", [$userId]
 );
 if ($rc['success'] && $rc['result']) {

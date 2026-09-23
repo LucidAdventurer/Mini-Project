@@ -38,7 +38,7 @@ $statsStmt = $conn->prepare("
     FROM assessments a
     LEFT JOIN assessment_attempts aa
         ON aa.assessment_id = a.assessment_id
-        AND aa.status = 'completed'
+        AND aa.status = 'submitted'
     WHERE a.created_by = ?
 ");
 $statsStmt->execute([$teacherId]);
@@ -69,7 +69,7 @@ $activityStmt = $conn->prepare("
             'assessment' AS activity_type,
             CONCAT(
                 CASE status
-                    WHEN 'active'   THEN 'Published assessment: '
+                    WHEN 'published' THEN 'Published assessment: '
                     WHEN 'draft'    THEN 'Saved draft: '
                     WHEN 'archived' THEN 'Archived assessment: '
                     ELSE 'Updated assessment: '
@@ -140,6 +140,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
     }
 
+    if ($_POST['action'] === 'delete_picture') {
+
+      if (!empty($userPicture)) {
+
+        // Convert the database path into the actual filesystem path
+        $imagePath = __DIR__ . '/' . ltrim($userPicture, '/');
+
+        // Delete the physical image from uploads/profiles/
+        if (file_exists($imagePath)) {
+          if (!unlink($imagePath)) {
+            $errorMsg = 'Failed to delete the profile picture file.';
+          }
+        }
+      }
+
+      // Remove the image path from the database
+      if (empty($errorMsg)) {
+
+        $delPic = $conn->prepare(
+            "UPDATE users
+            SET profile_image = NULL
+            WHERE user_id = ?"
+        );
+
+        if ($delPic->execute([$teacherId])) {
+            $userPicture = '';
+            $successMsg = 'Profile picture removed successfully.';
+        } else {
+            $errorMsg = 'Failed to remove profile picture.';
+        }
+      }
+    }
+
     if ($_POST['action'] === 'upload_picture' && isset($_FILES['profile_picture'])) {
         $file    = $_FILES['profile_picture'];
         $allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -163,20 +196,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $updPic = $conn->prepare("UPDATE users SET profile_image = ? WHERE user_id = ?");
                 $updPic->execute([$fullPath, $teacherId]);
 
-                $insFile = $conn->prepare("
-                    INSERT INTO uploaded_files
-                        (original_filename, stored_filename, file_path, file_type,
-                         mime_type, file_size, uploaded_by, entity_type, entity_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 'user_profile', ?)
-                ");
-                $fileType = $ext;
-                $mimeType = $file['type'];
-                $fileSize = (int)$file['size'];
-                $insFile->execute([
-                    $file['name'], $storedName, $fullPath,
-                    $fileType, $mimeType, $fileSize,
-                    $teacherId, $teacherId
-                ]);
+                // $insFile = $conn->prepare("
+                //     INSERT INTO uploaded_files
+                //         (original_filename, stored_filename, file_path, file_type,
+                //          mime_type, file_size, uploaded_by, entity_type, entity_id)
+                //     VALUES (?, ?, ?, ?, ?, ?, ?, 'user_profile', ?)
+                // ");
+                // $fileType = $ext;
+                // $mimeType = $file['type'];
+                // $fileSize = (int)$file['size'];
+                // $insFile->execute([
+                //     $file['name'], $storedName, $fullPath,
+                //     $fileType, $mimeType, $fileSize,
+                //     $teacherId, $teacherId
+                // ]);
 
                 $userPicture = $fullPath;
                 $successMsg  = 'Profile picture updated successfully.';
@@ -686,10 +719,17 @@ textarea.form-control { resize: vertical; min-height: 100px; }
       <main>
 
         <?php if ($successMsg): ?>
-          <div class="alert alert-success"><i class="fa fa-circle-check"></i> <?= htmlspecialchars($successMsg) ?></div>
+          <div class="alert alert-success" id="successAlert">
+            <i class="fa fa-circle-check"></i>
+            <?= htmlspecialchars($successMsg) ?>
+          </div>
         <?php endif; ?>
+
         <?php if ($errorMsg): ?>
-          <div class="alert alert-error"><i class="fa fa-triangle-exclamation"></i> <?= htmlspecialchars($errorMsg) ?></div>
+          <div class="alert alert-error" id="errorAlert">
+            <i class="fa fa-triangle-exclamation"></i>
+            <?= htmlspecialchars($errorMsg) ?>
+          </div>
         <?php endif; ?>
 
         <!-- Personal Info -->
@@ -697,6 +737,8 @@ textarea.form-control { resize: vertical; min-height: 100px; }
           <div class="card">
             <div class="card-title"><i class="fa fa-user"></i> Personal Information</div>
             <form method="POST">
+              <input type="hidden" name="csrf_token"
+                    value="<?= htmlspecialchars(getCsrfToken(), ENT_QUOTES, 'UTF-8') ?>">
               <input type="hidden" name="action" value="update_info">
               <div class="form-grid">
                 <div class="form-group">
@@ -710,10 +752,52 @@ textarea.form-control { resize: vertical; min-height: 100px; }
                          value="<?= htmlspecialchars($userEmail) ?>" readonly>
                 </div>
                 <div class="form-group full-width">
-                  <label class="form-label" for="department">Department</label>
-                  <input type="text" id="department" name="department" class="form-control"
-                         value="<?= htmlspecialchars($userDept) ?>" placeholder="e.g. Computer Science">
-                </div>
+                <label class="form-label" for="department">Department</label>
+
+                <select id="department" name="department" class="form-control" required>
+                  <option value="">Select Department</option>
+
+                  <option value="CE"
+                    <?= $userDept === 'CE' ? 'selected' : '' ?>>
+                    CE
+                  </option>
+
+                  <option value="CSE"
+                    <?= $userDept === 'CSE' ? 'selected' : '' ?>>
+                    CSE
+                  </option>
+
+                  <option value="ECE"
+                    <?= $userDept === 'ECE' ? 'selected' : '' ?>>
+                    ECE
+                  </option>
+
+                  <option value="EEE"
+                    <?= $userDept === 'EEE' ? 'selected' : '' ?>>
+                    EEE
+                  </option>
+
+                  <option value="ME"
+                    <?= $userDept === 'ME' ? 'selected' : '' ?>>
+                    ME
+                  </option>
+
+                  <option value="ASH"
+                    <?= $userDept === 'ASH' ? 'selected' : '' ?>>
+                    ASH
+                  </option>
+
+                  <option value="AI & ML"
+                    <?= $userDept === 'AI & ML' ? 'selected' : '' ?>>
+                    AI & ML
+                  </option>
+
+                  <option value="Robotics"
+                    <?= $userDept === 'Robotics' ? 'selected' : '' ?>>
+                    Robotics
+                  </option>
+                </select>
+              </div>
               </div>
               <div class="form-actions">
                 <button type="reset" class="btn btn-secondary">Reset</button>
@@ -750,6 +834,8 @@ textarea.form-control { resize: vertical; min-height: 100px; }
           <div class="card">
             <div class="card-title"><i class="fa fa-lock"></i> Change Password</div>
             <form method="POST" id="passwordForm">
+              <input type="hidden" name="csrf_token"
+                    value="<?= htmlspecialchars(getCsrfToken(), ENT_QUOTES, 'UTF-8') ?>">
               <input type="hidden" name="action" value="change_password">
               <div class="form-grid">
                 <div class="form-group full-width">
@@ -798,6 +884,8 @@ textarea.form-control { resize: vertical; min-height: 100px; }
             </div>
 
             <form method="POST" enctype="multipart/form-data" id="pictureForm">
+              <input type="hidden" name="csrf_token"
+                    value="<?= htmlspecialchars(getCsrfToken(), ENT_QUOTES, 'UTF-8') ?>">
               <input type="hidden" name="action" value="upload_picture">
               <div class="upload-zone" id="uploadZone" onclick="document.getElementById('pictureInput').click()">
                 <div class="upload-icon"><i class="fa fa-cloud-arrow-up"></i></div>
@@ -813,9 +901,25 @@ textarea.form-control { resize: vertical; min-height: 100px; }
                 </button>
               </div>
             </form>
+            <?php if (!empty($userPicture)): ?>
+              <form method="POST"
+                    onsubmit="return confirm('Are you sure you want to remove your profile picture?');"
+                    style="margin-top:10px;">
+
+                <input type="hidden" name="csrf_token"
+                      value="<?= htmlspecialchars(getCsrfToken(), ENT_QUOTES, 'UTF-8') ?>">
+
+                <input type="hidden" name="action" value="delete_picture">
+
+                <button type="submit" class="btn btn-secondary">
+                  <i class="fa fa-trash"></i> Remove Profile Picture
+                </button>
+
+              </form>
+            <?php endif; ?>
           </div>
         </div>
-
+                  
         <!-- Activity Log -->
         <div class="tab-panel" id="panel-activity">
           <div class="card">
@@ -828,11 +932,22 @@ textarea.form-control { resize: vertical; min-height: 100px; }
                   $isLogin = $row['activity_type'] === 'login';
                   $ts   = strtotime($row['created_at']);
                   $diff = time() - $ts;
-                  if ($diff < 3600)        $timeAgo = round($diff / 60) . ' min ago';
-                  elseif ($diff < 86400)   $timeAgo = round($diff / 3600) . ' hr ago';
-                  elseif ($diff < 604800)  $timeAgo = round($diff / 86400) . ' days ago';
-                  elseif ($diff < 2592000) $timeAgo = round($diff / 604800) . ' wks ago';
-                  else                     $timeAgo = date('d M Y', $ts);
+
+                  if ($diff < 0) {
+                      $timeAgo = 'just now';
+                  } elseif ($diff < 60) {
+                      $timeAgo = 'just now';
+                  } elseif ($diff < 3600) {
+                      $timeAgo = round($diff / 60) . ' min ago';
+                  } elseif ($diff < 86400) {
+                      $timeAgo = round($diff / 3600) . ' hr ago';
+                  } elseif ($diff < 604800) {
+                      $timeAgo = round($diff / 86400) . ' days ago';
+                  } elseif ($diff < 2592000) {
+                      $timeAgo = round($diff / 604800) . ' wks ago';
+                  } else {
+                    $timeAgo = date('d M Y', $ts);
+                  }
                 ?>
                   <div class="activity-item">
                     <div class="activity-icon <?= $isLogin ? 'login-icon' : 'assessment-icon' ?>">
@@ -947,6 +1062,31 @@ uploadZone.addEventListener('drop', function(e) {
 window.addEventListener('DOMContentLoaded', () => {
   const hash = window.location.hash.replace('#', '');
   if (['info','password','picture','activity'].includes(hash)) switchTab(hash);
+});
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+    const alerts = [
+        document.getElementById('successAlert'),
+        document.getElementById('errorAlert')
+    ];
+
+    alerts.forEach(function (alert) {
+        if (!alert) return;
+
+        setTimeout(function () {
+            alert.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+            alert.style.opacity = '0';
+            alert.style.transform = 'translateY(-5px)';
+
+            setTimeout(function () {
+                alert.remove();
+            }, 400);
+
+        }, 5000);
+    });
+
 });
 </script>
 </body>

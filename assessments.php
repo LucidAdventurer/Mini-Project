@@ -17,9 +17,10 @@ if (empty($_SESSION['csrf_token'])) {
 
 // ── Unread notification count ──
 $notifResult = safePreparedQuery($conn,
-    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
+    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = FALSE",
     "i", [$userId]
 );
+
 $unreadCount = 0;
 if ($notifResult['success'] && $notifResult['result']) {
     $notifRow    = $notifResult['result']->fetch_assoc();
@@ -29,11 +30,12 @@ if ($notifResult['success'] && $notifResult['result']) {
 
 // ── Latest 5 notifications for dropdown ──
 $notifDropResult = safePreparedQuery($conn,
-    "SELECT notification_id, title, message, notification_type, is_read, created_at
+    "SELECT notification_id, title, message, type, is_read, created_at
      FROM notifications WHERE user_id = ?
      ORDER BY created_at DESC LIMIT 5",
     "i", [$userId]
 );
+
 $notifItems = [];
 if ($notifDropResult['success'] && $notifDropResult['result']) {
     while ($row = $notifDropResult['result']->fetch_assoc()) {
@@ -314,7 +316,7 @@ body {
                     <?php else: foreach ($notifItems as $n):
                         $isUnread  = !$n['is_read'];
                         $typeIcons = ['info'=>'ℹ️','success'=>'✅','warning'=>'⚠️','error'=>'❌','assessment'=>'📝','result'=>'🏆','material'=>'📚'];
-                        $icon      = $typeIcons[$n['notification_type']] ?? '🔔';
+                        $icon      = $typeIcons[$n['type']] ?? '🔔';
                     ?>
                     <div class="notif-item <?= $isUnread ? 'unread' : '' ?>">
                         <div class="notif-dot <?= $isUnread ? '' : 'read' ?>"></div>

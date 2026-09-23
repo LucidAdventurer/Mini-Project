@@ -12,10 +12,12 @@ $userName     = htmlspecialchars($currentUser['full_name'] ?? 'Teacher');
 $userEmail    = htmlspecialchars($currentUser['email'] ?? '');
 $userInitials = strtoupper(substr($currentUser['full_name'] ?? 'T', 0, 2));
 
-$picStmt = $conn->prepare("SELECT profile_image FROM users WHERE user_id = ?");
-$picStmt->bind_param("i", $teacherId);
-$picStmt->execute();
-$picRow      = $picStmt->get_result()->fetch_assoc();
+$picStmt = $conn->prepare(
+    "SELECT profile_image FROM users WHERE user_id = ?"
+);
+$picStmt->execute([$teacherId]);
+
+$picRow      = $picStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 $userPicture = $picRow['profile_image'] ?? '';
 
 $groups = [];
@@ -37,7 +39,7 @@ if ($rg['success'] && $rg['result']) {
 $students = [];
 $rs = safePreparedQuery($conn,
     "SELECT user_id, full_name, email, department, registration_number
-     FROM users WHERE role = 'student' AND is_active = 1 ORDER BY full_name ASC",
+     FROM users WHERE role = 'student' AND is_active = TRUE ORDER BY full_name ASC",
     "", []
 );
 if ($rs['success'] && $rs['result']) {

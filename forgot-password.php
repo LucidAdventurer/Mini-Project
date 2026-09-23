@@ -55,27 +55,6 @@ if (!ensureDatabaseConnection($conn)) {
 }
 
 // ════════════════════════════════════════
-// ENSURE TABLE EXISTS
-// ════════════════════════════════════════
-
-$conn->query(
-    "CREATE TABLE IF NOT EXISTS password_reset_tokens (
-        token_id   INT          PRIMARY KEY AUTO_INCREMENT,
-        user_id    INT          NOT NULL,
-        token      VARCHAR(64)  UNIQUE NOT NULL COMMENT 'SHA-256 hash of raw token',
-        expires_at DATETIME     NOT NULL,
-        is_used    BOOLEAN      DEFAULT FALSE,
-        request_ip VARCHAR(45),
-        created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-        INDEX idx_token    (token),
-        INDEX idx_expires  (expires_at),
-        INDEX idx_user     (user_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
-);
-
-
-// ════════════════════════════════════════
 // HANDLE GET — show form
 // ════════════════════════════════════════
 
@@ -122,13 +101,11 @@ $rateStmt = $conn->prepare(
      FROM   password_reset_tokens t
      JOIN   users u ON u.user_id = t.user_id
      WHERE  u.email = ?
-       AND  t.created_at >= DATE_SUB(NOW(), INTERVAL 60 MINUTE)"
+       AND t.created_at >= NOW() - INTERVAL '60 minutes'"
 );
 if ($rateStmt) {
-    $rateStmt->bind_param("s", $email);
-    $rateStmt->execute();
-    $rateRow = $rateStmt->get_result()->fetch_assoc();
-    $rateStmt->close();
+    $rateStmt->execute([$email]);
+    $rateRow = $rateStmt->fetch(PDO::FETCH_ASSOC);
 
     if ((int)($rateRow['cnt'] ?? 0) >= 3) {
         error_log("Password reset rate limit hit for email: $email from IP: $clientIp");
@@ -149,13 +126,18 @@ if (!$userStmt) {
     echo renderPage('error', 'Something went wrong. Please try again.');
     exit;
 }
-$userStmt->bind_param("s", $email);
-$userStmt->execute();
-$user = $userStmt->get_result()->fetch_assoc();
-$userStmt->close();
+$userStmt->execute([$email]);
+$user = $userStmt->fetch(PDO::FETCH_ASSOC) ?: null;
 
 // Always show the same "check your inbox" message
-if (!$user || !$user['is_active']) {
+if (!$user ||
+    !(
+        $user['is_active'] === true ||
+        $user['is_active'] === 't' ||
+        $user['is_active'] === 1 ||
+        $user['is_active'] === '1'
+    )
+) {
     error_log("Password reset requested for unknown/inactive email: $email");
     ob_end_clean();
     echo renderPage('sent',
@@ -170,9 +152,7 @@ $invalidateStmt = $conn->prepare(
      WHERE  user_id = ? AND is_used = FALSE"
 );
 if ($invalidateStmt) {
-    $invalidateStmt->bind_param("i", $user['user_id']);
-    $invalidateStmt->execute();
-    $invalidateStmt->close();
+    $invalidateStmt->execute([(int)$user['user_id']]);
 }
 
 // ── Generate secure token ──
@@ -181,8 +161,8 @@ $tokenHash = hash('sha256', $rawToken);           // stored in DB
 $expiresAt = date('Y-m-d H:i:s', time() + 3600); // 1 hour window
 
 $insertStmt = $conn->prepare(
-    "INSERT INTO password_reset_tokens (user_id, token, expires_at, request_ip)
-     VALUES (?, ?, ?, ?)"
+    "INSERT INTO password_reset_tokens (user_id, token, expires_at)
+     VALUES (?, ?, ?)"
 );
 if (!$insertStmt) {
     error_log("forgot-password: insert prepare failed: " . $conn->error);
@@ -190,15 +170,16 @@ if (!$insertStmt) {
     echo renderPage('error', 'Something went wrong. Please try again.');
     exit;
 }
-$insertStmt->bind_param("isss", $user['user_id'], $tokenHash, $expiresAt, $clientIp);
-if (!$insertStmt->execute()) {
-    error_log("forgot-password: insert failed: " . $insertStmt->error);
-    $insertStmt->close();
+if (!$insertStmt->execute([
+    (int)$user['user_id'],
+    $tokenHash,
+    $expiresAt
+])) {
+    error_log("forgot-password: insert failed.");
     ob_end_clean();
     echo renderPage('error', 'Something went wrong. Please try again.');
     exit;
 }
-$insertStmt->close();
 
 // ── Build reset link ──
 $protocol  = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';

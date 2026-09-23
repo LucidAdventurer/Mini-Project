@@ -15,11 +15,12 @@ $userEmail   = $currentUser['email']     ?? '';
 $userInitials = strtoupper(substr($userName, 0, 2));
 
 // Fetch teacher profile picture
-$picStmt = $conn->prepare("SELECT profile_image FROM users WHERE user_id = ?");
-$picStmt->bind_param("i", $teacherId);
-$picStmt->execute();
-$picRow = $picStmt->get_result()->fetch_assoc();
-$picStmt->close();
+$picStmt = $conn->prepare(
+    "SELECT profile_image FROM users WHERE user_id = ?"
+);
+$picStmt->execute([$teacherId]);
+
+$picRow = $picStmt->fetch(PDO::FETCH_ASSOC);
 $userPicture = $picRow['profile_image'] ?? '';
 
 // Ensure CSRF token
@@ -55,34 +56,40 @@ $asmResult['result']->free();
 // Use direct query (no prepared stmt) to avoid IN() issue with safePreparedQuery
 $_aid = (int)$assessmentId;
 $attemptsRaw = $conn->query(
-    "SELECT
-        aa.attempt_id,
-        aa.attempt_number,
-        aa.score,
-        aa.percentage,
-        aa.start_time,
-        aa.submitted_at,
-        TIMESTAMPDIFF(MINUTE, aa.start_time, aa.submitted_at) AS time_taken_min,
-        u.user_id,
-        u.full_name,
-        u.email,
-        u.registration_number,
-        u.department
-     FROM assessment_attempts aa
-     LEFT JOIN users u ON u.user_id = aa.user_id
-     WHERE aa.assessment_id = $_aid
-       AND aa.status IN ('submitted','completed','timeout')
-     ORDER BY aa.submitted_at DESC"
+  "SELECT
+  aa.attempt_id,
+  aa.attempt_number,
+  aa.score,
+  aa.percentage,
+  aa.start_time,
+  aa.submitted_at,
+  ROUND(
+    EXTRACT(EPOCH FROM (aa.submitted_at - aa.start_time)) / 60.0
+  ) AS time_taken_min,
+  u.user_id,
+  u.full_name,
+  u.email,
+  u.registration_number,
+  u.department
+  FROM assessment_attempts aa
+  LEFT JOIN users u ON u.user_id = aa.user_id
+  WHERE aa.assessment_id = $_aid
+  AND aa.status IN ('submitted','timeout')
+  ORDER BY aa.submitted_at DESC"
 );
-$attemptsResult = ['success' => ($attemptsRaw !== false), 'result' => $attemptsRaw ?: null, 'error' => $conn->error];
+$attemptsResult = [
+    'success' => ($attemptsRaw !== false),
+    'result' => $attemptsRaw ?: null,
+    'error' => $attemptsRaw === false ? 'Database query failed.' : null
+];
 
 $attempts = [];
 
 if ($attemptsResult['success'] && $attemptsResult['result']) {
-    while ($row = $attemptsResult['result']->fetch_assoc()) {
+    while ($row = $attemptsResult['result']->fetch(PDO::FETCH_ASSOC)) {
         $attempts[] = $row;
     }
-    $attemptsResult['result']->free();
+    $attemptsResult['result'] = null;
 }
 
 // ── Summary stats ──

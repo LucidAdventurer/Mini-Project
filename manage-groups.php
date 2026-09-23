@@ -8,42 +8,67 @@ require_once 'db-guard.php';
 
 $currentUser  = validateSession($conn, 'teacher');
 $teacherId    = (int) $currentUser['user_id'];
+
+$teacherDepartment = trim($currentUser['department'] ?? '');
+$departmentPrefix = $teacherDepartment !== ''
+    ? $teacherDepartment . '%'
+    : '__NO_DEPARTMENT__%';
+
 $userName     = htmlspecialchars($currentUser['full_name'] ?? 'Teacher');
 $userEmail    = htmlspecialchars($currentUser['email'] ?? '');
 $userInitials = strtoupper(substr($currentUser['full_name'] ?? 'T', 0, 2));
 
-$picStmt = $conn->prepare("SELECT profile_image FROM users WHERE user_id = ?");
-$picStmt->bind_param("i", $teacherId);
-$picStmt->execute();
-$picRow      = $picStmt->get_result()->fetch_assoc();
+$picStmt = $conn->prepare(
+    "SELECT profile_image FROM users WHERE user_id = ?"
+);
+
+$picStmt->execute([$teacherId]);
+
+$picRow = $picStmt->fetch(PDO::FETCH_ASSOC);
 $userPicture = $picRow['profile_image'] ?? '';
 
 $groups = [];
-$rg = safePreparedQuery($conn,
-    "SELECT g.group_id, g.name, g.description, g.created_at,
-            COUNT(gm.student_id) AS member_count
-     FROM groups g
-     LEFT JOIN group_members gm ON gm.group_id = g.group_id
-     WHERE g.teacher_id = ?
-     GROUP BY g.group_id
-     ORDER BY g.created_at DESC",
-    "i", [$teacherId]
-);
-if ($rg['success'] && $rg['result']) {
-    while ($row = $rg['result']->fetch_assoc()) $groups[] = $row;
-    $rg['result']->free();
-}
+
+$groupStmt = $conn->prepare("
+    SELECT
+        g.group_id,
+        g.name,
+        g.description,
+        g.created_at,
+        COUNT(gm.student_id) AS member_count
+    FROM groups g
+    LEFT JOIN group_members gm
+        ON gm.group_id = g.group_id
+    WHERE g.teacher_id = ?
+    GROUP BY g.group_id
+    ORDER BY
+        CASE
+            WHEN g.name ILIKE ? THEN 0
+            ELSE 1
+        END,
+        LOWER(g.name) ASC
+");
+
+$groupStmt->execute([$teacherId, $departmentPrefix]);
+$groups = $groupStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $students = [];
-$rs = safePreparedQuery($conn,
-    "SELECT user_id, full_name, email, department, registration_number
-     FROM users WHERE role = 'student' AND is_active = 1 ORDER BY full_name ASC",
-    "", []
-);
-if ($rs['success'] && $rs['result']) {
-    while ($row = $rs['result']->fetch_assoc()) $students[] = $row;
-    $rs['result']->free();
-}
+
+$studentStmt = $conn->prepare("
+    SELECT
+        user_id,
+        full_name,
+        email,
+        department,
+        registration_number
+    FROM users
+    WHERE role = 'student'
+      AND is_active = TRUE
+    ORDER BY full_name ASC
+");
+
+$studentStmt->execute();
+$students = $studentStmt->fetchAll(PDO::FETCH_ASSOC);
 
 function fmtDate(?string $dt): string {
     if (!$dt) return '—';

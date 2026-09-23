@@ -33,6 +33,7 @@ if (!empty($_GET['material_id'])) {
         "SELECT m.material_id, m.title, m.description, m.category,
                 m.visibility, m.cloudinary_public_id, m.external_url,
                 m.created_by, m.created_at,
+                m.available_from, m.available_until, m.auto_delete_after_expiry,
                 u.full_name AS uploaded_by_name,
                 (SELECT mt.target_id FROM material_targets mt
                  WHERE mt.material_id = m.material_id
@@ -133,6 +134,9 @@ $r = safePreparedQuery($conn,
         m.cloudinary_public_id,
         m.external_url,
         m.created_at,
+        m.available_from,
+        m.available_until,
+        m.auto_delete_after_expiry,
         u.full_name AS uploaded_by_name,
         (SELECT mt.target_id FROM material_targets mt
          WHERE mt.material_id = m.material_id
@@ -198,7 +202,12 @@ function buildMaterial(array $row): array {
         'estimated_time_minutes' => null,
         'created_at'           => $row['created_at'] ?? null,
         'uploaded_by_name'     => $row['uploaded_by_name'] ?? null,
-        'available_from'       => null,
-        'available_until'      => null,
+        'available_from'       => $row['available_from'] ?? null,
+        'available_until'      => $row['available_until'] ?? null,
+        'auto_delete_after_expiry' =>
+            $row['auto_delete_after_expiry'] === true ||
+            $row['auto_delete_after_expiry'] === 't' ||
+            $row['auto_delete_after_expiry'] === 1 ||
+            $row['auto_delete_after_expiry'] === '1',
     ];
 }

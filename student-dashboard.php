@@ -262,21 +262,6 @@ if ($notifDropResult['success'] && $notifDropResult['result']) {
     $notifDropResult['result']->free();
 }
 
-// ── Assessment notifications: new tests (not started) + previous tests (at least 1 attempt) ──
-// ── Fetch dismissed assessment IDs (table may not exist yet — handled gracefully) ──
-$dismissedAssessIds = [];
-$dismissRes = safePreparedQuery($conn,
-    "SELECT assessment_id FROM student_notif_dismiss WHERE user_id = ?",
-    "i", [$userId]
-);
-if ($dismissRes['success'] && $dismissRes['result']) {
-    while ($row = $dismissRes['result']->fetch_assoc()) {
-        $dismissedAssessIds[] = (int)$row['assessment_id'];
-    }
-    $dismissRes['result']->free();
-}
-$dismissedSet = array_flip($dismissedAssessIds);
-
 // ── Assessment notifications: new tests + previous tests ──
 $assessNotifResult = safePreparedQuery($conn,
     "SELECT
@@ -318,16 +303,16 @@ $assessNotifResult = safePreparedQuery($conn,
 );
 
 $assessNotifNew  = []; // Tests not yet attempted
-$assessNotifPrev = []; // Tests with at least 1 attempt (and not dismissed)
+$assessNotifPrev = []; // Tests with at least 1 attempt
 
 if ($assessNotifResult['success'] && $assessNotifResult['result']) {
     while ($row = $assessNotifResult['result']->fetch_assoc()) {
         $row['attempts_used'] = (int)$row['attempts_used'];
-        $isDismissed = isset($dismissedSet[(int)$row['assessment_id']]);
+
         if ($row['attempts_used'] === 0) {
-            $assessNotifNew[] = $row; // New tests are never dismissable
-        } elseif (!$isDismissed) {
-            $assessNotifPrev[] = $row; // Previous tests only show if not dismissed
+            $assessNotifNew[] = $row;
+        } else {
+            $assessNotifPrev[] = $row;
         }
     }
     $assessNotifResult['result']->free();
@@ -1172,9 +1157,6 @@ function timeAgo(string $datetime): string {
                                 </div>
                                 <div class="notif-item-time"><?= timeAgo($ap['created_at']) ?></div>
                             </div>
-                            <button class="notif-dismiss-btn" title="Remove from notifications"
-                                onclick="event.stopPropagation(); dismissAssessNotif(<?= $ap['assessment_id'] ?>)"
-                                aria-label="Remove test notification">✕</button>
                         </div>
                         <?php endforeach; endif; ?>
 
@@ -1266,7 +1248,6 @@ function timeAgo(string $datetime): string {
         <span class="left-sidebar-label">Navigation</span>
         <a href="student-dashboard.php" class="active"><i class="fa fa-home"></i> Dashboard</a>
         <a href="student-assessments.php"><i class="fa fa-clipboard-list"></i> Assessments</a>
-        <a href="self-assessment.php"><i class="fa fa-user-check"></i> Self Assessment</a>
         <a href="student-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
 
         <div class="left-sidebar-bottom">
@@ -1475,7 +1456,10 @@ function timeAgo(string $datetime): string {
         // removes completed/expired assessment and viewed/expired resource notifications
         fetch('api/notifications/cleanup-notifications.php', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': document.querySelector('meta[name=csrf]')?.content || '' },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': CSRF_TOKEN
+            }
         }).catch(() => {});
 
         function toggleProfileDropdown() {
@@ -1615,71 +1599,40 @@ function timeAgo(string $datetime): string {
             });
         });
 
-        // ── Dismiss an assessment notification (previous tests only) ──
-        function dismissAssessNotif(assessmentId) {
-            const el = document.getElementById('assess-notif-' + assessmentId);
-            if (!el) return;
-
-            // Animate out
-            el.style.transition  = 'opacity .25s, max-height .3s, padding .3s';
-            el.style.overflow    = 'hidden';
-            el.style.maxHeight   = el.offsetHeight + 'px';
-            el.style.opacity     = '0';
-            requestAnimationFrame(() => {
-                el.style.maxHeight   = '0';
-                el.style.padding     = '0';
-                el.style.borderWidth = '0';
-            });
-            setTimeout(() => {
-                el.remove();
-                // Also remove section label if no siblings left
-                document.querySelectorAll('.notif-section-label').forEach(label => {
-                    let next = label.nextElementSibling;
-                    let hasItems = false;
-                    while (next && !next.classList.contains('notif-section-label')) {
-                        if (next.classList.contains('notif-item')) { hasItems = true; break; }
-                        next = next.nextElementSibling;
-                    }
-                    if (!hasItems) label.remove();
-                });
-                // Show empty state if everything gone
-                const list = document.querySelector('.notif-list');
-                if (list && list.querySelectorAll('.notif-item').length === 0
-                        && !list.querySelector('.notif-empty')) {
-                    list.innerHTML = '<div class="notif-empty">No notifications yet.</div>';
-                }
-            }, 320);
-
-            // Persist dismissal to server
-            fetch('api/notifications/dismiss-assess-notif.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ assessment_id: assessmentId, csrf_token: '<?= $_SESSION['csrf_token'] ?>' })
-            }).catch(() => {});
-        }
-
         // ── Mark all regular notifications read ──
         function markAllRead() {
-            fetch('api/notifications/mark-all-read.php', {
+            fetch('api/notifications/mark-read.php', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ csrf_token: '<?= $_SESSION['csrf_token'] ?>' })
-            }).then(() => {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': CSRF_TOKEN
+                }
+            }).then(r => r.json()).then(data => {
+                if (!data.success) return;
+
                 document.querySelectorAll('.notif-item.unread:not(.assess-notif)').forEach(el => {
                     el.classList.remove('unread');
+
                     const dot = el.querySelector('.notif-dot');
-                    if (dot) dot.classList.add('read');
+                    if (dot) {
+                        dot.classList.add('read');
+                    }
                 });
-                // Remove "Mark all read" button
+
                 const btn = document.querySelector('[onclick="markAllRead()"]');
-                if (btn) btn.remove();
-                updateNotifBadge(0);
+                if (btn) {
+                    btn.remove();
+                }
+
+                updateNotifBadge(assessmentNotifCount);
+                lastUnreadCount = assessmentNotifCount;
             }).catch(() => {});
         }
 
         // ── Live notification sync (badge + DOM) ──
-        let lastUnreadCount = <?= $unreadCount + $assessNotifCount ?>;
-        let lastPollTime    = 0;
+        let assessmentNotifCount = <?= $assessNotifCount ?>;
+        let lastUnreadCount      = <?= $unreadCount + $assessNotifCount ?>;
+        let lastPollTime         = 0;
 
         function updateNotifBadge(count) {
             let badge = document.querySelector('.notification-badge');
@@ -1706,8 +1659,9 @@ function timeAgo(string $datetime): string {
                     lastPollTime = Date.now();
 
                     // ── 1. Update badge ──
-                    updateNotifBadge(data.unread_count);
-                    lastUnreadCount = data.unread_count;
+                    const totalUnread = data.unread_count + assessmentNotifCount;
+                    updateNotifBadge(totalUnread);
+                    lastUnreadCount = totalUnread;
 
                     // ── 2. Remove any DOM items not in the active list ──
                     const activeSet = new Set(data.ids);

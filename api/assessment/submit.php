@@ -109,12 +109,20 @@ if (!empty($answers) && is_array($answers)) {
         if ($optionId === null && $textAns === null) continue;
 
         safePreparedQuery($conn,
-            "INSERT INTO answers (attempt_id, question_id, selected_option_id, text_answer, marks_awarded)
-             VALUES (?, ?, ?, ?, 0)
-             ON DUPLICATE KEY UPDATE
-                selected_option_id = VALUES(selected_option_id),
-                text_answer        = VALUES(text_answer)",
-            "iiis", [$attemptId, $questionId, $optionId, $textAns]
+            "INSERT INTO answers (
+                attempt_id,
+                question_id,
+                selected_option_id,
+                text_answer,
+                marks_awarded
+            )
+            VALUES (?, ?, ?, ?, 0)
+            ON CONFLICT (attempt_id, question_id)
+            DO UPDATE SET
+                selected_option_id = EXCLUDED.selected_option_id,
+                text_answer        = EXCLUDED.text_answer",
+            "iiis",
+            [$attemptId, $questionId, $optionId, $textAns]
         );
     }
 }
@@ -149,14 +157,19 @@ $optsResult = $conn->query(
      WHERE question_id IN ($qids)"
 );
 $correctOptionSets = []; // question_id => [option_id, ...]
-if ($optsResult) {
-    while ($row = $optsResult->fetch_assoc()) {
+if ($optsResult !== false) {
+    while ($row = $optsResult->fetch(PDO::FETCH_ASSOC)) {
         $qid = (int)$row['question_id'];
-        if ((int)$row['is_correct'] === 1) {
+
+        if (
+            $row['is_correct'] === true ||
+            $row['is_correct'] === 't' ||
+            $row['is_correct'] === 1 ||
+            $row['is_correct'] === '1'
+        ) {
             $correctOptionSets[$qid][] = (int)$row['option_id'];
         }
     }
-    $optsResult->free();
 }
 
 /* ── Load all saved answers for this attempt ── */
@@ -206,11 +219,10 @@ foreach ($questions as $qid => $q) {
                     "SELECT option_text FROM question_options
                      WHERE question_id = $qid AND option_id IN ($correctIds)"
                 );
-                if ($tr) {
-                    while ($r = $tr->fetch_assoc()) {
+                if ($tr !== false) {
+                    while ($r = $tr->fetch(PDO::FETCH_ASSOC)) {
                         $correctTexts[] = trim(strtolower($r['option_text']));
                     }
-                    $tr->free();
                 }
             }
             if (in_array($textAns, $correctTexts, true)) {
@@ -240,9 +252,19 @@ foreach ($questions as $qid => $q) {
 
     // Write marks_awarded back to the answer row
     safePreparedQuery($conn,
-        "INSERT INTO answers (attempt_id, question_id, selected_option_id, text_answer, marks_awarded)
-         VALUES (?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE marks_awarded = VALUES(marks_awarded)",
+        "INSERT INTO answers (
+            attempt_id,
+            question_id,
+            selected_option_id,
+            text_answer,
+            marks_awarded
+        )
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT (attempt_id, question_id)
+        DO UPDATE SET
+            selected_option_id = EXCLUDED.selected_option_id,
+            text_answer        = EXCLUDED.text_answer,
+            marks_awarded      = EXCLUDED.marks_awarded",
         "iiisd",
         [
             $attemptId,
@@ -282,8 +304,9 @@ safePreparedQuery($conn,
 /* ── Rule 3: Purge any notifications older than 3 days for this user ── */
 safePreparedQuery($conn,
     "DELETE FROM notifications
-     WHERE user_id = ? AND created_at < NOW() - INTERVAL 3 DAY",
-    'i', [$userId]
+     WHERE user_id = ? AND created_at < NOW() - INTERVAL '3 days'",
+    'i',
+    [$userId]
 );
 
 /* ── Timeout redirect (GET) ── */

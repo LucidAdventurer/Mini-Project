@@ -173,8 +173,16 @@ if ($result['success'] && $result['insert_id'] > 0) {
     if (!empty($targets)) {
         foreach ($targets as $t) {
             safePreparedQuery($conn,
-                "INSERT IGNORE INTO assessment_targets (assessment_id, target_type, target_id) VALUES (?, ?, ?)",
-                "isi", [$newId, $t['type'], $t['id']]
+                "INSERT INTO assessment_targets (
+                    assessment_id,
+                    target_type,
+                    target_id
+                )
+                VALUES (?, ?, ?)
+                ON CONFLICT (assessment_id, target_type, target_id)
+                DO NOTHING",
+                "isi",
+                [$newId, $t['type'], $t['id']]
             );
         }
     }
@@ -189,7 +197,10 @@ if ($result['success'] && $result['insert_id'] > 0) {
         if ($visibility === 'public') {
             // Public assessment — notify ALL active students
             $r = safePreparedQuery($conn,
-                "SELECT user_id FROM users WHERE role = 'student' AND is_active = 1",
+                "SELECT user_id
+                    FROM users
+                    WHERE role = 'student'
+                    AND is_active = TRUE",
                 '', []);
             if ($r['success'] && $r['result']) {
                 while ($row = $r['result']->fetch_assoc()) {
@@ -220,15 +231,27 @@ if ($result['success'] && $result['insert_id'] > 0) {
 
         if (!empty($studentIds)) {
             $stmt = $conn->prepare(
-                "INSERT IGNORE INTO notifications (user_id, title, message, type, related_entity_id, created_at)
-                 VALUES (?, ?, ?, ?, ?, NOW())"
+                "INSERT INTO notifications (
+                    user_id,
+                    title,
+                    message,
+                    type,
+                    related_entity_id,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?, NOW())"
             );
+
             if ($stmt) {
                 foreach ($studentIds as $uid) {
-                    $stmt->bind_param("isssi", $uid, $notifTitle, $notifMessage, $notifType, $newId);
-                    $stmt->execute();
+                    $stmt->execute([
+                        $uid,
+                        $notifTitle,
+                        $notifMessage,
+                        $notifType,
+                        $newId
+                    ]);
                 }
-                $stmt->close();
             }
         }
     }

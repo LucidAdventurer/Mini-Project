@@ -59,7 +59,7 @@ $aRes = safePreparedQuery(
        AND a.visibility    = 'public'
        AND a.status        = 'published'
        AND u.role          IN ('admin', 'teacher')
-       AND u.is_active     = 1
+       AND u.is_active     = TRUE
        AND (a.start_time IS NULL OR a.start_time <= NOW())
        AND (a.end_time   IS NULL OR a.end_time   >= NOW())",
     "i", [$assessmentId]
@@ -139,9 +139,19 @@ if ($oRes['success'] && $oRes['result']) {
     $oRes['result']->free();
 }
 
+$randomizeQuestions = $assmt['randomize_questions'] === true ||
+                      $assmt['randomize_questions'] === 't' ||
+                      $assmt['randomize_questions'] === 1 ||
+                      $assmt['randomize_questions'] === '1';
+
+$randomizeOptions = $assmt['randomize_options'] === true ||
+                    $assmt['randomize_options'] === 't' ||
+                    $assmt['randomize_options'] === 1 ||
+                    $assmt['randomize_options'] === '1';
+
 // ── Optionally shuffle question order ──
 $qList = array_values($questions);
-if ($assmt['randomize_questions']) {
+if ($randomizeQuestions) {
     shuffle($qList);
 }
 
@@ -157,7 +167,7 @@ echo json_encode([
         'duration_minutes' => (int)$assmt['duration_minutes'],
         'total_marks'      => (float)$assmt['total_marks'],
         'passing_marks'    => (float)$assmt['passing_marks'],
-        'randomize_options'=> (bool)$assmt['randomize_options'],
+        'randomize_options' => $randomizeOptions,
     ],
     'questions'  => $qList,
 ]);

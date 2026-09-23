@@ -132,7 +132,7 @@ if (in_array($qType, ['mcq', 'true_false'], true) && $correctCount !== 1) {
 }
 
 // ── Update question + options in a transaction ──
-$conn->begin_transaction();
+$conn->beginTransaction();
 
 try {
     // Update question row — no option columns, no correct_answer, no topic
@@ -145,25 +145,27 @@ try {
          WHERE question_id = ? AND assessment_id = ?"
     );
     if (!$stmt) throw new Exception("Prepare question update failed: " . $conn->error);
-    $stmt->bind_param("sidsii",
+        $stmt->execute([
         $questionText,
         $marks,
         $negMarks,
         $explanation,
         $questionId,
         $assessmentId
-    );
-    $stmt->execute();
-    $stmt->close();
+    ]);
 
     // Replace options: delete existing, re-insert fresh set.
     // Existing answers referencing old option_ids will have their
     // selected_option_id set NULL via FK ON DELETE SET NULL.
-    $del = $conn->prepare("DELETE FROM question_options WHERE question_id = ?");
-    if (!$del) throw new Exception("Prepare delete options failed: " . $conn->error);
-    $del->bind_param("i", $questionId);
-    $del->execute();
-    $del->close();
+    $del = $conn->prepare(
+    "DELETE FROM question_options WHERE question_id = ?"
+    );
+
+    if (!$del) {
+        throw new Exception("Prepare delete options failed.");
+    }
+
+    $del->execute([$questionId]);
 
     $optStmt = $conn->prepare(
         "INSERT INTO question_options (question_id, option_text, is_correct, option_order)
@@ -175,19 +177,27 @@ try {
         $optText      = $opt['option_text'];
         $optIsCorrect = $opt['is_correct'];
         $optOrder     = $opt['option_order'];
-        $optStmt->bind_param("isii", $questionId, $optText, $optIsCorrect, $optOrder);
-        $optStmt->execute();
+
+        $optStmt->execute([
+            $questionId,
+            $optText,
+            $optIsCorrect,
+            $optOrder
+        ]);
     }
-    $optStmt->close();
 
     // Touch assessment updated_at
     $stmt = $conn->prepare(
-        "UPDATE assessments SET updated_at = NOW() WHERE assessment_id = ? AND created_by = ?"
+        "UPDATE assessments
+        SET updated_at = NOW()
+        WHERE assessment_id = ? AND created_by = ?"
     );
+
     if ($stmt) {
-        $stmt->bind_param("ii", $assessmentId, $teacherId);
-        $stmt->execute();
-        $stmt->close();
+        $stmt->execute([
+            $assessmentId,
+            $teacherId
+        ]);
     }
 
     $conn->commit();

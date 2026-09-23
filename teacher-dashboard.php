@@ -162,7 +162,7 @@ AND aa.status IN ('submitted','timeout')
 WHERE a.created_by = ?
 GROUP BY a.assessment_id, a.title, a.category, a.difficulty, a.status, a.duration_minutes, a.total_marks, a.passing_marks, a.start_time, a.end_time, a.created_at, a.updated_at
 ORDER BY
-        CASE a.status WHEN 'active' THEN 1 WHEN 'draft' THEN 2 WHEN 'archived' THEN 3 ELSE 4 END ASC,
+        CASE a.status WHEN 'published' THEN 1 WHEN 'draft' THEN 2 WHEN 'archived' THEN 3 ELSE 4 END ASC,
         a.updated_at DESC",
 "i", [$teacherId]
 );

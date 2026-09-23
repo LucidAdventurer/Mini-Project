@@ -23,7 +23,7 @@ if (!$user) {
 $userId = (int) $user['user_id'];
 
 $res = safePreparedQuery($conn,
-    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
+    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = FALSE",
     "i", [$userId]
 );
 

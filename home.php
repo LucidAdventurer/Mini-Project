@@ -25,7 +25,7 @@ if (!empty($_SESSION['user_id']) && !empty($_SESSION['role'])) {
         $conn,
         "SELECT user_id, full_name, email, role, is_active
          FROM users
-         WHERE user_id = ? AND role = ? AND is_active = 1",
+         WHERE user_id = ? AND role = ? AND is_active = TRUE",
         "is", [$sid, $stype]
     );
 
@@ -73,10 +73,10 @@ $aQuery = safePreparedQuery(
      WHERE a.visibility = 'public'
        AND a.status     = 'published'
        AND u.role       IN ('admin', 'teacher')
-       AND u.is_active  = 1
+       AND u.is_active  = TRUE
        AND (a.start_time IS NULL OR a.start_time <= NOW())
        AND (a.end_time   IS NULL OR a.end_time   >= NOW())
-     GROUP BY a.assessment_id
+     GROUP BY a.assessment_id, u.full_name, u.role
      ORDER BY a.created_at DESC",
     "", []
 );
@@ -908,7 +908,7 @@ if (!empty($_GET['category'])) {
         <a href="<?php echo $dashboardUrl; ?>" class="breadcrumb-link"><?php echo $dashboardLabel; ?></a>
         <span>›</span>
         <?php else: ?>
-        <a href="guest-dashboard.html" class="breadcrumb-link">Home</a>
+        <a href="index.html" class="breadcrumb-link">Home</a>
         <span>›</span>
         <?php endif; ?>
         <span>All Tests</span>
@@ -1456,13 +1456,22 @@ function gradeClientSide() {
         }
         answered++;
         const chosenOpt = (q.options || []).find(o => o.option_id === chosenId);
-        const isCorrect = chosenOpt && chosenOpt.is_correct == 1;
+        const isCorrect = chosenOpt &&
+            (chosenOpt.is_correct === true ||
+            chosenOpt.is_correct === 't' ||
+            chosenOpt.is_correct === 1 ||
+            chosenOpt.is_correct === '1');
         if (isCorrect) {
             score += parseFloat(q.marks);
         } else {
             score -= parseFloat(q.negative_marks || 0);
         }
-        const correctOpt = (q.options || []).find(o => o.is_correct == 1);
+        const correctOpt = (q.options || []).find(o =>
+            o.is_correct === true ||
+            o.is_correct === 't' ||
+            o.is_correct === 1 ||
+            o.is_correct === '1'
+        );
         results[q.question_id] = {
             correct: isCorrect,
             skipped: false,
@@ -1564,7 +1573,11 @@ function renderResults(data, timedOut) {
                 if (res.correct_option_id) {
                     isThisCorrect = (opt.option_id === res.correct_option_id);
                 } else {
-                    isThisCorrect = opt.is_correct == 1;
+                    isThisCorrect =
+                    opt.is_correct === true ||
+                    opt.is_correct === 't' ||
+                    opt.is_correct === 1 ||
+                    opt.is_correct === '1';
                 }
 
                 let cls = 'result-neutral';

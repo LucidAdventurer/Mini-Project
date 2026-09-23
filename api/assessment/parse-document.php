@@ -128,19 +128,34 @@ exit;
 // Uses pdftotext (poppler) — handles all text-based PDFs.
 // ============================================================
 function extractTextFromPDF(string $path): string {
-    $which = trim(shell_exec('which pdftotext 2>/dev/null') ?? '');
-    if ($which === '') {
-        error_log('parse-document.php: pdftotext not found. Install poppler.');
+    $pdftotext = '/usr/bin/pdftotext';
+
+    if (!is_executable($pdftotext)) {
+        error_log("parse-document.php: pdftotext not found or not executable at $pdftotext");
         return '';
     }
-    $escaped = escapeshellarg($path);
-    $text    = shell_exec("pdftotext -layout $escaped - 2>/dev/null");
-    if ($text === null || trim($text) === '') {
-        $text = shell_exec("pdftotext $escaped - 2>/dev/null");
+
+    if (!is_readable($path)) {
+        error_log("parse-document.php: PDF is not readable: $path");
+        return '';
     }
+
+    $escaped = escapeshellarg($path);
+
+    // First attempt: preserve PDF layout.
+    $text = shell_exec(
+        $pdftotext . ' -layout ' . $escaped . ' - 2>/dev/null'
+    );
+
+    // Fallback: normal extraction.
+    if ($text === null || trim($text) === '') {
+        $text = shell_exec(
+            $pdftotext . ' ' . $escaped . ' - 2>/dev/null'
+        );
+    }
+
     return $text ?? '';
 }
-
 
 // ============================================================
 // FUNCTION: extractTextFromDOCX

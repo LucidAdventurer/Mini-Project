@@ -31,7 +31,8 @@ if ($materialId <= 0) {
 
 // ── Fetch material ────────────────────────────────────────────────────────
 $r = safePreparedQuery($conn,
-    "SELECT material_id, title, cloudinary_public_id, external_url, visibility
+    "SELECT material_id, title, cloudinary_public_id, external_url, visibility,
+            available_from, available_until
      FROM materials WHERE material_id = ?",
     'i', [$materialId]
 );
@@ -44,6 +45,20 @@ if (!$r['success'] || !$r['result'] || $r['result']->num_rows === 0) {
 
 $material = $r['result']->fetch_assoc();
 $r['result']->free();
+
+// ── Availability window ───────────────────────────────────────────────────
+$today = date('Y-m-d');
+
+if ($role !== 'teacher' && (
+    ($material['available_from'] !== null &&
+     $today < $material['available_from']) ||
+    ($material['available_until'] !== null &&
+     $today > $material['available_until'])
+)) {
+    http_response_code(403);
+    echo 'This resource is not currently available.';
+    exit;
+}
 
 $vis = $material['visibility'] ?? 'private';
 
@@ -90,16 +105,24 @@ if (!$isGuest && $role === 'student') {
     );
 }
 
-// Derive type from stored data — no material_type column in schema
-$hasCloudinary = !empty($material['cloudinary_public_id']);
-$publicId      = $material['cloudinary_public_id'] ?? '';
-$ext           = strtolower(pathinfo($publicId, PATHINFO_EXTENSION));
+// ── Derive media type from stored local path or legacy Cloudinary ID ──
+$storedPath   = $material['external_url'] ?? '';
+$cloudinaryId = $material['cloudinary_public_id'] ?? '';
+
+$mediaSource = $storedPath !== '' ? $storedPath : $cloudinaryId;
+
+$ext = strtolower(
+    pathinfo(
+        parse_url($mediaSource, PHP_URL_PATH) ?: $mediaSource,
+        PATHINFO_EXTENSION
+    )
+);
 
 $videoExts = ['mp4', 'webm', 'ogg', 'mov'];
 $imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 
-$isVideo = $hasCloudinary && in_array($ext, $videoExts, true);
-$isImage = $hasCloudinary && in_array($ext, $imageExts, true);
+$isVideo = in_array($ext, $videoExts, true);
+$isImage = in_array($ext, $imageExts, true);
 
 $serveUrl = htmlspecialchars('serve-resource.php?material_id=' . $materialId . '&action=view',  ENT_QUOTES, 'UTF-8');
 $dlUrl    = htmlspecialchars('serve-resource.php?material_id=' . $materialId . '&action=download', ENT_QUOTES, 'UTF-8');
@@ -195,7 +218,15 @@ header('X-Frame-Options: SAMEORIGIN');
             display: flex; align-items: center; justify-content: center;
             background: #000;
         }
-        video { max-width: 100%; max-height: 100%; }
+        video,
+        .viewer img {
+            display: block;
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+        }
 
         .loader-overlay {
             position: absolute; inset: 0;
@@ -236,7 +267,7 @@ header('X-Frame-Options: SAMEORIGIN');
     </div>
 <?php elseif ($isImage): ?>
     <div class="video-wrap">
-        <img src="<?= $serveUrl ?>" alt="<?= $title ?>" style="max-width:100%;max-height:100%;object-fit:contain;">
+        <img src="<?= $serveUrl ?>" alt="<?= $title ?>">
     </div>
 <?php else: ?>
     <div class="loader-overlay" id="loader">

@@ -8,6 +8,26 @@ require_once __DIR__ . '/../../db-guard.php';
 
 header('Content-Type: application/json');
 
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+$sentToken    = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+$sessionToken = $_SESSION['csrf_token'] ?? '';
+
+if (
+    $sessionToken === '' ||
+    $sentToken === '' ||
+    !hash_equals($sessionToken, $sentToken)
+) {
+    http_response_code(403);
+    echo json_encode([
+        'success' => false,
+        'error'   => 'Invalid CSRF token.'
+    ]);
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['success' => false, 'error' => 'Method not allowed.']);
@@ -57,10 +77,92 @@ if (!$check['success'] || !$check['result'] || $check['result']->num_rows === 0)
 $material = $check['result']->fetch_assoc();
 $check['result']->free();
 
-if ($role === 'student' && $material['visibility'] === 'private') {
-    http_response_code(403);
-    echo json_encode(['success' => false, 'error' => 'Access denied.']);
-    exit;
+if ($role === 'student') {
+    if ($material['visibility'] === 'private') {
+        http_response_code(403);
+        echo json_encode([
+            'success' => false,
+            'error'   => 'Access denied.'
+        ]);
+        exit;
+    }
+
+    $access = safePreparedQuery(
+        $conn,
+        "SELECT 1
+         FROM material_targets mt
+         JOIN group_members gm
+           ON gm.group_id = mt.target_id
+         WHERE mt.material_id = ?
+           AND mt.target_type = 'group'
+           AND gm.student_id = ?
+
+         UNION
+
+         SELECT 1
+         FROM material_targets mt
+         WHERE mt.material_id = ?
+           AND mt.target_type = 'student'
+           AND mt.target_id = ?
+
+         LIMIT 1",
+        "iiii",
+        [$materialId, $userId, $materialId, $userId]
+    );
+
+    if (
+        $material['visibility'] === 'group' &&
+        (!$access['success'] ||
+         !$access['result'] ||
+         $access['result']->num_rows === 0)
+    ) {
+        if ($access['result']) {
+            $access['result']->free();
+        }
+
+        http_response_code(403);
+        echo json_encode([
+            'success' => false,
+            'error'   => 'Access denied.'
+        ]);
+        exit;
+    }
+
+    if ($access['result']) {
+        $access['result']->free();
+    }
+}
+
+if ($role === 'student') {
+    $availability = safePreparedQuery(
+        $conn,
+        "SELECT 1
+         FROM materials
+         WHERE material_id = ?
+           AND (available_from IS NULL OR CURRENT_DATE >= available_from)
+           AND (available_until IS NULL OR CURRENT_DATE <= available_until)",
+        "i",
+        [$materialId]
+    );
+
+    $available = (
+        $availability['success'] &&
+        $availability['result'] &&
+        $availability['result']->num_rows > 0
+    );
+
+    if ($availability['result']) {
+        $availability['result']->free();
+    }
+
+    if (!$available) {
+        http_response_code(403);
+        echo json_encode([
+            'success' => false,
+            'error'   => 'Material is not currently available.'
+        ]);
+        exit;
+    }
 }
 
 // ── view / download: no counter columns on materials — succeed silently ───
@@ -71,25 +173,36 @@ if ($action === 'view' || $action === 'download') {
 
 // ── progress: upsert into material_progress ───────────────────────────────
 try {
-    $isCompleted = ($progress >= 100) ? 1 : 0;
+    $isCompleted = ($progress >= 100);
 
     $stmt = $conn->prepare(
         'INSERT INTO material_progress
-             (material_id, user_id, progress_percentage, completed, last_accessed)
+            (material_id, user_id, progress_percentage, completed, last_accessed)
          VALUES (?, ?, ?, ?, NOW())
-         ON DUPLICATE KEY UPDATE
-             progress_percentage = GREATEST(progress_percentage, VALUES(progress_percentage)),
-             completed           = VALUES(completed),
-             last_accessed       = NOW()'
+         ON CONFLICT (material_id, user_id)
+         DO UPDATE SET
+            progress_percentage = GREATEST(
+                material_progress.progress_percentage,
+                EXCLUDED.progress_percentage
+            ),
+            completed = material_progress.completed OR EXCLUDED.completed,
+            last_accessed = NOW()'
     );
-    if (!$stmt) throw new Exception('Prepare failed: ' . $conn->error);
-    $stmt->bind_param('iiii', $materialId, $userId, $progress, $isCompleted);
-    $stmt->execute();
-    $stmt->close();
+
+    $stmt->execute([
+        $materialId,
+        $userId,
+        $progress,
+        $isCompleted
+    ]);
 
     echo json_encode(['success' => true]);
-} catch (Exception $e) {
+
+} catch (Throwable $e) {
     error_log('track-resource.php failed: ' . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Tracking failed. Please try again.']);
+    echo json_encode([
+        'success' => false,
+        'error' => 'Tracking failed. Please try again.'
+    ]);
 }

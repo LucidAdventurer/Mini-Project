@@ -59,7 +59,7 @@ $validTypes      = ['pdf', 'video', 'link', 'article', 'quiz'];
 
 // ── Build WHERE ───────────────────────────────────────────────────────────
 // Always restrict to public resources only
-$conditions = ['r.is_public = 1'];
+$conditions = ['r.is_public = TRUE'];
 $params     = [];
 $types      = '';
 

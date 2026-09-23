@@ -186,166 +186,183 @@ $updateMessage = '';
 $updateType    = '';
  
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
- 
-    if ($_POST['action'] === 'update_profile') {
-        $newName    = trim($_POST['full_name']           ?? '');
-        $newEmail   = trim($_POST['email']               ?? '');
-        $newDept    = trim($_POST['department']          ?? '');
-        $newRegNo   = trim($_POST['registration_number'] ?? '');
-        $confirmPw  = $_POST['confirm_password_profile'] ?? '';
- 
-        if ($newName === '') {
-            $updateMessage = 'Full name is required.';
-            $updateType    = 'error';
-        } elseif ($newEmail === '' || !filter_var($newEmail, FILTER_VALIDATE_EMAIL)) {
-            $updateMessage = 'A valid email address is required.';
-            $updateType    = 'error';
-        } else {
-            // Email change requires password confirmation
-            $emailChanged = ($newEmail !== $userEmail);
-            if ($emailChanged) {
-                if ($confirmPw === '') {
-                    $updateMessage = 'Please enter your current password to change your email.';
-                    $updateType    = 'error';
-                } else {
-                    $pwCheck = safePreparedQuery($conn, "SELECT password_hash FROM users WHERE user_id = ?", "i", [$userId]);
-                    $pwRow   = null;
-                    if ($pwCheck['success'] && $pwCheck['result']) {
-                        $pwRow = $pwCheck['result']->fetch_assoc();
-                        $pwCheck['result']->free();
-                    }
-                    if (!$pwRow || !password_verify($confirmPw, $pwRow['password_hash'])) {
-                        $updateMessage = 'Incorrect password. Email not updated.';
-                        $updateType    = 'error';
-                        $emailChanged  = false;
-                    }
-                }
-            }
- 
-            if ($updateType !== 'error') {
-                // Check email uniqueness if changed
+
+    // ── CSRF protection ──
+    $sessionToken = $_SESSION['csrf_token'] ?? '';
+    $postedToken  = $_POST['csrf_token'] ?? '';
+
+    if (
+        $sessionToken === '' ||
+        $postedToken === '' ||
+        !hash_equals($sessionToken, $postedToken)
+    ) {
+        http_response_code(403);
+        $updateMessage = 'Security check failed. Please refresh the page and try again.';
+        $updateType    = 'error';
+    } else {
+
+        // existing POST actions go here 
+        
+        if ($_POST['action'] === 'update_profile') {
+            $newName    = trim($_POST['full_name']           ?? '');
+            $newEmail   = trim($_POST['email']               ?? '');
+            $newDept    = trim($_POST['department']          ?? '');
+            $newRegNo   = trim($_POST['registration_number'] ?? '');
+            $confirmPw  = $_POST['confirm_password_profile'] ?? '';
+    
+            if ($newName === '') {
+                $updateMessage = 'Full name is required.';
+                $updateType    = 'error';
+            } elseif ($newEmail === '' || !filter_var($newEmail, FILTER_VALIDATE_EMAIL)) {
+                $updateMessage = 'A valid email address is required.';
+                $updateType    = 'error';
+            } else {
+                // Email change requires password confirmation
+                $emailChanged = ($newEmail !== $userEmail);
                 if ($emailChanged) {
-                    $emailCheck = safePreparedQuery($conn,
-                        "SELECT user_id FROM users WHERE email = ? AND user_id != ?",
-                        "si", [$newEmail, $userId]
-                    );
-                    if ($emailCheck['success'] && $emailCheck['result'] && $emailCheck['result']->num_rows > 0) {
-                        $updateMessage = 'That email address is already in use.';
+                    if ($confirmPw === '') {
+                        $updateMessage = 'Please enter your current password to change your email.';
                         $updateType    = 'error';
-                        $emailCheck['result']->free();
+                    } else {
+                        $pwCheck = safePreparedQuery($conn, "SELECT password_hash FROM users WHERE user_id = ?", "i", [$userId]);
+                        $pwRow   = null;
+                        if ($pwCheck['success'] && $pwCheck['result']) {
+                            $pwRow = $pwCheck['result']->fetch_assoc();
+                            $pwCheck['result']->free();
+                        }
+                        if (!$pwRow || !password_verify($confirmPw, $pwRow['password_hash'])) {
+                            $updateMessage = 'Incorrect password. Email not updated.';
+                            $updateType    = 'error';
+                            $emailChanged  = false;
+                        }
                     }
                 }
- 
+    
                 if ($updateType !== 'error') {
-                    $upRes = safePreparedQuery($conn,
-                        "UPDATE users SET full_name = ?, email = ?, department = ?, registration_number = ? WHERE user_id = ?",
-                        "ssssi",
-                        [$newName, $newEmail, $newDept ?: null, $newRegNo ?: null, $userId]
-                    );
-                    if ($upRes['success']) {
-                        $userName     = $newName;
-                        $userEmail    = $newEmail;
-                        $userDept     = $newDept;
-                        $userRegNo    = $newRegNo;
-                        $userInitials = strtoupper(substr($userName, 0, 2));
-                        $user['full_name']           = $newName;
-                        $user['email']               = $newEmail;
-                        $user['department']          = $newDept;
-                        $user['registration_number'] = $newRegNo;
-                        $updateMessage = 'Profile updated successfully!';
-                        $updateType    = 'success';
-                        header('Location: student-profile.php?t=' . time() . '&msg=profile_updated');
-                        exit;
-                    } else {
-                        $updateMessage = 'Failed to update profile. Please try again.';
-                        $updateType    = 'error';
+                    // Check email uniqueness if changed
+                    if ($emailChanged) {
+                        $emailCheck = safePreparedQuery($conn,
+                            "SELECT user_id FROM users WHERE email = ? AND user_id != ?",
+                            "si", [$newEmail, $userId]
+                        );
+                        if ($emailCheck['success'] && $emailCheck['result'] && $emailCheck['result']->num_rows > 0) {
+                            $updateMessage = 'That email address is already in use.';
+                            $updateType    = 'error';
+                            $emailCheck['result']->free();
+                        }
+                    }
+    
+                    if ($updateType !== 'error') {
+                        $upRes = safePreparedQuery($conn,
+                            "UPDATE users SET full_name = ?, email = ?, department = ?, registration_number = ? WHERE user_id = ?",
+                            "ssssi",
+                            [$newName, $newEmail, $newDept ?: null, $newRegNo ?: null, $userId]
+                        );
+                        if ($upRes['success']) {
+                            $userName     = $newName;
+                            $userEmail    = $newEmail;
+                            $userDept     = $newDept;
+                            $userRegNo    = $newRegNo;
+                            $userInitials = strtoupper(substr($userName, 0, 2));
+                            $user['full_name']           = $newName;
+                            $user['email']               = $newEmail;
+                            $user['department']          = $newDept;
+                            $user['registration_number'] = $newRegNo;
+                            $updateMessage = 'Profile updated successfully!';
+                            $updateType    = 'success';
+                            header('Location: student-profile.php?t=' . time() . '&msg=profile_updated');
+                            exit;
+                        } else {
+                            $updateMessage = 'Failed to update profile. Please try again.';
+                            $updateType    = 'error';
+                        }
                     }
                 }
             }
         }
-    }
- 
-    if ($_POST['action'] === 'upload_avatar') {
-        if (!isset($_FILES['avatar']) || $_FILES['avatar']['error'] !== UPLOAD_ERR_OK) {
-            $updateMessage = 'Upload error. Please try again.';
-            $updateType    = 'error';
-        } else {
-            $file    = $_FILES['avatar'];
-            $allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-            $maxSize = 2 * 1024 * 1024;
-            $ext     = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
- 
-            if ($file['size'] > $maxSize) {
-                $updateMessage = 'Image must be under 2MB.';
-                $updateType    = 'error';
-            } elseif (!in_array($file['type'], $allowed)) {
-                $updateMessage = 'Only JPG, PNG, GIF or WEBP images allowed.';
+    
+        if ($_POST['action'] === 'upload_avatar') {
+            if (!isset($_FILES['avatar']) || $_FILES['avatar']['error'] !== UPLOAD_ERR_OK) {
+                $updateMessage = 'Upload error. Please try again.';
                 $updateType    = 'error';
             } else {
-                $uploadDir  = 'uploads/avatars/';
-                $storedName = 'student_' . $userId . '_' . time() . '.' . $ext;
-                $fullPath   = $uploadDir . $storedName;
-                if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
-                // Delete old avatar
-                $oldImg = $user['profile_image'] ?? '';
-                if ($oldImg && file_exists($oldImg)) @unlink($oldImg);
-                if (move_uploaded_file($file['tmp_name'], $fullPath)) {
-                    $upRes = safePreparedQuery($conn, "UPDATE users SET profile_image = ? WHERE user_id = ?", "si", [$fullPath, $userId]);
-                    if ($upRes['success']) {
-                        $_SESSION['profile_image'] = $fullPath;
-                        $user['profile_image']     = $fullPath;
-                        $updateMessage = 'Profile picture updated!';
-                        $updateType    = 'success';
-                        // Redirect to avoid re-POST on refresh
-                        header('Location: student-profile.php?t=' . time() . '&msg=avatar_updated');
-                        exit;
+                $file    = $_FILES['avatar'];
+                $allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+                $maxSize = 2 * 1024 * 1024;
+                $ext     = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    
+                if ($file['size'] > $maxSize) {
+                    $updateMessage = 'Image must be under 2MB.';
+                    $updateType    = 'error';
+                } elseif (!in_array($file['type'], $allowed)) {
+                    $updateMessage = 'Only JPG, PNG, GIF or WEBP images allowed.';
+                    $updateType    = 'error';
+                } else {
+                    $uploadDir  = 'uploads/avatars/';
+                    $storedName = 'student_' . $userId . '_' . time() . '.' . $ext;
+                    $fullPath   = $uploadDir . $storedName;
+                    if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+                    // Delete old avatar
+                    $oldImg = $user['profile_image'] ?? '';
+                    if ($oldImg && file_exists($oldImg)) @unlink($oldImg);
+                    if (move_uploaded_file($file['tmp_name'], $fullPath)) {
+                        $upRes = safePreparedQuery($conn, "UPDATE users SET profile_image = ? WHERE user_id = ?", "si", [$fullPath, $userId]);
+                        if ($upRes['success']) {
+                            $_SESSION['profile_image'] = $fullPath;
+                            $user['profile_image']     = $fullPath;
+                            $updateMessage = 'Profile picture updated!';
+                            $updateType    = 'success';
+                            // Redirect to avoid re-POST on refresh
+                            header('Location: student-profile.php?t=' . time() . '&msg=avatar_updated');
+                            exit;
+                        } else {
+                            $updateMessage = 'File saved but DB update failed.';
+                            $updateType    = 'error';
+                        }
                     } else {
-                        $updateMessage = 'File saved but DB update failed.';
+                        $updateMessage = 'Failed to save file. Check folder permissions.';
                         $updateType    = 'error';
                     }
-                } else {
-                    $updateMessage = 'Failed to save file. Check folder permissions.';
-                    $updateType    = 'error';
                 }
             }
         }
-    }
- 
-    if ($_POST['action'] === 'change_password') {
-        $current = $_POST['current_password'] ?? '';
-        $new     = $_POST['new_password']     ?? '';
-        $confirm = $_POST['confirm_password'] ?? '';
- 
-        if ($new !== $confirm) {
-            $updateMessage = 'New passwords do not match.';
-            $updateType    = 'error';
-        } elseif (strlen($new) < 8) {
-            $updateMessage = 'Password must be at least 8 characters.';
-            $updateType    = 'error';
-        } else {
-            $pwResult = safePreparedQuery(
-                $conn, "SELECT password_hash FROM users WHERE user_id = ?", "i", [$userId]
-            );
-            $pwRow = null;
-            if ($pwResult['success'] && $pwResult['result']) {
-                $pwRow = $pwResult['result']->fetch_assoc();
-                $pwResult['result']->free();
-            }
-            if ($pwRow && password_verify($current, $pwRow['password_hash'])) {
-                $newHash  = password_hash($new, PASSWORD_DEFAULT);
-                $upResult = safePreparedQuery(
-                    $conn, "UPDATE users SET password_hash = ? WHERE user_id = ?", "si", [$newHash, $userId]
+    
+        if ($_POST['action'] === 'change_password') {
+            $current = $_POST['current_password'] ?? '';
+            $new     = $_POST['new_password']     ?? '';
+            $confirm = $_POST['confirm_password'] ?? '';
+    
+            if ($new !== $confirm) {
+                $updateMessage = 'New passwords do not match.';
+                $updateType    = 'error';
+            } elseif (strlen($new) < 8) {
+                $updateMessage = 'Password must be at least 8 characters.';
+                $updateType    = 'error';
+            } else {
+                $pwResult = safePreparedQuery(
+                    $conn, "SELECT password_hash FROM users WHERE user_id = ?", "i", [$userId]
                 );
-                if ($upResult['success']) {
-                    $updateMessage = 'Password changed successfully.';
-                    $updateType    = 'success';
+                $pwRow = null;
+                if ($pwResult['success'] && $pwResult['result']) {
+                    $pwRow = $pwResult['result']->fetch_assoc();
+                    $pwResult['result']->free();
+                }
+                if ($pwRow && password_verify($current, $pwRow['password_hash'])) {
+                    $newHash  = password_hash($new, PASSWORD_DEFAULT);
+                    $upResult = safePreparedQuery(
+                        $conn, "UPDATE users SET password_hash = ? WHERE user_id = ?", "si", [$newHash, $userId]
+                    );
+                    if ($upResult['success']) {
+                        $updateMessage = 'Password changed successfully.';
+                        $updateType    = 'success';
+                    } else {
+                        $updateMessage = 'Failed to change password.';
+                        $updateType    = 'error';
+                    }
                 } else {
-                    $updateMessage = 'Failed to change password.';
+                    $updateMessage = 'Current password is incorrect.';
                     $updateType    = 'error';
                 }
-            } else {
-                $updateMessage = 'Current password is incorrect.';
-                $updateType    = 'error';
             }
         }
     }
@@ -1161,7 +1178,7 @@ function parseUA(string $ua): string {
     <main>
  
         <?php if ($updateMessage): ?>
-            <div class="alert alert-<?= $updateType ?>">
+            <div class="alert alert-<?= $updateType ?>" id="flashMessage">
                 <?= $updateType === 'success' ? '✅' : '⚠️' ?>
                 <?= htmlspecialchars($updateMessage) ?>
             </div>
@@ -1514,6 +1531,8 @@ function parseUA(string $ua): string {
             list.innerHTML = '<div class="notif-dd-empty">No notifications yet.</div>';
         }
     }
+
+    const pw = document.getElementById('profileWrapper');
  
     document.addEventListener('click', function(e) {
         const nw = document.querySelector('.notif-dropdown-wrap');
@@ -1684,6 +1703,22 @@ dz.addEventListener('drop', e => {
         previewAvatar(input);
     }
 });
+
+/* ── Auto-hide flash messages after 5 seconds ── */
+document.addEventListener('DOMContentLoaded', () => {
+    const flash = document.getElementById('flashMessage');
+
+    if (flash) {
+        setTimeout(() => {
+            flash.style.transition = 'opacity .4s ease, transform .4s ease';
+            flash.style.opacity = '0';
+            flash.style.transform = 'translateY(-8px)';
+
+            setTimeout(() => flash.remove(), 400);
+        }, 5000);
+    }
+});
+
 </script>
 
 </body>

@@ -30,7 +30,7 @@
 // visibility='group'   → students in targeted groups or targeted directly
 // visibility='private' → no students (teacher-only)
 // ──────────────────────────────────────────────────────────────
-function resolve_assessment_students(mysqli $conn, int $assessmentId): array {
+function resolve_assessment_students(PDO $conn, int $assessmentId): array {
     // Get visibility
     $r = safePreparedQuery($conn,
         "SELECT visibility FROM assessments WHERE assessment_id = ?",
@@ -46,7 +46,7 @@ function resolve_assessment_students(mysqli $conn, int $assessmentId): array {
     if ($visibility === 'public') {
         // All active students
         $r2 = safePreparedQuery($conn,
-            "SELECT user_id FROM users WHERE role = 'student' AND is_active = 1",
+            "SELECT user_id FROM users WHERE role = 'student' AND is_active = TRUE",
             "", []
         );
         $ids = [];
@@ -61,7 +61,7 @@ function resolve_assessment_students(mysqli $conn, int $assessmentId): array {
     $r3 = safePreparedQuery($conn,
         "SELECT DISTINCT u.user_id
          FROM users u
-         WHERE u.role = 'student' AND u.is_active = 1
+         WHERE u.role = 'student' AND u.is_active = TRUE
            AND (
                -- Directly targeted student
                EXISTS (
@@ -98,7 +98,7 @@ function resolve_assessment_students(mysqli $conn, int $assessmentId): array {
 // using the same visibility/targeting logic as assessments
 // but against the materials + material_targets tables.
 // ──────────────────────────────────────────────────────────────
-function resolve_material_students(mysqli $conn, int $materialId): array {
+function resolve_material_students(PDO $conn, int $materialId): array {
     $r = safePreparedQuery($conn,
         "SELECT visibility FROM materials WHERE material_id = ?",
         "i", [$materialId]
@@ -112,7 +112,7 @@ function resolve_material_students(mysqli $conn, int $materialId): array {
 
     if ($visibility === 'public') {
         $r2 = safePreparedQuery($conn,
-            "SELECT user_id FROM users WHERE role = 'student' AND is_active = 1",
+            "SELECT user_id FROM users WHERE role = 'student' AND is_active = TRUE",
             "", []
         );
         $ids = [];
@@ -127,7 +127,7 @@ function resolve_material_students(mysqli $conn, int $materialId): array {
     $r3 = safePreparedQuery($conn,
         "SELECT DISTINCT u.user_id
          FROM users u
-         WHERE u.role = 'student' AND u.is_active = 1
+         WHERE u.role = 'student' AND u.is_active = TRUE
            AND (
                EXISTS (
                    SELECT 1 FROM material_targets mt
@@ -159,46 +159,42 @@ function resolve_material_students(mysqli $conn, int $materialId): array {
 // HELPER: bulk_insert_notifications
 //
 // Inserts one notification row per user_id in $userIds.
-// Uses INSERT IGNORE so re-running the same trigger never
-// creates duplicates (requires a unique key on the table —
-// see SQL note at bottom of this file).
 //
 // $type  : one of 'assessment' | 'material' | 'warning'
 // $entityType : 'assessment' | 'material'
 // $entityId   : the PK of the related row
 // ──────────────────────────────────────────────────────────────
 function bulk_insert_notifications(
-    mysqli $conn,
-    array  $userIds,
+    PDO $conn,
+    array $userIds,
     string $type,
     string $title,
     string $message,
     string $entityType,
-    int    $entityId,
-    string $actionUrl = ''   // ← URL to redirect when notification is clicked
+    int $entityId
 ): void {
-    if (empty($userIds)) return;
-
-    // Prepare once, execute per user — safePreparedQuery handles
-    // individual rows; batching here avoids N round-trips.
-    $stmt = $conn->prepare(
-        "INSERT IGNORE INTO notifications
-            (user_id, title, message, type,
-             related_entity_type, related_entity_id, action_url, is_read, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 0, NOW())"
-    );
-    if (!$stmt) {
-        error_log("bulk_insert_notifications prepare failed: " . $conn->error);
+    if (empty($userIds)) {
         return;
     }
-    $stmt->bind_param("issssiss",
-        $uid, $title, $message, $type, $entityType, $entityId, $actionUrl
+
+    $stmt = $conn->prepare(
+        "INSERT INTO notifications
+            (user_id, title, message, type,
+             related_entity_type, related_entity_id, is_read, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, FALSE, NOW())
+         ON CONFLICT DO NOTHING"
     );
+
     foreach ($userIds as $userId) {
-        $uid = $userId;
-        $stmt->execute();
+        $stmt->execute([
+            (int)$userId,
+            $title,
+            $message,
+            $type,
+            $entityType,
+            $entityId
+        ]);
     }
-    $stmt->close();
 }
 
 
@@ -209,7 +205,7 @@ function bulk_insert_notifications(
 // to 'published'. Sends an 'assessment' notification to every
 // student who has access.
 // ──────────────────────────────────────────────────────────────
-function notifyAssessmentPublished(mysqli $conn, int $assessmentId): void {
+function notifyAssessmentPublished(PDO $conn, int $assessmentId): void {
     // Fetch assessment details for the message
     $r = safePreparedQuery($conn,
         "SELECT title, category, difficulty, end_time FROM assessments WHERE assessment_id = ?",
@@ -228,11 +224,10 @@ function notifyAssessmentPublished(mysqli $conn, int $assessmentId): void {
              . ' — A new assessment has been published for you.' . $deadline;
 
     $students  = resolve_assessment_students($conn, $assessmentId);
-    $actionUrl = 'student-assessments.php?id=' . $assessmentId; // ⚠️ update path if different
     bulk_insert_notifications(
         $conn, $students,
         'assessment', $title, $message,
-        'assessment', $assessmentId, $actionUrl
+        'assessment', $assessmentId
     );
 }
 
@@ -243,7 +238,7 @@ function notifyAssessmentPublished(mysqli $conn, int $assessmentId): void {
 // Called by create-material.php after a resource is saved.
 // Sends a 'material' notification to every student who has access.
 // ──────────────────────────────────────────────────────────────
-function notifyMaterialUploaded(mysqli $conn, int $materialId): void {
+function notifyMaterialUploaded(PDO $conn, int $materialId): void {
     $r = safePreparedQuery($conn,
         "SELECT m.title, m.category, m.difficulty, u.full_name AS teacher_name
          FROM materials m
@@ -263,25 +258,9 @@ function notifyMaterialUploaded(mysqli $conn, int $materialId): void {
     }
 
     $students  = resolve_material_students($conn, $materialId);
-    $actionUrl = 'student-resources.php?id=' . $materialId; // ⚠️ update path if different
     bulk_insert_notifications(
         $conn, $students,
         'material', $title, $message,
-        'material', $materialId, $actionUrl
+        'material', $materialId
     );
 }
-
-/*
- * ── Required unique key on notifications table ──────────────────
- * To make INSERT IGNORE idempotent, add this index once in MySQL:
- *
- *   ALTER TABLE notifications
- *   ADD UNIQUE KEY uq_notif_user_entity_type (
- *       user_id, related_entity_type, related_entity_id, type, title(100)
- *   );
- *
- * This prevents double-notifications if a teacher publishes,
- * un-publishes, then publishes again — the second publish is ignored.
- * Remove the key if re-notification on re-publish is desired.
- * ────────────────────────────────────────────────────────────────
- */

@@ -32,7 +32,7 @@ if ($imgRes['success'] && $imgRes['result']) {
 
 // ── Unread notification count ──
 $notifResult = safePreparedQuery($conn,
-    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0",
+    "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = FALSE",
     "i", [$userId]
 );
 $unreadCount = 0;
@@ -139,7 +139,7 @@ if (!in_array($activeCategory, $allowedCategories, true)) $activeCategory = 'all
 
 // ── Fetch all published assessments available to this student ──
 $assignedResult = safePreparedQuery($conn,
-    "SELECT DISTINCT
+    "SELECT
         a.assessment_id,
         a.title,
         a.description,
@@ -1029,7 +1029,6 @@ function deadlineLabel(?string $until): string {
         <span class="left-sidebar-label">Navigation</span>
         <a href="student-dashboard.php"><i class="fa fa-home"></i> Dashboard</a>
         <a href="student-assessments.php" class="active"><i class="fa fa-clipboard-list"></i> Assessments</a>
-        <a href="self-assessment.php"><i class="fa fa-user-check"></i> Self Assessment</a>
         <a href="student-resources.php"><i class="fa fa-folder-open"></i> Resources</a>
 
         <span class="left-sidebar-section">Filter by Category</span>

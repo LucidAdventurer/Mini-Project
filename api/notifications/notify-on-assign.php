@@ -34,29 +34,40 @@
 /**
  * Insert a notification row so the student sees the bell alert.
  *
- * @param mysqli  $conn           Active DB connection
+ * @param PDO     $conn           Active DB connection
  * @param int     $assessmentId   The assessment just assigned
  * @param string  $targetType     'student' or 'group'
  * @param int     $targetId       student user_id  OR  group_id
  */
 function createAssignmentNotification(
-    mysqli $conn,
-    int    $assessmentId,
+    PDO $conn,
+    int $assessmentId,
     string $targetType,
-    int    $targetId
+    int $targetId
 ): void {
 
     // ── Fetch the assessment title once ──────────────────────────────
-    $stmt = $conn->prepare(
-        "SELECT title FROM assessments WHERE assessment_id = ? LIMIT 1"
+    $result = safePreparedQuery(
+        $conn,
+        "SELECT title
+        FROM assessments
+        WHERE assessment_id = ?
+        LIMIT 1",
+        "i",
+        [$assessmentId]
     );
-    if (!$stmt) return;
-    $stmt->bind_param("i", $assessmentId);
-    $stmt->execute();
-    $row = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
 
-    if (!$row) return;   // assessment doesn't exist — bail
+    if (!$result['success'] || !$result['result']) {
+        return;
+    }
+
+    $row = $result['result']->fetch_assoc();
+    $result['result']->free();
+
+    if (!$row) {
+        return;
+    }
+
     $title = $row['title'];
 
     // ── Resolve the list of student user_ids to notify ───────────────
@@ -66,34 +77,40 @@ function createAssignmentNotification(
         $studentIds[] = $targetId;
 
     } elseif ($targetType === 'group') {
-        $stmt = $conn->prepare(
-            "SELECT student_id FROM group_members WHERE group_id = ?"
-        );
-        if (!$stmt) return;
-        $stmt->bind_param("i", $targetId);
-        $stmt->execute();
-        $res = $stmt->get_result();
-        while ($r = $res->fetch_assoc()) {
-            $studentIds[] = (int) $r['student_id'];
-        }
-        $stmt->close();
+        $result = safePreparedQuery(
+    $conn,
+        "SELECT student_id
+        FROM group_members
+        WHERE group_id = ?",
+        "i",
+        [$targetId]
+    );
+
+    if (!$result['success'] || !$result['result']) {
+        return;
+    }
+
+    while ($r = $result['result']->fetch_assoc()) {
+        $studentIds[] = (int) $r['student_id'];
+    }
+
+    $result['result']->free();
     }
 
     if (empty($studentIds)) return;
 
     // ── Insert one notification row per student ───────────────────────
-    $insertStmt = $conn->prepare(
-        "INSERT INTO notifications
-             (user_id, title, message, type, related_entity_id, is_read, created_at)
-         VALUES
-             (?, 'New Test Assigned', ?, 'assessment', ?, 0, NOW())"
-    );
-    if (!$insertStmt) return;
-
     foreach ($studentIds as $uid) {
-        $message = "\"$title\" has been assigned to you. Good luck!";
-        $insertStmt->bind_param("isi", $uid, $message, $assessmentId);
-        $insertStmt->execute();
-    }
-    $insertStmt->close();
+    $message = "\"$title\" has been assigned to you. Good luck!";
+
+    safePreparedQuery(
+        $conn,
+        "INSERT INTO notifications
+            (user_id, title, message, type, related_entity_type,
+             related_entity_id, is_read, created_at)
+         VALUES
+            (?, ?, ?, 'assessment', 'assessment', ?, FALSE, NOW())",
+        "issi",
+        [$uid, 'New Test Assigned', $message, $assessmentId]
+    );
 }
