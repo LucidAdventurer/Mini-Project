@@ -109,6 +109,27 @@ if ($statsResult['success'] && $statsResult['result']) {
     $statsResult['result']->free();
 }
 
+// ── Self Assessment Practice Stats (Separated from teacher tests) ──
+$selfStats = safePreparedQuery($conn,
+    "SELECT 
+        COUNT(*) AS total_self_tests,
+        COALESCE(AVG(percentage), 0) AS avg_self_score,
+        COALESCE(MAX(percentage), 0) AS best_self_score
+     FROM self_assessment_attempts
+     WHERE user_id = ? AND status = 'submitted'",
+    "i", [$userId]
+);
+$selfTestsCompleted = 0;
+$selfAvgScore       = 0;
+$selfBestScore      = 0;
+if ($selfStats['success'] && $selfStats['result']) {
+    $sr = $selfStats['result']->fetch_assoc();
+    $selfTestsCompleted = (int)($sr['total_self_tests'] ?? 0);
+    $selfAvgScore       = round((float)($sr['avg_self_score'] ?? 0));
+    $selfBestScore      = round((float)($sr['best_self_score'] ?? 0));
+    $selfStats['result']->free();
+}
+
 // ── Unread notification count ──
 $notifResult = safePreparedQuery($conn,
     "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = false",
@@ -1289,6 +1310,62 @@ function timeAgo(string $datetime): string {
                 </div>
             </div>
         </div>
+
+        <!-- ── SELF ASSESSMENT & PRACTICE HUB ── -->
+        <div class="practice-hub-banner" style="
+            background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+            border-radius: var(--radius);
+            padding: 24px 32px;
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #ffffff;
+            box-shadow: 0 4px 24px rgba(79, 70, 229, 0.35);
+            position: relative;
+            overflow: hidden;">
+            <div style="position: absolute; top: -50%; right: -10%; width: 300px; height: 300px; background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%); border-radius: 50%;"></div>
+            <div style="z-index: 1;">
+                <h2 style="font-family: 'Sora', sans-serif; font-size: 20px; font-weight: 700; margin-bottom: 8px;">🚀 Self Assessment & Practice Hub</h2>
+                <p style="font-size: 14px; color: rgba(255,255,255,0.85); margin-bottom: 16px; max-width: 500px;">
+                    Take control of your learning. Practice with AI-generated tests, PDF uploads, or customized levels. Your progress here is private and completely separate from teacher-assigned tests.
+                </p>
+                <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+                    <a href="self-assessment.php" style="
+                        background: #ffffff; color: #4f46e5; 
+                        padding: 10px 20px; border-radius: 10px; 
+                        font-weight: 700; font-size: 14px; text-decoration: none;
+                        display: inline-flex; align-items: center; gap: 8px;
+                        transition: var(--transition); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        Start Practicing →
+                    </a>
+                    <div style="display: flex; gap: 12px; font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.95); flex-wrap: wrap;">
+                        <span style="background: rgba(0,0,0,0.15); padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1);">
+                            📝 <?php echo $selfTestsCompleted; ?> Tests Taken
+                        </span>
+                        <span style="background: rgba(0,0,0,0.15); padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1);">
+                            🏆 Avg Score: <?php echo $selfAvgScore; ?>%
+                        </span>
+                        <?php if ($selfBestScore > 0): ?>
+                        <span style="background: rgba(0,0,0,0.15); padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1);">
+                            🔥 Best Score: <?php echo $selfBestScore; ?>%
+                        </span>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+            <!-- Optional graphic on the right -->
+            <div style="font-size: 80px; opacity: 0.8; z-index: 1; margin-right: 20px; user-select: none;" class="hide-mobile">
+                🎯
+            </div>
+        </div>
+        
+        <style>
+            @media (max-width: 768px) {
+                .hide-mobile { display: none !important; }
+                .practice-hub-banner { flex-direction: column; align-items: flex-start !important; padding: 20px !important; }
+            }
+        </style>
 
         <div class="main-content">
             <div class="assessments-section" id="assessments-section">
